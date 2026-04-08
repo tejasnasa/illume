@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 
-from app.api.v1 import ws
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.api.v1 import repositories, ws
 
 
 @asynccontextmanager
@@ -16,6 +17,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000"])
 
 app.include_router(ws.router)
+app.include_router(repositories.router)
 
 
 @app.get("/health")
