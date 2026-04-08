@@ -9,6 +9,7 @@ from app.models.repository import Repository
 from app.services.ingestion import (
     cleanup_clone,
     clone_repository,
+    embed_repository_symbols,
     process_repository_files,
 )
 
@@ -34,6 +35,8 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             process_repository_files(db, redis_client, repo, tmp_dir)
         finally:
             cleanup_clone(tmp_dir)
+
+        embed_repository_symbols(db, redis_client, repo)
 
         repo.status = "ready"
         db.commit()

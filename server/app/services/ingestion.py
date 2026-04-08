@@ -9,6 +9,7 @@ import git
 from app.models.ast_symbol import AstSymbol
 from app.models.file import File
 from app.models.repository import Repository
+from app.services.embedder import generate_embeddings
 from app.services.parser import parse_file
 from sqlalchemy.orm import Session
 
@@ -168,3 +169,26 @@ def process_repository_files(
     db.commit()
     _publish_log(redis_client, str(repo.id), f"Stored {processed} files in DB.")
     return processed
+
+
+def embed_repository_symbols(
+    db: Session,
+    redis_client,
+    repo: Repository,
+) -> int:
+    _update_status(db, repo, "embedding")
+    _publish_log(redis_client, str(repo.id), "Starting embedding generation...")
+
+    def publish_log(msg: str):
+        _publish_log(redis_client, str(repo.id), msg)
+
+    count = generate_embeddings(
+        repository_id=repo.id,
+        db=db,
+        publish_log=publish_log,
+    )
+
+    _publish_log(
+        redis_client, str(repo.id), f"Embedding complete — {count} vectors stored."
+    )
+    return count
