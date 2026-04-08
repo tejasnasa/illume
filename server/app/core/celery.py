@@ -19,3 +19,5 @@ celery.conf.update(
     broker_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED},
     redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED},
 )
+
+# uv run celery -A app.core.celery worker --loglevel=info --pool=solo
