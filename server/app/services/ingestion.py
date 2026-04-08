@@ -6,7 +6,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import git
+from app.models.ast_symbol import AstSymbol
+from app.models.file import File
 from app.models.repository import Repository
+from app.services.parser import parse_file
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -109,3 +112,59 @@ def _build_clone_url(github_url: str, github_access_token: str | None) -> str:
 
     parsed = urlparse(github_url)
     return parsed._replace(netloc=f"{github_access_token}@{parsed.netloc}").geturl()
+
+
+def process_repository_files(
+    db: Session,
+    redis_client,
+    repo,
+    repo_root: Path,
+) -> int:
+    _update_status(db, repo, "parsing")
+    _publish_log(redis_client, str(repo.id), "Starting file analysis...")
+
+    source_files = walk_source_files(repo_root)
+    total = len(source_files)
+    _publish_log(redis_client, str(repo.id), f"Found {total} source files.")
+
+    processed = 0
+
+    for file_path in source_files:
+        print(f"Processing {file_path}...")
+        parsed = parse_file(file_path)
+        if not parsed:
+            continue
+
+        relative_path = str(file_path.relative_to(repo_root))
+
+        db_file = File(
+            repository_id=repo.id,
+            path=relative_path,
+            language=parsed.language,
+            loc=parsed.loc,
+        )
+        db.add(db_file)
+        db.flush()
+
+        for symbol in parsed.symbols:
+            db_symbol = AstSymbol(
+                file_id=db_file.id,
+                kind=symbol.kind,
+                name=symbol.name,
+                start_line=symbol.start_line,
+                end_line=symbol.end_line,
+                source_code=symbol.source_code,
+                cyclomatic_complexity=symbol.cyclomatic_complexity,
+            )
+            db.add(db_symbol)
+
+        processed += 1
+        _publish_log(
+            redis_client,
+            str(repo.id),
+            f"{relative_path} ({parsed.loc} LOC, {len(parsed.symbols)} symbols)",
+        )
+
+    db.commit()
+    _publish_log(redis_client, str(repo.id), f"Stored {processed} files in DB.")
+    return processed
