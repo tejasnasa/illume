@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
+router = APIRouter(prefix="/api/v1/repository", tags=["chat"])
 
 
 class ChatMessageRequest(BaseModel):

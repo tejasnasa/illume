@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/repositories", tags=["repositories"])
+router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
 
 
 class RepositoryCreate(BaseModel):
@@ -17,6 +17,7 @@ class RepositoryCreate(BaseModel):
 
 
 class RepositoryResponse(BaseModel):
+    id: uuid.UUID
     github_url: str
     name: str
     status: str
