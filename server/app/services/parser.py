@@ -50,6 +50,7 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
         "import_statement": "import",
         "interface_declaration": "class",
         "type_alias_declaration": "class",
+        "export_statement": "function",
     },
     "tsx": {
         "function_declaration": "function",
@@ -57,6 +58,7 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
         "arrow_function": "function",
         "class_declaration": "class",
         "import_statement": "import",
+        "export_statement": "function",
     },
     "go": {
         "function_declaration": "function",
@@ -118,6 +120,24 @@ def get_language(file_path: Path) -> str | None:
 
 
 def _extract_name(node, source_bytes: bytes) -> str:
+    if node.type in ("arrow_function", "function") and node.parent:
+        parent = node.parent
+        if parent.type == "variable_declarator":
+            for child in parent.children:
+                if child.type == "identifier":
+                    return source_bytes[child.start_byte : child.end_byte].decode(
+                        "utf-8", errors="replace"
+                    )
+
+    if node.type == "lexical_declaration":
+        for child in node.children:
+            if child.type == "variable_declarator":
+                for subchild in child.children:
+                    if subchild.type == "identifier":
+                        return source_bytes[
+                            subchild.start_byte : subchild.end_byte
+                        ].decode("utf-8", errors="replace")
+
     if node.type == "decorated_definition":
         for child in node.children:
             if child.type in ("function_definition", "class_definition"):
@@ -130,49 +150,57 @@ def _extract_name(node, source_bytes: bytes) -> str:
                 return source_bytes[child.start_byte : child.end_byte].decode(
                     "utf-8", errors="replace"
                 )
+            if child.type == "string":
+                raw = source_bytes[child.start_byte : child.end_byte].decode(
+                    "utf-8", errors="replace"
+                )
+                name = raw.strip("\"'`").lstrip("./")
+                return name if name else "<anonymous>"
+
+    name_node = node.child_by_field_name("name")
+    if name_node:
+        return source_bytes[name_node.start_byte : name_node.end_byte].decode(
+            "utf-8", errors="replace"
+        )
 
     for child in node.children:
-        if child.type == "identifier" or child.type == "name":
+        if child.type in ("identifier", "name"):
             return source_bytes[child.start_byte : child.end_byte].decode(
                 "utf-8", errors="replace"
             )
+
     return "<anonymous>"
 
 
 def _count_complexity(node) -> int:
     DECISION_TYPES = {
         "if_statement",
-        "elif_clause",
         "else_clause",
         "for_statement",
+        "for_in_statement",
         "while_statement",
-        "try_statement",
-        "except_clause",
-        "boolean_operator",
-        "binary_expression",
+        "do_statement",
+        "catch_clause",
+        "ternary_expression",
         "switch_case",
         "case_clause",
+        "logical_and",
+        "logical_or",
+        "optional_chain",
+        "elif_clause",
+        "except_clause",
+        "boolean_operator",
+        "try_statement",
+        "for_each_statement",
+        "enhanced_for_statement",
     }
     count = 1
-    cursor = node.walk()
-    visited = set()
-
-    while True:
-        if cursor.node.id not in visited:
-            visited.add(cursor.node.id)
-            if cursor.node.type in DECISION_TYPES:
-                count += 1
-
-        if cursor.goto_first_child():
-            continue
-        if cursor.goto_next_sibling():
-            continue
-        while cursor.goto_parent():
-            if cursor.goto_next_sibling():
-                break
-        else:
-            break
-
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if current.type in DECISION_TYPES:
+            count += 1
+        stack.extend(current.children)
     return count
 
 
@@ -204,29 +232,43 @@ def parse_file(file_path: Path) -> ParsedFile | None:
     while nodes_to_visit:
         node = nodes_to_visit.pop()
 
-        if node.type in symbol_types:
+        actual_node = node
+        if node.type == "export_statement":
+            for child in node.children:
+                if child.type in ("function_declaration", "class_declaration"):
+                    actual_node = child
+                    break
+                elif child.type == "lexical_declaration":
+                    for decl in child.children:
+                        if decl.type == "variable_declarator":
+                            for val in decl.children:
+                                if val.type in ("arrow_function", "function"):
+                                    actual_node = val
+                                    break
+
+        if actual_node.type in symbol_types:
             kind = symbol_types[node.type]
-            name = _extract_name(node, source_bytes)
-            source_code = source_bytes[node.start_byte : node.end_byte].decode(
-                "utf-8", errors="replace"
-            )
+            name = _extract_name(actual_node, source_bytes)
+            source_code = source_bytes[
+                actual_node.start_byte : actual_node.end_byte
+            ].decode("utf-8", errors="replace")
             complexity = (
-                _count_complexity(node) if kind in ("function", "method") else 0
+                _count_complexity(actual_node) if kind in ("function", "method") else 0
             )
 
             symbols.append(
                 ParsedSymbol(
                     name=name,
                     kind=kind,
-                    start_line=node.start_point[0] + 1,
-                    end_line=node.end_point[0] + 1,
+                    start_line=actual_node.start_point[0] + 1,
+                    end_line=actual_node.end_point[0] + 1,
                     source_code=source_code,
                     cyclomatic_complexity=complexity,
                 )
             )
 
             if kind == "class":
-                nodes_to_visit.extend(node.children)
+                nodes_to_visit.extend(actual_node.children)
 
     return ParsedFile(
         path=str(file_path),

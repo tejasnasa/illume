@@ -2,13 +2,12 @@ import logging
 import os
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
 import git
-from app.models.ast_symbol import AstSymbol
-from app.models.file import File
-from app.models.repository import Repository
+from app.models import AstSymbol, Dependency, File, Repository
 from app.services.embedder import generate_embeddings
 from app.services.parser import parse_file
 from sqlalchemy.orm import Session
@@ -47,6 +46,7 @@ SKIP_DIRS = {
     ".next",
     "coverage",
     ".pytest_cache",
+    "alembic",
 }
 
 
@@ -131,7 +131,6 @@ def process_repository_files(
     processed = 0
 
     for file_path in source_files:
-        print(f"Processing {file_path}...")
         parsed = parse_file(file_path)
         if not parsed:
             continue
@@ -168,6 +167,10 @@ def process_repository_files(
 
     db.commit()
     _publish_log(redis_client, str(repo.id), f"Stored {processed} files in DB.")
+
+    dep_count = resolve_dependencies(db, repo.id)
+    _publish_log(redis_client, str(repo.id), f"Resolved {dep_count} dependencies.")
+
     return processed
 
 
@@ -191,4 +194,83 @@ def embed_repository_symbols(
     _publish_log(
         redis_client, str(repo.id), f"Embedding complete — {count} vectors stored."
     )
+    return count
+
+
+def resolve_dependencies(db: Session, repo_id: uuid.UUID) -> int:
+    files = db.query(File).filter(File.repository_id == repo_id).all()
+
+    normalized_paths: dict[str, File] = {}
+    for f in files:
+        normalized = f.path.replace("\\", "/")
+        if normalized.startswith("src/"):
+            normalized = normalized[4:]
+        normalized = normalized.rsplit(".", 1)[0]
+        normalized_paths[normalized] = f
+
+    imports = (
+        db.query(AstSymbol)
+        .join(File, AstSymbol.file_id == File.id)
+        .filter(File.repository_id == repo_id)
+        .filter(AstSymbol.kind == "import")
+        .all()
+    )
+
+    for k in list(normalized_paths.keys())[:10]:
+        print(f"  '{k}'")
+
+    for imp in imports[:10]:
+        module_path = imp.name.replace("\\", "/").lstrip("./")
+        module_path = (
+            module_path.rsplit(".", 1)[0]
+            if "." in module_path.split("/")[-1]
+            else module_path
+        )
+
+    symbols = (
+        db.query(AstSymbol)
+        .join(File, AstSymbol.file_id == File.id)
+        .filter(File.repository_id == repo_id)
+        .filter(AstSymbol.kind.in_(["function", "class", "method"]))
+        .all()
+    )
+    file_id_to_symbols: dict = {}
+    for s in symbols:
+        file_id_to_symbols.setdefault(s.file_id, []).append(s)
+
+    count = 0
+    deps_to_insert = []
+
+    for imp in imports:
+        if imp.name in ("<anonymous>", ""):
+            continue
+
+        module_path = imp.name.replace("\\", "/").lstrip("./")
+        module_path = (
+            module_path.rsplit(".", 1)[0]
+            if "." in module_path.split("/")[-1]
+            else module_path
+        )
+
+        matched_file_ids = [
+            f.id
+            for norm_path, f in normalized_paths.items()
+            if module_path in norm_path or norm_path in module_path
+        ]
+
+        for file_id in matched_file_ids[:3]:
+            for target in file_id_to_symbols.get(file_id, [])[:10]:
+                deps_to_insert.append(
+                    Dependency(
+                        source_symbol_id=imp.id,
+                        target_symbol_id=target.id,
+                        dep_type="imports",
+                    )
+                )
+                count += 1
+
+    print(f"file_id_to_symbols keys: {len(file_id_to_symbols)}")
+
+    db.bulk_save_objects(deps_to_insert)
+    db.commit()
     return count
