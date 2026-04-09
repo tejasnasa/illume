@@ -7,8 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import git
-from app.models import AstSymbol, Dependency, File, Repository
-from app.models.health_metric import HealthMetric
+from app.models import AstSymbol, Dependency, File, Repository, HealthMetric
 from app.services.embedder import generate_embeddings
 from app.services.health_scorer import compute_health_metrics
 from app.services.parser import parse_file

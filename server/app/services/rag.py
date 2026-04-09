@@ -4,9 +4,7 @@ from typing import Literal, cast
 from uuid import UUID
 
 from app.core.config import settings
-from app.models.ast_symbol import AstSymbol
-from app.models.embedding import Embedding
-from app.models.file import File
+from app.models import AstSymbol, Embedding, File
 from openai import OpenAI
 from openai.types.responses import ResponseInputParam
 from sqlalchemy import Row

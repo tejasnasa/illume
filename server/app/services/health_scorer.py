@@ -4,10 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Sequence
 
-from app.models.ast_symbol import AstSymbol
-from app.models.dependency import Dependency
-from app.models.file import File
-from app.models.health_metric import HealthMetric
+from app.models import AstSymbol, Dependency, File, HealthMetric
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
