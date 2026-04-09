@@ -11,6 +11,7 @@ from app.services.ingestion import (
     clone_repository,
     embed_repository_symbols,
     process_repository_files,
+    score_repository_health,
 )
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,8 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             cleanup_clone(tmp_dir)
 
         embed_repository_symbols(db, redis_client, repo)
+
+        score_repository_health(db, redis_client, repo)
 
         repo.status = "ready"
         db.commit()

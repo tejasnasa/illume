@@ -8,8 +8,11 @@ from urllib.parse import urlparse
 
 import git
 from app.models import AstSymbol, Dependency, File, Repository
+from app.models.health_metric import HealthMetric
 from app.services.embedder import generate_embeddings
+from app.services.health_scorer import compute_health_metrics
 from app.services.parser import parse_file
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -274,3 +277,35 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID) -> int:
     db.bulk_save_objects(deps_to_insert)
     db.commit()
     return count
+
+
+def score_repository_health(
+    db: Session,
+    redis_client,
+    repo: Repository,
+) -> int:
+    _update_status(db, repo, "scoring")
+    _publish_log(redis_client, str(repo.id), "Computing health metrics...")
+
+    compute_health_metrics(repo.id, db)
+
+    hotspot_count = (
+        db.execute(
+            select(HealthMetric).where(
+                HealthMetric.repository_id == repo.id,
+                HealthMetric.file_id.isnot(None),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    hotspot_count = sum(
+        1 for m in hotspot_count if m.breakdown and m.breakdown.get("is_hotspot")
+    )
+
+    _publish_log(
+        redis_client,
+        str(repo.id),
+        f"Health scoring complete — {hotspot_count} hotspot(s) found.",
+    )
+    return hotspot_count
