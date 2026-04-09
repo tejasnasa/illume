@@ -40,10 +40,7 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
 
         score_repository_health(db, redis_client, repo)
 
-        repo.status = "summarizing"
-        db.commit()
         publish("Generating architecture summary...")
-
         summary = generate_repo_summary(
             repo_id=repo.id,
             repo_name=repo.name,
