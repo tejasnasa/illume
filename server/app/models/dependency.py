@@ -1,8 +1,9 @@
 import uuid
 
-from app.core.database import Base
 from sqlalchemy import JSON, Enum, ForeignKey, text
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.database import Base
 
 
 class Dependency(Base):
@@ -12,10 +13,10 @@ class Dependency(Base):
         primary_key=True, server_default=text("gen_random_uuid()")
     )
     source_symbol_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("ast_symbols.id"), nullable=False
+        ForeignKey("ast_symbols.id", ondelete="CASCADE"), nullable=False
     )
     target_symbol_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("ast_symbols.id"), nullable=False
+        ForeignKey("ast_symbols.id", ondelete="CASCADE"), nullable=False
     )
     dep_type: Mapped[str] = mapped_column(
         Enum("imports", "calls", "inherits", "instantiates", name="dep_type"),

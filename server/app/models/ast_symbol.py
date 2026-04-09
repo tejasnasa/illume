@@ -1,8 +1,9 @@
 import uuid
 
-from app.core.database import Base
 from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.database import Base
 
 
 class AstSymbol(Base):
@@ -11,7 +12,9 @@ class AstSymbol(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, server_default=text("gen_random_uuid()")
     )
-    file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("files.id"), nullable=False)
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("files.id", ondelete="CASCADE"), nullable=False
+    )
     kind: Mapped[str] = mapped_column(
         Enum(
             "function",

@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
 
-from app.core.database import Base
 from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, text
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.database import Base
 
 
 class HealthMetric(Base):
@@ -13,10 +14,11 @@ class HealthMetric(Base):
         primary_key=True, server_default=text("gen_random_uuid()")
     )
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("repositories.id"), nullable=False
+        ForeignKey("repositories.id", ondelete="CASCADE"),
+        nullable=False,
     )
     file_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("files.id"), nullable=True
+        ForeignKey("files.id", ondelete="CASCADE"), nullable=True
     )  # null = repo-level
     overall_score: Mapped[float] = mapped_column(Float, nullable=True)
     complexity_score: Mapped[float] = mapped_column(Float, nullable=True)
