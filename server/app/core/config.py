@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     SYNC_DATABASE_URL: str
     REDIS_URL: str
     OPENAI_API_KEY: str
+    AI_MODEL: str
 
     class Config:
         env_file = ".env"
