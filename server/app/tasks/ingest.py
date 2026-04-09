@@ -1,5 +1,3 @@
-# server/app/tasks/ingest.py
-
 import logging
 
 from app.core.celery import celery
@@ -13,6 +11,7 @@ from app.services.ingestion import (
     process_repository_files,
     score_repository_health,
 )
+from app.services.summarizer import generate_repo_summary
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +39,17 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
         embed_repository_symbols(db, redis_client, repo)
 
         score_repository_health(db, redis_client, repo)
+
+        repo.status = "summarizing"
+        db.commit()
+        publish("Generating architecture summary...")
+
+        summary = generate_repo_summary(
+            repo_id=repo.id,
+            repo_name=repo.name,
+            db=db,
+        )
+        repo.summary = summary
 
         repo.status = "ready"
         db.commit()
