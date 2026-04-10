@@ -1,3 +1,4 @@
+import { Toast } from "@/components/ui/Toast";
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
@@ -22,6 +23,7 @@ export default function RootLayout({
     <html lang="en" className={`${spaceGrotesk.className} antialiased`}>
       <body className="min-h-screen bg-background text-foreground overflow-x-hidden">
         {children}
+        <Toast />
       </body>
     </html>
   );

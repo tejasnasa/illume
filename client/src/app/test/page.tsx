@@ -1,11 +1,23 @@
-import Button from "@/ui/Button";
-import Input from "@/ui/Input";
-import Textarea from "@/ui/Textarea";
+"use client";
+
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import Textarea from "@/components/ui/Textarea";
+import { toast } from "@/lib/use-toast";
 
 export default function Test() {
   return (
     <div className="flex-col flex w-min gap-5 m-5">
-      <Button loading size="md">
+      <Button
+        size="md"
+        onClick={() =>
+          toast({
+            title: "Repo analyzed",
+            description: "AST graph generated successfully",
+            variant: "error",
+          })
+        }
+      >
         Click this
       </Button>
       <Input />
