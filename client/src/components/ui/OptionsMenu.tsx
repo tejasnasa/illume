@@ -54,7 +54,7 @@ export default function OptionMenu({
                 item.onClick?.();
                 setOpen(false);
               }}
-              className={`flex w-full items-center gap-2.5 rounded-xs px-3 py-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 hover:cursor-pointer
+              className={`flex w-full items-center gap-2.5 rounded-xs px-3 py-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 hover:cursor-pointer whitespace-nowrap
                 ${size === "sm" && "text-xs"}
                 ${size === "lg" && "text-sm"}
                 ${
