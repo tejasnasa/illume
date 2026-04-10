@@ -1,4 +1,4 @@
-import { Spinner } from "@/icons/Spinner";
+import { SpinnerIcon } from "@phosphor-icons/react/dist/ssr";
 
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: "xs" | "sm" | "md" | "lg";
@@ -38,9 +38,11 @@ export default function Button({
         ...(ratio && { aspectRatio: ratio }),
       }}
       disabled={loading || props.disabled}
-      className={`bg-(--primary) text-(--primary-foreground) hover:bg-(--primary)/90 rounded-xl transition-all duration-200 active:translate-y-0.5 inline-flex items-center justify-center gap-2 font-medium disabled:bg-(--primary)/40 disabled:cursor-default ${base} ${ratio ? "px-0" : ""} ${className}`}
+      className={`bg-(--primary) text-(--primary-foreground) hover:cursor-pointer hover:bg-(--primary)/90 rounded-xl transition-all duration-200 active:translate-y-0.5 inline-flex items-center justify-center gap-2 font-medium disabled:bg-(--primary)/40 disabled:cursor-default ${base} ${ratio ? "px-0" : ""} ${className}`}
     >
-      {loading && <Spinner className={iconSizes[size]} />}
+      {loading && (
+        <SpinnerIcon className={`animate-spin ${iconSizes[size]}`} />
+      )}
       {props.children}
     </button>
   );
