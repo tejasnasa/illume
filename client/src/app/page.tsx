@@ -1,5 +1,4 @@
-import logo from "@/assets/logo.svg";
-import Image from "next/image";
+import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 
 export default function Home() {
   return (
@@ -10,18 +9,21 @@ export default function Home() {
         <div className="orb orb-2" />
         <div className="orb orb-3" />
       </div>
-      <div className="grid-bg fixed inset-0 z-0 pointer-events-none" />
+      <div className="fixed inset-0 z-0 pointer-events-none" />
 
       {/* ── Content wrapper ── */}
       <div className="relative z-10">
         {/* ═══ NAVBAR ═══ */}
         <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl">
           <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Image src={logo} alt="Illume Logo" className="w-7 h-7" />
-              <span className="text-lg font-semibold tracking-tight text-white">
-                Illume
-              </span>
+            <div className="relative">
+              <div className="absolute inset-0 blur-xl bg-(--chart-1)/30 rounded-full" />
+
+              <StarFourIcon
+                className="relative text-(--chart-1)"
+                weight="fill"
+                size={36}
+              />
             </div>
             <div className="flex items-center gap-6">
               <a

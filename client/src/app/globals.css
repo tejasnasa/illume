@@ -63,6 +63,20 @@ html {
   animation: shimmer 2s linear infinite;
 }
 
+.grid-bg {
+  background-image:
+    linear-gradient(
+      oklch(from var(--foreground) l c h / 0.02) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      90deg,
+      oklch(from var(--foreground) l c h / 0.02) 1px,
+      transparent 1px
+    );
+  background-size: 64px 64px;
+}
+
 /* ── Selection ── */
 ::selection {
   background: oklch(from var(--primary) l c h / 0.35);
@@ -356,16 +370,3 @@ html {
 }
 
 /* ── Grid bg ── */
-.grid-bg {
-  background-image:
-    linear-gradient(
-      oklch(from var(--foreground) l c h / 0.02) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      90deg,
-      oklch(from var(--foreground) l c h / 0.02) 1px,
-      transparent 1px
-    );
-  background-size: 64px 64px;
-}

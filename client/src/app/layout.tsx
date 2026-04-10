@@ -21,7 +21,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${spaceGrotesk.className} antialiased`}>
-      <body className="min-h-screen bg-background text-foreground overflow-x-hidden">
+      <body className="min-h-screen bg-background text-foreground overflow-x-hidden grid-bg">
         {children}
         <Toast />
       </body>
