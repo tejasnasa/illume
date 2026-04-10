@@ -12,8 +12,9 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, server_default=text("gen_random_uuid()")
     )
-    github_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    username: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str]  = mapped_column(String, unique=True, nullable=False, index=True)
+    password: Mapped[str] = mapped_column(String, nullable=False)
     avatar_url: Mapped[str] = mapped_column(String, nullable=True)
     github_access_token: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("now()"))
