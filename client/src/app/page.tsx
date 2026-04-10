@@ -1,3 +1,6 @@
+import logo from "@/assets/logo.svg";
+import Image from "next/image";
+
 export default function Home() {
   return (
     <div className="relative min-h-screen w-full">
@@ -15,9 +18,7 @@ export default function Home() {
         <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl">
           <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-gradient-to-br from-(--primary) to-(--chart-2) flex items-center justify-center text-white font-bold text-sm rounded-full">
-                ✦
-              </div>
+              <Image src={logo} alt="Illume Logo" className="w-7 h-7" />
               <span className="text-lg font-semibold tracking-tight text-white">
                 Illume
               </span>
@@ -409,7 +410,9 @@ function FeatureCard({
       >
         {emoji}
       </div>
-      <h3 className="text-xl font-semibold text-(--foreground) mb-3">{title}</h3>
+      <h3 className="text-xl font-semibold text-(--foreground) mb-3">
+        {title}
+      </h3>
       <p className="text-[15px] text-(--mute-foreground) leading-relaxed mb-4">
         {description}
       </p>
