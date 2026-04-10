@@ -12,10 +12,10 @@ export default function Home() {
       {/* ── Content wrapper ── */}
       <div className="relative z-10">
         {/* ═══ NAVBAR ═══ */}
-        <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl bg-[#050510]/70 border-b border-white/[0.04]">
+        <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl">
           <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center text-white font-bold text-sm">
+              <div className="w-8 h-8 bg-gradient-to-br from-(--primary) to-(--chart-2) flex items-center justify-center text-white font-bold text-sm rounded-full">
                 ✦
               </div>
               <span className="text-lg font-semibold tracking-tight text-white">
@@ -23,20 +23,29 @@ export default function Home() {
               </span>
             </div>
             <div className="flex items-center gap-6">
-              <a href="#features" className="text-sm text-zinc-400 hover:text-white transition-colors hidden sm:block">
+              <a
+                href="#features"
+                className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors hidden sm:block"
+              >
                 Features
               </a>
-              <a href="#tech" className="text-sm text-zinc-400 hover:text-white transition-colors hidden sm:block">
+              <a
+                href="#tech"
+                className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors hidden sm:block"
+              >
                 Stack
               </a>
-              <a href="#architecture" className="text-sm text-zinc-400 hover:text-white transition-colors hidden sm:block">
+              <a
+                href="#architecture"
+                className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors hidden sm:block"
+              >
                 Architecture
               </a>
               <a
                 href="https://github.com/tejasnasa/illume"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-full border border-white/10 text-zinc-300 hover:text-white hover:border-violet-500/40 transition-all"
+                className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-full border border-(--foreground)/10 text-(--muted-foreground) hover:text-(--foreground) hover:border-(--primary)/40 transition-all"
               >
                 <GithubIcon />
                 GitHub
@@ -59,7 +68,7 @@ export default function Home() {
 
           {/* Heading */}
           <h1 className="fade-up fd2 max-w-4xl">
-            <span className="block text-[clamp(40px,6vw,72px)] font-bold tracking-tighter text-white leading-[1.1]">
+            <span className="block text-[clamp(40px,6vw,72px)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
               Understand any
             </span>
             <span className="gradient-text block text-[clamp(40px,6vw,72px)] font-bold tracking-tighter leading-[1.1] mt-2">
@@ -68,11 +77,13 @@ export default function Home() {
           </h1>
 
           {/* Subtitle */}
-          <p className="fade-up fd3 mt-6 text-lg sm:text-xl text-zinc-400 max-w-2xl leading-relaxed">
+          <p className="fade-up fd3 mt-6 text-lg sm:text-xl text-(--muted-foreground) max-w-2xl leading-relaxed">
             AI-powered repo analysis with a deterministic{" "}
-            <span className="text-violet-400 font-medium">AST-first</span>{" "}
+            <span className="text-(--chart-1) font-medium">AST-first</span>{" "}
             approach — hallucination-free querying and{" "}
-            <span className="text-cyan-400 font-medium">3D architectural</span>{" "}
+            <span className="text-(--primary) font-medium">
+              3D architectural
+            </span>{" "}
             visualization.
           </p>
 
@@ -82,18 +93,28 @@ export default function Home() {
               href="https://github.com/tejasnasa/illume"
               target="_blank"
               rel="noopener noreferrer"
-              className="cta-glow inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium text-sm"
+              className="cta-glow inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-linear-to-r from-(--primary) to-(--accent) text-(--foreground) font-medium text-sm"
             >
               <GithubIcon />
               View on GitHub
             </a>
             <a
               href="#features"
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-white/10 text-zinc-300 font-medium text-sm hover:border-violet-500/30 hover:text-white transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--foreground)/10 text-(--muted-foreground) font-medium text-sm hover:border-(--primary)/30 hover:text-(--foreground) transition-all"
             >
               Explore Features
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
               </svg>
             </a>
           </div>
@@ -109,10 +130,12 @@ export default function Home() {
           </div>
 
           {/* Scroll indicator */}
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-zinc-600">
-            <span className="text-[10px] tracking-[0.15em] uppercase">Scroll</span>
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-(--muted-foreground)">
+            <span className="text-[10px] tracking-[0.15em] uppercase">
+              Scroll
+            </span>
             <div className="w-5 h-8 rounded-full border border-zinc-700 flex justify-center pt-1.5">
-              <div className="scroll-bounce w-[3px] h-2 rounded-full bg-zinc-500" />
+              <div className="scroll-bounce w-[3px] h-2 rounded-full bg-(--muted-foreground)" />
             </div>
           </div>
         </section>
@@ -123,14 +146,15 @@ export default function Home() {
         {/* ═══ FEATURES ═══ */}
         <section id="features" className="py-32 px-6 max-w-[1200px] mx-auto">
           <div className="text-center mb-20">
-            <span className="block text-xs font-semibold tracking-[0.2em] uppercase text-violet-400 mb-4">
+            <span className="block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
               Capabilities
             </span>
-            <h2 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">
+            <h2 className="text-4xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
               Engineered for <span className="gradient-text">precision</span>
             </h2>
-            <p className="mt-4 text-lg text-zinc-500 max-w-xl mx-auto">
-              No guesswork. No hallucinations. Just deterministic, structural code intelligence.
+            <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
+              No guesswork. No hallucinations. Just deterministic, structural
+              code intelligence.
             </p>
           </div>
 
@@ -174,15 +198,18 @@ export default function Home() {
         <div className="glow-line max-w-3xl mx-auto" />
 
         {/* ═══ ARCHITECTURE ═══ */}
-        <section id="architecture" className="py-32 px-6 max-w-[1000px] mx-auto">
+        <section
+          id="architecture"
+          className="py-32 px-6 max-w-[1000px] mx-auto"
+        >
           <div className="text-center mb-16">
-            <span className="block text-xs font-semibold tracking-[0.2em] uppercase text-rose-400 mb-4">
+            <span className="block text-xs font-semibold tracking-[0.2em] uppercase text-(--destructive) mb-4">
               Architecture
             </span>
-            <h2 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">
+            <h2 className="text-4xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
               How it <span className="gradient-text">works</span>
             </h2>
-            <p className="mt-4 text-lg text-zinc-500 max-w-xl mx-auto">
+            <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
               From GitHub URL to queryable, visualized code intelligence.
             </p>
           </div>
@@ -191,42 +218,47 @@ export default function Home() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
               <ArchStep
                 emoji="📥"
-                colorClass="bg-violet-500/10 border-violet-500/20"
+                colorClass="bg-(--primary)/10 border-(--primary)/20"
                 step="1"
                 title="Ingest"
                 desc="Submit a GitHub URL. Celery workers clone the repo via a Redis-brokered task queue."
               />
               <ArchStep
                 emoji="🌳"
-                colorClass="bg-cyan-500/10 border-cyan-500/20"
+                colorClass="bg-(--accent)/10 border-(--accent)/20"
                 step="2"
                 title="Parse"
                 desc="Tree-Sitter traverses the AST. Functions, classes, and calls are extracted deterministically."
               />
               <ArchStep
                 emoji="🧠"
-                colorClass="bg-rose-500/10 border-rose-500/20"
+                colorClass="bg-(--accent)/10 border-(--accent)/20"
                 step="3"
                 title="Embed & Query"
                 desc="Code blocks become vector embeddings in pgvector. Ask anything — get pinpoint-accurate answers."
               />
             </div>
 
-            <div className="mt-10 pt-6 border-t border-white/[0.04] flex flex-wrap justify-center gap-6 text-xs text-zinc-600">
+            <div className="mt-10 pt-6 border-t border-(--foreground)/[0.04] flex flex-wrap justify-center gap-6 text-xs text-(--muted-foreground)">
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />FastAPI
+                <span className="w-1.5 h-1.5 rounded-full bg-(--primary)" />
+                FastAPI
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />Redis
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                Redis
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />Celery
+                <span className="w-1.5 h-1.5 rounded-full bg-(--accent)" />
+                Celery
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />PostgreSQL + pgvector
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                PostgreSQL + pgvector
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-white" />Next.js
+                <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                Next.js
               </span>
             </div>
           </div>
@@ -262,7 +294,9 @@ export default function Home() {
                   In Progress
                 </span>
               </div>
-              <p className="text-sm text-zinc-300">AST engine &amp; Tree-Sitter integration</p>
+              <p className="text-sm text-zinc-300">
+                AST engine &amp; Tree-Sitter integration
+              </p>
             </div>
             <div className="glass-card rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
@@ -271,7 +305,9 @@ export default function Home() {
                   Planned
                 </span>
               </div>
-              <p className="text-sm text-zinc-300">RAG pipeline &amp; vector embeddings</p>
+              <p className="text-sm text-zinc-300">
+                RAG pipeline &amp; vector embeddings
+              </p>
             </div>
             <div className="glass-card rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
@@ -280,7 +316,9 @@ export default function Home() {
                   Upcoming
                 </span>
               </div>
-              <p className="text-sm text-zinc-300">3D visualization &amp; chat interface</p>
+              <p className="text-sm text-zinc-300">
+                3D visualization &amp; chat interface
+              </p>
             </div>
           </div>
 
@@ -288,7 +326,7 @@ export default function Home() {
             href="https://github.com/tejasnasa/illume"
             target="_blank"
             rel="noopener noreferrer"
-            className="cta-glow inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-gradient-to-r from-violet-600 to-violet-500 text-white font-medium text-sm"
+            className="cta-glow inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-gradient-to-r from-violet-600 to-(--primary) text-white font-medium text-sm"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
@@ -298,10 +336,10 @@ export default function Home() {
         </section>
 
         {/* ═══ FOOTER ═══ */}
-        <footer className="border-t border-white/[0.04] py-10 px-6">
+        <footer className="border-t border-(--foreground)/[0.04] py-10 px-6">
           <div className="max-w-[1200px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-500 to-cyan-400 flex items-center justify-center text-white text-[10px] font-bold">
+              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-(--primary) to-(--accent) flex items-center justify-center text-white text-[10px] font-bold">
                 ✦
               </div>
               <span className="text-sm text-zinc-600">
@@ -310,7 +348,7 @@ export default function Home() {
                   href="https://github.com/tejasnasa"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-zinc-400 hover:text-white transition-colors"
+                  className="text-zinc-400 hover:text-(--foreground) transition-colors"
                 >
                   Tejas
                 </a>
@@ -331,12 +369,12 @@ export default function Home() {
 
 const COLOR_MAP: Record<string, { icon: string; tag: string }> = {
   violet: {
-    icon: "bg-violet-500/10 border border-violet-500/20",
-    tag: "bg-violet-500/10 text-violet-400 border border-violet-500/20",
+    icon: "bg-(--primary)/10 border border-(--primary)/20",
+    tag: "bg-(--primary)/10 text-(--primary) border border-(--primary)/20",
   },
   cyan: {
-    icon: "bg-cyan-500/10 border border-cyan-500/20",
-    tag: "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20",
+    icon: "bg-(--accent)/10 border border-(--accent)/20",
+    tag: "bg-(--accent)/10 text-(--accent) border border-(--accent)/20",
   },
   rose: {
     icon: "bg-rose-500/10 border border-rose-500/20",
@@ -366,14 +404,21 @@ function FeatureCard({
   const c = COLOR_MAP[color] ?? COLOR_MAP.violet;
   return (
     <div className="glass-card rounded-2xl p-8">
-      <div className={`${float} w-12 h-12 rounded-xl ${c.icon} flex items-center justify-center text-2xl mb-6`}>
+      <div
+        className={`${float} w-12 h-12 rounded-xl ${c.icon} flex items-center justify-center text-2xl mb-6`}
+      >
         {emoji}
       </div>
-      <h3 className="text-xl font-semibold text-white mb-3">{title}</h3>
-      <p className="text-[15px] text-zinc-400 leading-relaxed mb-4">{description}</p>
+      <h3 className="text-xl font-semibold text-(--foreground) mb-3">{title}</h3>
+      <p className="text-[15px] text-(--mute-foreground) leading-relaxed mb-4">
+        {description}
+      </p>
       <div className="flex flex-wrap gap-2">
         {tags.map((tag) => (
-          <span key={tag} className={`text-xs px-2.5 py-1 rounded-full ${c.tag}`}>
+          <span
+            key={tag}
+            className={`text-xs px-2.5 py-1 rounded-full ${c.tag}`}
+          >
             {tag}
           </span>
         ))}
@@ -397,7 +442,9 @@ function ArchStep({
 }) {
   return (
     <div className="text-center">
-      <div className={`node-glow w-16 h-16 rounded-2xl ${colorClass} border flex items-center justify-center text-[28px] mx-auto mb-4`}>
+      <div
+        className={`node-glow w-16 h-16 rounded-2xl ${colorClass} border flex items-center justify-center text-[28px] mx-auto mb-4`}
+      >
         {emoji}
       </div>
       <h4 className="text-sm font-semibold text-white mb-1">
