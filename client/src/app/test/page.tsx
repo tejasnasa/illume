@@ -2,6 +2,7 @@
 
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
 import Textarea from "@/components/ui/Textarea";
 import { toast } from "@/lib/use-toast";
 
@@ -22,6 +23,10 @@ export default function Test() {
       </Button>
       <Input />
       <Textarea />
+      <Modal trigger={<Button>Open Modal</Button>}>
+        <div>Hello!</div>
+        <Button>click this fr</Button>
+      </Modal>
     </div>
   );
 }
