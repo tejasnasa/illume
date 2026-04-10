@@ -1,7 +1,75 @@
+"use client";
+
 import Navbar from "@/components/Navbar";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
+import RepoCard from "@/components/ui/RepoCard";
+import Masonry from "react-masonry-css";
+
+const REPO_DATA = [
+  {
+    id: 1,
+    name: "My Repository",
+    description: "A simple repository for demonstration purposes.",
+    updatedAt: "20 minutes ago",
+    github_url: "https://github.com/user/repo1",
+    status: "ready",
+  },
+  {
+    id: 2,
+    name: "Another Repo",
+    description:
+      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
+    updatedAt: "5 days ago",
+    github_url: "https://github.com/user/repo2",
+    status: "pending",
+  },
+  {
+    id: 3,
+    name: "My Repository",
+    description: "A simple repository for demonstration purposes. lorem ipsum dolor sit amet consectetur adipisicing elit. Voluptas, dicta.",
+    updatedAt: "20 minutes ago",
+    github_url: "https://github.com/user/repo1",
+    status: "ready",
+  },
+  {
+    id: 4,
+    name: "Another Repo",
+    description:
+      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
+    updatedAt: "5 days ago",
+    github_url: "https://github.com/user/repo2",
+    status: "pending",
+  },
+  {
+    id: 22,
+    name: "Another Repo",
+    description:
+      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
+    updatedAt: "5 days ago",
+    github_url: "https://github.com/user/repo2",
+    status: "pending",
+  },
+  {
+    id: 21,
+    name: "Another Repo",
+    description:
+      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
+    updatedAt: "5 days ago",
+    github_url: "https://github.com/user/repo2",
+    status: "pending",
+  },
+  {
+    id: 12,
+    name: "Another Repo",
+    description:
+      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
+    updatedAt: "5 days ago",
+    github_url: "https://github.com/user/repo2",
+    status: "pending",
+  },
+];
 
 export default function Dashboard() {
   return (
@@ -34,6 +102,16 @@ export default function Dashboard() {
             </form>
           </Modal>
         </section>
+
+        <Masonry
+          className="flex gap-5 mt-6"
+          columnClassName="space-y-5"
+          breakpointCols={4}
+        >
+          {REPO_DATA.map((repo) => (
+            <RepoCard key={repo.id} repo={repo} />
+          ))}
+        </Masonry>
       </main>
     </>
   );
