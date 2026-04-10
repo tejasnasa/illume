@@ -43,7 +43,7 @@ export default function OptionMenu({
 
       {open && (
         <div
-          className={`absolute z-50 mt-1 rounded-xl border border-(--border) bg-(--card) shadow-xl shadow-(--primary)/5 p-1.5 backdrop-blur-xl ${direction === "left" ? "right-0" : "left-0"} ${className || ""}`}
+          className={`absolute z-50 mt-1 rounded-sm border border-(--border) bg-(--card) shadow-xl shadow-(--primary)/5 p-1.5 backdrop-blur-xl ${direction === "left" ? "right-0" : "left-0"} ${className || ""}`}
           style={{ animation: "scale-in 0.15s ease-out" }}
         >
           {items.map((item, i) => (
@@ -54,7 +54,7 @@ export default function OptionMenu({
                 item.onClick?.();
                 setOpen(false);
               }}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 hover:cursor-pointer
+              className={`flex w-full items-center gap-2.5 rounded-xs px-3 py-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 hover:cursor-pointer
                 ${size === "sm" && "text-xs"}
                 ${size === "lg" && "text-sm"}
                 ${

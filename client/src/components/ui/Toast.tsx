@@ -47,9 +47,9 @@ function ToastItem({
 
   return (
     <div
-      className={`w-[320px] rounded-xl border px-4 py-3 shadow-lg backdrop-blur-xl animate-in fade-in slide-in-from-right flex gap-3 items-center justify-center ${variantStyles[variant]}`}
+      className={`w-[320px] rounded-sm border p-3 shadow-lg backdrop-blur-xl animate-in fade-in slide-in-from-right flex gap-3 items-center justify-center ${variantStyles[variant]}`}
     >
-      <div className="flex items-center justify-center rounded-md ">
+      <div className="flex items-center justify-center rounded-sm ">
         {iconMap[variant]}
       </div>
       <div className="flex-1">
