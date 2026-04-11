@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime
 
 from app.core.database import get_sync_db
 from app.models.repository import Repository
@@ -21,6 +22,8 @@ class RepositoryResponse(BaseModel):
     github_url: str
     name: str
     status: str
+    summary: str | None
+    updated_at: datetime
 
     class Config:
         from_attributes = True
