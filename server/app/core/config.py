@@ -7,9 +7,11 @@ class Settings(BaseSettings):
     REDIS_URL: str
     OPENAI_API_KEY: str
     AI_MODEL: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    SECRET_KEY: str
 
     class Config:
         env_file = ".env"
 
 
-settings = Settings() #type: ignore
+settings = Settings()  # type: ignore
