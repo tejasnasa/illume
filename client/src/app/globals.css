@@ -66,12 +66,12 @@ html {
 .grid-bg {
   background-image:
     linear-gradient(
-      oklch(from var(--foreground) l c h / 0.02) 1px,
+      oklch(from var(--foreground) l c h / 0.04) 1px,
       transparent 1px
     ),
     linear-gradient(
       90deg,
-      oklch(from var(--foreground) l c h / 0.02) 1px,
+      oklch(from var(--foreground) l c h / 0.04) 1px,
       transparent 1px
     );
   background-size: 64px 64px;
