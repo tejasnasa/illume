@@ -1,0 +1,517 @@
+{
+  "nodes": [
+    {
+      "id": "f8c715a6-1a26-4494-b7de-b512e09fd5a6",
+      "label": "drizzle.config.ts",
+      "path": "drizzle.config.ts",
+      "group": "root",
+      "kind": "file",
+      "loc": 12,
+      "health": 90,
+      "language": "typescript"
+    },
+    {
+      "id": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "label": "src\\index.ts",
+      "path": "src\\index.ts",
+      "group": "src",
+      "kind": "file",
+      "loc": 38,
+      "health": 67.5,
+      "language": "typescript"
+    },
+    {
+      "id": "b520b666-0494-499f-8767-8745c5a26557",
+      "label": "src\\config\\env.ts",
+      "path": "src\\config\\env.ts",
+      "group": "src/config",
+      "kind": "file",
+      "loc": 15,
+      "health": 82.5,
+      "language": "typescript"
+    },
+    {
+      "id": "cba29104-a557-4ee3-b189-1592727e3acb",
+      "label": "src\\controllers\\auth.ts",
+      "path": "src\\controllers\\auth.ts",
+      "group": "src/controllers",
+      "kind": "file",
+      "loc": 129,
+      "health": 55,
+      "language": "typescript"
+    },
+    {
+      "id": "0e3c9e0a-f46a-4f1f-8b7a-2d72f2a24034",
+      "label": "src\\controllers\\bookmark.ts",
+      "path": "src\\controllers\\bookmark.ts",
+      "group": "src/controllers",
+      "kind": "file",
+      "loc": 89,
+      "health": 68.8,
+      "language": "typescript"
+    },
+    {
+      "id": "d4af700e-e717-4db1-813c-454f7250e82a",
+      "label": "src\\controllers\\like.ts",
+      "path": "src\\controllers\\like.ts",
+      "group": "src/controllers",
+      "kind": "file",
+      "loc": 81,
+      "health": 72.5,
+      "language": "typescript"
+    },
+    {
+      "id": "c5f435a9-9a02-4a1c-8eb7-37dc3a4da17a",
+      "label": "src\\controllers\\post.ts",
+      "path": "src\\controllers\\post.ts",
+      "group": "src/controllers",
+      "kind": "file",
+      "loc": 201,
+      "health": 69.8,
+      "language": "typescript"
+    },
+    {
+      "id": "65dccbb3-88eb-49e3-9749-e226ef20f4c4",
+      "label": "src\\controllers\\search.ts",
+      "path": "src\\controllers\\search.ts",
+      "group": "src/controllers",
+      "kind": "file",
+      "loc": 100,
+      "health": 63.5,
+      "language": "typescript"
+    },
+    {
+      "id": "51d05c33-5c00-413e-b2c9-e6a3146399b0",
+      "label": "src\\controllers\\self.ts",
+      "path": "src\\controllers\\self.ts",
+      "group": "src/controllers",
+      "kind": "file",
+      "loc": 104,
+      "health": 62,
+      "language": "typescript"
+    },
+    {
+      "id": "341a34b0-cf43-47b9-9961-ba0dc085b216",
+      "label": "src\\controllers\\user.ts",
+      "path": "src\\controllers\\user.ts",
+      "group": "src/controllers",
+      "kind": "file",
+      "loc": 187,
+      "health": 65,
+      "language": "typescript"
+    },
+    {
+      "id": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "label": "src\\db\\schema.ts",
+      "path": "src\\db\\schema.ts",
+      "group": "src/db",
+      "kind": "file",
+      "loc": 83,
+      "health": 72.5,
+      "language": "typescript"
+    },
+    {
+      "id": "8513d8a7-229d-42ae-8927-05c3622cdfe9",
+      "label": "src\\middlewares\\authCheck.ts",
+      "path": "src\\middlewares\\authCheck.ts",
+      "group": "src/middlewares",
+      "kind": "file",
+      "loc": 49,
+      "health": 82.5,
+      "language": "typescript"
+    },
+    {
+      "id": "22ca0c9a-b372-44da-b716-21f588a5e256",
+      "label": "src\\middlewares\\validate.ts",
+      "path": "src\\middlewares\\validate.ts",
+      "group": "src/middlewares",
+      "kind": "file",
+      "loc": 22,
+      "health": 82.5,
+      "language": "typescript"
+    },
+    {
+      "id": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "label": "src\\models\\serverResponse.ts",
+      "path": "src\\models\\serverResponse.ts",
+      "group": "src/models",
+      "kind": "file",
+      "loc": 22,
+      "health": 67.5,
+      "language": "typescript"
+    },
+    {
+      "id": "9eb7f312-a5e3-41c1-b3e9-552f30854d69",
+      "label": "src\\models\\validations.ts",
+      "path": "src\\models\\validations.ts",
+      "group": "src/models",
+      "kind": "file",
+      "loc": 38,
+      "health": 85,
+      "language": "typescript"
+    },
+    {
+      "id": "a86fe0fc-2b05-4c23-b04d-e7a59dd36f5d",
+      "label": "src\\routes\\authRouter.ts",
+      "path": "src\\routes\\authRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 73,
+      "health": 80,
+      "language": "typescript"
+    },
+    {
+      "id": "5b1e2cf7-8936-4f60-b406-db2741ee3d64",
+      "label": "src\\routes\\bookmarkRouter.ts",
+      "path": "src\\routes\\bookmarkRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 24,
+      "health": 85,
+      "language": "typescript"
+    },
+    {
+      "id": "c923d232-935e-45c5-b060-6b1cb68973ae",
+      "label": "src\\routes\\likeRouter.ts",
+      "path": "src\\routes\\likeRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 24,
+      "health": 85,
+      "language": "typescript"
+    },
+    {
+      "id": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "label": "src\\routes\\masterRouter.ts",
+      "path": "src\\routes\\masterRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 22,
+      "health": 67.5,
+      "language": "typescript"
+    },
+    {
+      "id": "9c9e7b98-bb6e-452c-af28-7d46dae4f54d",
+      "label": "src\\routes\\postRouter.ts",
+      "path": "src\\routes\\postRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 52,
+      "health": 80,
+      "language": "typescript"
+    },
+    {
+      "id": "61a8959e-0c9f-4c82-b255-75e40c7aece7",
+      "label": "src\\routes\\searchRouter.ts",
+      "path": "src\\routes\\searchRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 16,
+      "health": 85,
+      "language": "typescript"
+    },
+    {
+      "id": "2eb8a51b-f7d4-4ef3-9860-4cd287450458",
+      "label": "src\\routes\\selfRouter.ts",
+      "path": "src\\routes\\selfRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 38,
+      "health": 85,
+      "language": "typescript"
+    },
+    {
+      "id": "fe093a54-17f5-48fa-9e7c-aedaec2264f0",
+      "label": "src\\routes\\userRouter.ts",
+      "path": "src\\routes\\userRouter.ts",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 41,
+      "health": 85,
+      "language": "typescript"
+    }
+  ],
+  "links": [
+    {
+      "source": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "target": "b520b666-0494-499f-8767-8745c5a26557",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "target": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cba29104-a557-4ee3-b189-1592727e3acb",
+      "target": "b520b666-0494-499f-8767-8745c5a26557",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cba29104-a557-4ee3-b189-1592727e3acb",
+      "target": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cba29104-a557-4ee3-b189-1592727e3acb",
+      "target": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cba29104-a557-4ee3-b189-1592727e3acb",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "61a8959e-0c9f-4c82-b255-75e40c7aece7",
+      "target": "65dccbb3-88eb-49e3-9749-e226ef20f4c4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0e3c9e0a-f46a-4f1f-8b7a-2d72f2a24034",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0e3c9e0a-f46a-4f1f-8b7a-2d72f2a24034",
+      "target": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0e3c9e0a-f46a-4f1f-8b7a-2d72f2a24034",
+      "target": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d4af700e-e717-4db1-813c-454f7250e82a",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d4af700e-e717-4db1-813c-454f7250e82a",
+      "target": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d4af700e-e717-4db1-813c-454f7250e82a",
+      "target": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c5f435a9-9a02-4a1c-8eb7-37dc3a4da17a",
+      "target": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c5f435a9-9a02-4a1c-8eb7-37dc3a4da17a",
+      "target": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c5f435a9-9a02-4a1c-8eb7-37dc3a4da17a",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "65dccbb3-88eb-49e3-9749-e226ef20f4c4",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "65dccbb3-88eb-49e3-9749-e226ef20f4c4",
+      "target": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "65dccbb3-88eb-49e3-9749-e226ef20f4c4",
+      "target": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "51d05c33-5c00-413e-b2c9-e6a3146399b0",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "51d05c33-5c00-413e-b2c9-e6a3146399b0",
+      "target": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "51d05c33-5c00-413e-b2c9-e6a3146399b0",
+      "target": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2eb8a51b-f7d4-4ef3-9860-4cd287450458",
+      "target": "51d05c33-5c00-413e-b2c9-e6a3146399b0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "341a34b0-cf43-47b9-9961-ba0dc085b216",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "341a34b0-cf43-47b9-9961-ba0dc085b216",
+      "target": "294b6b11-ed72-4e73-9454-382ac2cd4482",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "341a34b0-cf43-47b9-9961-ba0dc085b216",
+      "target": "10e209ea-358a-491a-a590-a8c342112b8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8513d8a7-229d-42ae-8927-05c3622cdfe9",
+      "target": "b520b666-0494-499f-8767-8745c5a26557",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8513d8a7-229d-42ae-8927-05c3622cdfe9",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "22ca0c9a-b372-44da-b716-21f588a5e256",
+      "target": "3fbc66c7-449c-48b2-b0eb-34a1b92a1c3c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a86fe0fc-2b05-4c23-b04d-e7a59dd36f5d",
+      "target": "9eb7f312-a5e3-41c1-b3e9-552f30854d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a86fe0fc-2b05-4c23-b04d-e7a59dd36f5d",
+      "target": "22ca0c9a-b372-44da-b716-21f588a5e256",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a86fe0fc-2b05-4c23-b04d-e7a59dd36f5d",
+      "target": "cba29104-a557-4ee3-b189-1592727e3acb",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5b1e2cf7-8936-4f60-b406-db2741ee3d64",
+      "target": "0e3c9e0a-f46a-4f1f-8b7a-2d72f2a24034",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c923d232-935e-45c5-b060-6b1cb68973ae",
+      "target": "d4af700e-e717-4db1-813c-454f7250e82a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "61a8959e-0c9f-4c82-b255-75e40c7aece7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "2eb8a51b-f7d4-4ef3-9860-4cd287450458",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "5b1e2cf7-8936-4f60-b406-db2741ee3d64",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "c923d232-935e-45c5-b060-6b1cb68973ae",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "fe093a54-17f5-48fa-9e7c-aedaec2264f0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "9c9e7b98-bb6e-452c-af28-7d46dae4f54d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "a86fe0fc-2b05-4c23-b04d-e7a59dd36f5d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b9b0ec2-c100-4b8f-9533-22424db0f44e",
+      "target": "8513d8a7-229d-42ae-8927-05c3622cdfe9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9c9e7b98-bb6e-452c-af28-7d46dae4f54d",
+      "target": "9eb7f312-a5e3-41c1-b3e9-552f30854d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9c9e7b98-bb6e-452c-af28-7d46dae4f54d",
+      "target": "22ca0c9a-b372-44da-b716-21f588a5e256",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9c9e7b98-bb6e-452c-af28-7d46dae4f54d",
+      "target": "c5f435a9-9a02-4a1c-8eb7-37dc3a4da17a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fe093a54-17f5-48fa-9e7c-aedaec2264f0",
+      "target": "341a34b0-cf43-47b9-9961-ba0dc085b216",
+      "type": "imports",
+      "weight": 1
+    }
+  ],
+  "metadata": {
+    "total_nodes": 23,
+    "total_edges": 46,
+    "clusters": 2
+  }
+}
