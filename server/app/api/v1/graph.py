@@ -5,7 +5,7 @@ from typing import Literal
 from app.core.database import get_sync_db
 from app.models.repository import Repository
 from app.services.graph_builder import build_graph
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -15,10 +15,16 @@ router = APIRouter(prefix="/api/v1/repository", tags=["graph"])
 @router.get("/{repo_id}/graph")
 def get_graph(
     repo_id: uuid.UUID,
+    request: Request,
     level: Literal["file", "symbol"] = Query("file", enum=["file", "symbol"]),
     db: Session = Depends(get_sync_db),
 ):
-    repo = db.query(Repository).filter_by(id=repo_id).first()
+    user_id = getattr(request.state, "user_id", None)
+    repo = (
+        db.query(Repository)
+        .filter(Repository.id == repo_id, Repository.user_id == user_id)
+        .first()
+    )
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 

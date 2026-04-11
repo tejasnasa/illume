@@ -4,7 +4,8 @@ import uuid
 from app.core.database import get_sync_db
 from app.models.file import File
 from app.models.health_metric import HealthMetric
-from fastapi import APIRouter, Depends, HTTPException, Query
+from app.models.repository import Repository
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -75,8 +76,18 @@ class HotspotResponse(BaseModel):
 @router.get("/{repo_id}/health", response_model=RepoHealthResponse)
 def get_repo_health(
     repo_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_sync_db),
 ):
+    user_id = getattr(request.state, "user_id", None)
+    repo = (
+        db.query(Repository)
+        .filter(Repository.id == repo_id, Repository.user_id == user_id)
+        .first()
+    )
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
     metric = (
         db.query(HealthMetric)
         .filter(
@@ -104,12 +115,22 @@ def get_repo_health(
 @router.get("/{repo_id}/health/files", response_model=FileHealthListResponse)
 def get_file_health(
     repo_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_sync_db),
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=200),
     sort_by: str = Query("overall_score"),
     order: str = Query("asc"),
 ):
+    user_id = getattr(request.state, "user_id", None)
+    repo = (
+        db.query(Repository)
+        .filter(Repository.id == repo_id, Repository.user_id == user_id)
+        .first()
+    )
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
     allowed_sort_columns = {
         "overall_score",
         "complexity_score",
@@ -166,8 +187,18 @@ def get_file_health(
 @router.get("/{repo_id}/hotspots", response_model=list[HotspotResponse])
 def get_hotspots(
     repo_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_sync_db),
 ):
+    user_id = getattr(request.state, "user_id", None)
+    repo = (
+        db.query(Repository)
+        .filter(Repository.id == repo_id, Repository.user_id == user_id)
+        .first()
+    )
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
     metrics = (
         db.query(HealthMetric)
         .filter(

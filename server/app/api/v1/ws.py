@@ -1,16 +1,46 @@
 import asyncio
 import logging
+import uuid
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-
+from app.core.database import get_async_db
 from app.core.redis import get_async_redis
+from app.core.security import decode_access_token
+from app.models.repository import Repository
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.websocket("/ws/ingest/{repo_id}")
-async def ingest_ws(websocket: WebSocket, repo_id: str):
+async def ingest_ws(
+    websocket: WebSocket,
+    repo_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_db),
+):
+    token = websocket.cookies.get("access_token")
+    if not token:
+        await websocket.close(code=1008, reason="Not authenticated")
+        return
+
+    user_id = decode_access_token(token)
+    if not user_id:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+
+    result = await db.execute(
+        select(Repository).where(
+            Repository.id == repo_id, Repository.user_id == user_id
+        )
+    )
+    repo = result.scalar_one_or_none()
+
+    if not repo:
+        await websocket.close(code=1008, reason="Repository not found or access denied")
+        return
+
     await websocket.accept()
     redis_client = get_async_redis()
     pubsub = redis_client.pubsub()

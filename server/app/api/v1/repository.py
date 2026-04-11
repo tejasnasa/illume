@@ -4,7 +4,7 @@ import uuid
 from app.core.database import get_sync_db
 from app.models.repository import Repository
 from app.tasks.ingest import ingest_repository
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -33,11 +33,17 @@ def _extract_repo_name(github_url: str) -> str:
 @router.post("", status_code=202)
 def create_repository(
     payload: RepositoryCreate,
+    request: Request,
     db: Session = Depends(get_sync_db),
 ):
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     repo = Repository(
         github_url=payload.github_url,
         name=_extract_repo_name(payload.github_url),
+        user_id=user_id,
     )
     db.add(repo)
     db.commit()
@@ -52,14 +58,28 @@ def create_repository(
 @router.get("/{repo_id}", response_model=RepositoryResponse)
 def get_repository(
     repo_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_sync_db),
 ):
-    repo = db.query(Repository).filter(Repository.id == repo_id).first()
+    user_id = getattr(request.state, "user_id", None)
+
+    repo = (
+        db.query(Repository)
+        .filter(Repository.id == repo_id, Repository.user_id == user_id)
+        .first()
+    )
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     return repo
 
 
 @router.get("", response_model=list[RepositoryResponse])
-def list_repositories(db: Session = Depends(get_sync_db)):
-    return db.query(Repository).order_by(Repository.created_at.desc()).all()
+def list_repositories(request: Request, db: Session = Depends(get_sync_db)):
+    user_id = getattr(request.state, "user_id", None)
+
+    return (
+        db.query(Repository)
+        .order_by(Repository.created_at.desc())
+        .filter(Repository.user_id == user_id)
+        .all()
+    )

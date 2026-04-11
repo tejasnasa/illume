@@ -5,7 +5,7 @@ from typing import Literal
 from app.core.database import get_sync_db
 from app.models.repository import Repository
 from app.services.rag import ChatMessage, answer_question
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -41,9 +41,15 @@ class ChatResponse(BaseModel):
 def chat(
     repo_id: uuid.UUID,
     payload: ChatRequest,
+    request: Request,
     db: Session = Depends(get_sync_db),
 ):
-    repo = db.query(Repository).filter(Repository.id == repo_id).first()
+    user_id = getattr(request.state, "user_id", None)
+    repo = (
+        db.query(Repository)
+        .filter(Repository.id == repo_id, Repository.user_id == user_id)
+        .first()
+    )
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
