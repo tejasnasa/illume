@@ -1,4 +1,4 @@
-import { signupSchema } from "@/validations/schema";
+import { signupSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";

@@ -80,9 +80,19 @@ def get_repository(
 def list_repositories(request: Request, db: Session = Depends(get_sync_db)):
     user_id = getattr(request.state, "user_id", None)
 
-    return (
+    repositories = (
         db.query(Repository)
         .order_by(Repository.created_at.desc())
         .filter(Repository.user_id == user_id)
         .all()
     )
+
+    results = []
+
+    for repo in repositories:
+        data = RepositoryResponse.model_validate(repo)
+        if data.summary and len(data.summary) > 200:
+            data.summary = data.summary[:200] + "..."
+        results.append(data)
+
+    return results

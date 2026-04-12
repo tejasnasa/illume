@@ -1,16 +1,8 @@
-"use client"
+"use client";
 
+import Repository from "@/types/repository";
 import Masonry from "react-masonry-css";
 import RepoCard from "./RepoCard";
-
-interface Repository {
-  id: number;
-  name: string;
-  description: string;
-  updatedAt: string;
-  github_url: string;
-  status: string;
-}
 
 export default function MasonryView({
   repositories,

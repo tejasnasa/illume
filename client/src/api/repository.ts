@@ -1,15 +1,7 @@
 "use server";
 
+import Repository from "@/types/repository";
 import { headers } from "next/headers";
-
-interface Repository {
-  id: number;
-  name: string;
-  description: string;
-  updatedAt: string;
-  github_url: string;
-  status: string;
-}
 
 export async function getRepositories(): Promise<Repository[]> {
   const res = await fetch(
