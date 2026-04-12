@@ -1,23 +1,12 @@
-import { signupSchema } from "@/validations/schema";
+"use client";
+
+import useSignupForm from "@/hooks/useSignupForm";
 import Link from "next/link";
-import { UseFormRegister } from "react-hook-form";
-import z from "zod";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
 
-interface SignupFormProps {
-  register: UseFormRegister<z.infer<typeof signupSchema>>;
-  firstError?: string;
-  isSubmitting: boolean;
-  onSubmit: (e: React.SubmitEvent) => void;
-}
-
-export default function SignupForm({
-  register,
-  firstError,
-  isSubmitting,
-  onSubmit,
-}: SignupFormProps) {
+export default function SignupForm() {
+  const { register, firstError, isSubmitting, onSubmit } = useSignupForm();
   return (
     <form
       className="bg-transparent w-[55%] p-8 rounded-sm mb-24"

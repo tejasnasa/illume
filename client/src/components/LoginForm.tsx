@@ -1,23 +1,12 @@
-import { loginSchema } from "@/validations/schema";
+"use client";
+
+import useLoginForm from "@/hooks/useLoginForm";
 import Link from "next/link";
-import { UseFormRegister } from "react-hook-form";
-import z from "zod";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
 
-interface LoginFormProps {
-  register: UseFormRegister<z.infer<typeof loginSchema>>;
-  firstError?: string;
-  isSubmitting: boolean;
-  onSubmit: (e: React.SubmitEvent) => void;
-}
-
-export default function LoginForm({
-  register,
-  firstError,
-  isSubmitting,
-  onSubmit,
-}: LoginFormProps) {
+export default function LoginForm() {
+  const { register, firstError, isSubmitting, onSubmit } = useLoginForm();
   return (
     <form
       className="bg-transparent w-[55%] p-8 rounded-sm mb-24"
