@@ -1,24 +1,23 @@
-import { signupSchema } from "@/validations/schema";
+import { loginSchema } from "@/validations/schema";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
-export default function useSignupForm() {
+export default function useLoginForm() {
   const router = useRouter();
-  const form = useForm<z.infer<typeof signupSchema>>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: { name: "", email: "", password: "" },
+  const form = useForm<z.infer<typeof loginSchema>>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
   });
 
-  const { name, email, password, root } = form.formState.errors;
-  const firstError =
-    name?.message || email?.message || password?.message || root?.message;
+  const { email, password, root } = form.formState.errors;
+  const firstError = email?.message || password?.message || root?.message;
 
   const onSubmit = form.handleSubmit(async (data) => {
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/signup`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/login`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
