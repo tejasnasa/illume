@@ -1,6 +1,6 @@
 import avatar from "@/assets/loginart.jpg";
+import useLogout from "@/hooks/useLogout";
 import {
-  GearIcon,
   GearSixIcon,
   SignOutIcon,
   StarFourIcon,
@@ -11,6 +11,7 @@ import Link from "next/link";
 import OptionsMenu from "./ui/OptionsMenu";
 
 export default function Navbar() {
+  const { logout } = useLogout();
   return (
     <header className="flex justify-between">
       <Link
@@ -49,6 +50,7 @@ export default function Navbar() {
             label: "Logout",
             destructive: true,
             icon: <SignOutIcon size={"inherit"} />,
+            onClick: logout,
           },
         ]}
         size="lg"
