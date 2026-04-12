@@ -1,10 +1,12 @@
 import loginimg from "@/assets/loginart6.jpg";
 import SignupForm from "@/components/SignupForm";
+import useSignupForm from "@/hooks/useSignupForm";
 import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 import Image from "next/image";
 import Link from "next/link";
 
 export default function Signup() {
+  const { register, firstError, isSubmitting, onSubmit } = useSignupForm();
   return (
     <main className="flex h-dvh w-dvw overflow-hidden">
       <section className="w-1/2 relative overflow-hidden">
@@ -25,7 +27,12 @@ export default function Signup() {
           />
         </Link>
         <div className="flex-1 flex justify-center items-center">
-          <SignupForm />
+          <SignupForm
+            register={register}
+            firstError={firstError}
+            isSubmitting={isSubmitting}
+            onSubmit={onSubmit}
+          />
         </div>
       </section>
     </main>

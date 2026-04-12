@@ -1,10 +1,13 @@
 import loginimg from "@/assets/loginart6.jpg";
 import LoginForm from "@/components/LoginForm";
+import useLoginForm from "@/hooks/useLoginForm";
 import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 import Image from "next/image";
 import Link from "next/link";
 
 export default function Login() {
+  const { register, firstError, isSubmitting, onSubmit } = useLoginForm();
+
   return (
     <main className="flex h-dvh w-dvw overflow-hidden">
       <section className="w-1/2 flex flex-col">
@@ -22,7 +25,12 @@ export default function Login() {
           />
         </Link>
         <div className="flex-1 flex justify-center items-center">
-          <LoginForm />
+          <LoginForm
+            register={register}
+            firstError={firstError}
+            isSubmitting={isSubmitting}
+            onSubmit={onSubmit}
+          />
         </div>
       </section>
       <section className="w-1/2 relative overflow-hidden">
