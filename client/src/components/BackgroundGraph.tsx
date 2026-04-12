@@ -1,12 +1,12 @@
 "use client";
 
-import data from "@/data/graph.json";
+import Graph from "@/types/graph";
 import { useEffect, useRef } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 
 const ORBIT_SPEED = 0.0001; // radians per ms
 
-export default function BackgroundGraph() {
+export default function BackgroundGraph({ graph }: { graph: Graph }) {
   const fgRef = useRef<any>(null);
   const angleRef = useRef(0);
   const rafRef = useRef<number | null>(null);
@@ -51,7 +51,7 @@ export default function BackgroundGraph() {
   return (
     <div className="fixed inset-0 -z-10">
       <ForceGraph3D
-        graphData={data}
+        graphData={graph}
         nodeLabel="label"
         nodeVal={(node: any) => node.loc || 10}
         linkDirectionalParticles={2}
