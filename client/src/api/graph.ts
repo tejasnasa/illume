@@ -1,19 +1,14 @@
 "use server";
 
+import Graph from "@/types/graph";
 import { headers } from "next/headers";
 
-interface Repository {
-  id: number;
-  name: string;
-  summary: string;
-  updatedAt: string;
-  github_url: string;
-  status: string;
-}
-
-export async function getRepoGraph(): Promise<Repository[]> {
+export async function getRepoGraph(
+  repoId: string,
+  level: "file" | "symbol",
+): Promise<Graph[]> {
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository`,
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${repoId}/graph?level=${level}`,
     {
       headers: { cookie: (await headers()).get("cookie") ?? "" },
       cache: "no-store",
