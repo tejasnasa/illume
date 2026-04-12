@@ -18,7 +18,7 @@ export default function useSignupForm() {
   const onSubmit = form.handleSubmit(async (data) => {
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/signup`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/register`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

@@ -8,9 +8,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         public_paths = [
             "/healthz",
-            "/auth/login",
-            "/auth/register",
-            "/auth/logout",
+            "/api/v1/auth/login",
+            "/api/v1/auth/register",
+            "/api/v1/auth/logout",
             "/openapi.json",
             "/docs",
             "/redoc",
