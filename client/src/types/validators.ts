@@ -22,3 +22,7 @@ export const loginSchema = z.object({
   email: z.email({ message: "Enter a valid email." }).trim(),
   password: z.string().min(8, { message: "Enter a valid password" }).trim(),
 });
+
+export const repoCreateSchema = z.object({
+  github_url: z.url({ message: "Enter a valid GitHub repository URL." }).trim(),
+});
