@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import JSON, Enum, ForeignKey, Integer, String, Text, text
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -32,4 +32,7 @@ class AstSymbol(Base):
     end_line: Mapped[int] = mapped_column(Integer, nullable=True)
     source_code: Mapped[str] = mapped_column(Text, nullable=True)
     cyclomatic_complexity: Mapped[int] = mapped_column(Integer, nullable=True)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSON, nullable=True)
+    docstring: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )

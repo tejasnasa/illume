@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -19,4 +20,10 @@ class File(Base):
     path: Mapped[str] = mapped_column(String, nullable=False)
     language: Mapped[str] = mapped_column(String, nullable=True)
     loc: Mapped[int] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=text("now()"))
+    fan_in: Mapped[int] = mapped_column(Integer, default=0)
+    fan_out: Mapped[int] = mapped_column(Integer, default=0)
+    criticality: Mapped[str | None] = mapped_column(String, nullable=True)
+    criticality_reasons: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    change_frequency: Mapped[float | None] = mapped_column(Float, nullable=True)
+    has_tests: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

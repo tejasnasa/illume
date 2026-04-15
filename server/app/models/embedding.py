@@ -1,7 +1,7 @@
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, ForeignKey, Text, text
+from sqlalchemy import UUID, ForeignKey, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -13,13 +13,15 @@ class Embedding(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, server_default=text("gen_random_uuid()")
     )
-    symbol_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("ast_symbols.id", ondelete="CASCADE"), nullable=True
+    source_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
-    file_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
+    file_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("files.id", ondelete="CASCADE"), nullable=True
+    )
     repository_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False
     )
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list] = mapped_column(Vector(1536), nullable=False)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSON, nullable=True)
+    source_type: Mapped[str] = mapped_column(String, nullable=False)

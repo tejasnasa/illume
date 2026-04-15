@@ -1,4 +1,3 @@
-# server/test.py
 from app.core.database import get_sync_db
 from app.models.repository import Repository
 from app.models.file import File

@@ -29,5 +29,5 @@ class HealthMetric(Base):
     circular_deps: Mapped[int] = mapped_column(Integer, nullable=True)
     breakdown: Mapped[dict] = mapped_column(JSON, nullable=True)
     computed_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=text("now()")
+        DateTime(timezone=True), server_default=text("now()")
     )

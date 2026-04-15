@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import JSON, Enum, ForeignKey, text
+from sqlalchemy import Enum, ForeignKey, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -22,4 +22,3 @@ class Dependency(Base):
         Enum("imports", "calls", "inherits", "instantiates", name="dep_type"),
         nullable=False,
     )
-    metadata_: Mapped[dict] = mapped_column("metadata", JSON, nullable=True)
