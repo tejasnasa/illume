@@ -1,10 +1,13 @@
 import logging
 import os
+import re
 import shutil
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import UUID
 
 import git
 from app.models import AstSymbol, Dependency, File, HealthMetric, Repository
@@ -15,6 +18,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+CRITICAL_PATH_PATTERNS = [
+    r"config\.",
+    r"database\.",
+    r"middleware/",
+    r"migrations/",
+    r"auth\.",
+    r"security\.",
+    r"celery\.",
+    r"main\.",
+]
 
 
 SOURCE_EXTENSIONS = {
@@ -172,6 +187,12 @@ def process_repository_files(
     dep_count = resolve_dependencies(db, repo.id)
     _publish_log(redis_client, str(repo.id), f"Resolved {dep_count} dependencies.")
 
+    _publish_log(redis_client, str(repo.id), "Computing fan-in/fan-out metrics...")
+    compute_fan_metrics(db, repo.id)
+
+    _publish_log(redis_client, str(repo.id), "Scoring file criticality...")
+    run_criticality_scoring(db, repo.id)
+
     return processed
 
 
@@ -282,6 +303,51 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID) -> int:
     return count
 
 
+def compute_fan_metrics(db: Session, repo_id: uuid.UUID) -> None:
+    from collections import defaultdict
+
+    fan_in: dict[uuid.UUID, int] = defaultdict(int)
+    fan_out: dict[uuid.UUID, int] = defaultdict(int)
+
+    deps = db.query(Dependency).filter(Dependency.source_symbol_id.isnot(None)).all()
+
+    symbol_to_file: dict[uuid.UUID, uuid.UUID] = {}
+    files = db.query(File).filter(File.repository_id == repo_id).all()
+    file_ids = {f.id for f in files}
+
+    symbols = (
+        db.query(AstSymbol)
+        .join(File, AstSymbol.file_id == File.id)
+        .filter(File.repository_id == repo_id)
+        .all()
+    )
+    for s in symbols:
+        symbol_to_file[s.id] = s.file_id
+
+    for dep in deps:
+        src_file = (
+            symbol_to_file.get(dep.source_symbol_id) if dep.source_symbol_id else None
+        )
+        tgt_file = (
+            symbol_to_file.get(dep.target_symbol_id) if dep.target_symbol_id else None
+        )
+        if (
+            src_file
+            and tgt_file
+            and src_file in file_ids
+            and tgt_file in file_ids
+            and src_file != tgt_file
+        ):
+            fan_out[src_file] += 1
+            fan_in[tgt_file] += 1
+
+    for f in files:
+        f.fan_in = fan_in[f.id]
+        f.fan_out = fan_out[f.id]
+
+    db.commit()
+
+
 def score_repository_health(
     db: Session,
     redis_client,
@@ -312,3 +378,54 @@ def score_repository_health(
         f"Health scoring complete — {hotspot_count} hotspot(s) found.",
     )
     return hotspot_count
+
+
+def _score_file(file) -> tuple[str, list[str]]:
+    score = 0
+    reasons: list[str] = []
+    now = datetime.now(tz=timezone.utc)
+
+    fan_in = file.fan_in or 0
+    if fan_in >= 10:
+        score += 3
+        reasons.append(f"imported by {fan_in} files")
+    elif fan_in >= 5:
+        score += 1
+        reasons.append(f"imported by {fan_in} files")
+
+    if any(re.search(p, file.path) for p in CRITICAL_PATH_PATTERNS):
+        score += 2
+        reasons.append("core infrastructure file")
+
+    if file.git_last_modified:
+        last_modified = file.git_last_modified
+        if last_modified.tzinfo is None:
+            last_modified = last_modified.replace(tzinfo=timezone.utc)
+        if (now - last_modified).days > 180:
+            score += 1
+            reasons.append("untouched for 6+ months")
+
+    if not file.has_tests:
+        score += 1
+        reasons.append("no test coverage")
+
+    if score >= 4:
+        criticality = "critical"
+    elif score >= 2:
+        criticality = "caution"
+    else:
+        criticality = "safe"
+
+    return criticality, reasons
+
+
+def run_criticality_scoring(db: Session, repo_id: UUID) -> int:
+    from app.models import File
+
+    files = db.query(File).filter(File.repository_id == repo_id).all()
+
+    for f in files:
+        f.criticality, f.criticality_reasons = _score_file(f)
+
+    db.commit()
+    return len(files)

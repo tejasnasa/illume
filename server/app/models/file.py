@@ -26,4 +26,5 @@ class File(Base):
     criticality_reasons: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     change_frequency: Mapped[float | None] = mapped_column(Float, nullable=True)
     has_tests: Mapped[bool] = mapped_column(Boolean, default=False)
+    git_last_modified: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))

@@ -239,7 +239,7 @@ def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
 
         result[path] = {
             "change_frequency": total_commits,
-            "last_modified": file_last_modified[path],
+            "git_last_modified": file_last_modified[path],
             "primary_owner_email": primary_email,
             "primary_owner_name": primary_name,
             "contributors": contributors,
@@ -350,7 +350,7 @@ def _bulk_update_files(
             {
                 "id": file_id,
                 "change_frequency": stats["change_frequency"],
-                "last_modified": stats["last_modified"],
+                "git_last_modified": stats["git_last_modified"],
                 "has_tests": has_tests_map.get(path, False),
             }
         )
