@@ -79,7 +79,6 @@ def clone_repository(
         git.Repo.clone_from(
             clone_url,
             tmp_dir,
-            depth=1,
             single_branch=True,
         )
     except git.GitCommandError as e:
@@ -236,12 +235,7 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID) -> int:
         if not imp.name or imp.name in ("<anonymous>", ""):
             continue
 
-        module_path = (
-            imp.name.replace("\\", "/")
-            .replace(".", "/")
-            .lstrip("./")
-            .strip()
-        )
+        module_path = imp.name.replace("\\", "/").replace(".", "/").lstrip("./").strip()
 
         for noise in (
             " as aioredis",

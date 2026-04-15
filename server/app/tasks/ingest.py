@@ -12,6 +12,7 @@ from app.services.ingestion import (
     score_repository_health,
 )
 from app.services.summarizer import generate_repo_summary
+from app.services.git_analyzer import analyze_git_history
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
 
         try:
             process_repository_files(db, redis_client, repo, tmp_dir)
+            analyze_git_history(db, redis_client, repo, tmp_dir)
         finally:
             cleanup_clone(tmp_dir)
 
