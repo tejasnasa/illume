@@ -103,7 +103,8 @@ def generate_embeddings(
             symbol, chunk_text = batch[i]
 
             db_embedding = Embedding(
-                symbol_id=symbol.id,
+                source_type="symbol",
+                source_id=symbol.id,
                 file_id=symbol.file_id,
                 repository_id=repository_id,
                 chunk_text=chunk_text,

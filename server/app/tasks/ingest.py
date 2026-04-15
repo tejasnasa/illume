@@ -4,6 +4,8 @@ from app.core.celery import celery
 from app.core.database import get_sync_db
 from app.core.redis import get_sync_redis
 from app.models.repository import Repository
+from app.services.git_analyzer import analyze_git_history
+from app.services.github_client import fetch_pull_requests
 from app.services.ingestion import (
     cleanup_clone,
     clone_repository,
@@ -12,7 +14,6 @@ from app.services.ingestion import (
     score_repository_health,
 )
 from app.services.summarizer import generate_repo_summary
-from app.services.git_analyzer import analyze_git_history
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
         try:
             process_repository_files(db, redis_client, repo, tmp_dir)
             analyze_git_history(db, redis_client, repo, tmp_dir)
+            fetch_pull_requests(repo, db, redis_client)
         finally:
             cleanup_clone(tmp_dir)
 

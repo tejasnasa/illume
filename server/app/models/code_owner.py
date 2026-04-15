@@ -1,9 +1,10 @@
 import uuid
 
-from app.core.database import Base
 from sqlalchemy import UUID, Boolean, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.database import Base
 
 
 class CodeOwner(Base):
@@ -13,7 +14,7 @@ class CodeOwner(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     file_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("files.id"), nullable=False, unique=True
     )
     primary_owner: Mapped[str | None] = mapped_column(String, nullable=True)
     contributors: Mapped[list | None] = mapped_column(JSONB, nullable=True)

@@ -385,9 +385,8 @@ def _bulk_insert_code_owners(
         rows.append(
             {
                 "file_id": file_id,
-                "primary_owner_email": stats["primary_owner_email"],
-                "primary_owner_name": stats["primary_owner_name"],
-                "contributor_json": json.dumps(stats["contributors"]),
+                "primary_owner": f"{stats['primary_owner_name']} <{stats['primary_owner_email']}>",
+                "contributors": json.dumps(stats["contributors"]),
                 "is_knowledge_silo": stats["is_knowledge_silo"],
             }
         )
@@ -399,9 +398,8 @@ def _bulk_insert_code_owners(
     stmt = stmt.on_conflict_do_update(
         index_elements=["file_id"],
         set_={
-            "primary_owner_email": stmt.excluded.primary_owner_email,
-            "primary_owner_name": stmt.excluded.primary_owner_name,
-            "contributor_json": stmt.excluded.contributor_json,
+            "primary_owner": f"{stats['primary_owner_name']} <{stats['primary_owner_email']}>",
+            "contributors": stmt.excluded.contributors,
             "is_knowledge_silo": stmt.excluded.is_knowledge_silo,
         },
     )
