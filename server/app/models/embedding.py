@@ -1,7 +1,7 @@
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import UUID, ForeignKey, String, Text, text
+from sqlalchemy import UUID, Enum, ForeignKey, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -13,9 +13,7 @@ class Embedding(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, server_default=text("gen_random_uuid()")
     )
-    source_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
+    source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     file_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("files.id", ondelete="CASCADE"), nullable=True
     )
@@ -24,4 +22,13 @@ class Embedding(Base):
     )
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list] = mapped_column(Vector(1536), nullable=False)
-    source_type: Mapped[str] = mapped_column(String, nullable=False)
+    source_type: Mapped[str] = mapped_column(
+        Enum(
+            "symbol",
+            "commit",
+            "pull_request",
+            "document",
+            name="source_type",
+            native_enum=False,
+        )
+    )
