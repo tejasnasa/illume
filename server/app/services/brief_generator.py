@@ -435,6 +435,7 @@ def generate_brief(db: Session, repo: Repository) -> OnboardingGuide:
 
     repo.architecture_summary = narrative
     db.add(repo)
+    db.commit()
 
     guide = _upsert_guide(db, repo.id, architecture_sections)
     logger.info("brief_generator: done for repo %s", repo.id)

@@ -109,7 +109,9 @@ def build_glossary(db: Session, repo: Repository) -> int:
 
     created = 0
     for symbol, file in pairs:
-        definition = all_definitions.get(symbol.name)
+        lower_definitions = {k.lower(): v for k, v in all_definitions.items()}
+
+        definition = lower_definitions.get(symbol.name.lower())
         if not definition:
             logger.warning(f"[glossary] Missing definition for: {symbol.name}")
             continue
