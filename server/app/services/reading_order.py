@@ -6,7 +6,7 @@ from uuid import UUID
 
 import openai
 from app.core.config import settings
-from app.models import AstSymbol, Dependency, File, OnboardingGuide
+from app.models import AstSymbol, Dependency, File, OnboardingGuide, Repository
 from sqlalchemy.orm import Session, aliased
 
 logger = logging.getLogger(__name__)
@@ -165,18 +165,18 @@ def _annotate_files(ordered_files: list[dict[str, Any]]) -> dict[str, str]:
     return annotations
 
 
-def build_reading_order(db: Session, repo_id: UUID) -> OnboardingGuide:
-    logger.info("reading_order: starting for repo %s", repo_id)
+def build_reading_order(db: Session, repo: Repository) -> OnboardingGuide:
+    logger.info("reading_order: starting for repo %s", repo.id)
 
-    files: list[File] = db.query(File).filter(File.repository_id == repo_id).all()
+    files: list[File] = db.query(File).filter(File.repository_id == repo.id).all()
 
     if not files:
-        logger.warning("reading_order: no files found for repo %s", repo_id)
-        return _upsert_guide(db, repo_id, [])
+        logger.warning("reading_order: no files found for repo %s", repo.id)
+        return _upsert_guide(db, repo.id, [])
 
     logger.info("reading_order: loaded %d files", len(files))
 
-    deps, rdeps = _build_file_graph(db, repo_id)
+    deps, rdeps = _build_file_graph(db, repo.id)
 
     for f in files:
         deps.setdefault(f.id, set())
@@ -212,8 +212,8 @@ def build_reading_order(db: Session, repo_id: UUID) -> OnboardingGuide:
     for item in ordered_flat:
         item["annotation"] = annotations.get(item["path"], "")
 
-    guide = _upsert_guide(db, repo_id, ordered_flat)
-    logger.info("reading_order: done for repo %s", repo_id)
+    guide = _upsert_guide(db, repo.id, ordered_flat)
+    logger.info("reading_order: done for repo %s", repo.id)
     return guide
 
 

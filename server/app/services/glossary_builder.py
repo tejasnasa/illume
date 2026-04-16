@@ -5,7 +5,7 @@ import logging
 import uuid
 
 from app.core.config import settings
-from app.models import AstSymbol, File, GlossaryEntry
+from app.models import AstSymbol, File, GlossaryEntry, Repository
 from openai import OpenAI
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
@@ -73,19 +73,17 @@ def _parse_response(text: str) -> dict[str, str]:
         return {}
 
 
-def build_glossary(db: Session, repository_id: uuid.UUID) -> int:
+def build_glossary(db: Session, repo: Repository) -> int:
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-    logger.info(f"[glossary] Starting for repo {repository_id}")
+    logger.info(f"[glossary] Starting for repo {repo.id}")
 
-    db.query(GlossaryEntry).filter(
-        GlossaryEntry.repository_id == repository_id
-    ).delete()
+    db.query(GlossaryEntry).filter(GlossaryEntry.repository_id == repo.id).delete()
     db.commit()
 
-    pairs = _get_top_symbols(db, repository_id)
+    pairs = _get_top_symbols(db, repo.id)
     if not pairs:
-        logger.warning(f"[glossary] No symbols found for repo {repository_id}")
+        logger.warning(f"[glossary] No symbols found for repo {repo.id}")
         return 0
 
     logger.info(f"[glossary] Processing {len(pairs)} symbols")
@@ -117,7 +115,7 @@ def build_glossary(db: Session, repository_id: uuid.UUID) -> int:
             continue
 
         entry = GlossaryEntry(
-            repository_id=repository_id,
+            repository_id=repo.id,
             symbol_id=symbol.id,
             name=symbol.name,
             definition=definition,
@@ -128,5 +126,5 @@ def build_glossary(db: Session, repository_id: uuid.UUID) -> int:
         created += 1
 
     db.commit()
-    logger.info(f"[glossary] Done. {created} entries created for repo {repository_id}")
+    logger.info(f"[glossary] Done. {created} entries created for repo {repo.id}")
     return created

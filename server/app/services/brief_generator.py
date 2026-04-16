@@ -4,13 +4,15 @@ from typing import Sequence, cast
 from uuid import UUID
 
 from app.core.config import settings
-from app.models.ast_symbol import AstSymbol
-from app.models.code_owner import CodeOwner
-from app.models.dependency import Dependency
-from app.models.file import File
-from app.models.glossary_entry import GlossaryEntry
-from app.models.onboarding_guide import OnboardingGuide
-from app.models.repository import Repository
+from app.models import (
+    AstSymbol,
+    CodeOwner,
+    Dependency,
+    File,
+    GlossaryEntry,
+    OnboardingGuide,
+    Repository,
+)
 from openai import OpenAI
 from openai.types.responses import ResponseInputParam
 from sqlalchemy import select
@@ -324,23 +326,22 @@ def _call_llm_narrative(prompt: str) -> str:
         return ""
 
 
-def generate_brief(db: Session, repo_id: UUID) -> OnboardingGuide:
-    logger.info("brief_generator: starting for repo %s", repo_id)
+def generate_brief(db: Session, repo: Repository) -> OnboardingGuide:
+    logger.info("brief_generator: starting for repo %s", repo.id)
 
-    repo: Repository | None = db.get(Repository, repo_id)
     if not repo:
-        raise ValueError(f"Repository {repo_id} not found")
+        raise ValueError(f"Repository {repo.id} not found")
 
     files: Sequence[File] = (
-        db.execute(select(File).where(File.repository_id == repo_id)).scalars().all()
+        db.execute(select(File).where(File.repository_id == repo.id)).scalars().all()
     )
     files_by_id: dict[UUID, File] = {f.id: f for f in files}
     files_by_path: dict[str, File] = {f.path: f for f in files}
     file_ids = list(files_by_id.keys())
 
     if not files:
-        logger.warning("brief_generator: no files found for repo %s", repo_id)
-        return _upsert_guide(db, repo_id, {})
+        logger.warning("brief_generator: no files found for repo %s", repo.id)
+        return _upsert_guide(db, repo.id, {})
 
     symbols: Sequence[AstSymbol] = (
         db.execute(select(AstSymbol).where(AstSymbol.file_id.in_(file_ids)))
@@ -387,11 +388,11 @@ def generate_brief(db: Session, repo_id: UUID) -> OnboardingGuide:
         if km["path"] in files_by_path
     ]
     ownership_summary = _get_ownership_summary(db, key_module_ids)
-    glossary_preview = _get_glossary_preview(db, repo_id)
+    glossary_preview = _get_glossary_preview(db, repo.id)
 
     guide = (
         db.execute(
-            select(OnboardingGuide).where(OnboardingGuide.repository_id == repo_id)
+            select(OnboardingGuide).where(OnboardingGuide.repository_id == repo.id)
         )
         .scalars()
         .first()
@@ -435,8 +436,8 @@ def generate_brief(db: Session, repo_id: UUID) -> OnboardingGuide:
     repo.architecture_summary = narrative
     db.add(repo)
 
-    guide = _upsert_guide(db, repo_id, architecture_sections)
-    logger.info("brief_generator: done for repo %s", repo_id)
+    guide = _upsert_guide(db, repo.id, architecture_sections)
+    logger.info("brief_generator: done for repo %s", repo.id)
     return guide
 
 

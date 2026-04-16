@@ -5,8 +5,10 @@ from app.core.celery import celery
 from app.core.database import get_sync_db
 from app.core.redis import get_sync_redis
 from app.models.repository import Repository
+from app.services.brief_generator import generate_brief
 from app.services.git_analyzer import analyze_git_history
 from app.services.github_client import fetch_pull_requests
+from app.services.glossary_builder import build_glossary
 from app.services.ingestion import (
     cleanup_clone,
     clone_repository,
@@ -14,6 +16,7 @@ from app.services.ingestion import (
     process_repository_files,
     score_repository_health,
 )
+from app.services.reading_order import build_reading_order
 from app.services.summarizer import generate_repo_summary
 
 logger = logging.getLogger(__name__)
@@ -50,6 +53,10 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             cleanup_clone(tmp_dir)
 
         embed_repository_symbols(db, redis_client, repo, readme_content=readme_content)
+
+        build_glossary(db, repo)
+        build_reading_order(db, repo)
+        generate_brief(db, repo)
 
         score_repository_health(db, redis_client, repo)
 
