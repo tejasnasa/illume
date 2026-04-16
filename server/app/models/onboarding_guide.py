@@ -1,10 +1,11 @@
 import uuid
 from datetime import datetime
 
-from app.core.database import Base
 from sqlalchemy import UUID, DateTime, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.database import Base
 
 
 class OnboardingGuide(Base):
@@ -18,7 +19,7 @@ class OnboardingGuide(Base):
     )
     reading_order: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     critical_files: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    architecture_brief: Mapped[str | None] = mapped_column(Text, nullable=True)
+    architecture_brief: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
