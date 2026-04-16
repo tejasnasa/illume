@@ -63,7 +63,6 @@ def _parse_response(text: str) -> dict[str, str]:
         .removesuffix("```")
         .strip()
     )
-    print(clean)
     try:
         parsed = json.loads(clean)
         return {item["name"]: item["definition"] for item in parsed}
