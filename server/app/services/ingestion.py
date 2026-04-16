@@ -200,6 +200,7 @@ def embed_repository_symbols(
     db: Session,
     redis_client,
     repo: Repository,
+    readme_content: str | None = None,
 ) -> int:
     _update_status(db, repo, "embedding")
     _publish_log(redis_client, str(repo.id), "Starting embedding generation...")
@@ -211,6 +212,7 @@ def embed_repository_symbols(
         repository_id=repo.id,
         db=db,
         publish_log=publish_log,
+        readme_content=readme_content,
     )
 
     _publish_log(

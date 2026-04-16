@@ -4,10 +4,9 @@ from typing import Literal, cast
 from uuid import UUID
 
 from app.core.config import settings
-from app.models import AstSymbol, Embedding, File
+from app.models import AstSymbol, Commit, Embedding, File, PullRequest
 from openai import OpenAI
 from openai.types.responses import ResponseInputParam
-from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -17,11 +16,16 @@ TOP_K = 10
 
 @dataclass
 class SourceReference:
-    file_path: str
-    symbol_name: str
-    start_line: int | None
-    end_line: int | None
+    source_type: str
     chunk_text: str
+    file_path: str | None = None
+    symbol_name: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    commit_hash: str | None = None
+    author_name: str | None = None
+    pr_number: int | None = None
+    pr_title: str | None = None
 
 
 @dataclass
@@ -44,53 +48,93 @@ def _embed_query(client: OpenAI, query: str) -> list[float]:
     return response.data[0].embedding
 
 
-def _vector_search(
-    db: Session,
-    repository_id: UUID,
-    query_vector: list[float],
-    top_k: int = TOP_K,
-) -> list[Row[tuple[Embedding, AstSymbol, File]]]:
-    results = (
-        db.query(Embedding, AstSymbol, File)
-        .join(AstSymbol, Embedding.symbol_id == AstSymbol.id)
-        .join(File, Embedding.file_id == File.id)
-        .filter(Embedding.repository_id == repository_id)
-        .order_by(Embedding.embedding.cosine_distance(query_vector))
-        .limit(top_k)
-        .all()
-    )
-    return results
-
-
-def _build_prompt(
-    query: str, chunks: list[Row[tuple[Embedding, AstSymbol, File]]]
-) -> str:
-    context_blocks = []
-    for i, (embedding, symbol, file) in enumerate(chunks):
-        block = (
-            f"[Source {i + 1}] {file.path} — {symbol.kind}: {symbol.name} "
-            f"(lines {symbol.start_line}–{symbol.end_line})\n"
-            f"{embedding.chunk_text}"
+def _vector_search(db, repository_id, query_vector, top_k=TOP_K):
+    def query_type(source_type, limit):
+        return (
+            db.query(Embedding)
+            .filter(
+                Embedding.repository_id == repository_id,
+                Embedding.source_type == source_type,
+            )
+            .order_by(Embedding.embedding.cosine_distance(query_vector))
+            .limit(limit)
+            .all()
         )
-        context_blocks.append(block)
+
+    symbols = query_type("symbol", 6)
+    commits = query_type("commit", 2)
+    prs = query_type("pull_request", 1)
+    docs = query_type("document", 1)
+    return symbols + commits + prs + docs
+
+
+def _resolve_source(db: Session, embedding: Embedding) -> SourceReference:
+    if embedding.source_type == "symbol":
+        symbol = db.query(AstSymbol).filter(AstSymbol.id == embedding.source_id).first()
+        file = db.query(File).filter(File.id == embedding.file_id).first()
+        return SourceReference(
+            source_type="symbol",
+            chunk_text=embedding.chunk_text,
+            file_path=file.path if file else None,
+            symbol_name=symbol.name if symbol else None,
+            start_line=symbol.start_line if symbol else None,
+            end_line=symbol.end_line if symbol else None,
+        )
+
+    elif embedding.source_type == "commit":
+        commit = db.query(Commit).filter(Commit.id == embedding.source_id).first()
+        return SourceReference(
+            source_type="commit",
+            chunk_text=embedding.chunk_text,
+            commit_hash=commit.hash if commit else None,
+            author_name=commit.author_name if commit else None,
+        )
+
+    elif embedding.source_type == "pull_request":
+        pr = db.query(PullRequest).filter(PullRequest.id == embedding.source_id).first()
+        return SourceReference(
+            source_type="pull_request",
+            chunk_text=embedding.chunk_text,
+            pr_number=pr.number if pr else None,
+            pr_title=pr.title if pr else None,
+        )
+
+    else:
+        return SourceReference(
+            source_type="document",
+            chunk_text=embedding.chunk_text,
+        )
+
+
+def _build_prompt(query: str, sources: list[SourceReference]) -> str:
+    context_blocks = []
+
+    for i, src in enumerate(sources):
+        if src.source_type == "symbol":
+            header = f"[Source {i + 1}] [Code] {src.file_path} — {src.symbol_name} (lines {src.start_line}–{src.end_line})"
+        elif src.source_type == "commit":
+            header = f"[Source {i + 1}] [Commit] {src.commit_hash} by {src.author_name}"
+        elif src.source_type == "pull_request":
+            header = f"[Source {i + 1}] [PR #{src.pr_number}] {src.pr_title}"
+        else:
+            header = f"[Source {i + 1}] [README]"
+        context_blocks.append(f"{header}\n{src.chunk_text}")
 
     context = "\n\n---\n\n".join(context_blocks)
-
     return f"""You are an expert code assistant analyzing a software repository.
-        Answer the user's question using ONLY the code context provided below.
-        Be specific — reference file names, function names, and line numbers where relevant.
-        If the answer cannot be found in the context, say so clearly.
+            Answer the user's question using ONLY the context provided below.
+            Context includes code, commit messages, pull requests, and documentation.
+            Be specific — reference file names, function names, line numbers, commit hashes, or PR numbers where relevant.
+            If the answer cannot be found in the context, say so clearly.
 
-        ## Code Context
+            ## Context
+            {context}
 
-        {context}
+            ## Question
+            {query}
 
-        ## Question
-
-        {query}
-
-        ## Answer
-    """
+            ## Answer
+        """
 
 
 def answer_question(
@@ -113,7 +157,8 @@ def answer_question(
             sources=[],
         )
 
-    prompt = _build_prompt(query, chunks)
+    sources = [_resolve_source(db, e) for e in chunks]
+    prompt = _build_prompt(query, sources)
 
     messages: list[dict] = [{"role": "system", "content": prompt}]
 
@@ -132,16 +177,5 @@ def answer_question(
     )
 
     answer = (response.output_text or "").strip()
-
-    sources = [
-        SourceReference(
-            file_path=file.path,
-            symbol_name=symbol.name,
-            start_line=symbol.start_line,
-            end_line=symbol.end_line,
-            chunk_text=embedding.chunk_text,
-        )
-        for embedding, symbol, file in chunks
-    ]
 
     return RAGResponse(answer=answer, sources=sources)

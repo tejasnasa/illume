@@ -1,4 +1,5 @@
 import logging
+import os
 
 from app.core.celery import celery
 from app.core.database import get_sync_db
@@ -37,10 +38,18 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             process_repository_files(db, redis_client, repo, tmp_dir)
             analyze_git_history(db, redis_client, repo, tmp_dir)
             fetch_pull_requests(repo, db, redis_client)
+
+            readme_content = None
+            for name in ("README.md", "readme.md", "Readme.md"):
+                readme_path = os.path.join(tmp_dir, name)
+                if os.path.exists(readme_path):
+                    with open(readme_path, "r", errors="ignore") as f:
+                        readme_content = f.read()
+                    break
         finally:
             cleanup_clone(tmp_dir)
 
-        embed_repository_symbols(db, redis_client, repo)
+        embed_repository_symbols(db, redis_client, repo, readme_content=readme_content)
 
         score_repository_health(db, redis_client, repo)
 

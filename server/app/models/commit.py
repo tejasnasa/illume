@@ -28,7 +28,7 @@ class Commit(Base):
     repository_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("repositories.id"), nullable=False
     )
-    hash: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    hash: Mapped[str] = mapped_column(String, nullable=False)
     author_name: Mapped[str] = mapped_column(String, nullable=False)
     author_email: Mapped[str] = mapped_column(String, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)

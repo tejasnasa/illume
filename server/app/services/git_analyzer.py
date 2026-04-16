@@ -323,7 +323,9 @@ def _bulk_insert_commits(db: Session, repo_id: str, parsed_commits: list[dict]) 
     ]
 
     stmt = (
-        pg_insert(Commit).values(rows).on_conflict_do_nothing(index_elements=["hash"])
+        pg_insert(Commit)
+        .values(rows)
+        .on_conflict_do_nothing(index_elements=["repository_id", "hash"])
     )
     db.execute(stmt)
     db.commit()

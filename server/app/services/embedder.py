@@ -3,7 +3,7 @@ from typing import Generator
 from uuid import UUID
 
 from app.core.config import settings
-from app.models import AstSymbol, Embedding, File
+from app.models import AstSymbol, Commit, Embedding, File, PullRequest
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,19 @@ def _build_chunk_text(file_path: str, kind: str, name: str, source_code: str) ->
     return f"# {file_path}\n## {kind}: {name}\n{source_code}"
 
 
+def _build_commit_chunk(commit: Commit) -> str:
+    return f"# Commit {commit.hash[:8]} by {commit.author_name}\n{commit.message}"
+
+
+def _build_pr_chunk(pr: PullRequest) -> str:
+    desc = pr.description or ""
+    return f"# PR #{pr.number}: {pr.title}\n{desc}".strip()
+
+
+def _build_readme_chunk(content: str) -> str:
+    return f"# README\n{content}"
+
+
 def _token_estimate(text: str) -> int:  # token estimate: 4 chars per token
     return len(text) // 4
 
@@ -33,6 +46,7 @@ def generate_embeddings(
     repository_id: UUID,
     db: Session,
     publish_log=None,
+    readme_content: str | None = None,
 ) -> int:
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -79,7 +93,102 @@ def generate_embeddings(
         f"Repo {repository_id}: {len(chunks)} chunks to embed, {skipped} skipped (oversized)"
     )
 
+    embedded_file_ids = {s.file_id for s, _ in chunks}
+    all_files = db.query(File).filter(File.repository_id == repository_id).all()
+    for file in all_files:
+        if file.id in embedded_file_ids:
+            continue
+        file_symbols = db.query(AstSymbol).filter(AstSymbol.file_id == file.id).all()
+        symbol_lines = "\n".join(s.source_code for s in file_symbols if s.source_code)
+        if not symbol_lines.strip():
+            continue
+        chunk_text = f"# {file.path}\n{symbol_lines}"
+        if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
+            chunks.append((file, chunk_text))
+
     total_inserted = 0
+
+    commits = db.query(Commit).filter(Commit.repository_id == repository_id).all()
+    commit_chunks = [
+        (c, _build_commit_chunk(c))
+        for c in commits
+        if _token_estimate(_build_commit_chunk(c)) <= MAX_CHUNK_TOKENS
+    ]
+    for batch_idx, batch in enumerate(_iter_batches(commit_chunks, BATCH_SIZE)):
+        batch_texts = [t for _, t in batch]
+        if publish_log:
+            publish_log(
+                f"Embedding commits batch {batch_idx + 1}/{len(list(_iter_batches(commit_chunks, BATCH_SIZE)))}..."
+            )
+        response = client.embeddings.create(
+            model="text-embedding-3-small", input=batch_texts
+        )
+        for i, embedding_data in enumerate(response.data):
+            commit, chunk_text = batch[i]
+            db.add(
+                Embedding(
+                    source_type="commit",
+                    source_id=commit.id,
+                    file_id=None,
+                    repository_id=repository_id,
+                    chunk_text=chunk_text,
+                    embedding=embedding_data.embedding,
+                )
+            )
+        db.commit()
+        total_inserted += len(batch)
+
+    prs = db.query(PullRequest).filter(PullRequest.repository_id == repository_id).all()
+    pr_chunks = [
+        (p, _build_pr_chunk(p))
+        for p in prs
+        if _token_estimate(_build_pr_chunk(p)) <= MAX_CHUNK_TOKENS
+    ]
+    for batch_idx, batch in enumerate(_iter_batches(pr_chunks, BATCH_SIZE)):
+        batch_texts = [t for _, t in batch]
+        if publish_log:
+            publish_log(
+                f"Embedding PRs batch {batch_idx + 1}/{len(list(_iter_batches(pr_chunks, BATCH_SIZE)))}..."
+            )
+        response = client.embeddings.create(
+            model="text-embedding-3-small", input=batch_texts
+        )
+        for i, embedding_data in enumerate(response.data):
+            pr, chunk_text = batch[i]
+            db.add(
+                Embedding(
+                    source_type="pull_request",
+                    source_id=pr.id,
+                    file_id=None,
+                    repository_id=repository_id,
+                    chunk_text=chunk_text,
+                    embedding=embedding_data.embedding,
+                )
+            )
+        db.commit()
+        total_inserted += len(batch)
+
+    if readme_content:
+        chunk_text = _build_readme_chunk(readme_content)
+        if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
+            response = client.embeddings.create(
+                model="text-embedding-3-small", input=[chunk_text]
+            )
+            db.add(
+                Embedding(
+                    source_type="document",
+                    source_id=repository_id,
+                    file_id=None,
+                    repository_id=repository_id,
+                    chunk_text=chunk_text,
+                    embedding=response.data[0].embedding,
+                )
+            )
+            db.commit()
+            total_inserted += 1
+            if publish_log:
+                publish_log("README embedded.")
+
     batches = list(_iter_batches(chunks, BATCH_SIZE))
 
     for batch_idx, batch in enumerate(batches):
@@ -100,12 +209,17 @@ def generate_embeddings(
             raise
 
         for i, embedding_data in enumerate(response.data):
-            symbol, chunk_text = batch[i]
-
+            item, chunk_text = batch[i]
+            if isinstance(item, AstSymbol):
+                source_id = item.id
+                file_id = item.file_id
+            else:
+                source_id = item.id
+                file_id = item.id
             db_embedding = Embedding(
                 source_type="symbol",
-                source_id=symbol.id,
-                file_id=symbol.file_id,
+                source_id=source_id,
+                file_id=file_id,
                 repository_id=repository_id,
                 chunk_text=chunk_text,
                 embedding=embedding_data.embedding,

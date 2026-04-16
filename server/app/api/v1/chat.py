@@ -25,11 +25,16 @@ class ChatRequest(BaseModel):
 
 
 class SourceReferenceResponse(BaseModel):
-    file_path: str
-    symbol_name: str
-    start_line: int | None
-    end_line: int | None
+    source_type: str
     chunk_text: str
+    file_path: str | None = None
+    symbol_name: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    commit_hash: str | None = None
+    author_name: str | None = None
+    pr_number: int | None = None
+    pr_title: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -72,11 +77,16 @@ def chat(
         answer=result.answer,
         sources=[
             SourceReferenceResponse(
+                source_type=s.source_type,
+                chunk_text=s.chunk_text,
                 file_path=s.file_path,
                 symbol_name=s.symbol_name,
                 start_line=s.start_line,
                 end_line=s.end_line,
-                chunk_text=s.chunk_text,
+                commit_hash=s.commit_hash,
+                author_name=s.author_name,
+                pr_number=s.pr_number,
+                pr_title=s.pr_title,
             )
             for s in result.sources
         ],
