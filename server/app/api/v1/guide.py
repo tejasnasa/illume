@@ -2,9 +2,9 @@ import logging
 import uuid
 from pathlib import Path
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_repo_for_user
 from app.core.database import get_async_db
-from app.models import OnboardingGuide, Repository, User
+from app.models import OnboardingGuide, User
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -54,23 +54,6 @@ class GuideResponse(BaseModel):
     pdf_ready: bool
 
     model_config = ConfigDict(from_attributes=True)
-
-
-async def _get_repo_for_user(
-    repo_id: uuid.UUID,
-    user: User,
-    db: AsyncSession,
-) -> Repository:
-    result = await db.execute(
-        select(Repository).where(
-            Repository.id == repo_id,
-            Repository.user_id == user.id,
-        )
-    )
-    repo = result.scalar_one_or_none()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    return repo
 
 
 async def _get_guide(repo_id: uuid.UUID, db: AsyncSession) -> OnboardingGuide:
@@ -144,7 +127,7 @@ async def get_onboarding_guide(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ) -> GuideResponse:
-    await _get_repo_for_user(repo_id, current_user, db)
+    await get_repo_for_user(repo_id, current_user, db)
     guide = await _get_guide(repo_id, db)
 
     return GuideResponse(

@@ -1,10 +1,10 @@
 import logging
 import uuid
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_repo_for_user
 from app.core.database import get_async_db
-from app.models import GlossaryEntry, Repository, User
-from fastapi import APIRouter, Depends, HTTPException, Query
+from app.models import GlossaryEntry, User
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,23 +32,6 @@ class GlossaryListResponse(BaseModel):
     page_size: int
 
 
-async def _get_repo_for_user(
-    repo_id: uuid.UUID,
-    user: User,
-    db: AsyncSession,
-) -> Repository:
-    result = await db.execute(
-        select(Repository).where(
-            Repository.id == repo_id,
-            Repository.user_id == user.id,
-        )
-    )
-    repo = result.scalar_one_or_none()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    return repo
-
-
 @router.get("/{repo_id}/glossary", response_model=GlossaryListResponse)
 async def browse_glossary(
     repo_id: uuid.UUID,
@@ -60,7 +43,7 @@ async def browse_glossary(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ) -> GlossaryListResponse:
-    await _get_repo_for_user(repo_id, current_user, db)
+    await get_repo_for_user(repo_id, current_user, db)
 
     base_query = select(GlossaryEntry).where(GlossaryEntry.repository_id == repo_id)
 
@@ -100,7 +83,7 @@ async def search_glossary(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ) -> GlossaryListResponse:
-    await _get_repo_for_user(repo_id, current_user, db)
+    await get_repo_for_user(repo_id, current_user, db)
 
     pattern = f"%{q}%"
 

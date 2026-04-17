@@ -1,20 +1,19 @@
 import logging
 import uuid
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_repo_for_user
 from app.core.database import get_async_db
 from app.models.code_owner import CodeOwner
 from app.models.file import File
-from app.models.repository import Repository
 from app.models.user import User
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["ownership"])
+router = APIRouter(prefix="/api/v1/repository", tags=["ownership"])
 
 
 class Contributor(BaseModel):
@@ -43,23 +42,6 @@ class OwnershipMapResponse(BaseModel):
 class SilosResponse(BaseModel):
     silos: list[FileOwnershipResponse]
     total: int
-
-
-async def _get_repo_for_user(
-    repo_id: uuid.UUID,
-    user: User,
-    db: AsyncSession,
-) -> Repository:
-    result = await db.execute(
-        select(Repository).where(
-            Repository.id == repo_id,
-            Repository.user_id == user.id,
-        )
-    )
-    repo = result.scalar_one_or_none()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    return repo
 
 
 def _build_file_ownership(owner: CodeOwner, file: File) -> FileOwnershipResponse:
@@ -91,7 +73,7 @@ async def get_ownership_map(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ) -> OwnershipMapResponse:
-    await _get_repo_for_user(repo_id, current_user, db)
+    await get_repo_for_user(repo_id, current_user, db)
 
     stmt = (
         select(CodeOwner, File)
@@ -123,7 +105,7 @@ async def get_knowledge_silos(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ) -> SilosResponse:
-    await _get_repo_for_user(repo_id, current_user, db)
+    await get_repo_for_user(repo_id, current_user, db)
 
     stmt = (
         select(CodeOwner, File)
