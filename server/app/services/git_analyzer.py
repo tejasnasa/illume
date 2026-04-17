@@ -162,6 +162,7 @@ def _parse_numstat_line(line: str) -> dict | None:
 
     added_raw, deleted_raw, path_raw = parts
     path = _normalise_rename_path(path_raw.strip())
+    path = path.replace("\\", "/")
 
     try:
         added = int(added_raw) if added_raw != "-" else 0
@@ -206,7 +207,14 @@ def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
             path = file_entry["path"]
 
             if email not in file_author_counts[path]:
-                file_author_counts[path][email] = {"name": name, "commit_count": 0}
+                file_author_counts[path][email] = {
+                    "name": name,
+                    "commit_count": 0,
+                    "last_commit": ts,
+                }
+            else:
+                if ts > file_author_counts[path][email]["last_commit"]:
+                    file_author_counts[path][email]["last_commit"] = ts
             file_author_counts[path][email]["commit_count"] += 1
 
             if path not in file_last_modified or ts > file_last_modified[path]:
@@ -229,6 +237,7 @@ def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
                 "name": data["name"],
                 "commit_count": data["commit_count"],
                 "percentage": round(data["commit_count"] / total_commits * 100, 1),
+                "last_commit": data["last_commit"].isoformat(),
             }
             for email, data in sorted_contributors
         ]
@@ -341,7 +350,9 @@ def _bulk_update_files(
         return
 
     file_rows = db.query(File.id, File.path).filter(File.repository_id == repo_id).all()
-    path_to_id: dict[str, str] = {row.path: str(row.id) for row in file_rows}
+    path_to_id: dict[str, str] = {
+        row.path.replace("\\", "/"): str(row.id) for row in file_rows
+    }
 
     updates = []
     for path, stats in file_stats.items():
@@ -377,7 +388,9 @@ def _bulk_insert_code_owners(
         return
 
     file_rows = db.query(File.id, File.path).filter(File.repository_id == repo_id).all()
-    path_to_id: dict[str, str] = {row.path: str(row.id) for row in file_rows}
+    path_to_id: dict[str, str] = {
+        row.path.replace("\\", "/"): str(row.id) for row in file_rows
+    }
 
     rows = []
     for path, stats in file_stats.items():
@@ -388,7 +401,8 @@ def _bulk_insert_code_owners(
             {
                 "file_id": file_id,
                 "primary_owner": f"{stats['primary_owner_name']} <{stats['primary_owner_email']}>",
-                "contributors": json.dumps(stats["contributors"]),
+                "contributors": stats["contributors"],
+                "bus_factor": len(stats["contributors"]),
                 "is_knowledge_silo": stats["is_knowledge_silo"],
             }
         )
@@ -400,7 +414,7 @@ def _bulk_insert_code_owners(
     stmt = stmt.on_conflict_do_update(
         index_elements=["file_id"],
         set_={
-            "primary_owner": f"{stats['primary_owner_name']} <{stats['primary_owner_email']}>",
+            "primary_owner": stmt.excluded.primary_owner,
             "contributors": stmt.excluded.contributors,
             "is_knowledge_silo": stmt.excluded.is_knowledge_silo,
         },

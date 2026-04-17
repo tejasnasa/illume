@@ -151,7 +151,7 @@ def process_repository_files(
         if not parsed:
             continue
 
-        relative_path = str(file_path.relative_to(repo_root))
+        relative_path = file_path.relative_to(repo_root).as_posix()
 
         db_file = File(
             repository_id=repo.id,

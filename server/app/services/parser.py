@@ -247,7 +247,7 @@ def parse_file(file_path: Path) -> ParsedFile | None:
                                     break
 
         if actual_node.type in symbol_types:
-            kind = symbol_types[node.type]
+            kind = symbol_types[actual_node.type]
             name = _extract_name(actual_node, source_bytes)
             source_code = source_bytes[
                 actual_node.start_byte : actual_node.end_byte
@@ -271,7 +271,7 @@ def parse_file(file_path: Path) -> ParsedFile | None:
                 nodes_to_visit.extend(actual_node.children)
 
     return ParsedFile(
-        path=str(file_path),
+        path=file_path.as_posix(),
         language=language,
         loc=loc,
         symbols=symbols,
