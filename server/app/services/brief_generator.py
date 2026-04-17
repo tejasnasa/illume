@@ -436,7 +436,7 @@ def generate_brief(db: Session, repo: Repository) -> OnboardingGuide:
     repo.architecture_summary = narrative
     db.add(repo)
 
-    guide = _upsert_guide(db, repo.id, architecture_sections)
+    guide = _upsert_guide(db, repo.id, architecture_sections, critical_files)
     logger.info("brief_generator: done for repo %s", repo.id)
     return guide
 
@@ -445,6 +445,7 @@ def _upsert_guide(
     db: Session,
     repo_id: UUID,
     architecture_brief: dict,
+    critical_files: list | None = None,
 ) -> OnboardingGuide:
     guide = (
         db.execute(
@@ -459,12 +460,14 @@ def _upsert_guide(
             repository_id=repo_id,
             reading_order=[],
             architecture_brief=architecture_brief,
-            critical_files=[],
+            critical_files=critical_files or [],
             pdf_path=None,
         )
         db.add(guide)
     else:
         guide.architecture_brief = architecture_brief
+        if critical_files is not None:
+            guide.critical_files = critical_files
 
     db.commit()
     db.refresh(guide)

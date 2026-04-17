@@ -104,7 +104,7 @@ def _topological_sort(
 
 def _build_annotation_prompt(batch: list[dict[str, Any]]) -> str:
     items = "\n".join(
-        f"{i + 1}. path={item['path']} | fan_in={item['fan_in']} "
+        f"{i + 1}. file_path={item['path']} | fan_in={item['fan_in']} "
         f"| fan_out={item['fan_out']} | tier={item['tier']} "
         f"| language={item['language'] or 'unknown'}"
         for i, item in enumerate(batch)

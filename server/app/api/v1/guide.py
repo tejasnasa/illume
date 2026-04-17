@@ -6,7 +6,7 @@ from app.api.deps import get_current_user
 from app.core.database import get_async_db
 from app.models import OnboardingGuide, Repository, User
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,12 +31,18 @@ class CriticalFile(BaseModel):
     has_tests: bool
 
 
+class DataFlowStep(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+    step: int | None = None
+
+
 class ArchitectureBrief(BaseModel):
     detected_stack: dict | None = None
     entry_points: list[str] | None = None
     directory_summary: dict | None = None
     external_integrations: list[str] | None = None
-    data_flow: list[str] | str | None = None
+    data_flow: list[DataFlowStep] | None = None
     summary: str | None = None
 
 
@@ -90,7 +96,7 @@ def _parse_reading_order(raw: list | None) -> list[ReadingOrderItem]:
         items.append(
             ReadingOrderItem(
                 position=entry.get("position", 0),
-                file_path=entry.get("file_path", ""),
+                file_path=entry.get("path", ""),
                 annotation=entry.get("annotation", ""),
                 fan_in=entry.get("fan_in", 0),
             )
@@ -107,7 +113,7 @@ def _parse_critical_files(raw: list | None) -> list[CriticalFile]:
             continue
         items.append(
             CriticalFile(
-                file_path=entry.get("file_path", ""),
+                file_path=entry.get("path", ""),
                 criticality=entry.get("criticality", "safe"),
                 reasons=entry.get("reasons", []),
                 fan_in=entry.get("fan_in", 0),
@@ -123,12 +129,12 @@ def _parse_architecture_brief(raw: dict | None) -> ArchitectureBrief | None:
     if not raw:
         return None
     return ArchitectureBrief(
-        detected_stack=raw.get("detected_stack"),
+        detected_stack=raw.get("tech_stack"),
         entry_points=raw.get("entry_points"),
         directory_summary=raw.get("directory_summary"),
         external_integrations=raw.get("external_integrations"),
         data_flow=raw.get("data_flow"),
-        summary=raw.get("summary"),
+        summary=raw.get("narrative"),
     )
 
 

@@ -193,6 +193,16 @@ def process_repository_files(
     _publish_log(redis_client, str(repo.id), "Scoring file criticality...")
     run_criticality_scoring(db, repo.id)
 
+    repo.detected_stack = detect_stack(repo_root)
+    repo.entry_points = detect_entry_points(repo_root)
+
+    db.commit()
+    _publish_log(
+        redis_client,
+        str(repo.id),
+        f"Stack detected: {repo.detected_stack.get('languages', [])}",
+    )
+
     return processed
 
 
@@ -431,3 +441,328 @@ def run_criticality_scoring(db: Session, repo_id: UUID) -> int:
 
     db.commit()
     return len(files)
+
+
+def detect_stack(repo_root: Path) -> dict:
+    import json
+
+    SKIP_DIRS = {
+        "node_modules",
+        ".git",
+        ".next",
+        "dist",
+        "build",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "target",
+        "bin",
+        "obj",
+    }
+
+    languages: set[str] = set()
+    frameworks: set[str] = set()
+    databases: set[str] = set()
+    ci_cd: set[str] = set()
+
+    ext_map = {
+        ".py": "Python",
+        ".ts": "TypeScript",
+        ".tsx": "TypeScript",
+        ".js": "JavaScript",
+        ".jsx": "JavaScript",
+        ".go": "Go",
+        ".rs": "Rust",
+        ".java": "Java",
+        ".cs": "C#",
+        ".rb": "Ruby",
+        ".php": "PHP",
+        ".cpp": "C++",
+        ".c": "C",
+        ".kt": "Kotlin",
+        ".swift": "Swift",
+    }
+
+    all_files = [
+        f
+        for f in repo_root.rglob("*")
+        if not any(skip in f.parts for skip in SKIP_DIRS)
+    ]
+
+    for f in all_files:
+        if f.suffix in ext_map:
+            languages.add(ext_map[f.suffix])
+
+    for f in all_files:
+        if f.name == "package.json":
+            try:
+                data = json.loads(f.read_text())
+                deps = {
+                    **data.get("dependencies", {}),
+                    **data.get("devDependencies", {}),
+                }
+
+                js_fw = {
+                    "next": "Next.js",
+                    "react": "React",
+                    "vue": "Vue",
+                    "svelte": "Svelte",
+                    "express": "Express",
+                    "@nestjs/core": "NestJS",
+                    "angular": "Angular",
+                }
+
+                js_db = {
+                    "mongoose": "MongoDB",
+                    "pg": "PostgreSQL",
+                    "mysql": "MySQL",
+                    "sqlite3": "SQLite",
+                    "redis": "Redis",
+                    "ioredis": "Redis",
+                }
+
+                for k, v in js_fw.items():
+                    if k in deps:
+                        frameworks.add(v)
+
+                for k, v in js_db.items():
+                    if k in deps:
+                        databases.add(v)
+
+            except Exception:
+                pass
+
+    for f in all_files:
+        if f.suffix == ".py":
+            try:
+                text = f.read_text().lower()
+
+                if "fastapi" in text:
+                    frameworks.add("FastAPI")
+                if "django" in text:
+                    frameworks.add("Django")
+                if "flask" in text:
+                    frameworks.add("Flask")
+
+                if "sqlalchemy" in text:
+                    databases.add("SQLAlchemy")
+                if "psycopg" in text:
+                    databases.add("PostgreSQL")
+                if "pymongo" in text:
+                    databases.add("MongoDB")
+                if "redis" in text:
+                    databases.add("Redis")
+
+            except Exception:
+                pass
+
+    for f in all_files:
+        name = f.name.lower()
+
+        if name == "pom.xml":
+            try:
+                if "spring-boot" in f.read_text(errors="ignore").lower():
+                    frameworks.add("Spring Boot")
+            except Exception:
+                pass
+
+        if name in {"build.gradle", "build.gradle.kts"}:
+            try:
+                if "spring" in f.read_text(errors="ignore").lower():
+                    frameworks.add("Spring")
+            except Exception:
+                pass
+
+    go_mod = repo_root / "go.mod"
+    if go_mod.exists():
+        text = go_mod.read_text().lower()
+        if "gin-gonic" in text:
+            frameworks.add("Gin")
+        if "echo" in text:
+            frameworks.add("Echo")
+
+    cargo = repo_root / "Cargo.toml"
+    if cargo.exists():
+        text = cargo.read_text().lower()
+        if "actix-web" in text:
+            frameworks.add("Actix")
+        if "rocket" in text:
+            frameworks.add("Rocket")
+        if "diesel" in text:
+            databases.add("PostgreSQL")
+
+    gemfile = repo_root / "Gemfile"
+    if gemfile.exists():
+        text = gemfile.read_text().lower()
+        if "rails" in text:
+            frameworks.add("Ruby on Rails")
+
+    composer = repo_root / "composer.json"
+    if composer.exists():
+        try:
+            data = json.loads(composer.read_text())
+            deps = data.get("require", {})
+            if "laravel/framework" in deps:
+                frameworks.add("Laravel")
+            if "symfony" in str(deps):
+                frameworks.add("Symfony")
+        except Exception:
+            pass
+
+    if (repo_root / "manage.py").exists():
+        frameworks.add("Django")
+
+    if any((repo_root / f).exists() for f in ["next.config.js", "next.config.ts"]):
+        frameworks.add("Next.js")
+
+    if (repo_root / "apps").exists() and (repo_root / "packages").exists():
+        frameworks.add("Monorepo")
+
+    for f in all_files:
+        name = f.name.lower()
+        path = str(f).lower()
+
+        if "socket" in name or "ws" in name:
+            frameworks.add("WebSockets")
+            frameworks.add("Real-time System")
+
+        if "prisma" in path:
+            frameworks.add("Prisma ORM")
+            databases.add("PostgreSQL")
+
+        if "redis" in path:
+            databases.add("Redis")
+            frameworks.add("Caching Layer")
+
+    if (repo_root / ".github" / "workflows").exists():
+        ci_cd.add("GitHub Actions")
+    if (repo_root / ".gitlab-ci.yml").exists():
+        ci_cd.add("GitLab CI")
+    if (repo_root / "Jenkinsfile").exists():
+        ci_cd.add("Jenkins")
+    if (repo_root / "Dockerfile").exists():
+        ci_cd.add("Docker")
+
+    return {
+        "languages": sorted(languages),
+        "frameworks": sorted(frameworks),
+        "databases": sorted(databases),
+        "ci_cd": sorted(ci_cd),
+    }
+
+
+def detect_entry_points(repo_root: Path) -> list[str]:
+    SKIP_DIRS = {
+        "node_modules",
+        ".git",
+        ".next",
+        "dist",
+        "build",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "target",
+        "bin",
+        "obj",
+    }
+
+    entry_points: set[str] = set()
+
+    all_files = [
+        f
+        for f in repo_root.rglob("*")
+        if f.is_file() and not any(skip in f.parts for skip in SKIP_DIRS)
+    ]
+
+    def rel(f: Path) -> str:
+        return str(f.relative_to(repo_root)).replace("\\", "/")
+
+    for f in all_files:
+        name = f.name.lower()
+        path = rel(f)
+
+        if name in {
+            "main.py",
+            "app.py",
+            "server.py",
+            "run.py",
+            "main.go",
+            "main.rs",
+            "main.java",
+            "main.kt",
+            "program.cs",
+            "app.rb",
+        }:
+            entry_points.add(path)
+
+        if name in {
+            "index.js",
+            "server.js",
+            "main.js",
+            "index.ts",
+            "server.ts",
+            "main.ts",
+        }:
+            if "src" not in path or "server" in path or "api" in path:
+                entry_points.add(path)
+
+        if name in {"app.tsx", "app.jsx"} and "src" in path:
+            entry_points.add(path)
+
+        if name in {"page.tsx", "page.jsx"} and "app" in path:
+            entry_points.add(path)
+
+        elif name in {"index.tsx", "index.jsx"} and "pages" in path:
+            entry_points.add(path)
+
+        elif name in {"next.config.js", "next.config.ts"}:
+            entry_points.add(path)
+
+        if name in {"manage.py", "wsgi.py", "asgi.py"}:
+            entry_points.add(path)
+
+        if name in {"pom.xml", "build.gradle", "build.gradle.kts"}:
+            entry_points.add(path)
+
+        if name in {"cargo.toml", "go.mod", "gemfile", "composer.json"}:
+            entry_points.add(path)
+
+        if name == "dockerfile":
+            entry_points.add(path)
+
+    for f in all_files:
+        if f.suffix not in {".py", ".js", ".ts", ".go", ".rs", ".java", ".cs"}:
+            continue
+
+        try:
+            text = f.read_text(errors="ignore").lower()
+        except Exception:
+            continue
+
+        path = rel(f)
+
+        if 'if __name__ == "__main__"' in text:
+            entry_points.add(path)
+
+        if "uvicorn.run" in text or "fastapi(" in text:
+            entry_points.add(path)
+
+        if "app.listen" in text or "express()" in text:
+            entry_points.add(path)
+
+        if "createServer" in text or "http.createServer" in text:
+            entry_points.add(path)
+
+        if "func main()" in text:
+            entry_points.add(path)
+
+        if "fn main()" in text:
+            entry_points.add(path)
+
+        if "public static void main" in text:
+            entry_points.add(path)
+
+        if "webapplication.createbuilder" in text:
+            entry_points.add(path)
+
+    return sorted(entry_points)
