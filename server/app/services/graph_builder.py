@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import uuid
 from collections import defaultdict
 from typing import Literal
@@ -7,22 +5,35 @@ from typing import Literal
 from app.models.ast_symbol import AstSymbol
 from app.models.dependency import Dependency
 from app.models.file import File
-from app.models.health_metric import HealthMetric
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+_CRITICALITY_SCORE: dict[str | None, float] = {
+    "critical": 100.0,
+    "high": 75.0,
+    "medium": 50.0,
+    "low": 25.0,
+    None: 50.0,
+}
 
 
-def build_graph(
-    db: Session,
+async def build_graph(
+    db: AsyncSession,
     repo_id: uuid.UUID,
     level: Literal["file", "symbol"] = "file",
 ) -> dict:
     if level == "file":
-        return _build_file_graph(db, repo_id)
-    return _build_symbol_graph(db, repo_id)
+        return await _build_file_graph(db, repo_id)
+    return await _build_symbol_graph(db, repo_id)
 
 
-def _build_file_graph(db: Session, repo_id: uuid.UUID) -> dict:
-    files = db.query(File).filter_by(repository_id=repo_id).all()
+async def _build_file_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
+    files = (
+        (await db.execute(select(File).filter(File.repository_id == repo_id)))
+        .scalars()
+        .all()
+    )
+
     if not files:
         return {
             "nodes": [],
@@ -32,18 +43,6 @@ def _build_file_graph(db: Session, repo_id: uuid.UUID) -> dict:
 
     file_ids = {f.id for f in files}
 
-    metrics = (
-        db.query(HealthMetric)
-        .filter(
-            HealthMetric.repository_id == repo_id,
-            HealthMetric.file_id.isnot(None),
-        )
-        .all()
-    )
-    health_by_file: dict[uuid.UUID, float] = {
-        m.file_id: m.overall_score for m in metrics
-    }
-
     nodes = [
         {
             "id": str(f.id),
@@ -52,8 +51,14 @@ def _build_file_graph(db: Session, repo_id: uuid.UUID) -> dict:
             "group": _parent_dir(f.path),
             "kind": "file",
             "loc": f.loc or 0,
-            "health": round(health_by_file.get(f.id, 50.0), 1),
+            "criticality": f.criticality or "medium",
+            "criticality_score": _CRITICALITY_SCORE.get(
+                (f.criticality or "medium").lower().strip(),
+                50.0,
+            ),
             "language": f.language or "unknown",
+            "fan_in": f.fan_in or 0,
+            "fan_out": f.fan_out or 0,
         }
         for f in files
     ]
@@ -62,39 +67,37 @@ def _build_file_graph(db: Session, repo_id: uuid.UUID) -> dict:
     TargetSymbol = AstSymbol.__table__.alias("tgt_sym")
 
     rows = (
-        db.query(
-            Dependency.dep_type,
-            SourceSymbol.c.file_id.label("src_file_id"),
-            TargetSymbol.c.file_id.label("tgt_file_id"),
+        await db.execute(
+            select(
+                Dependency.dep_type,
+                SourceSymbol.c.file_id.label("src_file_id"),
+                TargetSymbol.c.file_id.label("tgt_file_id"),
+            )
+            .join(SourceSymbol, Dependency.source_symbol_id == SourceSymbol.c.id)
+            .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.c.id)
+            .filter(SourceSymbol.c.file_id.in_(file_ids))
+            .filter(TargetSymbol.c.file_id.in_(file_ids))
         )
-        .join(SourceSymbol, Dependency.source_symbol_id == SourceSymbol.c.id)
-        .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.c.id)
-        .filter(SourceSymbol.c.file_id.in_(file_ids))
-        .filter(TargetSymbol.c.file_id.in_(file_ids))
-        .all()
-    )
+    ).all()
 
-    edge_map: dict[tuple[str, str], dict] = {}
     type_counter: dict[tuple[str, str], dict[str, int]] = defaultdict(
         lambda: defaultdict(int)
     )
 
     for dep_type, src_file_id, tgt_file_id in rows:
         if src_file_id == tgt_file_id:
-            continue  # skip intra-file edges
-        key = (str(src_file_id), str(tgt_file_id))
-        type_counter[key][dep_type] += 1
-
-    for key, type_counts in type_counter.items():
-        dominant_type = max(type_counts, key=type_counts.__getitem__)
-        total_weight = sum(type_counts.values())
-        edge_map[key] = {"type": dominant_type, "weight": total_weight}
+            continue
+        type_counter[(str(src_file_id), str(tgt_file_id))][dep_type] += 1
 
     links = [
-        {"source": src, "target": tgt, **meta} for (src, tgt), meta in edge_map.items()
+        {
+            "source": src,
+            "target": tgt,
+            "type": max(type_counts, key=type_counts.__getitem__),
+            "weight": sum(type_counts.values()),
+        }
+        for (src, tgt), type_counts in type_counter.items()
     ]
-
-    cluster_count = len({_top_dir(f.path) for f in files})
 
     return {
         "nodes": nodes,
@@ -102,20 +105,25 @@ def _build_file_graph(db: Session, repo_id: uuid.UUID) -> dict:
         "metadata": {
             "total_nodes": len(nodes),
             "total_edges": len(links),
-            "clusters": cluster_count,
+            "clusters": len({_top_dir(f.path) for f in files}),
         },
     }
 
 
-def _build_symbol_graph(db: Session, repo_id: uuid.UUID) -> dict:
-    # Load function + class symbols for NODES
+async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
     node_symbols = (
-        db.query(AstSymbol)
-        .join(File, AstSymbol.file_id == File.id)
-        .filter(File.repository_id == repo_id)
-        .filter(AstSymbol.kind.in_(["function", "class"]))
+        (
+            await db.execute(
+                select(AstSymbol)
+                .join(File, AstSymbol.file_id == File.id)
+                .filter(File.repository_id == repo_id)
+                .filter(AstSymbol.kind.in_(["function", "class"]))
+            )
+        )
+        .scalars()
         .all()
     )
+
     if not node_symbols:
         return {
             "nodes": [],
@@ -124,9 +132,14 @@ def _build_symbol_graph(db: Session, repo_id: uuid.UUID) -> dict:
         }
 
     all_symbols = (
-        db.query(AstSymbol)
-        .join(File, AstSymbol.file_id == File.id)
-        .filter(File.repository_id == repo_id)
+        (
+            await db.execute(
+                select(AstSymbol)
+                .join(File, AstSymbol.file_id == File.id)
+                .filter(File.repository_id == repo_id)
+            )
+        )
+        .scalars()
         .all()
     )
 
@@ -142,7 +155,9 @@ def _build_symbol_graph(db: Session, repo_id: uuid.UUID) -> dict:
     }
 
     file_ids = {s.file_id for s in node_symbols}
-    files = db.query(File).filter(File.id.in_(file_ids)).all()
+    files = (
+        (await db.execute(select(File).filter(File.id.in_(file_ids)))).scalars().all()
+    )
     file_map = {f.id: f for f in files}
 
     nodes = [
@@ -158,15 +173,25 @@ def _build_symbol_graph(db: Session, repo_id: uuid.UUID) -> dict:
             if s.start_line and s.end_line
             else 0,
             "complexity": s.cyclomatic_complexity or 0,
-            "health": _complexity_to_health(s.cyclomatic_complexity or 1),
+            "criticality": file_map[s.file_id].criticality or "medium"
+            if s.file_id in file_map
+            else "medium",
+            "criticality_score": _CRITICALITY_SCORE[
+                file_map[s.file_id].criticality if s.file_id in file_map else None
+            ],
         }
         for s in node_symbols
     ]
 
     deps = (
-        db.query(Dependency)
-        .filter(Dependency.source_symbol_id.in_(all_symbol_ids))
-        .filter(Dependency.target_symbol_id.in_(all_symbol_ids))
+        (
+            await db.execute(
+                select(Dependency)
+                .filter(Dependency.source_symbol_id.in_(all_symbol_ids))
+                .filter(Dependency.target_symbol_id.in_(all_symbol_ids))
+            )
+        )
+        .scalars()
         .all()
     )
 
@@ -203,20 +228,14 @@ def _build_symbol_graph(db: Session, repo_id: uuid.UUID) -> dict:
             continue
         seen_edges.add(key)
 
-        links.append({
-            "source": str(src_id),
-            "target": str(tgt_id),
-            "type": d.dep_type,
-            "weight": 1,
-        })
-
-    cluster_count = len(
-        {
-            _top_dir(file_map[s.file_id].path)
-            for s in node_symbols
-            if s.file_id in file_map
-        }
-    )
+        links.append(
+            {
+                "source": str(src_id),
+                "target": str(tgt_id),
+                "type": d.dep_type,
+                "weight": 1,
+            }
+        )
 
     return {
         "nodes": nodes,
@@ -224,7 +243,13 @@ def _build_symbol_graph(db: Session, repo_id: uuid.UUID) -> dict:
         "metadata": {
             "total_nodes": len(nodes),
             "total_edges": len(links),
-            "clusters": cluster_count,
+            "clusters": len(
+                {
+                    _top_dir(file_map[s.file_id].path)
+                    for s in node_symbols
+                    if s.file_id in file_map
+                }
+            ),
         },
     }
 
@@ -239,8 +264,3 @@ def _top_dir(path: str) -> str:
     path = path.replace("\\", "/")
     parts = path.split("/")
     return parts[0] if len(parts) > 1 else "root"
-
-
-def _complexity_to_health(cyclomatic: int) -> float:
-    score = max(0.0, 100.0 - (cyclomatic - 1) * 5.0)
-    return round(score, 1)
