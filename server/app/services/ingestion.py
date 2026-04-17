@@ -321,7 +321,13 @@ def compute_fan_metrics(db: Session, repo_id: uuid.UUID) -> None:
     fan_in: dict[uuid.UUID, int] = defaultdict(int)
     fan_out: dict[uuid.UUID, int] = defaultdict(int)
 
-    deps = db.query(Dependency).filter(Dependency.source_symbol_id.isnot(None)).all()
+    deps = (
+        db.query(Dependency)
+        .join(AstSymbol, Dependency.source_symbol_id == AstSymbol.id)
+        .join(File, AstSymbol.file_id == File.id)
+        .filter(File.repository_id == repo_id)
+        .all()
+    )
 
     symbol_to_file: dict[uuid.UUID, uuid.UUID] = {}
     files = db.query(File).filter(File.repository_id == repo_id).all()
@@ -365,7 +371,7 @@ def score_repository_health(
     redis_client,
     repo: Repository,
 ) -> int:
-    _update_status(db, repo, "analyzing")
+    _update_status(db, repo, "scoring")
     _publish_log(redis_client, str(repo.id), "Computing health metrics...")
 
     compute_health_metrics(repo.id, db)

@@ -7,6 +7,7 @@ from uuid import UUID
 import openai
 from app.core.config import settings
 from app.models import AstSymbol, Dependency, File, OnboardingGuide, Repository
+from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
 logger = logging.getLogger(__name__)
@@ -22,11 +23,7 @@ def _build_file_graph(
 ) -> tuple[dict[UUID, set[UUID]], dict[UUID, set[UUID]]]:
     TargetSymbol = aliased(AstSymbol, name="tgt_sym")
 
-    repo_file_ids = db.query(File.id).filter(File.repository_id == repo_id).subquery()
-
-    repo_file_ids = (
-        db.query(File.id).filter(File.repository_id == repo_id).scalar_subquery()
-    )
+    repo_file_ids = select(File.id).where(File.repository_id == repo_id)
 
     rows = (
         db.query(
@@ -35,7 +32,7 @@ def _build_file_graph(
         )
         .join(Dependency, Dependency.source_symbol_id == AstSymbol.id)
         .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.id)
-        .filter(AstSymbol.file_id.in_(repo_file_ids))
+        .filter(File.id.in_(repo_file_ids))
         .all()
     )
 
@@ -232,7 +229,7 @@ def _upsert_guide(
         guide = OnboardingGuide(
             repository_id=repo_id,
             reading_order=reading_order,
-            architecture_brief=json.dumps({}),
+            architecture_brief={},
             critical_files=[],
             pdf_path=None,
         )

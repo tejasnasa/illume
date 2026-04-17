@@ -47,7 +47,7 @@ async def register(
         email=body.email,
         name=body.name,
         password=hash_password(body.password),
-        github_access_token="",
+        github_access_token=None,
     )
     db.add(user)
     await db.commit()
