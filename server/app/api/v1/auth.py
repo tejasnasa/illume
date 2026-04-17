@@ -5,7 +5,7 @@ from app.core.database import get_async_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
 from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +32,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
 
-    model_config = {"from_attributes": True}
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.post("/register", response_model=MessageResponse, status_code=201)

@@ -6,7 +6,7 @@ from app.core.database import AsyncSession, get_async_db
 from app.models.repository import Repository
 from app.tasks.ingest import ingest_repository
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,7 @@ class RepositoryResponse(BaseModel):
     architecture_summary: str | None
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 def _extract_repo_name(github_url: str) -> str:
