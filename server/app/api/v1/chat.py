@@ -2,12 +2,12 @@ import logging
 import uuid
 from typing import Literal
 
-from app.core.database import get_sync_db
+from app.core.database import AsyncSession, get_async_db
 from app.models.repository import Repository
 from app.services.rag import ChatMessage, answer_question
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -43,18 +43,20 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/{repo_id}/chat", response_model=ChatResponse)
-def chat(
+async def chat(
     repo_id: uuid.UUID,
     payload: ChatRequest,
     request: Request,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     user_id = getattr(request.state, "user_id", None)
     repo = (
-        db.query(Repository)
-        .filter(Repository.id == repo_id, Repository.user_id == user_id)
-        .first()
-    )
+        await db.execute(
+            select(Repository).filter(
+                Repository.id == repo_id, Repository.user_id == user_id
+            )
+        )
+    ).scalar_one_or_none()
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
@@ -66,7 +68,7 @@ def chat(
 
     history = payload.history[-5:]
 
-    result = answer_question(
+    result = await answer_question(
         query=payload.question,
         repository_id=repo_id,
         db=db,
