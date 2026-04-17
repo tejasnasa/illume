@@ -26,10 +26,11 @@ async def get_async_db():
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
-        except Exception:
+        except:
             await session.rollback()
             raise
+        finally:
+            await session.close()
 
 
 sync_engine = create_engine(
@@ -49,7 +50,6 @@ def get_sync_db():
     session = SyncSessionLocal()
     try:
         yield session
-        session.commit()
     except Exception:
         session.rollback()
         raise
