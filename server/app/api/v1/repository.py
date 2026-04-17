@@ -7,7 +7,7 @@ from app.models.repository import Repository
 from app.tasks.ingest import ingest_repository
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
@@ -58,6 +58,53 @@ async def create_repository(
 
     ingest_repository.delay(str(repo.id))
     logger.info("Queued ingestion for repo %s", repo.id)
+
+    return {"repo_id": str(repo.id)}
+
+
+@router.post("/{repo_id}/reingest", status_code=202)
+async def reingest_repository(
+    repo_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+):
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    result = await db.execute(
+        select(Repository).where(
+            Repository.id == repo_id,
+            Repository.user_id == user_id,
+        )
+    )
+    repo = result.scalar_one_or_none()
+
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    if repo.status not in ("ready", "failed"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Repository cannot be re-ingested while in status '{repo.status}'",
+        )
+
+    await db.execute(delete(Repository).where(Repository.id == repo_id))
+    await db.commit()
+
+    new_repo = Repository(
+        id=repo_id,
+        github_url=repo.github_url,
+        name=repo.name,
+        user_id=repo.user_id,
+        status="pending",
+    )
+
+    db.add(new_repo)
+    await db.commit()
+
+    ingest_repository.delay(str(repo.id))
+    logger.info("Re-ingestion queued for repo %s", repo.id)
 
     return {"repo_id": str(repo.id)}
 
