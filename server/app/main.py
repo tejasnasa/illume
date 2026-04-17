@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import auth, chat, glossary, graph, health, repository, ws
+from app.api.v1 import auth, chat, glossary, graph, health, ownership, repository, ws
 from app.middleware.auth import AuthMiddleware
 
 
@@ -31,6 +31,7 @@ app.include_router(health.router)
 app.include_router(graph.router)
 app.include_router(auth.router)
 app.include_router(glossary.router)
+app.include_router(ownership.router)
 
 
 @app.get("/healthz")
