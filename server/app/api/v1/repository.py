@@ -2,12 +2,12 @@ import logging
 import uuid
 from datetime import datetime
 
-from app.core.database import get_sync_db
+from app.core.database import AsyncSession, get_async_db
 from app.models.repository import Repository
 from app.tasks.ingest import ingest_repository
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
@@ -34,10 +34,10 @@ def _extract_repo_name(github_url: str) -> str:
 
 
 @router.post("", status_code=202)
-def create_repository(
+async def create_repository(
     payload: RepositoryCreate,
     request: Request,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
@@ -49,8 +49,8 @@ def create_repository(
         user_id=user_id,
     )
     db.add(repo)
-    db.commit()
-    db.refresh(repo)
+    await db.commit()
+    await db.refresh(repo)
 
     ingest_repository.delay(str(repo.id))
     logger.info("Queued ingestion for repo %s", repo.id)
@@ -59,31 +59,37 @@ def create_repository(
 
 
 @router.get("/{repo_id}", response_model=RepositoryResponse)
-def get_repository(
+async def get_repository(
     repo_id: uuid.UUID,
     request: Request,
-    db: Session = Depends(get_sync_db),
+    db: AsyncSession = Depends(get_async_db),
 ):
     user_id = getattr(request.state, "user_id", None)
-
     repo = (
-        db.query(Repository)
-        .filter(Repository.id == repo_id, Repository.user_id == user_id)
-        .first()
-    )
+        await db.execute(
+            select(Repository).filter(
+                Repository.id == repo_id, Repository.user_id == user_id
+            )
+        )
+    ).scalar_one_or_none()
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     return repo
 
 
 @router.get("", response_model=list[RepositoryResponse])
-def list_repositories(request: Request, db: Session = Depends(get_sync_db)):
+async def list_repositories(request: Request, db: AsyncSession = Depends(get_async_db)):
     user_id = getattr(request.state, "user_id", None)
 
     repositories = (
-        db.query(Repository)
-        .order_by(Repository.created_at.desc())
-        .filter(Repository.user_id == user_id)
+        (
+            await db.execute(
+                select(Repository)
+                .filter(Repository.user_id == user_id)
+                .order_by(Repository.created_at.desc())
+            )
+        )
+        .scalars()
         .all()
     )
 
