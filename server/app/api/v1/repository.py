@@ -23,6 +23,11 @@ class RepositoryResponse(BaseModel):
     name: str
     status: str
     architecture_summary: str | None
+    repo_number: int
+    primary_language: str | None
+    detected_stack: dict | None
+    entry_points: dict | list | None
+    created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -101,3 +106,30 @@ async def list_repositories(request: Request, db: AsyncSession = Depends(get_asy
         results.append(data)
 
     return results
+
+
+@router.delete("/{repo_id}", status_code=204)
+async def delete_repository(
+    repo_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+):
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    result = await db.execute(
+        select(Repository).where(
+            Repository.id == repo_id,
+            Repository.user_id == user_id,
+        )
+    )
+    repo = result.scalar_one_or_none()
+
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    await db.delete(repo)
+    await db.commit()
+
+    return None

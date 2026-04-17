@@ -20,7 +20,9 @@ class Repository(Base):
         unique=True,
         nullable=False,
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     github_url: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     default_branch: Mapped[str] = mapped_column(String, nullable=True)

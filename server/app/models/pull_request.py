@@ -27,7 +27,7 @@ class PullRequest(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("repositories.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False
     )
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)

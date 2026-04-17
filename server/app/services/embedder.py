@@ -114,15 +114,21 @@ def generate_embeddings(
         for c in commits
         if _token_estimate(_build_commit_chunk(c)) <= MAX_CHUNK_TOKENS
     ]
-    for batch_idx, batch in enumerate(_iter_batches(commit_chunks, BATCH_SIZE)):
+    commit_batches = list(_iter_batches(commit_chunks, BATCH_SIZE))
+    total_commit_batches = len(commit_batches)
+
+    for batch_idx, batch in enumerate(commit_batches):
         batch_texts = [t for _, t in batch]
+
         if publish_log:
             publish_log(
-                f"Embedding commits batch {batch_idx + 1}/{len(list(_iter_batches(commit_chunks, BATCH_SIZE)))}..."
+                f"Embedding commits batch {batch_idx + 1}/{total_commit_batches}..."
             )
+
         response = client.embeddings.create(
             model="text-embedding-3-small", input=batch_texts
         )
+
         for i, embedding_data in enumerate(response.data):
             commit, chunk_text = batch[i]
             db.add(
@@ -144,15 +150,19 @@ def generate_embeddings(
         for p in prs
         if _token_estimate(_build_pr_chunk(p)) <= MAX_CHUNK_TOKENS
     ]
-    for batch_idx, batch in enumerate(_iter_batches(pr_chunks, BATCH_SIZE)):
+    pr_batches = list(_iter_batches(pr_chunks, BATCH_SIZE))
+    total_pr_batches = len(pr_batches)
+
+    for batch_idx, batch in enumerate(pr_batches):
         batch_texts = [t for _, t in batch]
+
         if publish_log:
-            publish_log(
-                f"Embedding PRs batch {batch_idx + 1}/{len(list(_iter_batches(pr_chunks, BATCH_SIZE)))}..."
-            )
+            publish_log(f"Embedding PRs batch {batch_idx + 1}/{total_pr_batches}...")
+
         response = client.embeddings.create(
             model="text-embedding-3-small", input=batch_texts
         )
+
         for i, embedding_data in enumerate(response.data):
             pr, chunk_text = batch[i]
             db.add(

@@ -15,7 +15,7 @@ class OnboardingGuide(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("repositories.id"), unique=True, nullable=False
+        UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), unique=True, nullable=False
     )
     reading_order: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     critical_files: Mapped[list | None] = mapped_column(JSONB, nullable=True)

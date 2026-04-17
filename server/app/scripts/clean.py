@@ -7,7 +7,6 @@ from app.models import (
     Embedding,
     File,
     GlossaryEntry,
-    HealthMetric,
     OnboardingGuide,
     PullRequest,
     Repository,
@@ -23,7 +22,6 @@ try:
     db.query(PullRequest).delete()
     db.query(Embedding).delete()
     db.query(Dependency).delete()
-    db.query(HealthMetric).delete()
     db.query(AstSymbol).delete()
     db.query(File).delete()
     db.query(Repository).delete()

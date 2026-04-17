@@ -12,10 +12,10 @@ class GlossaryEntry(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("repositories.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="CASCADE"), nullable=False
     )
     symbol_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("ast_symbols.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("ast_symbols.id", ondelete="CASCADE"), nullable=True
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     definition: Mapped[str] = mapped_column(Text, nullable=False)
