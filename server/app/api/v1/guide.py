@@ -2,10 +2,10 @@ import logging
 import uuid
 from pathlib import Path
 
-from app.api.deps import get_current_user, get_repo_for_user
+from app.api.deps import get_repo_for_user
 from app.core.database import get_async_db
-from app.models import OnboardingGuide, User
-from fastapi import APIRouter, Depends, HTTPException
+from app.models import OnboardingGuide
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,11 +123,16 @@ def _parse_architecture_brief(raw: dict | None) -> ArchitectureBrief | None:
 
 @router.get("/{repo_id}/guide", response_model=GuideResponse)
 async def get_onboarding_guide(
+    request: Request,
     repo_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
 ) -> GuideResponse:
-    await get_repo_for_user(repo_id, current_user, db)
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    await get_repo_for_user(repo_id, user_id, db)
+
     guide = await _get_guide(repo_id, db)
 
     return GuideResponse(

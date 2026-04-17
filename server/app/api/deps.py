@@ -24,13 +24,13 @@ async def get_current_user(
 
 async def get_repo_for_user(
     repo_id: uuid.UUID,
-    user: User,
+    user_id: uuid.UUID,
     db: AsyncSession,
 ) -> Repository:
     result = await db.execute(
         select(Repository).where(
             Repository.id == repo_id,
-            Repository.user_id == user.id,
+            Repository.user_id == user_id,
         )
     )
     repo = result.scalar_one_or_none()

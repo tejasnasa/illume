@@ -1,12 +1,11 @@
 import logging
 import uuid
 
-from app.api.deps import get_current_user, get_repo_for_user
+from app.api.deps import get_repo_for_user
 from app.core.database import get_async_db
 from app.models.code_owner import CodeOwner
 from app.models.file import File
-from app.models.user import User
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,13 +66,17 @@ def _build_file_ownership(owner: CodeOwner, file: File) -> FileOwnershipResponse
 
 @router.get("/{repo_id}/ownership", response_model=OwnershipMapResponse)
 async def get_ownership_map(
+    request: Request,
     repo_id: uuid.UUID,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
 ) -> OwnershipMapResponse:
-    await get_repo_for_user(repo_id, current_user, db)
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    await get_repo_for_user(repo_id, user_id, db)
 
     stmt = (
         select(CodeOwner, File)
@@ -101,11 +104,15 @@ async def get_ownership_map(
 
 @router.get("/{repo_id}/ownership/silos", response_model=SilosResponse)
 async def get_knowledge_silos(
+    request: Request,
     repo_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
 ) -> SilosResponse:
-    await get_repo_for_user(repo_id, current_user, db)
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    await get_repo_for_user(repo_id, user_id, db)
 
     stmt = (
         select(CodeOwner, File)

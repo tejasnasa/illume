@@ -1,10 +1,10 @@
 import logging
 import uuid
 
-from app.api.deps import get_current_user, get_repo_for_user
+from app.api.deps import get_repo_for_user
 from app.core.database import get_async_db
-from app.models import GlossaryEntry, User
-from fastapi import APIRouter, Depends, Query
+from app.models import GlossaryEntry
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,7 @@ class GlossaryListResponse(BaseModel):
 
 @router.get("/{repo_id}/glossary", response_model=GlossaryListResponse)
 async def browse_glossary(
+    request: Request,
     repo_id: uuid.UUID,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
@@ -41,9 +42,12 @@ async def browse_glossary(
         None, description="Filter entries by file path (exact match)"
     ),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
 ) -> GlossaryListResponse:
-    await get_repo_for_user(repo_id, current_user, db)
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    await get_repo_for_user(repo_id, user_id, db)
 
     base_query = select(GlossaryEntry).where(GlossaryEntry.repository_id == repo_id)
 
@@ -72,6 +76,7 @@ async def browse_glossary(
 
 @router.get("/{repo_id}/glossary/search", response_model=GlossaryListResponse)
 async def search_glossary(
+    request: Request,
     repo_id: uuid.UUID,
     q: str = Query(
         ...,
@@ -81,9 +86,12 @@ async def search_glossary(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_async_db),
-    current_user: User = Depends(get_current_user),
 ) -> GlossaryListResponse:
-    await get_repo_for_user(repo_id, current_user, db)
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    await get_repo_for_user(repo_id, user_id, db)
 
     pattern = f"%{q}%"
 
