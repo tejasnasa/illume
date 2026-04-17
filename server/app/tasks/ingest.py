@@ -15,10 +15,8 @@ from app.services.ingestion import (
     clone_repository,
     embed_repository_symbols,
     process_repository_files,
-    score_repository_health,
 )
 from app.services.reading_order import build_reading_order
-from app.services.summarizer import generate_repo_summary
 
 logger = logging.getLogger(__name__)
 
@@ -73,16 +71,6 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             build_glossary(db, repo)
             build_reading_order(db, repo)
             generate_brief(db, repo)
-
-            score_repository_health(db, redis_client, repo)
-
-            publish("Generating architecture summary...")
-            summary = generate_repo_summary(
-                repo_id=repo.id,
-                repo_name=repo.name,
-                db=db,
-            )
-            repo.summary = summary
 
             repo.status = "ready"
             db.commit()

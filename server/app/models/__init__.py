@@ -5,7 +5,6 @@ from app.models.dependency import Dependency
 from app.models.embedding import Embedding
 from app.models.file import File
 from app.models.glossary_entry import GlossaryEntry
-from app.models.health_metric import HealthMetric
 from app.models.onboarding_guide import OnboardingGuide
 from app.models.pull_request import PullRequest
 from app.models.repository import Repository
@@ -16,7 +15,6 @@ __all__ = [
     "Dependency",
     "Embedding",
     "File",
-    "HealthMetric",
     "Repository",
     "User",
     "Commit",

@@ -25,7 +25,6 @@ class Repository(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     default_branch: Mapped[str] = mapped_column(String, nullable=True)
     primary_language: Mapped[str] = mapped_column(String, nullable=True)
-    summary: Mapped[str] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(
         Enum(
             "pending",

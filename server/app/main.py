@@ -9,7 +9,6 @@ from app.api.v1 import (
     glossary,
     graph,
     guide,
-    health,
     ownership,
     repository,
     ws,
@@ -37,7 +36,6 @@ app.add_middleware(
 app.include_router(ws.router)
 app.include_router(repository.router)
 app.include_router(chat.router)
-app.include_router(health.router)
 app.include_router(graph.router)
 app.include_router(auth.router)
 app.include_router(glossary.router)
