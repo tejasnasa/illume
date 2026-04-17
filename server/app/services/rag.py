@@ -5,9 +5,10 @@ from uuid import UUID
 
 from app.core.config import settings
 from app.models import AstSymbol, Commit, Embedding, File, PullRequest
-from openai import OpenAI
+from openai import AsyncOpenAI
 from openai.types.responses import ResponseInputParam
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -40,38 +41,44 @@ class ChatMessage:
     content: str
 
 
-def _embed_query(client: OpenAI, query: str) -> list[float]:
-    response = client.embeddings.create(
+async def _embed_query(client: AsyncOpenAI, query: str) -> list[float]:
+    response = await client.embeddings.create(
         model="text-embedding-3-small",
         input=query,
     )
     return response.data[0].embedding
 
 
-def _vector_search(db, repository_id, query_vector, top_k=TOP_K):
-    def query_type(source_type, limit):
-        return (
-            db.query(Embedding)
+async def _vector_search(db: AsyncSession, repository_id, query_vector, top_k=TOP_K):
+    async def query_type(source_type, limit):
+        result = await db.execute(
+            select(Embedding)
             .filter(
                 Embedding.repository_id == repository_id,
                 Embedding.source_type == source_type,
             )
             .order_by(Embedding.embedding.cosine_distance(query_vector))
             .limit(limit)
-            .all()
         )
+        return result.scalars().all()
 
-    symbols = query_type("symbol", 6)
-    commits = query_type("commit", 2)
-    prs = query_type("pull_request", 1)
-    docs = query_type("document", 1)
-    return symbols + commits + prs + docs
+    symbols = await query_type("symbol", 6)
+    commits = await query_type("commit", 2)
+    prs = await query_type("pull_request", 1)
+    docs = await query_type("document", 1)
+    return list(symbols) + list(commits) + list(prs) + list(docs)
 
 
-def _resolve_source(db: Session, embedding: Embedding) -> SourceReference:
+async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceReference:
     if embedding.source_type == "symbol":
-        symbol = db.query(AstSymbol).filter(AstSymbol.id == embedding.source_id).first()
-        file = db.query(File).filter(File.id == embedding.file_id).first()
+        symbol = (
+            await db.execute(
+                select(AstSymbol).filter(AstSymbol.id == embedding.source_id)
+            )
+        ).scalar_one_or_none()
+        file = (
+            await db.execute(select(File).filter(File.id == embedding.file_id))
+        ).scalar_one_or_none()
         return SourceReference(
             source_type="symbol",
             chunk_text=embedding.chunk_text,
@@ -82,7 +89,9 @@ def _resolve_source(db: Session, embedding: Embedding) -> SourceReference:
         )
 
     elif embedding.source_type == "commit":
-        commit = db.query(Commit).filter(Commit.id == embedding.source_id).first()
+        commit = (
+            await db.execute(select(Commit).filter(Commit.id == embedding.source_id))
+        ).scalar_one_or_none()
         return SourceReference(
             source_type="commit",
             chunk_text=embedding.chunk_text,
@@ -91,7 +100,11 @@ def _resolve_source(db: Session, embedding: Embedding) -> SourceReference:
         )
 
     elif embedding.source_type == "pull_request":
-        pr = db.query(PullRequest).filter(PullRequest.id == embedding.source_id).first()
+        pr = (
+            await db.execute(
+                select(PullRequest).filter(PullRequest.id == embedding.source_id)
+            )
+        ).scalar_one_or_none()
         return SourceReference(
             source_type="pull_request",
             chunk_text=embedding.chunk_text,
@@ -137,18 +150,18 @@ def _build_prompt(query: str, sources: list[SourceReference]) -> str:
         """
 
 
-def answer_question(
+async def answer_question(
     query: str,
     repository_id: UUID,
-    db: Session,
+    db: AsyncSession,
     history: list[ChatMessage] | None = None,
 ) -> RAGResponse:
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     logger.info(f"Embedding query for repo {repository_id}: {query!r}")
-    query_vector = _embed_query(client, query)
+    query_vector = await _embed_query(client, query)
 
-    chunks = _vector_search(db, repository_id, query_vector)
+    chunks = await _vector_search(db, repository_id, query_vector)
     logger.info(f"Retrieved {len(chunks)} chunks from pgvector")
 
     if not chunks:
@@ -157,7 +170,7 @@ def answer_question(
             sources=[],
         )
 
-    sources = [_resolve_source(db, e) for e in chunks]
+    sources = [await _resolve_source(db, e) for e in chunks]
     prompt = _build_prompt(query, sources)
 
     messages: list[dict] = [{"role": "system", "content": prompt}]
@@ -169,7 +182,7 @@ def answer_question(
     messages.append({"role": "user", "content": query})
 
     logger.info("Calling LLM for answer generation")
-    response = client.responses.create(
+    response = await client.responses.create(
         model=settings.AI_MODEL,
         reasoning={"effort": "minimal"},
         input=cast(ResponseInputParam, messages),
