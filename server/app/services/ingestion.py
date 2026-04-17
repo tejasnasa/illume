@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -64,6 +65,9 @@ SKIP_DIRS = {
     "coverage",
     ".pytest_cache",
     "alembic",
+    "target",
+    "bin",
+    "obj",
 }
 
 
@@ -450,21 +454,6 @@ def run_criticality_scoring(db: Session, repo_id: UUID) -> int:
 
 
 def detect_stack(repo_root: Path) -> dict:
-    import json
-
-    SKIP_DIRS = {
-        "node_modules",
-        ".git",
-        ".next",
-        "dist",
-        "build",
-        "__pycache__",
-        ".venv",
-        "venv",
-        "target",
-        "bin",
-        "obj",
-    }
 
     languages: set[str] = set()
     frameworks: set[str] = set()
@@ -658,19 +647,6 @@ def detect_stack(repo_root: Path) -> dict:
 
 
 def detect_entry_points(repo_root: Path) -> list[str]:
-    SKIP_DIRS = {
-        "node_modules",
-        ".git",
-        ".next",
-        "dist",
-        "build",
-        "__pycache__",
-        ".venv",
-        "venv",
-        "target",
-        "bin",
-        "obj",
-    }
 
     entry_points: set[str] = set()
 
