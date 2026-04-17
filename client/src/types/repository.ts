@@ -2,7 +2,7 @@ export default interface Repository {
   id: number;
   name: string;
   architecture_summary: string;
-  updatedAt: string;
+  updated_at: string;
   github_url: string;
   status: string;
 }

@@ -22,7 +22,7 @@ class RepositoryResponse(BaseModel):
     github_url: str
     name: str
     status: str
-    summary: str | None
+    architecture_summary: str | None
     updated_at: datetime
 
     class Config:
@@ -91,8 +91,8 @@ def list_repositories(request: Request, db: Session = Depends(get_sync_db)):
 
     for repo in repositories:
         data = RepositoryResponse.model_validate(repo)
-        if data.summary and len(data.summary) > 200:
-            data.summary = data.summary[:200] + "..."
+        if data.architecture_summary and len(data.architecture_summary) > 200:
+            data.architecture_summary = data.architecture_summary[:200] + "..."
         results.append(data)
 
     return results

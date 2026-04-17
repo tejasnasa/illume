@@ -15,7 +15,7 @@ export default function RepoCard({ repo }: RepoCardProps) {
       <h3 className="text-2xl">{repo.name}</h3>
       <GithubLogoIcon />
       <p className="text-sm text-(--muted-foreground)">{repo.architecture_summary}</p>
-      <p className="text-xs text-(--muted-foreground)">{repo.updatedAt}</p>
+      <p className="text-xs text-(--muted-foreground)">{repo.updated_at}</p>
       <p className="text-xs">status: {repo.status}</p>
     </Link>
   );
