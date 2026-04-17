@@ -28,8 +28,6 @@ _TEST_TEMPLATES = [
     "{stem}_spec{suffix}",
 ]
 
-_REDIS_CHANNEL_PREFIX = "ingest:progress"
-
 
 def analyze_git_history(
     db: Session,
@@ -429,7 +427,7 @@ def _publish(
     event: str,
     message: str,
 ) -> None:
-    channel = f"{_REDIS_CHANNEL_PREFIX}:{repo_id}"
+    channel = f"task:{repo_id}:logs"
     payload = json.dumps(
         {
             "event": event,

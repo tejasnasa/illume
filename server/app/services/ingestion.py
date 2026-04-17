@@ -365,7 +365,7 @@ def score_repository_health(
     redis_client,
     repo: Repository,
 ) -> int:
-    _update_status(db, repo, "scoring")
+    _update_status(db, repo, "analyzing")
     _publish_log(redis_client, str(repo.id), "Computing health metrics...")
 
     compute_health_metrics(repo.id, db)

@@ -19,8 +19,6 @@ PER_PAGE = 100
 REQUEST_TIMEOUT = 20.0
 MAX_RETRIES = 3
 
-_REDIS_CHANNEL_PREFIX = "ingest:progress"
-
 
 def fetch_pull_requests(
     repo,
@@ -240,7 +238,7 @@ def _publish(
     event: str,
     message: str,
 ) -> None:
-    channel = f"{_REDIS_CHANNEL_PREFIX}:{repo_id}"
+    channel = f"task:{repo_id}:logs"
     payload = json.dumps(
         {
             "event": event,
