@@ -24,9 +24,11 @@ export async function GetGlossary(
 export async function GetGlossarySearchResults(
   id: string,
   q: string,
+  page: number,
+  page_size: number,
 ): Promise<Glossary> {
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/glossary?q=${encodeURIComponent(q)}`,
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/glossary?q=${encodeURIComponent(q)}&page=${page}&page_size=${page_size}`,
     {
       headers: { cookie: (await headers()).get("cookie") ?? "" },
       cache: "no-store",
