@@ -1,8 +1,8 @@
-export default interface glossary {
+export default interface Glossary {
   entries: {
     id: string;
     name: string;
-    defintion: string;
+    definition: string;
     file_path: string;
     line_number: number;
     symbol_id: string;
