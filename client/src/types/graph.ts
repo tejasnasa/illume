@@ -6,8 +6,11 @@ export default interface Graph {
     group: string;
     kind: string;
     loc: number;
-    health: number;
+    criticality: string;
+    criticality_score: number;
     language: string;
+    fan_in: number;
+    fan_out: number;
   }[];
   links: {
     source: string;

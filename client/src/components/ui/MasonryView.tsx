@@ -13,7 +13,7 @@ export default function MasonryView({
     <Masonry
       className="flex gap-5 mt-6"
       columnClassName="space-y-5"
-      breakpointCols={4}
+      breakpointCols={2}
     >
       {repositories.map((repo) => (
         <RepoCard key={repo.id} repo={repo} />
