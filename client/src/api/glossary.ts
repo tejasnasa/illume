@@ -20,3 +20,22 @@ export async function GetGlossary(
 
   return data;
 }
+
+export async function GetGlossarySearchResults(
+  id: string,
+  q: string,
+): Promise<Guide> {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/glossary?q=${encodeURIComponent(q)}`,
+    {
+      headers: { cookie: (await headers()).get("cookie") ?? "" },
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) throw new Error("Failed to fetch repo glossary");
+
+  const data = await res.json();
+
+  return data;
+}
