@@ -4,7 +4,15 @@ import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export default function RepoNavbar({ name, id }: { name: string; id: number }) {
+export default function RepoNavbar({
+  name,
+  id,
+  status,
+}: {
+  name: string;
+  id: number;
+  status: string;
+}) {
   const path = usePathname();
   return (
     <header className="flex backdrop-blur-xs items-center justify-between">
@@ -23,6 +31,9 @@ export default function RepoNavbar({ name, id }: { name: string; id: number }) {
           />
         </Link>
         <h1 className="text-xl font-medium mx-2">{name}</h1>
+        <div className="bg-green-500 text-(--background) rounded-full px-3 py-1 text-xs font-medium">
+          {status}
+        </div>
       </section>
 
       <section className="flex">

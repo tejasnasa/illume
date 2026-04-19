@@ -6,7 +6,12 @@ export default interface Repository {
   architecture_summary: string;
   repo_number: number;
   primary_language: string;
-  detected_stack: unknown;
+  detected_stack: {
+    ci_cd: string[];
+    databases: string[];
+    languages: string[];
+    frameworks: string[];
+  };
   entry_points: unknown;
   created_at: Date;
   updated_at: Date;

@@ -36,7 +36,7 @@ export default async function RootLayout({
   return (
     <main className="relative min-h-screen">
       <BackgroundGraph graph={graph} />
-      <RepoNavbar name={repo.name} id={Number(id)} />
+      <RepoNavbar name={repo.name} id={Number(id)} status={repo.status} />
 
       <AnimatedLayout>{children}</AnimatedLayout>
     </main>
