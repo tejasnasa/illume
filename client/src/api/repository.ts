@@ -12,7 +12,7 @@ export async function getRepositories(): Promise<Repository[]> {
     },
   );
 
-  if (!res.ok) throw new Error("Failed to fetch repositories");
+  if (!res.ok) throw new Error("Failed to fetch repository");
 
   const data = await res.json();
 

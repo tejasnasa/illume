@@ -106,12 +106,12 @@ async def reingest_repository(
     ingest_repository.delay(str(repo.id))
     logger.info("Re-ingestion queued for repo %s", repo.id)
 
-    return {"repo_id": str(repo.id)}
+    return {"repo_id": str(repo.id), "repo_num": repo.repo_number}
 
 
-@router.get("/{repo_id}", response_model=RepositoryResponse)
+@router.get("/{repo_num}", response_model=RepositoryResponse)
 async def get_repository(
-    repo_id: uuid.UUID,
+    repo_num: int,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
@@ -119,7 +119,7 @@ async def get_repository(
     repo = (
         await db.execute(
             select(Repository).filter(
-                Repository.id == repo_id, Repository.user_id == user_id
+                Repository.repo_number == repo_num, Repository.user_id == user_id
             )
         )
     ).scalar_one_or_none()
