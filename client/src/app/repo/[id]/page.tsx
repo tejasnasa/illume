@@ -1,4 +1,5 @@
 import { getRepoGraph } from "@/api/graph";
+import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import BackgroundGraph from "@/components/BackgroundGraph";
 
@@ -10,6 +11,7 @@ export default async function Repository({
   const { id } = await params;
   const repo = await GetRepository(Number(id));
   const graph = await getRepoGraph(repo.id, "file");
+  const guide = await GetGuide(repo.id);
 
   return (
     <main className="relative min-h-screen flex items-center">
