@@ -1,5 +1,6 @@
 import { getRepoGraph } from "@/api/graph";
 import { GetRepository } from "@/api/repository";
+import AnimatedLayout from "@/components/AnimatedLayout";
 import BackgroundGraph from "@/components/BackgroundGraph";
 import type { Metadata, ResolvingMetadata } from "next";
 
@@ -16,7 +17,7 @@ export async function generateMetadata(
   const repo = await GetRepository(Number(id));
 
   return {
-    title: repo.name,
+    title: `${repo.name} - Illume`,
   };
 }
 
@@ -34,7 +35,8 @@ export default async function RootLayout({
   return (
     <main className="relative min-h-screen">
       <BackgroundGraph graph={graph} />
-      {children}
+
+      <AnimatedLayout>{children}</AnimatedLayout>
     </main>
   );
 }

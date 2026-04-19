@@ -7,7 +7,7 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ssr: false,
 });
 
-const ORBIT_SPEED = 0.003; // radians per frame
+const ORBIT_SPEED = 0.002; // radians per frame
 
 export default function BackgroundGraph({ graph }: { graph: Graph }) {
   const fgRef = useRef<any>(null);
@@ -56,7 +56,7 @@ export default function BackgroundGraph({ graph }: { graph: Graph }) {
           if (forcesSet.current) return;
           const fg = fgRef.current;
           if (!fg) return;
-          fg.d3Force("charge")?.strength(-200);
+          fg.d3Force("charge")?.strength(-250);
           fg.d3Force("link")?.distance(200);
           fg.d3ReheatSimulation();
           forcesSet.current = true;
