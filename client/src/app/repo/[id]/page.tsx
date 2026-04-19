@@ -1,7 +1,4 @@
-import { getRepoGraph } from "@/api/graph";
-import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
-import BackgroundGraph from "@/components/BackgroundGraph";
 
 export default async function Repository({
   params,
@@ -10,13 +7,9 @@ export default async function Repository({
 }) {
   const { id } = await params;
   const repo = await GetRepository(Number(id));
-  const graph = await getRepoGraph(repo.id, "file");
-  const guide = await GetGuide(repo.id);
 
   return (
-    <main className="relative min-h-screen flex items-center">
-      <BackgroundGraph graph={graph} />
-
+    <main>
       <div className="bg-(--card)/10 text-xl backdrop-blur-xs border rounded-sm p-4">
         <h2>{repo.name}</h2>
       </div>
