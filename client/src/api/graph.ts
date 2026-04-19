@@ -15,7 +15,7 @@ export async function getRepoGraph(
     },
   );
 
-  if (!res.ok) throw new Error("Failed to fetch repositories");
+  if (!res.ok) throw new Error("Failed to fetch repository");
 
   const data = await res.json();
 

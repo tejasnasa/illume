@@ -1,5 +1,5 @@
 export default interface Repository {
-  id: number;
+  id: string;
   github_url: string;
   name: string;
   status: string;
