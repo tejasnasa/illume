@@ -101,7 +101,7 @@ export default async function Repository({
         </div>
       </section>
 
-      <Chat />
+      <Chat repoId={repo.id} />
     </main>
   );
 }
