@@ -1,0 +1,62 @@
+"use client";
+
+import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+export default function RepoNavbar({ name, id }: { name: string; id: number }) {
+  const path = usePathname();
+  return (
+    <header className="flex backdrop-blur-xs items-center justify-between">
+      <section className="flex items-center">
+        <Link
+          href={"/dashboard"}
+          className="relative h-12 w-12 flex items-center justify-center m-2"
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="h-10 w-10 rounded-full bg-(--chart-1)/30 blur-xl" />
+          </div>
+          <StarFourIcon
+            className="relative text-(--chart-1)"
+            weight="fill"
+            size={24}
+          />
+        </Link>
+        <h1 className="text-xl font-medium mx-2">{name}</h1>
+      </section>
+
+      <section className="flex">
+        <Link
+          href={`/repo/${id}`}
+          className={`m-2 mx-4  ${path === `/repo/${id}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+        >
+          Home
+        </Link>
+        <Link
+          href={`/repo/${id}/glossary`}
+          className={`m-2 mx-4  ${path === `/repo/${id}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+        >
+          Glossary
+        </Link>
+        <Link
+          href={`/repo/${id}/ownership`}
+          className={`m-2 mx-4  ${path === `/repo/${id}/ownership` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+        >
+          Ownership
+        </Link>
+        <Link
+          href={`/repo/${id}/chat`}
+          className={`m-2 mx-4  ${path === `/repo/${id}/chat` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+        >
+          Chat
+        </Link>
+        <Link
+          href={`/repo/${id}/graph`}
+          className={`m-2 mx-4  ${path === `/repo/${id}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+        >
+          Graph
+        </Link>
+      </section>
+    </header>
+  );
+}
