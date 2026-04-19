@@ -13,6 +13,7 @@ from app.api.v1 import (
     repository,
     ws,
 )
+from app.core.config import settings
 from app.middleware.auth import AuthMiddleware
 
 
@@ -27,7 +28,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[settings.FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

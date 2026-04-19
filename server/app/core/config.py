@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     AI_MODEL: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     SECRET_KEY: str
+    FRONTEND_URL: str
 
     model_config = SettingsConfigDict(env_file=".env")
 
