@@ -41,7 +41,7 @@ export default async function GlossaryPage({
                       <span className="text-muted-foreground mr-2">
                         {start + i}.
                       </span>
-                      {entry.name}
+                      {entry.name} ({entry.file_path})
                     </h3>
                     <p className="text-sm text-muted-foreground">
                       {entry.definition}

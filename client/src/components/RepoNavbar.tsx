@@ -44,6 +44,12 @@ export default function RepoNavbar({
           Home
         </Link>
         <Link
+          href={`/repo/${id}/onboarding-guide`}
+          className={`m-2 mx-4  ${path === `/repo/${id}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+        >
+          Onboarding Guide
+        </Link>
+        <Link
           href={`/repo/${id}/glossary`}
           className={`m-2 mx-4  ${path === `/repo/${id}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
         >
@@ -54,12 +60,6 @@ export default function RepoNavbar({
           className={`m-2 mx-4  ${path === `/repo/${id}/ownership` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
         >
           Ownership
-        </Link>
-        <Link
-          href={`/repo/${id}/chat`}
-          className={`m-2 mx-4  ${path === `/repo/${id}/chat` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-        >
-          Chat
         </Link>
         <Link
           href={`/repo/${id}/graph`}
