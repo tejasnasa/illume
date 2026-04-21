@@ -1,8 +1,8 @@
-# 🧠 Illume — AI-Powered Repo Analyzer
+# 🧠 Illume — AI-Powered Codebase Onboarding Platform
 
 <div align="center">
 
-**An elite-tier AI Code Analyzer adopting a deterministic AST-first approach for hallucination-free querying and 3D architectural visualization.**
+**An intelligent onboarding accelerator that transforms dense repositories into interactive guides, drastically reducing engineer ramp-up time.**
 
 [Live Demo](https://illume.tejasnasa.me) · [GitHub](https://github.com/tejasnasa/illume) · [Features](#-features) · [Tech Stack](#-tech-stack) · [Architecture](#-architecture)
 
@@ -12,20 +12,31 @@
 
 ## ✨ Features
 
-### 🌳 Deterministic AST Engine
-- **Tree-Sitter Parsing** — Instead of dumping raw strings into an LLM context window, Illume strictly parses code structurally first. Accurate extraction of Functions, Classes, and Call relationships.
-- **Relational Code Graphs** — Analyzes AST extractions to deterministically graph exactly how dependencies interact across a codebase, bypassing AI-guessing.
+### 🗺️ Auto-Generated Architecture Briefs
+- **Dynamic Executive Summaries** — Instantly unpacks new codebases. Automatically detects tech stacks, identifies primary application entry points, and traces data flows.
+- **Dependency Inference** — Synthesizes module and directory-level summaries to give new engineers a bird's-eye view.
 
-### 🔎 Intelligent RAG Architecture
-- **Semantic Embeddings** — Converts functional AST blocks into precise semantic vector embeddings stored in pgvector holding foreign-keys to the source AST table.
-- **Hallucination-Free Q&A** — Enables hyper-specific semantic search capabilities that map directly to functional logic codeblocks, practically eliminating generic LLM hallucinations.
+### 🧭 Guided Reading Order
+- **Topological Learning Paths** — Uses Abstract Syntax Tree (AST) import dependency graphs and Tarjan's algorithm to compute foundational modules vs. entry points.
+- **Where To Begin** — Provides a step-by-step checklist annotated by an LLM ("Read `database.py` first because it sets up the DB..."), entirely removing the guesswork.
 
-### 🌐 3D Dependency Visualization
-- **React Force Graph 3D** — An interactive 3D client-side renderer that visually plots complex webs of imports and circular dependencies for repositories traversing 10,000+ nodes.
-- **Real-Time Telemetry** — Seamless WebSocket streaming pushing live GitHub ingestion processing logs directly to the user interface.
+### 📚 Codebase Glossary
+- **Domain Dictionary** — Extracts functions, classes, and complex variable structures and runs them against AI to generate plain-English explanations.
+- **Searchable Definitions** — New hires can immediately search what a niche domain term or custom service class means, without hunting down the original author.
 
-### 🧬 Code Health Metrics
-- **Automated Scoring** — Computes repository health natively via Lines of Code (LOC), cyclomatic complexity, and coupling heatmaps derived purely before any LLM is contacted.
+### 👥 Code Ownership Map
+- **Git Intelligence Integration** — Leverages deep `git log` and GitHub Pull Request analysis to attribute primary owners and map out contribution percentages.
+- **Knowledge Silo Flags** — Automatically identifies bus-factors of 1 (files only touched by a single engineer) and traces domain expertise.
+
+### 🚧 Critical Files & Guardrails
+- **Traffic-Light Prioritization** — Tags core plumbing and infrastructure components (🔴 Critical, 🟡 Caution, 🟢 Safe to Explore) using heuristic algorithms that measure code fan-in, historical test presence, and update churn rates.
+
+### 🔎 "Ask the Codebase" RAG Chat
+- **Multi-Source Context Search** — Vector embeddings generated off AST symbols, semantic code, pull request discussions, and commit messages. 
+- **The "Why" Beyond the "What"** — Empowers queries like *"Why did we switch to gRPC in the messaging service?"* by referencing the original pull request context rather than just blind code reading.
+
+### 🌐 3D Dependency Graph
+- **Interactive Visualization** — Render complex dependencies natively in the browser via WebGL and `react-force-graph-3d`. Nodes are colored by criticality and sized relative to their architectural weight.
 
 ---
 
@@ -33,14 +44,14 @@
 
 | Layer | Technology |
 |---|---|
-| **Backend Framework**| FastAPI (Python 3.11+) |
-| **Frontend UI** | Next.js 14 (App Router) + React |
+| **Backend Framework**| FastAPI (Python 3.12, Async) |
+| **Frontend UI** | Next.js 15 (App Router, Tailwind CSS 4) |
 | **Parsing Engine** | Tree-Sitter |
-| **Database** | PostgreSQL + SQLAlchemy |
-| **Vector Engine** | pgvector + OpenAI Embeddings |
-| **Task Queue** | Celery + Redis |
+| **Database** | PostgreSQL + SQLAlchemy 2.0 |
+| **Vector Search** | pgvector + OpenAI Embeddings |
+| **Task Distributed Queue** | Celery + Redis |
 | **Visual Graphing** | react-force-graph-3d |
-| **Styling** | Tailwind CSS + shadcn/ui |
+| **AI LLM** | OpenAI API |
 
 ---
 
@@ -49,44 +60,48 @@
 ### Prerequisites
 - Python 3.11+
 - Node.js 18+
-- Docker & Docker Compose (for PostgreSQL & Redis)
+- Docker & Docker Compose
+- OpenAI API Key & GitHub OAuth Credentials
 
 ### Installation
 
 ```bash
-# 1. Spin up the Postgres and Redis environments
+# 1. Spin up the Postgres (with pgvector) and Redis instances
 docker-compose up -d
 
 # 2. Launch the FastAPI backend
-cd api
-pip install -r requirements.txt
-uvicorn main:app --reload
+cd server
+uv sync
+uv run uvicorn app.main:app --reload
 
-# 3. Launch the Celery Worker queue
-celery -A core.tasks worker --loglevel=info
+# 3. Launch the Celery Worker pipeline
+uv run celery -A app.core.celery worker --loglevel=info
 
 # 4. Boot the Next.js Client
-cd web
+cd client
 npm install
 npm run dev
 ```
 
 ---
 
-## 🏗 Architecture Workflow
+## 🏗 System Architecture
 
 ```mermaid
 graph TD
-    Client[Next.js Frontend] -->|REST / WebSockets| API[FastAPI Web Server]
+    Client[Next.js Frontend] -->|REST / WebSockets| API[FastAPI Server]
     
-    API -->|Queue Repo Job| Redis[Redis Broker]
+    API -->|Queue Repository| Redis[Redis Broker / PubSub]
     
-    Worker[Celery Worker] -->|Clone Repo| GitHub[GitHub API]
-    Worker -->|AST Traverse| Scanner[Tree-sitter Parser]
+    Worker[Celery Pipeline] -->|Clone & Analyze Git| GitHub[GitHub API]
+    Worker -->|AST Extraction| Scanner[Tree-sitter Engine]
     
-    Scanner --> Graph[Postgres Relational DB]
-    Scanner -->|Chunk Code| LLM[OpenAI Embeddings]
-    LLM --> Vector[(pgvector Extension)]
+    Scanner --> Graph[PostgreSQL]
+    Worker -->|Chunking & Summaries| LLM[OpenAI API]
+    LLM --> Vector[(pgvector Storage)]
+    
+    Worker -->|Streaming Telemetry| Redis
+    API -->|Subscribe to Status| Redis
 ```
 
 ---
