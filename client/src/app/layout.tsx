@@ -9,9 +9,9 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Illume — AI-Powered Repo Analyzer",
+  title: "Illume — AI-Powered Codebase Onboarding Platform",
   description:
-    "An elite-tier AI Code Analyzer with deterministic AST-first approach for hallucination-free querying and 3D architectural visualization.",
+    "Transform dense repositories into interactive onboarding guides. Architecture briefs, reading orders, glossaries, and ownership maps — all automated.",
 };
 
 export default function RootLayout({

@@ -1,471 +1,591 @@
-import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
+"use client";
+
+import {
+  ArrowDownIcon,
+  ArrowRightIcon,
+  BrainIcon,
+  ChatTeardropTextIcon,
+  GitBranchIcon,
+  GithubLogoIcon,
+  LinkedinLogoIcon,
+  ListChecksIcon,
+  MagnifyingGlassIcon,
+  MapTrifoldIcon,
+  PulseIcon,
+  SparkleIcon,
+  StarFourIcon,
+  TreeStructureIcon,
+  UsersFourIcon,
+  WarningDiamondIcon,
+  XLogoIcon,
+} from "@phosphor-icons/react/dist/ssr";
+import { motion, type Variants } from "motion/react";
+import Link from "next/link";
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 32 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * 0.1,
+      duration: 0.6,
+      ease: [0.25, 0.46, 0.45, 0.94],
+    },
+  }),
+};
+
+const stagger = {
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+
+const FEATURES = [
+  {
+    icon: MapTrifoldIcon,
+    title: "Architecture Brief",
+    description:
+      "Auto-generated executive summaries — detects tech stacks, maps entry points, and traces data flows through your codebase.",
+    color: "oklch(0.6270 0.2148 292.72)",
+  },
+  {
+    icon: ListChecksIcon,
+    title: "Guided Reading Order",
+    description:
+      "Topologically sorted learning paths. Know exactly where to start and what to read next with LLM-annotated explanations.",
+    color: "var(--chart-1)",
+  },
+  {
+    icon: MagnifyingGlassIcon,
+    title: "Codebase Glossary",
+    description:
+      "Every function, class, and domain term explained in plain English. Searchable, browsable, and linked to source code.",
+    color: "oklch(0.7225 0.1768 149.58)",
+  },
+  {
+    icon: UsersFourIcon,
+    title: "Code Ownership Map",
+    description:
+      "Who wrote what, who owns what, who to ask. Knowledge silo detection with bus-factor analysis from git history.",
+    color: "var(--destructive)",
+  },
+  {
+    icon: WarningDiamondIcon,
+    title: "Critical File Guardrails",
+    description:
+      "Traffic-light tagging: 🔴 Critical 🟡 Caution 🟢 Safe. Know what you can touch and what needs review.",
+    color: "oklch(0.7954 0.1758 85.87)",
+  },
+  {
+    icon: ChatTeardropTextIcon,
+    title: "Ask the Codebase",
+    description:
+      "RAG-powered Q&A over code, commits, and pull requests. Ask 'why' — get answers citing the exact PR that made the change.",
+    color: "var(--sidebar-primary)",
+  },
+];
+
+const PIPELINE_STEPS = [
+  {
+    icon: GitBranchIcon,
+    label: "Clone & Analyze",
+    desc: "Full git clone with history. Extract commits, PRs, and ownership data.",
+  },
+  {
+    icon: TreeStructureIcon,
+    label: "Parse AST",
+    desc: "Tree-sitter extracts functions, classes, imports, and dependency edges.",
+  },
+  {
+    icon: BrainIcon,
+    label: "Embed & Generate",
+    desc: "OpenAI embeddings for RAG. LLM generates glossary, brief, and reading order.",
+  },
+  {
+    icon: SparkleIcon,
+    label: "Onboarding Ready",
+    desc: "Interactive guide with architecture brief, ownership map, and 3D graph.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen w-full">
-      {/* ── Background decorations ── */}
-      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
+    <main className="relative">
+      <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
+        <motion.div
+          animate={{ x: [0, 40, -20, 0], y: [0, -30, 15, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute -top-40 -left-40 w-150 h-150 rounded-full bg-(--primary) opacity-[0.11] blur-[120px]"
+        />
+        <motion.div
+          animate={{ x: [0, -25, 35, 0], y: [0, 40, -20, 0] }}
+          transition={{
+            duration: 15,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: 2,
+          }}
+          className="absolute top-1/3 -right-40 w-125 h-125 rounded-full bg-(--chart-1) opacity-[0.07] blur-[120px]"
+        />
+        <motion.div
+          animate={{ x: [0, 30, -15, 0], y: [0, -25, 30, 0] }}
+          transition={{
+            duration: 18,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: 4,
+          }}
+          className="absolute -bottom-40 left-1/3 w-100 h-100 rounded-full bg-(--chart-2) opacity-[0.07] blur-[120px]"
+        />
       </div>
-      <div className="fixed inset-0 z-0 pointer-events-none" />
 
-      {/* ── Content wrapper ── */}
-      <div className="relative z-10">
-        {/* ═══ NAVBAR ═══ */}
-        <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl">
-          <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
+      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl border-b border-(--border)">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <Link
+            href={"/"}
+            className="relative h-12 flex items-center justify-center m-2 gap-2"
+          >
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="h-10 w-40 rounded-full bg-(--chart-1)/30 blur-xl" />
+            </div>
+            <StarFourIcon
+              className="relative text-(--chart-1)"
+              weight="fill"
+              size={24}
+            />
+            <span className="text-xl font-semibold">Illume</span>
+          </Link>
+
+          <div className="flex items-center gap-1">
+            {["Features", "How It Works"].map((item) => (
+              <a
+                key={item}
+                href={`#${item.toLowerCase().replace(/\s+/g, "-")}`}
+                className="hidden sm:block px-4 py-2 text-sm text-(--muted-foreground) hover:text-(--foreground) rounded-lg hover:bg-(--secondary) transition-all duration-200"
+              >
+                {item}
+              </a>
+            ))}
+            {/* <Link
+              href="/login"
+              className="ml-2 flex items-center gap-2 px-5 py-2 text-sm rounded-full border border-(--primary) text-(--muted-foreground) hover:text-(--foreground) hover:border-(--primary) transition-all duration-200"
+            >
+              <span className="hidden sm:inline">Login</span>
+            </Link> */}
+            <Link
+              href="/login"
+              className="ml-2 flex items-center gap-2 px-4 py-2 text-sm rounded-full border bg-(--primary) border-(--border)  hover:border-white transition-all duration-200"
+            >
+              <span className="hidden sm:inline">Login</span>
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-36 pb-20 text-center overflow-hidden">
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={stagger}
+          className="flex flex-col items-center"
+        >
+          <motion.div variants={fadeUp} custom={0}>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-(--chart-1)/20 bg-(--chart-1)/6 mb-6">
+              <PulseIcon
+                size={14}
+                className="text-(--chart-1) animate-pulse"
+                weight="bold"
+              />
+              <span className="text-xs font-medium text-(--chart-1) tracking-widest uppercase">
+                AI-Powered Onboarding Platform
+              </span>
+            </div>
+          </motion.div>
+
+          <motion.h1 variants={fadeUp} custom={1} className="max-w-6xl">
+            <span className="block text-[clamp(3rem,6vw,7rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
+              Onboard engineers
+            </span>
+            <span className="block text-[clamp(3rem,6vw,7rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
+              in days, not weeks
+            </span>
+          </motion.h1>
+
+          <motion.p
+            variants={fadeUp}
+            custom={2}
+            className="mt-6 text-md sm:text-xl text-(--muted-foreground) max-w-2xl leading-relaxed"
+          >
+            Illume ingests a GitHub repository and generates an{" "}
+            <span className="text-(--foreground) font-medium">
+              interactive onboarding guide
+            </span>{" "}
+            — architecture briefs, reading orders, glossaries, and ownership
+            maps.{" "}
+            <span className="text-(--primary) font-medium">All automated.</span>
+          </motion.p>
+
+          <motion.div
+            variants={fadeUp}
+            custom={3}
+            className="flex flex-col sm:flex-row gap-4 mt-10"
+          >
+            <Link
+              href="/login"
+              className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-(--primary) text-(--primary-foreground) font-medium text-md hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300"
+            >
+              Get Started
+              <ArrowRightIcon
+                size={16}
+                weight="bold"
+                className="group-hover:translate-x-0.5 transition-transform"
+              />
+            </Link>
+            <a
+              href="#preview"
+              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--border) text-(--muted-foreground) font-medium text-md hover:border-(--primary) hover:text-(--foreground) transition-all duration-300"
+            >
+              See It In Action
+              <ArrowDownIcon size={16} weight="bold" />
+            </a>
+          </motion.div>
+
+          <motion.div
+            variants={fadeUp}
+            custom={4}
+            className="mt-14 flex items-center gap-8 text-md text-(--muted-foreground)"
+          >
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-3xl font-bold text-(--foreground)">9</span>
+              <span className="text-sm">Features</span>
+            </div>
+            <div className="w-px h-8 bg-(--border)" />
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-3xl font-bold text-(--foreground)">6</span>
+              <span className="text-sm">AI Pipelines</span>
+            </div>
+            <div className="w-px h-8 bg-(--border)" />
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-3xl font-bold text-(--foreground)">3D</span>
+              <span className="text-sm">Graph View</span>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2 }}
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
+        >
+          <span className="text-[10px] tracking-[0.2em] uppercase text-(--muted-foreground)">
+            Scroll
+          </span>
+          <ArrowDownIcon
+            size={16}
+            className="text-(--muted-foreground) animate-bounce"
+          />
+        </motion.div>
+      </section>
+
+      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
+
+      <section id="features" className="py-28 px-6 max-w-7xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
+            Features
+          </span>
+          <h2 className="text-3xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
+            Everything a new hire needs
+          </h2>
+          <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
+            From architecture overview to code ownership — generated
+            automatically from your repository.
+          </p>
+        </motion.div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-16">
+          {FEATURES.map((f, i) => (
+            <motion.div
+              key={f.title}
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ delay: i * 0.08, duration: 0.5 }}
+              whileHover={{ rotateX: 4, rotateY: -4, scale: 1.02 }}
+              style={{ transformPerspective: 800 }}
+            >
+              <div className="group relative h-full rounded-2xl border border-(--border) bg-(--card)/40 backdrop-blur-sm p-7 hover:border-(--primary)/40 hover:-translate-y-1 transition-all duration-300">
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
+                  style={{
+                    backgroundColor: `color-mix(in oklch, ${f.color} 12%, transparent)`,
+                    border: `1px solid color-mix(in oklch, ${f.color} 20%, transparent)`,
+                  }}
+                >
+                  <f.icon
+                    size={22}
+                    weight="duotone"
+                    style={{ color: f.color }}
+                  />
+                </div>
+
+                <h3 className="font-semibold text-(--foreground) mb-2 text-xl">
+                  {f.title}
+                </h3>
+                <p className="text-sm text-(--muted-foreground) leading-relaxed">
+                  {f.description}
+                </p>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
+
+      <section id="how-it-works" className="py-28 px-6 max-w-7xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
+            How It Works
+          </span>
+          <h2 className="text-3xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
+            From GitHub URL to onboarding guide
+          </h2>
+          <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
+            Submit a repository. Get a living document in minutes.
+          </p>
+        </motion.div>
+
+        <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
+          {PIPELINE_STEPS.map((step, i) => (
+            <motion.div
+              key={step.label}
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ delay: i * 0.12, duration: 0.5 }}
+              className="relative flex flex-col items-center text-center"
+            >
+              <div className="relative mb-5">
+                <div className="w-17 h-17 rounded-2xl border border-(--border) bg-(--card) flex items-center justify-center group hover:border-(--primary)/50 transition-colors duration-300">
+                  <step.icon
+                    size={28}
+                    weight="duotone"
+                    className="text-(--primary)"
+                  />
+                </div>
+                <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-(--primary) text-(--primary-foreground) text-xs font-bold flex items-center justify-center">
+                  {i + 1}
+                </div>
+              </div>
+
+              <h4 className="text-lg font-semibold text-(--foreground) mb-1.5">
+                {step.label}
+              </h4>
+              <p className="text-sm text-(--muted-foreground) leading-relaxed max-w-55">
+                {step.desc}
+              </p>
+            </motion.div>
+          ))}
+        </div>
+      </section>
+
+      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
+
+      <section className="py-28 px-6 max-w-7xl mx-auto" id="preview">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
+            Preview
+          </span>
+          <h2 className="text-3xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
+            See it in action
+          </h2>
+          <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
+            Interactive onboarding guides generated from real repositories.
+          </p>
+        </motion.div>
+
+        <div className="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="lg:col-span-2 rounded-2xl border border-(--border) bg-(--card)/40 overflow-hidden"
+          >
+            <div className="px-6 py-4 border-b border-(--border) flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <span className="w-3 h-3 rounded-full bg-red-500/60" />
+                <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
+                <span className="w-3 h-3 rounded-full bg-green-500/60" />
+              </div>
+              <span className="ml-3 text-xs text-(--muted-foreground)">
+                Dashboard — Architecture Brief
+              </span>
+            </div>
+            <div className="aspect-21/9 bg-(--secondary)/40 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-(--muted-foreground)">
+                <span className="text-sm">Architecture Brief Screenshot</span>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.1, duration: 0.5 }}
+            className="rounded-2xl border border-(--border) bg-(--card)/40 overflow-hidden"
+          >
+            <div className="px-4 py-3 border-b border-(--border) flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <span className="w-3 h-3 rounded-full bg-red-500/60" />
+                <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
+                <span className="w-3 h-3 rounded-full bg-green-500/60" />
+              </div>
+              <span className="ml-3 text-xs text-(--muted-foreground)">
+                3D Dependency Graph
+              </span>
+            </div>
+            <div className="aspect-video bg-(--secondary)/40 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-(--muted-foreground)">
+                <span className="text-sm">3D Dependency Graph Screenshot</span>
+              </div>
+            </div>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="rounded-2xl border border-(--border) bg-(--card)/40 overflow-hidden"
+          >
+            <div className="px-4 py-3 border-b border-(--border) flex items-center gap-2">
+              <div className="flex gap-1.5">
+                <span className="w-3 h-3 rounded-full bg-red-500/60" />
+                <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
+                <span className="w-3 h-3 rounded-full bg-green-500/60" />
+              </div>
+              <span className="ml-3 text-xs text-(--muted-foreground)">
+                RAG Chat Interface
+              </span>
+            </div>
+            <div className="aspect-video bg-(--secondary)/40 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-(--muted-foreground)">
+                <span className="text-sm">RAG Chat Interface Screenshot</span>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
+
+      <section className="py-24 px-12">
+        <motion.div
+          initial={{ opacity: 0, y: 32 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+          className="max-w-3xl mx-auto text-center"
+        >
+          <div className="p-8 sm:p-10 relative overflow-hidden">
             <div className="relative">
-              <div className="absolute inset-0 blur-xl bg-(--chart-1)/30 rounded-full" />
+              <h2 className="text-3xl sm:text-4xl font-bold text-(--foreground) tracking-tight my-4">
+                Ready to <span className="gradient-text">illuminate</span> your
+                codebase?
+              </h2>
+              <p className="text-(--muted-foreground) text-md mb-10 max-w-lg mx-auto">
+                Submit a repository and get a complete onboarding guide
+                generated in minutes.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link
+                  href="/login"
+                  className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-(--primary) text-(--primary-foreground) font-medium text-sm hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300"
+                >
+                  Start Analyzing
+                  <ArrowRightIcon
+                    size={16}
+                    weight="bold"
+                    className="group-hover:translate-x-0.5 transition-transform"
+                  />
+                </Link>
+                <a
+                  href="https://github.com/tejasnasa/illume"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--border) text-(--muted-foreground) font-medium text-sm hover:border-(--primary) hover:text-(--foreground) transition-all duration-300"
+                >
+                  <GithubLogoIcon size={16} weight="bold" />
+                  Star on GitHub
+                </a>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </section>
 
+      <footer className="border-t border-(--border) pt-3 pb-6 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="relative h-12 w-12 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="h-10 w-10 rounded-full bg-(--chart-1)/30 blur-xl" />
+              </div>
               <StarFourIcon
                 className="relative text-(--chart-1)"
                 weight="fill"
-                size={36}
+                size={24}
               />
             </div>
-            <div className="flex items-center gap-6">
-              <a
-                href="#features"
-                className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors hidden sm:block"
-              >
-                Features
-              </a>
-              <a
-                href="#tech"
-                className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors hidden sm:block"
-              >
-                Stack
-              </a>
-              <a
-                href="#architecture"
-                className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors hidden sm:block"
-              >
-                Architecture
-              </a>
-              <a
-                href="https://github.com/tejasnasa/illume"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-full border border-(--foreground)/10 text-(--muted-foreground) hover:text-(--foreground) hover:border-(--primary)/40 transition-all"
-              >
-                <GithubIcon />
-                GitHub
-              </a>
-            </div>
-          </div>
-        </nav>
-
-        {/* ═══ HERO ═══ */}
-        <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-24 pb-16 text-center">
-          {/* Badge */}
-          <div className="fade-up fd1">
-            <div className="shimmer-badge inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] mb-8">
-              <span className="pulse-dot w-2 h-2 rounded-full bg-amber-400 inline-block" />
-              <span className="text-xs font-medium text-amber-300 tracking-widest uppercase">
-                Preview · Under Active Development
-              </span>
-            </div>
-          </div>
-
-          {/* Heading */}
-          <h1 className="fade-up fd2 max-w-4xl">
-            <span className="block text-[clamp(40px,6vw,72px)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
-              Understand any
+            <span className="text-sm text-(--muted-foreground)">
+              Illume &middot; Built by Tejas Nasa
             </span>
-            <span className="gradient-text block text-[clamp(40px,6vw,72px)] font-bold tracking-tighter leading-[1.1] mt-2">
-              codebase instantly
-            </span>
-          </h1>
-
-          {/* Subtitle */}
-          <p className="fade-up fd3 mt-6 text-lg sm:text-xl text-(--muted-foreground) max-w-2xl leading-relaxed">
-            AI-powered repo analysis with a deterministic{" "}
-            <span className="text-(--chart-1) font-medium">AST-first</span>{" "}
-            approach — hallucination-free querying and{" "}
-            <span className="text-(--primary) font-medium">
-              3D architectural
-            </span>{" "}
-            visualization.
-          </p>
-
-          {/* CTAs */}
-          <div className="fade-up fd4 flex flex-col sm:flex-row gap-4 mt-10">
+          </div>
+          <div className="flex items-center gap-4 text-2xl text-(--muted-foreground)">
             <a
-              href="https://github.com/tejasnasa/illume"
+              href="https://github.com/tejasnasa"
               target="_blank"
-              rel="noopener noreferrer"
-              className="cta-glow inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-linear-to-r from-(--primary) to-(--accent) text-(--foreground) font-medium text-sm"
+              className="hover:text-(--foreground) transition-colors"
             >
-              <GithubIcon />
-              View on GitHub
+              <GithubLogoIcon />
             </a>
             <a
-              href="#features"
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--foreground)/10 text-(--muted-foreground) font-medium text-sm hover:border-(--primary)/30 hover:text-(--foreground) transition-all"
+              href="https://www.linkedin.com/in/tejasnasa/"
+              target="_blank"
+              className="hover:text-(--foreground) transition-colors"
             >
-              Explore Features
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              <LinkedinLogoIcon weight="fill" />
+            </a>
+            <a
+              href="https://x.com/tejasnasa/"
+              target="_blank"
+              className="hover:text-(--foreground) transition-colors"
+            >
+              <XLogoIcon />
             </a>
           </div>
-
-          {/* Version */}
-          <div className="fade-up fd5 mt-16 flex items-center gap-3 text-sm text-zinc-600">
-            <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-700" />
-            </div>
-            <span>v0.1.0 · AST Engine &amp; RAG pipeline in progress</span>
-          </div>
-
-          {/* Scroll indicator */}
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 text-(--muted-foreground)">
-            <span className="text-[10px] tracking-[0.15em] uppercase">
-              Scroll
-            </span>
-            <div className="w-5 h-8 rounded-full border border-zinc-700 flex justify-center pt-1.5">
-              <div className="scroll-bounce w-[3px] h-2 rounded-full bg-(--muted-foreground)" />
-            </div>
-          </div>
-        </section>
-
-        {/* ── Divider ── */}
-        <div className="glow-line max-w-3xl mx-auto" />
-
-        {/* ═══ FEATURES ═══ */}
-        <section id="features" className="py-32 px-6 max-w-[1200px] mx-auto">
-          <div className="text-center mb-20">
-            <span className="block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
-              Capabilities
-            </span>
-            <h2 className="text-4xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
-              Engineered for <span className="gradient-text">precision</span>
-            </h2>
-            <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
-              No guesswork. No hallucinations. Just deterministic, structural
-              code intelligence.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FeatureCard
-              emoji="🌳"
-              color="violet"
-              title="Deterministic AST Engine"
-              description="Tree-Sitter powered structural parsing — not string-dumping into LLM context windows. Accurate extraction of functions, classes, and call relationships."
-              tags={["Tree-Sitter", "AST Traversal", "Call Graphs"]}
-              float="float-subtle"
-            />
-            <FeatureCard
-              emoji="🔎"
-              color="cyan"
-              title="Intelligent RAG Architecture"
-              description="Semantic vector embeddings tied to AST blocks via pgvector foreign keys. Hyper-specific search that maps to actual code logic — no generic LLM guessing."
-              tags={["pgvector", "Embeddings", "Semantic Search"]}
-              float="float-subtle-d"
-            />
-            <FeatureCard
-              emoji="🌐"
-              color="rose"
-              title="3D Dependency Visualization"
-              description="Interactive force-graph rendering that plots complex import webs and circular dependencies for repos exceeding 10,000+ nodes. Real-time WebSocket telemetry."
-              tags={["Force Graph 3D", "WebSockets", "Live Telemetry"]}
-              float="float-subtle"
-            />
-            <FeatureCard
-              emoji="🧬"
-              color="emerald"
-              title="Code Health Metrics"
-              description="Automated scoring computed natively — lines of code, cyclomatic complexity, and coupling heatmaps derived before any LLM is ever contacted."
-              tags={["LOC Analysis", "Complexity", "Coupling Maps"]}
-              float="float-subtle-d"
-            />
-          </div>
-        </section>
-
-        {/* ── Divider ── */}
-        <div className="glow-line max-w-3xl mx-auto" />
-
-        {/* ═══ ARCHITECTURE ═══ */}
-        <section
-          id="architecture"
-          className="py-32 px-6 max-w-[1000px] mx-auto"
-        >
-          <div className="text-center mb-16">
-            <span className="block text-xs font-semibold tracking-[0.2em] uppercase text-(--destructive) mb-4">
-              Architecture
-            </span>
-            <h2 className="text-4xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
-              How it <span className="gradient-text">works</span>
-            </h2>
-            <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
-              From GitHub URL to queryable, visualized code intelligence.
-            </p>
-          </div>
-
-          <div className="glass-card rounded-2xl p-8 sm:p-12">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-              <ArchStep
-                emoji="📥"
-                colorClass="bg-(--primary)/10 border-(--primary)/20"
-                step="1"
-                title="Ingest"
-                desc="Submit a GitHub URL. Celery workers clone the repo via a Redis-brokered task queue."
-              />
-              <ArchStep
-                emoji="🌳"
-                colorClass="bg-(--accent)/10 border-(--accent)/20"
-                step="2"
-                title="Parse"
-                desc="Tree-Sitter traverses the AST. Functions, classes, and calls are extracted deterministically."
-              />
-              <ArchStep
-                emoji="🧠"
-                colorClass="bg-(--accent)/10 border-(--accent)/20"
-                step="3"
-                title="Embed & Query"
-                desc="Code blocks become vector embeddings in pgvector. Ask anything — get pinpoint-accurate answers."
-              />
-            </div>
-
-            <div className="mt-10 pt-6 border-t border-(--foreground)/[0.04] flex flex-wrap justify-center gap-6 text-xs text-(--muted-foreground)">
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-(--primary)" />
-                FastAPI
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                Redis
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-(--accent)" />
-                Celery
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                PostgreSQL + pgvector
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                Next.js
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Divider ── */}
-        <div className="glow-line max-w-3xl mx-auto" />
-
-        {/* ═══ DEVELOPMENT STATUS ═══ */}
-        <section className="py-32 px-6 max-w-[800px] mx-auto text-center">
-          <div className="shimmer-badge inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] mb-8">
-            <span className="pulse-dot w-2 h-2 rounded-full bg-amber-400 inline-block" />
-            <span className="text-xs font-medium text-amber-300 tracking-widest uppercase">
-              Development Preview
-            </span>
-          </div>
-
-          <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight mb-6">
-            Currently in early access
-          </h2>
-          <p className="text-lg text-zinc-500 leading-relaxed max-w-xl mx-auto mb-12">
-            Illume is actively being built in the open. Core systems are under
-            development — star the repo to follow progress and get notified when
-            we ship.
-          </p>
-
-          {/* Roadmap */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-left mb-12">
-            <div className="glass-card rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider">
-                  In Progress
-                </span>
-              </div>
-              <p className="text-sm text-zinc-300">
-                AST engine &amp; Tree-Sitter integration
-              </p>
-            </div>
-            <div className="glass-card rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                <span className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">
-                  Planned
-                </span>
-              </div>
-              <p className="text-sm text-zinc-300">
-                RAG pipeline &amp; vector embeddings
-              </p>
-            </div>
-            <div className="glass-card rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-zinc-600" />
-                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                  Upcoming
-                </span>
-              </div>
-              <p className="text-sm text-zinc-300">
-                3D visualization &amp; chat interface
-              </p>
-            </div>
-          </div>
-
-          <a
-            href="https://github.com/tejasnasa/illume"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="cta-glow inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-gradient-to-r from-violet-600 to-(--primary) text-white font-medium text-sm"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 .587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z" />
-            </svg>
-            Star on GitHub
-          </a>
-        </section>
-
-        {/* ═══ FOOTER ═══ */}
-        <footer className="border-t border-(--foreground)/[0.04] py-10 px-6">
-          <div className="max-w-[1200px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-(--primary) to-(--accent) flex items-center justify-center text-white text-[10px] font-bold">
-                ✦
-              </div>
-              <span className="text-sm text-zinc-600">
-                Illume · Built by{" "}
-                <a
-                  href="https://github.com/tejasnasa"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-zinc-400 hover:text-(--foreground) transition-colors"
-                >
-                  Tejas
-                </a>
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-zinc-700">
-              <span className="pulse-dot w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
-              Pre-release · v0.1.0-alpha
-            </div>
-          </div>
-        </footer>
-      </div>
-    </div>
-  );
-}
-
-/* ═══ COMPONENTS ═══ */
-
-const COLOR_MAP: Record<string, { icon: string; tag: string }> = {
-  violet: {
-    icon: "bg-(--primary)/10 border border-(--primary)/20",
-    tag: "bg-(--primary)/10 text-(--primary) border border-(--primary)/20",
-  },
-  cyan: {
-    icon: "bg-(--accent)/10 border border-(--accent)/20",
-    tag: "bg-(--accent)/10 text-(--accent) border border-(--accent)/20",
-  },
-  rose: {
-    icon: "bg-rose-500/10 border border-rose-500/20",
-    tag: "bg-rose-500/10 text-rose-400 border border-rose-500/20",
-  },
-  emerald: {
-    icon: "bg-emerald-500/10 border border-emerald-500/20",
-    tag: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
-  },
-};
-
-function FeatureCard({
-  emoji,
-  color,
-  title,
-  description,
-  tags,
-  float,
-}: {
-  emoji: string;
-  color: string;
-  title: string;
-  description: string;
-  tags: string[];
-  float: string;
-}) {
-  const c = COLOR_MAP[color] ?? COLOR_MAP.violet;
-  return (
-    <div className="glass-card rounded-2xl p-8">
-      <div
-        className={`${float} w-12 h-12 rounded-xl ${c.icon} flex items-center justify-center text-2xl mb-6`}
-      >
-        {emoji}
-      </div>
-      <h3 className="text-xl font-semibold text-(--foreground) mb-3">
-        {title}
-      </h3>
-      <p className="text-[15px] text-(--mute-foreground) leading-relaxed mb-4">
-        {description}
-      </p>
-      <div className="flex flex-wrap gap-2">
-        {tags.map((tag) => (
-          <span
-            key={tag}
-            className={`text-xs px-2.5 py-1 rounded-full ${c.tag}`}
-          >
-            {tag}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ArchStep({
-  emoji,
-  colorClass,
-  step,
-  title,
-  desc,
-}: {
-  emoji: string;
-  colorClass: string;
-  step: string;
-  title: string;
-  desc: string;
-}) {
-  return (
-    <div className="text-center">
-      <div
-        className={`node-glow w-16 h-16 rounded-2xl ${colorClass} border flex items-center justify-center text-[28px] mx-auto mb-4`}
-      >
-        {emoji}
-      </div>
-      <h4 className="text-sm font-semibold text-white mb-1">
-        {step}. {title}
-      </h4>
-      <p className="text-[13px] text-zinc-500 leading-relaxed max-w-[240px] mx-auto">
-        {desc}
-      </p>
-    </div>
-  );
-}
-
-function GithubIcon() {
-  return (
-    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
-    </svg>
+        </div>
+      </footer>
+    </main>
   );
 }

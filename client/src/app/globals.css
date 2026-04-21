@@ -78,24 +78,6 @@ html {
   background-size: 64px 64px;
 }
 
-/* ── Selection ── */
-::selection {
-  background: oklch(from var(--primary) l c h / 0.35);
-  color: var(--foreground);
-}
-
-/* ── Scrollbar ── */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: oklch(from var(--primary) l c h / 0.3);
-  border-radius: 999px;
-}
-
 /* ── Gradient animated text ── */
 .gradient-text {
   background: linear-gradient(
@@ -105,269 +87,32 @@ html {
     var(--primary)
   );
   background-size: 200% 200%;
-
+  animation: gradient-shift 4s ease-in-out infinite;
   -webkit-background-clip: text;
   background-clip: text;
-
-  color: transparent; /* important */
+  color: transparent;
   -webkit-text-fill-color: transparent;
-
-  display: inline-block; /* VERY IMPORTANT */
+  display: inline-block;
 }
 
 @keyframes gradient-shift {
-  0%,
-  100% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
-/* ── Orb floaters ── */
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(100px);
-  pointer-events: none;
+/* ── Selection ── */
+::selection {
+  background: oklch(from var(--primary) l c h / 0.35);
+  color: var(--foreground);
 }
 
-.orb-1 {
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(
-    circle,
-    oklch(from var(--primary) l c h / 0.2),
-    transparent 70%
-  );
-  top: -200px;
-  left: -150px;
-  animation: orbFloat1 20s ease-in-out infinite;
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: oklch(from var(--primary) l c h / 0.25);
+  border-radius: 999px;
 }
-
-.orb-2 {
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(
-    circle,
-    oklch(from var(--accent) l c h / 0.15),
-    transparent 70%
-  );
-  bottom: -200px;
-  right: -150px;
-  animation: orbFloat2 25s ease-in-out infinite;
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(from var(--primary) l c h / 0.4);
 }
-
-.orb-3 {
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(
-    circle,
-    oklch(from var(--destructive) l c h / 0.1),
-    transparent 70%
-  );
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  animation: orbFloat3 18s ease-in-out infinite;
-}
-
-@keyframes orbFloat1 {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(60px, 80px);
-  }
-}
-@keyframes orbFloat2 {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(-80px, -60px);
-  }
-}
-@keyframes orbFloat3 {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) scale(1);
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.3);
-  }
-}
-
-/* ── Shimmer ── */
-.shimmer-badge {
-  position: relative;
-  overflow: hidden;
-}
-.shimmer-badge::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    oklch(from var(--foreground) l c h / 0.1),
-    transparent
-  );
-  transform: translateX(-100%);
-  animation: shimmer 3s ease-in-out infinite;
-}
-
-/* ── Pulse dot ── */
-.pulse-dot {
-  animation: pulseDot 2s ease-in-out infinite;
-}
-@keyframes pulseDot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
-}
-
-/* ── Glow divider ── */
-.glow-line {
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    oklch(from var(--primary) l c h / 0.4),
-    transparent
-  );
-  animation: glowPulse 4s ease-in-out infinite;
-}
-@keyframes glowPulse {
-  0%,
-  100% {
-    opacity: 0.3;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-/* ── Glass card ── */
-.glass-card {
-  background: oklch(from var(--background) l c h / 0.4);
-  backdrop-filter: blur(12px);
-  border: 1px solid oklch(from var(--border) l c h / 0.6);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.glass-card:hover {
-  background: oklch(from var(--background) l c h / 0.6);
-  border-color: oklch(from var(--primary) l c h / 0.4);
-  transform: translateY(-4px);
-  box-shadow:
-    0 20px 40px oklch(0 0 0 / 0.3),
-    0 0 60px oklch(from var(--primary) l c h / 0.08);
-}
-
-/* ── Node glow ── */
-.node-glow {
-  animation: nodeGlow 3s ease-in-out infinite;
-}
-@keyframes nodeGlow {
-  0%,
-  100% {
-    box-shadow: 0 0 8px oklch(from var(--primary) l c h / 0.1);
-  }
-  50% {
-    box-shadow:
-      0 0 20px oklch(from var(--primary) l c h / 0.3),
-      0 0 40px oklch(from var(--primary) l c h / 0.08);
-  }
-}
-
-/* ── Float subtle ── */
-.float-subtle {
-  animation: floatSubtle 4s ease-in-out infinite;
-}
-.float-subtle-d {
-  animation: floatSubtle 4s ease-in-out 1.5s infinite;
-}
-@keyframes floatSubtle {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-6px);
-  }
-}
-
-/* ── Fade in up ── */
-.fade-up {
-  animation: fadeUp 0.8s ease-out both;
-}
-.fd1 {
-  animation-delay: 0.1s;
-}
-.fd2 {
-  animation-delay: 0.2s;
-}
-.fd3 {
-  animation-delay: 0.3s;
-}
-.fd4 {
-  animation-delay: 0.4s;
-}
-.fd5 {
-  animation-delay: 0.5s;
-}
-
-@keyframes fadeUp {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* ── Scroll bounce ── */
-.scroll-bounce {
-  animation: scrollBounce 2s ease-in-out infinite;
-}
-@keyframes scrollBounce {
-  0%,
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
-  50% {
-    transform: translateY(6px);
-    opacity: 0.4;
-  }
-}
-
-/* ── Tech pill ── */
-.tech-pill {
-  transition: all 0.3s ease;
-}
-.tech-pill:hover {
-  background-color: oklch(from var(--primary) l c h / 0.1) !important;
-  border-color: oklch(from var(--primary) l c h / 0.35) !important;
-  transform: scale(1.05);
-}
-
-/* ── CTA glow ── */
-.cta-glow {
-  transition: all 0.35s ease;
-}
-.cta-glow:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 32px oklch(from var(--primary) l c h / 0.35);
-}
-
-/* ── Grid bg ── */
