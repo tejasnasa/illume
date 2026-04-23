@@ -11,13 +11,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/api/v1/auth/login",
             "/api/v1/auth/register",
             "/api/v1/auth/logout",
+            "/api/v1/ws",
             "/openapi.json",
-            "/docs",
-            "/redoc",
         ]
-
-        if request.url.path.startswith("/ws"):
-            return await call_next(request)
 
         if any(request.url.path.startswith(path) for path in public_paths):
             return await call_next(request)

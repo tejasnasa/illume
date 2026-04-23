@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(prefix="/api/v1")
 
 
 @router.websocket("/ws/ingest/{repo_id}")
@@ -20,13 +20,17 @@ async def ingest_ws(
     repo_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db),
 ):
-    token = websocket.cookies.get("access_token")
+    await websocket.accept()
+
+    token = websocket.cookies.get("access_token") or websocket.query_params.get("token")
     if not token:
+        logger.error("WebSocket auth failed: No token provided")
         await websocket.close(code=1008, reason="Not authenticated")
         return
 
     user_id = decode_access_token(token)
     if not user_id:
+        logger.error(f"WebSocket auth failed: Invalid token {token}")
         await websocket.close(code=1008, reason="Invalid token")
         return
 
@@ -38,10 +42,10 @@ async def ingest_ws(
     repo = result.scalar_one_or_none()
 
     if not repo:
+        logger.error(f"WebSocket auth failed: Repo not found or access denied for user {user_id}")
         await websocket.close(code=1008, reason="Repository not found or access denied")
         return
 
-    await websocket.accept()
     redis_client = get_async_redis()
     pubsub = redis_client.pubsub()
     channel = f"task:{repo_id}:logs"
