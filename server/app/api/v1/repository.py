@@ -59,7 +59,7 @@ async def create_repository(
     ingest_repository.delay(str(repo.id))
     logger.info("Queued ingestion for repo %s", repo.id)
 
-    return {"repo_id": str(repo.id)}
+    return {"repo_id": str(repo.id), "repo_num": repo.repo_number}
 
 
 @router.post("/{repo_id}/reingest", status_code=202)
