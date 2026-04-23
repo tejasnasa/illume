@@ -69,15 +69,22 @@ SKIP_DIRS = {
 }
 
 
-def _publish_log(redis_client, repo_id: str, message: str) -> None:
+def _publish_log(redis_client, repo_id: str, event: str, message: str, **kwargs) -> None:
     channel = f"task:{repo_id}:logs"
-    redis_client.publish(channel, message)
-    logger.info("[%s] %s", repo_id, message)
+    data = {
+        "event": event,
+        "message": message,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **kwargs
+    }
+    redis_client.publish(channel, json.dumps(data))
+    logger.info("[%s] %s: %s", repo_id, event, message)
 
 
-def _update_status(db: Session, repo: Repository, status: str) -> None:
+def _update_status(db: Session, redis_client, repo: Repository, status: str) -> None:
     repo.status = status
     db.commit()
+    _publish_log(redis_client, str(repo.id), "status_update", f"Status changed to {status}", status=status)
 
 
 def clone_repository(
@@ -86,8 +93,8 @@ def clone_repository(
     repo: Repository,
     github_access_token: str | None = None,
 ) -> Path:
-    _update_status(db, repo, "cloning")
-    _publish_log(redis_client, str(repo.id), "Cloning repository...")
+    _update_status(db, redis_client, repo, "cloning")
+    _publish_log(redis_client, str(repo.id), "clone_started", "Cloning repository...")
 
     clone_url = _build_clone_url(repo.github_url, github_access_token)
     tmp_dir = tempfile.mkdtemp(prefix=f"illume_{repo.id}_")
@@ -102,7 +109,7 @@ def clone_repository(
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise RuntimeError(f"Git clone failed: {e.stderr.strip()}") from e
 
-    _publish_log(redis_client, str(repo.id), "Clone complete.")
+    _publish_log(redis_client, str(repo.id), "clone_complete", "Clone complete.")
     return Path(tmp_dir)
 
 
@@ -139,12 +146,12 @@ def process_repository_files(
     repo,
     repo_root: Path,
 ) -> int:
-    _update_status(db, repo, "parsing")
-    _publish_log(redis_client, str(repo.id), "Starting file analysis...")
+    _update_status(db, redis_client, repo, "parsing")
+    _publish_log(redis_client, str(repo.id), "parsing_started", "Starting file analysis...")
 
     source_files = walk_source_files(repo_root)
     total = len(source_files)
-    _publish_log(redis_client, str(repo.id), f"Found {total} source files.")
+    _publish_log(redis_client, str(repo.id), "file_discovery", f"Found {total} source files.")
 
     processed = 0
 
@@ -180,19 +187,20 @@ def process_repository_files(
         _publish_log(
             redis_client,
             str(repo.id),
+            "file_processed",
             f"{relative_path} ({parsed.loc} LOC, {len(parsed.symbols)} symbols)",
         )
 
     db.commit()
-    _publish_log(redis_client, str(repo.id), f"Stored {processed} files in DB.")
+    _publish_log(redis_client, str(repo.id), "db_storage_complete", f"Stored {processed} files in DB.")
 
     dep_count = resolve_dependencies(db, repo.id)
-    _publish_log(redis_client, str(repo.id), f"Resolved {dep_count} dependencies.")
+    _publish_log(redis_client, str(repo.id), "deps_resolved", f"Resolved {dep_count} dependencies.")
 
-    _publish_log(redis_client, str(repo.id), "Computing fan-in/fan-out metrics...")
+    _publish_log(redis_client, str(repo.id), "metrics_started", "Computing fan-in/fan-out metrics...")
     compute_fan_metrics(db, repo.id)
 
-    _publish_log(redis_client, str(repo.id), "Scoring file criticality...")
+    _publish_log(redis_client, str(repo.id), "criticality_started", "Scoring file criticality...")
     run_criticality_scoring(db, repo.id)
 
     repo.detected_stack = detect_stack(repo_root)
@@ -202,6 +210,7 @@ def process_repository_files(
     _publish_log(
         redis_client,
         str(repo.id),
+        "stack_detected",
         f"Stack detected: {repo.detected_stack.get('languages', [])}",
     )
 
@@ -214,11 +223,11 @@ def embed_repository_symbols(
     repo: Repository,
     readme_content: str | None = None,
 ) -> int:
-    _update_status(db, repo, "embedding")
-    _publish_log(redis_client, str(repo.id), "Starting embedding generation...")
+    _update_status(db, redis_client, repo, "embedding")
+    _publish_log(redis_client, str(repo.id), "embedding_started", "Starting embedding generation...")
 
     def publish_log(msg: str):
-        _publish_log(redis_client, str(repo.id), msg)
+        _publish_log(redis_client, str(repo.id), "embedding_progress", msg)
 
     count = generate_embeddings(
         repository_id=repo.id,
@@ -228,7 +237,7 @@ def embed_repository_symbols(
     )
 
     _publish_log(
-        redis_client, str(repo.id), f"Embedding complete — {count} vectors stored."
+        redis_client, str(repo.id), "embedding_complete", f"Embedding complete — {count} vectors stored."
     )
     return count
 

@@ -1,5 +1,7 @@
 import logging
 import os
+import json
+from datetime import datetime, timezone
 from contextlib import contextmanager
 
 from app.core.celery import celery
@@ -38,8 +40,14 @@ def get_db_context():
 def ingest_repository(self, repo_id: str, access_token: str | None = None):
     redis_client = get_sync_redis()
 
-    def publish(msg: str):
-        redis_client.publish(f"task:{repo_id}:logs", msg)
+    def publish(event: str, message: str, **kwargs):
+        data = {
+            "event": event,
+            "message": message,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            **kwargs
+        }
+        redis_client.publish(f"task:{repo_id}:logs", json.dumps(data))
 
     with get_db_context() as db:
         try:
@@ -68,14 +76,19 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
                 db, redis_client, repo, readme_content=readme_content
             )
 
+            publish("glossary_started", "Building project glossary...")
             build_glossary(db, repo)
+            
+            publish("reading_order_started", "Generating recommended reading order...")
             build_reading_order(db, repo)
+            
+            publish("brief_started", "Synthesizing AI architecture brief...")
             generate_brief(db, repo)
 
             repo.status = "ready"
             db.commit()
-            publish("Ingestion complete!")
-            publish("DONE")
+            publish("status_update", "Ingestion complete!", status="ready")
+            publish("done", "DONE")
 
         except Exception as exc:
             logger.exception("Ingestion failed for repo %s", repo_id)
@@ -86,8 +99,8 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
                     db.commit()
             except Exception:
                 pass
-            publish(f"Error: {exc}")
-            publish("ERROR")
+            publish("status_update", f"Error: {exc}", status="failed")
+            publish("error", "ERROR")
             raise self.retry(exc=exc, countdown=10)
 
         finally:
