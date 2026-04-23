@@ -10,9 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 _CRITICALITY_SCORE: dict[str | None, float] = {
     "critical": 100.0,
-    "high": 75.0,
-    "medium": 50.0,
-    "low": 25.0,
+    "caution": 75.0,
+    "safe": 25.0,
     None: 50.0,
 }
 
@@ -176,9 +175,10 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
             "criticality": file_map[s.file_id].criticality or "medium"
             if s.file_id in file_map
             else "medium",
-            "criticality_score": _CRITICALITY_SCORE[
-                file_map[s.file_id].criticality if s.file_id in file_map else None
-            ],
+            "criticality_score": _CRITICALITY_SCORE.get(
+                file_map[s.file_id].criticality if s.file_id in file_map else None,
+                50.0,
+            ),
         }
         for s in node_symbols
     ]
