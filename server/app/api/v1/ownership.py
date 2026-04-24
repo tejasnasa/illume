@@ -70,6 +70,7 @@ async def get_ownership_map(
     repo_id: uuid.UUID,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    file_path: str | None = Query(None),
     db: AsyncSession = Depends(get_async_db),
 ) -> OwnershipMapResponse:
     user_id = getattr(request.state, "user_id", None)
@@ -82,10 +83,12 @@ async def get_ownership_map(
         select(CodeOwner, File)
         .join(File, File.id == CodeOwner.file_id)
         .where(File.repository_id == repo_id)
-        .order_by(File.path)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
     )
+    if file_path:
+        stmt = stmt.where(File.path == file_path)
+    
+    stmt = stmt.order_by(File.path).offset((page - 1) * page_size).limit(page_size)
+    
     result = await db.execute(stmt)
     rows = result.all()
 
@@ -94,6 +97,9 @@ async def get_ownership_map(
         .join(File, File.id == CodeOwner.file_id)
         .where(File.repository_id == repo_id)
     )
+    if file_path:
+        count_stmt = count_stmt.where(File.path == file_path)
+    
     count_result = await db.execute(count_stmt)
     total = len(count_result.scalars().all())
 
