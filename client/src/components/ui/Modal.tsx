@@ -56,7 +56,7 @@ export default function Modal({ trigger, children }: Props) {
                 }
               }}
             >
-              <div className="relative z-50 w-120 rounded-2xl border border-(--border) bg-(--card) shadow-2xl p-6">
+              <div className="relative z-50 w-120 rounded-sm border border-(--border) bg-(--card) shadow-2xl p-6">
                 {children}
               </div>
             </div>
