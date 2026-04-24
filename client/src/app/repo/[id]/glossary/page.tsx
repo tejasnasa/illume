@@ -1,9 +1,10 @@
 import { GetGlossary } from "@/api/glossary";
 import { GetRepository } from "@/api/repository";
 import GlossarySearch from "@/components/GlossarySearch";
+import GlossaryEntry from "@/components/ui/GlossaryEntry";
 import Link from "next/link";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 export default async function GlossaryPage({
   params,
@@ -13,86 +14,76 @@ export default async function GlossaryPage({
   searchParams: Promise<{ page?: string }>;
 }) {
   const { id } = await params;
-  const { page: pageParam } = await searchParams;
-  const page = Math.max(1, Number(pageParam) || 1);
-
   const repo = await GetRepository(Number(id));
-  const glossary = await GetGlossary(repo.id, page, PAGE_SIZE);
+  const { page: pageParam } = await searchParams;
+  const currentPage = Math.max(1, Number(pageParam) || 1);
+  const data = await GetGlossary(repo.id, currentPage, PAGE_SIZE);
 
-  const totalPages = Math.ceil(glossary.total / glossary.page_size);
-  const start = (page - 1) * glossary.page_size + 1;
+  const totalPages = data ? Math.ceil(data.total / data.page_size) : 1;
+  const start = (currentPage - 1) * PAGE_SIZE + 1;
 
   return (
-    <main className="p-4 h-[calc(100dvh-4rem)]">
-      <section className="backdrop-blur-xs border rounded-sm p-4 flex flex-col bg-black/30 w-full h-full overflow-hidden">
-        <h2 className="text-2xl font-semibold mb-3">Glossary</h2>
+    <div className="max-w-5xl mx-auto p-6 pt-12">
+      <GlossarySearch github_url={repo.github_url} repoId={repo.id}>
+        <div className="flex justify-between items-center mb-6">
+          <span className="text-sm font-medium text-(--muted-foreground)">
+            {data
+              ? `Showing ${data.entries.length} of ${data.total} entries`
+              : "Failed to load"}
+          </span>
+          <div className="flex items-center gap-2">
+            {currentPage > 1 ? (
+              <Link
+                href={`/repo/${repo.repo_number}/glossary?page=${currentPage - 1}`}
+                className="px-4 py-2 rounded-sm text-sm border border-(--border) hover:bg-(--secondary) transition-colors"
+              >
+                Previous
+              </Link>
+            ) : (
+              <span className="px-4 py-2 rounded-sm text-sm border border-(--border) opacity-50 cursor-not-allowed">
+                Previous
+              </span>
+            )}
+            <span className="px-3 py-2 text-sm text-(--muted-foreground)">
+              Page {currentPage} of {totalPages}
+            </span>
+            {currentPage < totalPages ? (
+              <Link
+                href={`/repo/${repo.repo_number}/glossary?page=${currentPage + 1}`}
+                className="px-4 py-2 rounded-sm text-sm border border-(--border) hover:bg-(--secondary) transition-colors"
+              >
+                Next
+              </Link>
+            ) : (
+              <span className="px-4 py-2 rounded-sm text-sm border border-(--border) opacity-50 cursor-not-allowed">
+                Next
+              </span>
+            )}
+          </div>
+        </div>
 
-        <GlossarySearch repoId={String(repo.id)}>
-          {glossary.entries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No glossary entries found.
-            </p>
-          ) : (
-            <>
-              <ol className="space-y-2 overflow-scroll flex-1">
-                {glossary.entries.map((entry, i) => (
-                  <li key={entry.id} className="border-b pb-2">
-                    <h3 className="font-semibold text-sm">
-                      <span className="text-muted-foreground mr-2">
-                        {start + i}.
-                      </span>
-                      {entry.name} ({entry.file_path})
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {entry.definition}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-
-              {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-2 pt-4 border-t mt-2 shrink-0">
-                  <Link
-                    href={`?page=${page - 1}`}
-                    aria-disabled={page <= 1}
-                    className={
-                      page <= 1 ? "pointer-events-none opacity-40" : ""
-                    }
-                  >
-                    ← Prev
-                  </Link>
-                  <div className="flex gap-1">
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                      (p) => (
-                        <Link
-                          key={p}
-                          href={`?page=${p}`}
-                          className={`px-2 py-0.5 rounded text-sm ${
-                            p === page
-                              ? "bg-(--primary) font-semibold"
-                              : "opacity-60 hover:opacity-100"
-                          }`}
-                        >
-                          {p}
-                        </Link>
-                      ),
-                    )}
-                  </div>
-                  <Link
-                    href={`?page=${page + 1}`}
-                    aria-disabled={page >= totalPages}
-                    className={
-                      page >= totalPages ? "pointer-events-none opacity-40" : ""
-                    }
-                  >
-                    Next →
-                  </Link>
-                </div>
-              )}
-            </>
-          )}
-        </GlossarySearch>
-      </section>
-    </main>
+        {!data ? (
+          <div className="p-6 rounded-sm border border-(--destructive)/30 bg-(--destructive)/10 text-(--destructive)">
+            Failed to load glossary data.
+          </div>
+        ) : data.entries.length === 0 ? (
+          <div className="text-center py-24 glass-card rounded-sm text-(--muted-foreground)">
+            No glossary entries found.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {data.entries.map((entry, idx) => (
+              <GlossaryEntry
+                key={entry.id}
+                entry={entry}
+                start={start}
+                idx={idx}
+                github_url={repo.github_url}
+              />
+            ))}
+          </div>
+        )}
+      </GlossarySearch>
+    </div>
   );
 }

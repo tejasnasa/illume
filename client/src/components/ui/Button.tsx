@@ -38,11 +38,9 @@ export default function Button({
         ...(ratio && { aspectRatio: ratio }),
       }}
       disabled={loading || props.disabled}
-      className={`bg-(--primary) text-(--primary-foreground) hover:cursor-pointer hover:bg-(--primary)/90 rounded-sm transition-all duration-200 active:translate-y-0.5 inline-flex items-center justify-center gap-2 font-medium disabled:bg-(--primary)/40 disabled:cursor-default ${base} ${ratio ? "px-0" : ""} ${className}`}
+      className={`bg-(--primary) text-(--primary-foreground) hover:cursor-pointer hover:scale-[1.02] transform rounded-sm transition-all duration-200 active:translate-y-0.5 inline-flex items-center justify-center gap-2 font-medium disabled:bg-(--primary)/40 disabled:cursor-default ${base} ${ratio ? "px-0" : ""} ${className}`}
     >
-      {loading && (
-        <SpinnerIcon className={`animate-spin ${iconSizes[size]}`} />
-      )}
+      {loading && <SpinnerIcon className={`animate-spin ${iconSizes[size]}`} />}
       {props.children}
     </button>
   );
