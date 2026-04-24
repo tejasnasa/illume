@@ -1,96 +1,76 @@
 import { getRepositories } from "@/api/repository";
+import DashboardRefresh from "@/components/DashboardRefresh";
 import Navbar from "@/components/Navbar";
 import RepoForm from "@/components/RepoForm";
 import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
-import MasonryView from "@/components/ui/MasonryView";
 import Modal from "@/components/ui/Modal";
-
-const REPO_DATA = [
-  {
-    id: 1,
-    name: "My Repository",
-    description: "A simple repository for demonstration purposes.",
-    updatedAt: "20 minutes ago",
-    github_url: "https://github.com/user/repo1",
-    status: "ready",
-  },
-  {
-    id: 2,
-    name: "Another Repo",
-    description:
-      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
-    updatedAt: "5 days ago",
-    github_url: "https://github.com/user/repo2",
-    status: "pending",
-  },
-  {
-    id: 3,
-    name: "My Repository",
-    description:
-      "A simple repository for demonstration purposes. lorem ipsum dolor sit amet consectetur adipisicing elit. Voluptas, dicta.",
-    updatedAt: "20 minutes ago",
-    github_url: "https://github.com/user/repo1",
-    status: "ready",
-  },
-  {
-    id: 4,
-    name: "Another Repo",
-    description:
-      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
-    updatedAt: "5 days ago",
-    github_url: "https://github.com/user/repo2",
-    status: "pending",
-  },
-  {
-    id: 22,
-    name: "Another Repo",
-    description:
-      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
-    updatedAt: "5 days ago",
-    github_url: "https://github.com/user/repo2",
-    status: "pending",
-  },
-  {
-    id: 21,
-    name: "Another Repo",
-    description:
-      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
-    updatedAt: "5 days ago",
-    github_url: "https://github.com/user/repo2",
-    status: "pending",
-  },
-  {
-    id: 12,
-    name: "Another Repo",
-    description:
-      "This is another repository with some sample data fr fr fr fr fr fr fr fr fr fr fr fr fr.",
-    updatedAt: "5 days ago",
-    github_url: "https://github.com/user/repo2",
-    status: "pending",
-  },
-];
+import RepoCard from "@/components/ui/RepoCard";
+import { DatabaseIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
 
 export default async function Dashboard() {
   const repositories = await getRepositories();
 
   return (
-    <>
+    <div className="min-h-screen">
       <Navbar />
-      <main className="mx-28">
-        <section className="flex justify-between items-end mt-24">
-          <h1 className="text-8xl">Dashboard</h1>
-          <Modal trigger={<Button className="m-4">+ Add New Repo</Button>}>
-            <h2 className="text-2xl font-semibold text-center">
-              Add New Repository
-            </h2>
+      
 
-            <RepoForm/>
+      <main className="max-w-7xl mx-auto px-6 py-24">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
+          <div>
+            <h1 className="text-8xl font-extrabold tracking-tight">
+              Dashboard
+            </h1>
+            <p className="text-(--muted-foreground) text-lg">
+              Manage and explore your indexed codebases.
+            </p>
+          </div>
+
+          <Modal
+            trigger={
+              <Button size="lg">
+                <PlusIcon weight="bold" size={20} />
+                Add New Repository
+              </Button>
+            }
+          >
+            <div className="flex flex-col items-center">
+              <h2 className="text-3xl font-bold mb-1 flex items-center gap-2">
+                <DatabaseIcon className="text-(--primary)" />
+                Index Repository
+              </h2>
+              <p className="text-sm text-(--muted-foreground) mb-4">
+                Paste a GitHub URL to start the AI analysis pipeline.
+              </p>
+              <RepoForm />
+            </div>
           </Modal>
-        </section>
+        </header>
 
-        <MasonryView repositories={repositories} />
+        <section className="relative">
+          <div className="absolute -top-8 left-0 text-xs font-bold uppercase tracking-[0.2em] text-(--muted-foreground)/50">
+            Your Indexed Libraries
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {repositories.map((repo) => (
+              <RepoCard key={repo.id} repo={repo} />
+            ))}
+          </div>
+
+          {repositories.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-(--border) rounded-3xl bg-(--secondary)/5">
+              <DatabaseIcon
+                size={48}
+                className="text-(--muted-foreground)/20 mb-4"
+              />
+              <p className="text-(--muted-foreground)">
+                No repositories found. Add your first one to get started!
+              </p>
+            </div>
+          )}
+        </section>
       </main>
-    </>
+    </div>
   );
 }
