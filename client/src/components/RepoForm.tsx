@@ -7,10 +7,7 @@ import Input from "./ui/Input";
 export default function RepoForm() {
   const { register, onSubmit, isSubmitting } = useRepoForm();
   return (
-    <form className="flex flex-col mt-6 gap-2" onSubmit={onSubmit}>
-      <label htmlFor="url" className="text-sm text-(--muted-foreground)">
-        Repository URL
-      </label>
+    <form className="flex flex-col mt-6 gap-2 w-full" onSubmit={onSubmit}>
       <Input
         className="w-full"
         id="url"
@@ -18,7 +15,7 @@ export default function RepoForm() {
         {...register("github_url")}
       />
 
-      <Button className="self-end mt-2" size="sm" loading={isSubmitting}>
+      <Button className="w-full mt-2" size="sm" loading={isSubmitting}>
         Add Repository
       </Button>
     </form>

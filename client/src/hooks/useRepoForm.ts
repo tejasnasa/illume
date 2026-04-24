@@ -32,8 +32,8 @@ export default function useRepoForm() {
           error.message ?? "Something went wrong. Please try again.",
         );
       }
-
-      router.push("/dashboard");
+      const result = await res.json();
+      router.push(`/repo/${result.repo_num}`);
     } catch (error) {
       alert((error as Error).message);
     }
