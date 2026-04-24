@@ -36,38 +36,64 @@ export default function RepoNavbar({
         </div>
       </section>
 
-      <section className="flex">
-        <Link
-          href={`/repo/${id}`}
-          className={`m-2 mx-4  ${path === `/repo/${id}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-        >
-          Home
-        </Link>
-        <Link
+      {status === "ready" && (
+        <section className="flex">
+          <Link
+            href={`/repo/${id}`}
+            className={`m-2 mx-4  ${path === `/repo/${id}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          >
+            Home
+          </Link>
+          {/* <Link
           href={`/repo/${id}/onboarding-guide`}
           className={`m-2 mx-4  ${path === `/repo/${id}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
         >
           Onboarding Guide
-        </Link>
-        <Link
-          href={`/repo/${id}/glossary`}
-          className={`m-2 mx-4  ${path === `/repo/${id}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-        >
-          Glossary
-        </Link>
-        <Link
-          href={`/repo/${id}/ownership`}
-          className={`m-2 mx-4  ${path === `/repo/${id}/ownership` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-        >
-          Ownership
-        </Link>
-        <Link
-          href={`/repo/${id}/graph`}
-          className={`m-2 mx-4  ${path === `/repo/${id}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-        >
-          Graph
-        </Link>
-      </section>
+        </Link> */}
+          <Link
+            href={`/repo/${id}/glossary`}
+            className={`m-2 mx-4  ${path === `/repo/${id}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          >
+            Glossary
+          </Link>
+          <Link
+            href={`/repo/${id}/explorer`}
+            className={`m-2 mx-4  ${path === `/repo/${id}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          >
+            Explorer
+          </Link>
+          <Link
+            href={`/repo/${id}/ownership`}
+            className={`m-2 mx-4  ${path === `/repo/${id}/ownership` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          >
+            Ownership
+          </Link>
+          <Link
+            href={`/repo/${id}/graph`}
+            className={`m-2 mx-4  ${path === `/repo/${id}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          >
+            Graph
+          </Link>
+        </section>
+      )}
+
+      {status !== "ready" && (
+        <section className="flex items-center">
+          <div className="m-2 mx-4 font-semibold">Home</div>
+          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
+            Glossary
+          </div>
+          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
+            Explorer
+          </div>
+          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
+            Ownership
+          </div>
+          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
+            Graph
+          </div>
+        </section>
+      )}
     </header>
   );
 }

@@ -31,7 +31,15 @@ export default async function RootLayout({
 }>) {
   const { id } = await params;
   const repo = await GetRepository(Number(id));
-  const graph = await getRepoGraph(repo.id, "file");
+  
+  let graph = null;
+  try {
+    if (repo.status === "ready") {
+      graph = await getRepoGraph(repo.id, "file");
+    }
+  } catch (error) {
+    console.error("Failed to fetch graph for background:", error);
+  }
 
   return (
     <main className="relative min-h-screen">
