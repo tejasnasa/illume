@@ -1,3 +1,4 @@
+"use server";
 import Ownership, { Silo } from "@/types/ownership";
 import { headers } from "next/headers";
 
@@ -5,9 +6,10 @@ export async function GetOwnership(
   id: string,
   page: number,
   page_size: number,
+  filePath?: string,
 ): Promise<Ownership> {
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/ownership?page=${page}&page_size=${page_size}`,
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/ownership?page=${page}&page_size=${page_size}${filePath ? `&file_path=${encodeURIComponent(filePath)}` : ""}`,
     {
       headers: { cookie: (await headers()).get("cookie") ?? "" },
       cache: "no-store",
