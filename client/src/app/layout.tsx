@@ -9,7 +9,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Illume — AI-Powered Codebase Onboarding Platform",
+  title: "Illume - AI Powered Codebase Onboarding Platform",
   description:
     "Transform dense repositories into interactive onboarding guides. Architecture briefs, reading orders, glossaries, and ownership maps — all automated.",
 };
