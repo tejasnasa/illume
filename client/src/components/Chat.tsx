@@ -1,21 +1,17 @@
 "use client";
 
 import { useChat } from "@/hooks/useChat";
-import { useEffect, useRef, useState } from "react";
+import { RobotIcon } from "@phosphor-icons/react/dist/ssr";
+import { useState } from "react";
 import Button from "./ui/Button";
 import ChatBubble from "./ui/ChatBubble";
 import Textarea from "./ui/Textarea";
 
-export default function Chat({ repoId }: { repoId: string }) {
+export default function Chat({ repoId, url }: { repoId: string; url: string }) {
   const { messages, isLoading, sendMessage } = useChat({
     repoId,
   });
   const [input, setInput] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -31,26 +27,36 @@ export default function Chat({ repoId }: { repoId: string }) {
   };
 
   return (
-    <section className="w-1/2 h-full backdrop-blur-xs border rounded-sm p-4 bg-black/30 flex flex-col">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-semibold">Ask Anything</h2>
+    <div className="w-full h-full flex flex-col">
+      <div className="flex items-center justify-between p-4 shrink-0 border-b bg-(--background)/50">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-(--primary) shadow-[0_0_8px_var(--primary)] animate-pulse" />
+          Chat with Codebase
+        </h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto flex flex-col gap-6 py-2 pr-1 min-h-0">
+      <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4 min-h-0 custom-scrollbar">
+        {messages.length === 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center opacity-50 space-y-2">
+            <RobotIcon size={48} weight="thin" />
+            <p className="text-sm max-w-50">
+              Ask questions about the architecture, logic, or ownership.
+            </p>
+          </div>
+        )}
+
         {messages.map((msg, i) => (
-          <ChatBubble key={i} question={msg.question} message={msg.answer} />
+          <ChatBubble key={i} question={msg.question} message={msg.answer} url={url} />
         ))}
-
-        <div ref={bottomRef} />
       </div>
 
-      <div className="relative">
+      <div className="relative m-2">
         <Textarea
-          className="w-full resize-none pb-12"
+          className="w-full"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask about the codebase… (Enter to send)"
+          placeholder="Ask about the codebase…"
           rows={2}
         />
 
@@ -59,11 +65,11 @@ export default function Chat({ repoId }: { repoId: string }) {
           loading={isLoading}
           disabled={isLoading || !input.trim()}
           size="sm"
-          className="absolute bottom-2 right-2"
+          className="absolute bottom-2.5 right-2.5"
         >
-          Send
+          {isLoading ? "Thinking..." : "Send"}
         </Button>
       </div>
-    </section>
+    </div>
   );
 }
