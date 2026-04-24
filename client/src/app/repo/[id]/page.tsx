@@ -38,7 +38,7 @@ export default async function Repository({
           <Link
             href={repo.github_url}
             target="_blank"
-            className="group relative glass-card overflow-hidden hover:border-(--primary)/50 transition-colors"
+            className="group relative glass-card rounded-sm overflow-hidden hover:border-(--primary)/50 transition-colors"
           >
             <div className="absolute inset-0 bg-linear-to-br from-(--primary)/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <div className="absolute top-4 right-4 text-(--muted-foreground) group-hover:text-(--foreground) transition-colors">
@@ -61,7 +61,7 @@ export default async function Repository({
             </div>
           </Link>
 
-          <div className="glass-card p-4 flex flex-col justify-between">
+          <div className="glass-card rounded-sm p-4 flex flex-col justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
               Processing Status
             </span>
@@ -90,7 +90,7 @@ export default async function Repository({
 
         {!isReady ? (
           <>
-            <div className="glass-card p-6 flex-1 min-h-0 flex flex-col border border-(--border) bg-(--secondary)/10">
+            <div className="glass-card rounded-sm p-6 flex-1 min-h-0 flex flex-col border border-(--border) bg-(--secondary)/10">
               <Skeleton className="w-48 h-6 mb-6" />
               <div className="space-y-3 flex-1">
                 <Skeleton className="h-4 w-full" />
@@ -102,7 +102,7 @@ export default async function Repository({
               </div>
             </div>
 
-            <div className="glass-card p-6 shrink-0 h-40 flex flex-col border border-(--border) bg-(--secondary)/10">
+            <div className="glass-card rounded-sm p-6 shrink-0 h-40 flex flex-col border border-(--border) bg-(--secondary)/10">
               <Skeleton className="w-32 h-5 mb-4" />
               <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <div>
@@ -123,13 +123,13 @@ export default async function Repository({
           </>
         ) : (
           <>
-            <div className="glass-card p-4 flex-1 min-h-0 flex flex-col relative overflow-hidden animate-fade-in">
+            <div className="glass-card rounded-sm p-4 flex-1 min-h-0 flex flex-col relative overflow-hidden animate-fade-in">
               <h2 className="text-lg font-bold mb-4 text-(--foreground) flex items-center gap-2 shrink-0">
                 <TreeStructureIcon size={20} className="text-(--primary)" />
                 AI Architecture Overview
               </h2>
               {repo.architecture_summary ? (
-                <div className="overflow-y-auto custom-scrollbar pr-4 text-sm text-(--muted-foreground) leading-relaxed whitespace-pre-line text-justify">
+                <div className="overflow-y-auto custom-scrollbar pr-2.5 text-sm text-(--muted-foreground) leading-relaxed whitespace-pre-line text-justify">
                   {repo.architecture_summary}
                 </div>
               ) : (
@@ -139,7 +139,7 @@ export default async function Repository({
               )}
             </div>
 
-            <div className="glass-card p-4 shrink-0 flex flex-col animate-fade-in">
+            <div className="glass-card rounded-sm p-4 shrink-0 flex flex-col animate-fade-in">
               <h2 className="text-lg font-bold mb-4 text-(--foreground) flex items-center gap-2 shrink-0">
                 <AtomIcon size={20} className="text-(--primary)" />
                 Tech Stack Detected
@@ -155,7 +155,7 @@ export default async function Repository({
                         (tool: string, i: number) => (
                           <span
                             key={i}
-                            className="px-2 py-0.5 rounded bg-(--destructive)/10 text-(--destructive) border border-(--destructive)/20 text-[10px] font-mono"
+                            className="px-2 py-0.5 bg-(--destructive)/10 text-(--destructive) border border-(--destructive)/20 text-[10px] font-mono"
                           >
                             {tool}
                           </span>
@@ -179,7 +179,7 @@ export default async function Repository({
                         (tool: string, i: number) => (
                           <span
                             key={i}
-                            className="px-2 py-0.5 rounded bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
                           >
                             {tool}
                           </span>
@@ -203,7 +203,7 @@ export default async function Repository({
                         (tool: string, i: number) => (
                           <span
                             key={i}
-                            className="px-2 py-0.5 rounded bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
                           >
                             {tool}
                           </span>
@@ -228,7 +228,7 @@ export default async function Repository({
                         (tool: string, i: number) => (
                           <span
                             key={i}
-                            className="px-2 py-0.5 rounded bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
                           >
                             {tool}
                           </span>
@@ -247,7 +247,7 @@ export default async function Repository({
         )}
       </section>
 
-      <section className="w-1/2 h-full flex flex-col glass-card rounded-2xl overflow-hidden border border-(--border)">
+      <section className="w-1/2 h-full flex flex-col glass-card rounded-sm overflow-hidden border border-(--border)">
         {isReady ? (
           <Chat repoId={repo.id} url={repo.github_url} />
         ) : (

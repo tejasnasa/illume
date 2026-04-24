@@ -1,6 +1,6 @@
 "use client";
 
-import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
+import { GearFineIcon, StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -15,7 +15,7 @@ export default function RepoNavbar({
 }) {
   const path = usePathname();
   return (
-    <header className="flex backdrop-blur-xs items-center justify-between">
+    <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10">
       <section className="flex items-center">
         <Link
           href={"/dashboard"}
@@ -37,7 +37,7 @@ export default function RepoNavbar({
       </section>
 
       {status === "ready" && (
-        <section className="flex">
+        <section className="flex items-center">
           <Link
             href={`/repo/${id}`}
             className={`m-2 mx-4  ${path === `/repo/${id}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
@@ -63,17 +63,12 @@ export default function RepoNavbar({
             Explorer
           </Link>
           <Link
-            href={`/repo/${id}/ownership`}
-            className={`m-2 mx-4  ${path === `/repo/${id}/ownership` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-          >
-            Ownership
-          </Link>
-          <Link
             href={`/repo/${id}/graph`}
             className={`m-2 mx-4  ${path === `/repo/${id}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Graph
           </Link>
+          <GearFineIcon size={24} className="m-2 mx-4 mr-6 text-(--muted-foreground)"/>
         </section>
       )}
 
@@ -85,9 +80,6 @@ export default function RepoNavbar({
           </div>
           <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
             Explorer
-          </div>
-          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
-            Ownership
           </div>
           <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
             Graph
