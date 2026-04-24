@@ -13,7 +13,7 @@ export default async function Dashboard() {
   return (
     <div className="min-h-screen">
       <Navbar />
-      
+      <DashboardRefresh repositories={repositories} />
 
       <main className="max-w-7xl mx-auto px-6 py-24">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
