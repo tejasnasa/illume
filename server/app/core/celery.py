@@ -1,5 +1,3 @@
-import ssl
-
 from app.core.config import settings
 from celery import Celery
 
@@ -16,8 +14,6 @@ celery.conf.update(
     accept_content=["json"],
     timezone="UTC",
     enable_utc=True,
-    broker_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED},
-    redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_REQUIRED},
 )
 
 # uv run celery -A app.core.celery worker --loglevel=info --pool=solo
