@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -59,6 +60,7 @@ async def register(
         value=token,
         httponly=True,
         samesite="lax",
+        secure=settings.ENVIRONMENT == "production",
     )
     return MessageResponse(message="Registered successfully")
 

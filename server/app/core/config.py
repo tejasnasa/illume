@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     SECRET_KEY: str
     FRONTEND_URL: str
+    ENVIRONMENT: str = "development"
 
     model_config = SettingsConfigDict(env_file=".env")
 
