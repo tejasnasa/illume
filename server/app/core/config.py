@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     FRONTEND_URL: str
     ENVIRONMENT: str = "development"
+    DOMAIN: str
 
     model_config = SettingsConfigDict(env_file=".env")
 

@@ -61,6 +61,7 @@ async def register(
         httponly=True,
         samesite="lax",
         secure=settings.ENVIRONMENT == "production",
+        domain=settings.DOMAIN,
     )
     return MessageResponse(message="Registered successfully")
 
