@@ -49,6 +49,7 @@ jobs:
             docker rm illume-server || true
             docker run -d \
               --name illume-server \
+              --network illume-net \
               --restart unless-stopped \
               -p 8000:8000 \
               --env-file /root/illume.env \
@@ -58,6 +59,7 @@ jobs:
             docker rm illume-worker || true
             docker run -d \
               --name illume-worker \
+              --network illume-net \
               --restart unless-stopped \
               --env-file /root/illume.env \
               ghcr.io/${{ env.IMAGE_NAME }}:latest \
