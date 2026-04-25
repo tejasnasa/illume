@@ -4,7 +4,7 @@ import Graph from "@/types/graph";
 import { GraphIcon, WarningDiamondIcon } from "@phosphor-icons/react/dist/ssr";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import GraphCard from "./ui/GraphCard";
 
 const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
@@ -24,6 +24,17 @@ export default function GraphClient({
 }) {
   const router = useRouter();
   const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLevelChange = (level: string) => {
+    setSelectedNode(null);
+    setIsLoading(true);
+    router.push(`/repo/${repoId}/graph?level=${level}`);
+  };
+
+  useEffect(() => {
+    setIsLoading(false);
+  }, [graphData]);
 
   if (!graphData) {
     return (
@@ -38,11 +49,17 @@ export default function GraphClient({
 
   return (
     <main className="backdrop-blur-xs bg-black/80 relative w-full h-[calc(100vh-64px)] flex flex-col items-center justify-center overflow-hidden">
+      {isLoading && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-8 h-8 rounded-full border-2 border-(--primary) border-t-transparent animate-spin mb-3" />
+        </div>
+      )}
+
       <div className="absolute bottom-4 left-4 z-10 p-2 rounded-sm flex flex-col gap-2">
         <div className="flex items-center gap-3 mb-2 text-(--primary)">
           <GraphIcon size={28} weight="duotone" />
           <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
-            Graph Analyzer
+            Dependency Graph
           </h1>
         </div>
       </div>
@@ -70,10 +87,7 @@ export default function GraphClient({
 
       <section className="glass-card p-1 rounded-sm items-center justify-between flex absolute top-4 left-4 z-10">
         <button
-          onClick={() => {
-            setSelectedNode(null);
-            router.push(`/repo/${repoId}/graph?level=file`);
-          }}
+          onClick={() => handleLevelChange("file")}
           className={`px-5 py-1.5 rounded-xs text-sm transition-colors ${
             currentLevel === "file"
               ? "bg-(--primary) text-white"
@@ -83,10 +97,7 @@ export default function GraphClient({
           File Level
         </button>
         <button
-          onClick={() => {
-            setSelectedNode(null);
-            router.push(`/repo/${repoId}/graph?level=symbol`);
-          }}
+          onClick={() => handleLevelChange("symbol")}
           className={`px-5 py-1.5 rounded-xs text-sm transition-colors ${
             currentLevel === "symbol"
               ? "bg-(--primary) text-white"
@@ -137,6 +148,7 @@ export default function GraphClient({
           linkDirectionalParticles={1}
           linkDirectionalParticleSpeed={0.005}
           nodeOpacity={0.9}
+          nodeResolution={12}
           linkOpacity={1}
           onNodeClick={(node) => setSelectedNode(node)}
           onBackgroundClick={() => setSelectedNode(null)}
