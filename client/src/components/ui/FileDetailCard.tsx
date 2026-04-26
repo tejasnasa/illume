@@ -15,6 +15,7 @@ interface Props {
   ownershipData: any;
   isLoading: boolean;
   githubUrl: string;
+  annotation: string | null;
   onClose: () => void;
 }
 
@@ -24,6 +25,7 @@ export default function FileDetailCard({
   isLoading,
   githubUrl,
   onClose,
+  annotation,
 }: Props) {
   return (
     <motion.div
@@ -32,7 +34,7 @@ export default function FileDetailCard({
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: "100%", opacity: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="flex-1 min-w-0 sticky mt-27.25 top-18"
+      className="flex-1 min-w-0 sticky top-18"
     >
       <div className="glass-card p-5 rounded-sm border border-(--border) bg-(--card)/60 backdrop-blur-xl shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-(--primary) to-(--chart-2)" />
@@ -190,6 +192,14 @@ export default function FileDetailCard({
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {annotation && (
+              <div className="mt-4 pt-4 border-t border-(--border)">
+                <p className="text-sm text-(--muted-foreground)">
+                  Note: {annotation}
+                </p>
               </div>
             )}
           </div>

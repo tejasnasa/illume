@@ -1,4 +1,5 @@
 import { getRepoGraph } from "@/api/graph";
+import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import ExplorerClient from "@/components/ExplorerClient";
 import {
@@ -15,6 +16,7 @@ export default async function ExplorerPage({
   const repo = await GetRepository(Number(id));
 
   const graphData = await getRepoGraph(repo.id, "file");
+  const guide = await GetGuide(repo.id);
 
   return (
     <div className="mx-auto max-w-7xl py-12">
@@ -31,7 +33,7 @@ export default async function ExplorerPage({
           </div>
         </div>
       ) : (
-        <ExplorerClient graphData={graphData} github_url={repo.github_url} repoId={repo.id} />
+        <ExplorerClient graphData={graphData} github_url={repo.github_url} repoId={repo.id} guide={guide} />
       )}
     </div>
   );

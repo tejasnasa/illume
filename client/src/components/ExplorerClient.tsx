@@ -3,6 +3,7 @@
 import { GetOwnership } from "@/api/ownership";
 import { FileNode, TreeNode } from "@/types/explorer";
 import Graph from "@/types/graph";
+import Guide from "@/types/guide";
 import { AnimatePresence } from "motion/react";
 import { useMemo, useState } from "react";
 import FileDetailCard from "./ui/FileDetailCard";
@@ -42,16 +43,22 @@ const buildTree = (files: FileNode[]): TreeNode => {
 
 export default function ExplorerClient({
   graphData,
+  guide,
   github_url,
   repoId,
 }: {
   graphData: Graph;
+  guide: Guide;
   github_url: string;
   repoId: string;
 }) {
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [ownershipData, setOwnershipData] = useState<any>(null);
   const [isLoadingOwnership, setIsLoadingOwnership] = useState(false);
+
+  const annotationMap = Object.fromEntries(
+    guide.reading_order.map((entry) => [entry.file_path, entry.annotation]),
+  );
 
   const fileTree = useMemo(
     () => buildTree(graphData.nodes as any as FileNode[]),
@@ -121,6 +128,7 @@ export default function ExplorerClient({
             <FileDetailCard
               key="detail-card"
               file={selectedFile}
+              annotation={annotationMap[selectedFile.path] ?? null}
               ownershipData={ownershipData}
               isLoading={isLoadingOwnership}
               githubUrl={github_url}
