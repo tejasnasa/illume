@@ -23,7 +23,7 @@ export default async function GlossaryPage({
   const start = (currentPage - 1) * PAGE_SIZE + 1;
 
   return (
-    <div className="max-w-5xl mx-auto p-6 pt-12">
+    <main className="max-w-5xl mx-auto p-6 pt-12">
       <GlossarySearch github_url={repo.github_url} repoId={repo.id}>
         <div className="flex justify-between items-center mb-6">
           <span className="text-sm font-medium text-(--muted-foreground)">
@@ -84,6 +84,6 @@ export default async function GlossaryPage({
           </div>
         )}
       </GlossarySearch>
-    </div>
+    </main>
   );
 }

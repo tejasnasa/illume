@@ -442,7 +442,7 @@ export default function Home() {
                 <span className="w-3 h-3 rounded-full bg-green-500/60" />
               </div>
               <span className="ml-3 text-xs text-(--muted-foreground)">
-                Dashboard — Architecture Brief
+                Dashboard
               </span>
             </div>
             <div className="aspect-21/9 bg-(--secondary)/40 flex items-center justify-center">
