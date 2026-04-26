@@ -179,7 +179,7 @@ export default function Home() {
               href="/login"
               className="ml-2 flex items-center gap-2 px-4 py-2 text-sm rounded-full border bg-(--primary) border-(--border)  hover:border-white transition-all duration-200"
             >
-              <span className="hidden sm:inline">Login</span>
+              <span className="sm:inline">Login</span>
             </Link>
           </div>
         </div>
