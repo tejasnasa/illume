@@ -1,5 +1,8 @@
 "use client";
 
+import dashboard from "@/assets/dashboard.png";
+import explorer from "@/assets/explorer.png";
+import graph from "@/assets/graph.png";
 import {
   ArrowDownIcon,
   ArrowRightIcon,
@@ -20,6 +23,7 @@ import {
   XLogoIcon,
 } from "@phosphor-icons/react/dist/ssr";
 import { motion, type Variants } from "motion/react";
+import Image from "next/image";
 import Link from "next/link";
 
 const fadeUp: Variants = {
@@ -442,9 +446,11 @@ export default function Home() {
               </span>
             </div>
             <div className="aspect-21/9 bg-(--secondary)/40 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3 text-(--muted-foreground)">
-                <span className="text-sm">Architecture Brief Screenshot</span>
-              </div>
+              <Image
+                src={dashboard}
+                alt="Dashboard Screenshot"
+                className="object-cover"
+              />
             </div>
           </motion.div>
 
@@ -466,9 +472,11 @@ export default function Home() {
               </span>
             </div>
             <div className="aspect-video bg-(--secondary)/40 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3 text-(--muted-foreground)">
-                <span className="text-sm">3D Dependency Graph Screenshot</span>
-              </div>
+              <Image
+                src={graph}
+                alt="3D Dependency Graph Screenshot"
+                className="object-cover"
+              />
             </div>
           </motion.div>
           <motion.div
@@ -485,13 +493,15 @@ export default function Home() {
                 <span className="w-3 h-3 rounded-full bg-green-500/60" />
               </div>
               <span className="ml-3 text-xs text-(--muted-foreground)">
-                RAG Chat Interface
+                Explorer Interface
               </span>
             </div>
             <div className="aspect-video bg-(--secondary)/40 flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3 text-(--muted-foreground)">
-                <span className="text-sm">RAG Chat Interface Screenshot</span>
-              </div>
+              <Image
+                src={explorer}
+                alt="RAG Chat Interface Screenshot"
+                className="object-cover"
+              />
             </div>
           </motion.div>
         </div>
