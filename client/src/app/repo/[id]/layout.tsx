@@ -31,7 +31,7 @@ export default async function RootLayout({
 }>) {
   const { id } = await params;
   const repo = await GetRepository(Number(id));
-  
+
   let graph = null;
   try {
     if (repo.status === "ready") {
@@ -44,7 +44,12 @@ export default async function RootLayout({
   return (
     <main className="relative min-h-screen">
       <BackgroundGraph graph={graph} />
-      <RepoNavbar name={repo.name} id={Number(id)} status={repo.status} />
+      <RepoNavbar
+        name={repo.name}
+        num_id={Number(id)}
+        id={repo.id}
+        status={repo.status}
+      />
 
       <AnimatedLayout>{children}</AnimatedLayout>
     </main>
