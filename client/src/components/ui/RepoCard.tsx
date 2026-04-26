@@ -1,3 +1,5 @@
+"use client";
+
 import Repository from "@/types/repository";
 import { timeAgo } from "@/utils/timeAgo";
 import {
@@ -21,12 +23,21 @@ export default function RepoCard({ repo }: { repo: Repository }) {
       href={`/repo/${repo.repo_number}`}
       className="group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5"
     >
-      <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
+      <div
+        className="absolute top-4 right-4 flex items-center gap-1 z-10"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
         <a
           href={repo.github_url}
           target="_blank"
           className="p-2 rounded-sm text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors"
           title="Open GitHub"
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
         >
           <GithubLogoIcon size={20} />
         </a>
@@ -85,8 +96,7 @@ export default function RepoCard({ repo }: { repo: Repository }) {
           <div className="flex gap-1 mt-1 overflow-x-hidden w-full">
             {(() => {
               const langs = repo.detected_stack?.languages ?? [];
-              const frameworks =
-                repo.detected_stack?.frameworks ?? [];
+              const frameworks = repo.detected_stack?.frameworks ?? [];
               const all = [...langs, ...frameworks];
 
               return all.length > 0 ? (
