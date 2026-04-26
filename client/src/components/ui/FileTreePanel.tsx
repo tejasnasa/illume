@@ -1,7 +1,8 @@
+import { FileNode, TreeNode } from "@/types/explorer";
 import { FolderOpenIcon } from "@phosphor-icons/react";
+import { ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react/dist/ssr";
 import { motion } from "motion/react";
 import TreeNodeRenderer from "./TreeNodeRenderer";
-import { FileNode, TreeNode } from "@/types/explorer";
 
 interface Props {
   fileTree: TreeNode;
@@ -9,6 +10,9 @@ interface Props {
   expandedDirs: Set<string>;
   onFileClick: (e: React.MouseEvent, file: FileNode) => void;
   onToggleDir: (path: string) => void;
+  pageIndex: number | null;
+  totalPages: number;
+  onNavigate: (index: number) => void;
 }
 
 export default function FileTreePanel({
@@ -17,6 +21,9 @@ export default function FileTreePanel({
   expandedDirs,
   onFileClick,
   onToggleDir,
+  pageIndex,
+  totalPages,
+  onNavigate,
 }: Props) {
   return (
     <motion.div
@@ -27,13 +34,37 @@ export default function FileTreePanel({
       }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <div className="mb-10">
-        <div className="flex items-center gap-3 mb-2 text-(--primary)">
-          <FolderOpenIcon size={28} weight="duotone" />
-          <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
-            File Explorer
-          </h1>
+      <div className="flex gap-3 mb-2 justify-between flex-col">
+        <div className="flex justify-between items-end gap-3 mb-2 ">
+          <div className="flex gap-3 items-center text-(--primary)">
+            <FolderOpenIcon size={28} weight="duotone" />
+            <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
+              File Explorer
+            </h1>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="font-medium uppercase text-(--foreground)/90">Reading Order:</div>
+            <button
+              onClick={() => onNavigate((pageIndex ?? 0) - 1)}
+              disabled={pageIndex === null || pageIndex === 0}
+              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
+            >
+              <ArrowLeftIcon size={14} />
+            </button>
+            <span className="text-sm text-(--muted-foreground) tabular-nums">
+              {pageIndex === null ? "—" : pageIndex + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => onNavigate((pageIndex ?? -1) + 1)}
+              disabled={pageIndex !== null && pageIndex === totalPages - 1}
+              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
+            >
+              <ArrowRightIcon size={14} />
+            </button>
+          </div>
         </div>
+
         <p className="text-(--muted-foreground)">
           Browse the entire repository tree. Criticality guardrails are mapped
           directly to files.

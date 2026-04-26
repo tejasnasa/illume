@@ -55,6 +55,39 @@ export default function ExplorerClient({
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [ownershipData, setOwnershipData] = useState<any>(null);
   const [isLoadingOwnership, setIsLoadingOwnership] = useState(false);
+  const [pageIndex, setPageIndex] = useState<number | null>(null);
+
+  const fileNodeMap = useMemo(() => {
+    const map = new Map<string, FileNode>();
+    (graphData.nodes as any as FileNode[]).forEach((f) => map.set(f.path, f));
+    return map;
+  }, [graphData]);
+
+  const orderedFiles = useMemo(
+    () =>
+      guide.reading_order
+        .sort((a, b) => a.position - b.position)
+        .map((entry) => fileNodeMap.get(entry.file_path))
+        .filter(Boolean) as FileNode[],
+    [guide, fileNodeMap],
+  );
+
+  const navigateToPage = (index: number) => {
+    const file = orderedFiles[index];
+    if (!file) return;
+    setPageIndex(index);
+    setSelectedFile(file);
+    fetchOwnership(file.path);
+
+    const parts = file.path.split("/");
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      for (let i = 1; i < parts.length; i++) {
+        next.add(parts.slice(0, i).join("/"));
+      }
+      return next;
+    });
+  };
 
   const annotationMap = Object.fromEntries(
     guide.reading_order.map((entry) => [entry.file_path, entry.annotation]),
@@ -101,15 +134,19 @@ export default function ExplorerClient({
     if (selectedFile?.path === file.path) {
       setSelectedFile(null);
       setOwnershipData(null);
+      setPageIndex(null);
     } else {
       setSelectedFile(file);
       fetchOwnership(file.path);
+      const idx = orderedFiles.findIndex((f) => f.path === file.path);
+      setPageIndex(idx === -1 ? null : idx);
     }
   };
 
   const handleClose = () => {
     setSelectedFile(null);
     setOwnershipData(null);
+    setPageIndex(null);
   };
 
   return (
@@ -121,6 +158,9 @@ export default function ExplorerClient({
           expandedDirs={expandedDirs}
           onFileClick={handleFileClick}
           onToggleDir={toggleDir}
+          pageIndex={pageIndex}
+          totalPages={orderedFiles.length}
+          onNavigate={navigateToPage}
         />
 
         <AnimatePresence mode="wait">
