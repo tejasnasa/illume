@@ -28,8 +28,8 @@ export async function GetRepository(id: number): Promise<Repository> {
     },
   );
 
-  if (!res.ok) throw new Error("Failed to fetch repository");
-
+  if (!res.ok) throw new Error(`Repository not found: ${res.status}`);
+  
   const data = await res.json();
 
   return data;

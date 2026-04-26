@@ -6,7 +6,6 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import RepoCard from "@/components/ui/RepoCard";
 import { DatabaseIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
-import { Suspense } from "react";
 
 export default async function Dashboard() {
   const repositories = await getRepositories();
@@ -53,21 +52,11 @@ export default async function Dashboard() {
             Your Indexed Libraries
           </div>
 
-          <Suspense
-            fallback={
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {repositories.map((repo) => (
-                  <RepoCard key={repo.id} repo={repo} />
-                ))}
-              </div>
-            }
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {repositories.map((repo) => (
-                <RepoCard key={repo.id} repo={repo} />
-              ))}
-            </div>
-          </Suspense>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {repositories.map((repo) => (
+              <RepoCard key={repo.id} repo={repo} />
+            ))}
+          </div>
 
           {repositories.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-(--border) rounded-3xl bg-(--secondary)/5">
