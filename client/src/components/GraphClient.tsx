@@ -2,7 +2,12 @@
 
 import Graph from "@/types/graph";
 import Guide from "@/types/guide";
-import { GraphIcon, WarningDiamondIcon } from "@phosphor-icons/react/dist/ssr";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  GraphIcon,
+  WarningDiamondIcon,
+} from "@phosphor-icons/react/dist/ssr";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -28,6 +33,21 @@ export default function GraphClient({
   const router = useRouter();
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [pageIndex, setPageIndex] = useState<number | null>(null);
+
+  const nodeMap = Object.fromEntries(graphData.nodes.map((n) => [n.path, n]));
+
+  const orderedNodes = guide.reading_order
+    .sort((a, b) => a.position - b.position)
+    .map((entry) => nodeMap[entry.file_path])
+    .filter(Boolean);
+
+  const navigateToPage = (index: number) => {
+    const node = orderedNodes[index];
+    if (!node) return;
+    setPageIndex(index);
+    setSelectedNode(node);
+  };
 
   const readingOrderMap = Object.fromEntries(
     guide.reading_order.map((entry) => [entry.file_path, entry]),
@@ -35,6 +55,7 @@ export default function GraphClient({
 
   const handleLevelChange = (level: string) => {
     setSelectedNode(null);
+    setPageIndex(null);
     setIsLoading(true);
     router.push(`/repo/${repoId}/graph?level=${level}`);
   };
@@ -92,27 +113,56 @@ export default function GraphClient({
         </div>
       </section>
 
-      <section className="glass-card p-1 rounded-sm items-center justify-between flex absolute top-4 left-4 z-10">
-        <button
-          onClick={() => handleLevelChange("file")}
-          className={`px-5 py-1.5 rounded-xs text-sm transition-colors ${
-            currentLevel === "file"
-              ? "bg-(--primary) text-white"
-              : "hover:bg-(--primary)/10 text-(--muted-foreground)"
-          }`}
-        >
-          File Level
-        </button>
-        <button
-          onClick={() => handleLevelChange("symbol")}
-          className={`px-5 py-1.5 rounded-xs text-sm transition-colors ${
-            currentLevel === "symbol"
-              ? "bg-(--primary) text-white"
-              : "hover:bg-(--primary)/10 text-(--muted-foreground)"
-          }`}
-        >
-          Symbol Level
-        </button>
+      <section className="p-1 rounded-sm items-center justify-between flex flex-col absolute top-4 left-4 z-10">
+        <div className="glass-card p-1 flex items-center justify-between w-70">
+          <button
+            onClick={() => handleLevelChange("file")}
+            className={`px-5 py-2 rounded-xs text-sm transition-colors w-[49%] ${
+              currentLevel === "file"
+                ? "bg-(--primary) text-white"
+                : "hover:bg-(--primary)/10 text-(--muted-foreground)"
+            }`}
+          >
+            File Level
+          </button>
+          <button
+            onClick={() => handleLevelChange("symbol")}
+            className={`px-5 py-2 rounded-xs text-sm transition-colors w-[49%] ${
+              currentLevel === "symbol"
+                ? "bg-(--primary) text-white"
+                : "hover:bg-(--primary)/10 text-(--muted-foreground)"
+            }`}
+          >
+            Symbol Level
+          </button>
+        </div>
+
+        {currentLevel === "file" && (
+          <div className="flex items-center gap-2 p-2">
+            <div className="font-medium uppercase text-(--foreground)/90">
+              Reading Order:
+            </div>
+            <button
+              onClick={() => navigateToPage((pageIndex ?? 0) - 1)}
+              disabled={pageIndex === null || pageIndex === 0}
+              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
+            >
+              <ArrowLeftIcon size={14} />
+            </button>
+            <span className="text-sm text-(--muted-foreground) tabular-nums">
+              {pageIndex === null ? "—" : pageIndex + 1} / {orderedNodes.length}
+            </span>
+            <button
+              onClick={() => navigateToPage((pageIndex ?? -1) + 1)}
+              disabled={
+                pageIndex !== null && pageIndex === orderedNodes.length - 1
+              }
+              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
+            >
+              <ArrowRightIcon size={14} />
+            </button>
+          </div>
+        )}
       </section>
 
       {selectedNode && (
@@ -158,8 +208,17 @@ export default function GraphClient({
           nodeOpacity={0.9}
           nodeResolution={12}
           linkOpacity={1}
-          onNodeClick={(node) => setSelectedNode(node)}
-          onBackgroundClick={() => setSelectedNode(null)}
+          onNodeClick={(node) => {
+            setSelectedNode(node);
+            const idx = orderedNodes.findIndex(
+              (n) => n.path === (node as any).path,
+            );
+            setPageIndex(idx === -1 ? null : idx);
+          }}
+          onBackgroundClick={() => {
+            setSelectedNode(null);
+            setPageIndex(null);
+          }}
         />
       </section>
     </main>
