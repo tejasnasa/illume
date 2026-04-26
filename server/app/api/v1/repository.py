@@ -62,7 +62,7 @@ async def create_repository(
     return {"repo_id": str(repo.id), "repo_num": repo.repo_number}
 
 
-@router.post("/{repo_id}/reingest", status_code=202)
+@router.put("/{repo_id}/reingest", status_code=202)
 async def reingest_repository(
     repo_id: uuid.UUID,
     request: Request,
