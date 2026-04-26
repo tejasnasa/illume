@@ -82,6 +82,8 @@ async def login(
         value=token,
         httponly=True,
         samesite="lax",
+        secure=settings.ENVIRONMENT == "production",
+        domain=settings.DOMAIN,
     )
     return MessageResponse(message="Logged in successfully")
 
