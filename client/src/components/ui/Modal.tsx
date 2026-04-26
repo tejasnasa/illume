@@ -6,9 +6,10 @@ import { createPortal } from "react-dom";
 type Props = {
   trigger: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 };
 
-export default function Modal({ trigger, children }: Props) {
+export default function Modal({ trigger, children, className = "" }: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -56,7 +57,7 @@ export default function Modal({ trigger, children }: Props) {
                 }
               }}
             >
-              <div className="relative z-50 w-120 rounded-sm border border-(--border) bg-(--card) shadow-2xl p-6">
+              <div className={`relative z-50 w-min-120 rounded-sm border border-(--border) bg-(--card) shadow-2xl p-6 ${className}`}>
                 {children}
               </div>
             </div>

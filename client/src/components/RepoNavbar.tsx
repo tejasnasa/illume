@@ -3,19 +3,23 @@
 import { GearFineIcon, StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import RepoSettings from "./RepoSettings";
+import Modal from "./ui/Modal";
 
 export default function RepoNavbar({
   name,
+  num_id,
   id,
   status,
 }: {
   name: string;
-  id: number;
+  num_id: number;
+  id: string;
   status: string;
 }) {
   const path = usePathname();
   return (
-    <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10">
+    <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10 print:hidden">
       <section className="flex items-center">
         <Link
           href={"/dashboard"}
@@ -39,36 +43,45 @@ export default function RepoNavbar({
       {status === "ready" && (
         <section className="flex items-center">
           <Link
-            href={`/repo/${id}`}
-            className={`m-2 mx-4  ${path === `/repo/${id}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${num_id}`}
+            className={`m-2 mx-4  ${path === `/repo/${num_id}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Home
           </Link>
           {/* <Link
-          href={`/repo/${id}/onboarding-guide`}
-          className={`m-2 mx-4  ${path === `/repo/${id}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          href={`/repo/${num_id}/onboarding-guide`}
+          className={`m-2 mx-4  ${path === `/repo/${num_id}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
         >
           Onboarding Guide
         </Link> */}
           <Link
-            href={`/repo/${id}/glossary`}
-            className={`m-2 mx-4  ${path === `/repo/${id}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${num_id}/glossary`}
+            className={`m-2 mx-4  ${path === `/repo/${num_id}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Glossary
           </Link>
           <Link
-            href={`/repo/${id}/explorer`}
-            className={`m-2 mx-4  ${path === `/repo/${id}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${num_id}/explorer`}
+            className={`m-2 mx-4  ${path === `/repo/${num_id}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Explorer
           </Link>
           <Link
-            href={`/repo/${id}/graph`}
-            className={`m-2 mx-4  ${path === `/repo/${id}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${num_id}/graph`}
+            className={`m-2 mx-4  ${path === `/repo/${num_id}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Graph
           </Link>
-          <GearFineIcon size={24} className="m-2 mx-4 mr-6 text-(--muted-foreground)"/>
+          <Modal
+            trigger={
+              <GearFineIcon
+                size={24}
+                className="m-2 mx-4 mr-6 text-(--muted-foreground) hover:cursor-pointer"
+              />
+            }
+          >
+            <RepoSettings repo_id={id} />
+          </Modal>
         </section>
       )}
 
@@ -84,6 +97,16 @@ export default function RepoNavbar({
           <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
             Graph
           </div>
+          <Modal
+            trigger={
+              <GearFineIcon
+                size={24}
+                className="m-2 mx-4 mr-6 text-(--muted-foreground) hover:cursor-pointer"
+              />
+            }
+          >
+            <RepoSettings repo_id={id} />
+          </Modal>
         </section>
       )}
     </header>
