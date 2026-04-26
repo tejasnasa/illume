@@ -24,5 +24,10 @@ export const loginSchema = z.object({
 });
 
 export const repoCreateSchema = z.object({
-  github_url: z.url({ message: "Enter a valid GitHub repository URL." }).trim(),
+  github_url: z
+    .url({ message: "Enter a valid GitHub repository URL." })
+    .trim()
+    .refine((url) => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(url), {
+      message: "URL must point to a valid GitHub repository.",
+    }),
 });

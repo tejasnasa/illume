@@ -40,6 +40,7 @@ export default function useRepoForm() {
   });
 
   return {
+    firstError,
     register: form.register,
     isSubmitting: form.formState.isSubmitting,
     onSubmit,
