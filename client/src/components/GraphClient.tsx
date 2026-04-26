@@ -1,6 +1,7 @@
 "use client";
 
 import Graph from "@/types/graph";
+import Guide from "@/types/guide";
 import { GraphIcon, WarningDiamondIcon } from "@phosphor-icons/react/dist/ssr";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -16,8 +17,10 @@ export default function GraphClient({
   currentLevel,
   repoId,
   github_url,
+  guide,
 }: {
-  graphData: Graph | null;
+  graphData: Graph;
+  guide: Guide;
   currentLevel: string;
   repoId: string;
   github_url: string;
@@ -25,6 +28,10 @@ export default function GraphClient({
   const router = useRouter();
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const readingOrderMap = Object.fromEntries(
+    guide.reading_order.map((entry) => [entry.file_path, entry]),
+  );
 
   const handleLevelChange = (level: string) => {
     setSelectedNode(null);
@@ -114,6 +121,7 @@ export default function GraphClient({
           setSelectedNode={setSelectedNode}
           currentLevel={currentLevel}
           github_url={github_url}
+          annotation={readingOrderMap[selectedNode?.path].annotation ?? null}
         />
       )}
 

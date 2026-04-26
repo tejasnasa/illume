@@ -4,18 +4,19 @@ import {
   GithubLogoIcon,
   XIcon,
 } from "@phosphor-icons/react/dist/ssr";
-import Link from "next/link";
 
 export default function GraphCard({
   selectedNode,
   setSelectedNode,
   currentLevel,
   github_url,
+  annotation,
 }: {
   selectedNode: any;
   setSelectedNode: (node: any) => void;
   currentLevel: string;
   github_url: string;
+  annotation: string | null;
 }) {
   return (
     <section className="absolute top-4 right-4 z-20 w-80 glass-card p-5 rounded-sm flex flex-col shadow-2xl animate-fade-left h-fit">
@@ -134,14 +135,21 @@ export default function GraphCard({
               </div>
             )}
         </div>
-        <Link
+
+        {annotation && (
+          <div className="mt-4 pt-4 border-t border-(--border)">
+            <p className="text-sm text-(--muted-foreground)">Note: {annotation}</p>
+          </div>
+        )}
+
+        <a
           className="bg-white hover:bg-white/80 transition-colors text-black flex items-center gap-2 p-2 justify-center rounded-sm font-semibold uppercase"
           href={`${github_url}/blob/master/${selectedNode.path}`}
           target="_blank"
         >
           <GithubLogoIcon weight="bold" />
           Github
-        </Link>
+        </a>
       </div>
     </section>
   );

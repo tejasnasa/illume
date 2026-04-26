@@ -1,4 +1,5 @@
 import { getRepoGraph } from "@/api/graph";
+import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import GraphClient from "@/components/GraphClient";
 
@@ -19,6 +20,7 @@ export default async function GraphPage({
     repo.id,
     currentLevel as "file" | "symbol",
   );
+  const guide = await GetGuide(repo.id);
 
   return (
     <GraphClient
@@ -26,6 +28,7 @@ export default async function GraphPage({
       currentLevel={currentLevel}
       repoId={id}
       github_url={repo.github_url}
+      guide={guide}
     />
   );
 }
