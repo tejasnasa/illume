@@ -112,7 +112,7 @@ async def github_login():
     return RedirectResponse(f"https://github.com/login/oauth/authorize?{query}")
 
 
-@router.get("/github/callback", response_model=MessageResponse)
+@router.get("/github/callback")
 async def github_callback(
     code: str,
     response: Response,
