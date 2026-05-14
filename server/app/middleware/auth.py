@@ -11,6 +11,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/api/v1/auth/login",
             "/api/v1/auth/register",
             "/api/v1/auth/logout",
+            "/api/v1/auth/github",
+            "/api/v1/auth/github/callback",
             "/api/v1/ws",
             "/openapi.json",
         ]
