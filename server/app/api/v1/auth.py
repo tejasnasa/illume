@@ -147,6 +147,8 @@ async def github_callback(
             headers={"Authorization": f"Bearer {github_token}"},
         )
         emails = email_res.json()
+        print("STATUS:", email_res.status_code)
+        print("BODY:", emails)
 
     primary_email = next(
         (e["email"] for e in emails if e["primary"] and e["verified"]),
