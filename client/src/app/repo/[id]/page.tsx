@@ -18,6 +18,8 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { cookies } from "next/headers";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default async function Repository({
   params,
@@ -131,8 +133,10 @@ export default async function Repository({
                 AI Architecture Overview
               </h2>
               {repo.architecture_summary ? (
-                <div className="overflow-y-auto custom-scrollbar pr-2.5 text-sm text-(--muted-foreground) leading-relaxed whitespace-pre-line text-justify">
-                  {repo.architecture_summary}
+                <div className="overflow-y-auto custom-scrollbar pr-2.5 text-sm text-(--muted-foreground) leading-relaxed text-justify prose prose-sm dark:prose-invert">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {repo.architecture_summary}
+                  </ReactMarkdown>
                 </div>
               ) : (
                 <div className="flex-1 flex items-center justify-center text-(--muted-foreground) text-sm italic">
