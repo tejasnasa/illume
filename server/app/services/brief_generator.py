@@ -31,8 +31,6 @@ EXTERNAL_INTEGRATION_PREFIXES = (
     "boto3",
     "botocore",
     "s3",
-    "redis",
-    "celery",
     "openai",
     "anthropic",
     "pinecone",
@@ -44,14 +42,12 @@ EXTERNAL_INTEGRATION_PREFIXES = (
     "mixpanel",
     "firebase",
     "supabase",
-    "prisma",
-    "mongoengine",
-    "pymongo",
     "google.cloud",
     "azure",
     "slack_sdk",
     "shopify",
     "hubspot",
+    "digitalocean"
 )
 
 
@@ -241,6 +237,7 @@ def _build_narrative_prompt(
         f"Languages: {', '.join(detected_stack.get('languages', ['unknown']))}",
         f"Frameworks: {', '.join(detected_stack.get('frameworks', ['none detected']))}",
         f"Databases: {', '.join(detected_stack.get('databases', ['none detected']))}",
+        f"Infrastructure: {', '.join(detected_stack.get('infrastructure', ['none detected']))}",
         f"CI/CD: {', '.join(detected_stack.get('ci_cd', ['none detected']))}",
         "",
         "## Entry Points",
