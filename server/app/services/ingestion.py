@@ -69,13 +69,15 @@ SKIP_DIRS = {
 }
 
 
-def _publish_log(redis_client, repo_id: str, event: str, message: str, **kwargs) -> None:
+def _publish_log(
+    redis_client, repo_id: str, event: str, message: str, **kwargs
+) -> None:
     channel = f"task:{repo_id}:logs"
     data = {
         "event": event,
         "message": message,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        **kwargs
+        **kwargs,
     }
     redis_client.publish(channel, json.dumps(data))
     logger.info("[%s] %s: %s", repo_id, event, message)
@@ -84,7 +86,13 @@ def _publish_log(redis_client, repo_id: str, event: str, message: str, **kwargs)
 def _update_status(db: Session, redis_client, repo: Repository, status: str) -> None:
     repo.status = status
     db.commit()
-    _publish_log(redis_client, str(repo.id), "status_update", f"Status changed to {status}", status=status)
+    _publish_log(
+        redis_client,
+        str(repo.id),
+        "status_update",
+        f"Status changed to {status}",
+        status=status,
+    )
 
 
 def clone_repository(
@@ -147,11 +155,15 @@ def process_repository_files(
     repo_root: Path,
 ) -> int:
     _update_status(db, redis_client, repo, "parsing")
-    _publish_log(redis_client, str(repo.id), "parsing_started", "Starting file analysis...")
+    _publish_log(
+        redis_client, str(repo.id), "parsing_started", "Starting file analysis..."
+    )
 
     source_files = walk_source_files(repo_root)
     total = len(source_files)
-    _publish_log(redis_client, str(repo.id), "file_discovery", f"Found {total} source files.")
+    _publish_log(
+        redis_client, str(repo.id), "file_discovery", f"Found {total} source files."
+    )
 
     processed = 0
 
@@ -192,15 +204,32 @@ def process_repository_files(
         )
 
     db.commit()
-    _publish_log(redis_client, str(repo.id), "db_storage_complete", f"Stored {processed} files in DB.")
+    _publish_log(
+        redis_client,
+        str(repo.id),
+        "db_storage_complete",
+        f"Stored {processed} files in DB.",
+    )
 
     dep_count = resolve_dependencies(db, repo.id)
-    _publish_log(redis_client, str(repo.id), "deps_resolved", f"Resolved {dep_count} dependencies.")
+    _publish_log(
+        redis_client,
+        str(repo.id),
+        "deps_resolved",
+        f"Resolved {dep_count} dependencies.",
+    )
 
-    _publish_log(redis_client, str(repo.id), "metrics_started", "Computing fan-in/fan-out metrics...")
+    _publish_log(
+        redis_client,
+        str(repo.id),
+        "metrics_started",
+        "Computing fan-in/fan-out metrics...",
+    )
     compute_fan_metrics(db, repo.id)
 
-    _publish_log(redis_client, str(repo.id), "criticality_started", "Scoring file criticality...")
+    _publish_log(
+        redis_client, str(repo.id), "criticality_started", "Scoring file criticality..."
+    )
     run_criticality_scoring(db, repo.id)
 
     repo.detected_stack = detect_stack(repo_root)
@@ -224,7 +253,12 @@ def embed_repository_symbols(
     readme_content: str | None = None,
 ) -> int:
     _update_status(db, redis_client, repo, "embedding")
-    _publish_log(redis_client, str(repo.id), "embedding_started", "Starting embedding generation...")
+    _publish_log(
+        redis_client,
+        str(repo.id),
+        "embedding_started",
+        "Starting embedding generation...",
+    )
 
     def publish_log(msg: str):
         _publish_log(redis_client, str(repo.id), "embedding_progress", msg)
@@ -237,7 +271,10 @@ def embed_repository_symbols(
     )
 
     _publish_log(
-        redis_client, str(repo.id), "embedding_complete", f"Embedding complete — {count} vectors stored."
+        redis_client,
+        str(repo.id),
+        "embedding_complete",
+        f"Embedding complete — {count} vectors stored.",
     )
     return count
 
@@ -434,6 +471,7 @@ def detect_stack(repo_root: Path) -> dict:
     frameworks: set[str] = set()
     databases: set[str] = set()
     ci_cd: set[str] = set()
+    infrastructure: set[str] = set()
 
     ext_map = {
         ".py": "Python",
@@ -489,6 +527,7 @@ def detect_stack(repo_root: Path) -> dict:
                     "sqlite3": "SQLite",
                     "redis": "Redis",
                     "ioredis": "Redis",
+                    "supabase": "Supabase",
                 }
 
                 for k, v in js_fw.items():
@@ -507,21 +546,39 @@ def detect_stack(repo_root: Path) -> dict:
             try:
                 text = f.read_text().lower()
 
-                if "fastapi" in text:
+                if re.search(
+                    r"^\s*(import fastapi|from fastapi[\. ])", text, re.MULTILINE
+                ):
                     frameworks.add("FastAPI")
-                if "django" in text:
+                if re.search(
+                    r"^\s*(import django|from django[\. ])", text, re.MULTILINE
+                ):
                     frameworks.add("Django")
-                if "flask" in text:
+                if re.search(r"^\s*(import flask|from flask[\. ])", text, re.MULTILINE):
                     frameworks.add("Flask")
 
-                if "sqlalchemy" in text:
+                if re.search(
+                    r"^\s*(import sqlalchemy|from sqlalchemy[\. ])", text, re.MULTILINE
+                ):
                     databases.add("SQLAlchemy")
-                if "psycopg" in text:
+
+                if re.search(
+                    r"^\s*(import psycopg|from psycopg[\. ])", text, re.MULTILINE
+                ):
                     databases.add("PostgreSQL")
-                if "pymongo" in text:
+
+                if re.search(
+                    r"^\s*(import pymongo|from pymongo[\. ])", text, re.MULTILINE
+                ):
                     databases.add("MongoDB")
-                if "redis" in text:
+
+                if re.search(r"^\s*(import redis|from redis[\. ])", text, re.MULTILINE):
                     databases.add("Redis")
+
+                if re.search(
+                    r"^\s*(import celery|from celery[\. ])", text, re.MULTILINE
+                ):
+                    infrastructure.add("Celery")
 
             except Exception:
                 pass
@@ -531,15 +588,21 @@ def detect_stack(repo_root: Path) -> dict:
 
         if name == "pom.xml":
             try:
-                if "spring-boot" in f.read_text(errors="ignore").lower():
+                text = f.read_text(errors="ignore").lower()
+                if "spring-boot" in text:
                     frameworks.add("Spring Boot")
+                if "hibernate" in text:
+                    databases.add("Hibernate")
             except Exception:
                 pass
 
         if name in {"build.gradle", "build.gradle.kts"}:
             try:
-                if "spring" in f.read_text(errors="ignore").lower():
+                text = f.read_text(errors="ignore").lower()
+                if "org.springframework" in text:
                     frameworks.add("Spring")
+                if "hibernate" in text:
+                    databases.add("Hibernate")
             except Exception:
                 pass
 
@@ -548,7 +611,7 @@ def detect_stack(repo_root: Path) -> dict:
         text = go_mod.read_text().lower()
         if "gin-gonic" in text:
             frameworks.add("Gin")
-        if "echo" in text:
+        if "labstack/echo" in text:
             frameworks.add("Echo")
 
     cargo = repo_root / "Cargo.toml"
@@ -579,45 +642,74 @@ def detect_stack(repo_root: Path) -> dict:
         except Exception:
             pass
 
-    if (repo_root / "manage.py").exists():
-        frameworks.add("Django")
+    manage_path = repo_root / "manage.py"
+    if manage_path.exists():
+        try:
+            manage_text = manage_path.read_text(errors="ignore")
+            if re.search(
+                r"^\s*(import django|from django[\. ])", manage_text, re.MULTILINE
+            ):
+                frameworks.add("Django")
+        except OSError:
+            pass
 
     if any((repo_root / f).exists() for f in ["next.config.js", "next.config.ts"]):
         frameworks.add("Next.js")
 
     if (repo_root / "apps").exists() and (repo_root / "packages").exists():
-        frameworks.add("Monorepo")
+        infrastructure.add("Monorepo")
 
     for f in all_files:
         name = f.name.lower()
         path = str(f).lower()
 
-        if "socket" in name or "ws" in name:
-            frameworks.add("WebSockets")
-            frameworks.add("Real-time System")
+        if "socketio" in name or "socket.io" in name:
+            infrastructure.add("Socket.IO")
+            infrastructure.add("WebSockets")
+        elif re.search(r"\bsocket\b", name) or re.search(r"\bws\b", name):
+            infrastructure.add("WebSockets")
 
         if "prisma" in path:
-            frameworks.add("Prisma ORM")
+            databases.add("Prisma ORM")
             databases.add("PostgreSQL")
 
-        if "redis" in path:
+        if "drizzle.config" in path:
+            databases.add("Drizzle ORM")
+
+        if re.search(r"\bredis\b", name):
             databases.add("Redis")
-            frameworks.add("Caching Layer")
 
     if (repo_root / ".github" / "workflows").exists():
         ci_cd.add("GitHub Actions")
+
     if (repo_root / ".gitlab-ci.yml").exists():
         ci_cd.add("GitLab CI")
+
     if (repo_root / "Jenkinsfile").exists():
         ci_cd.add("Jenkins")
+
     if (repo_root / "Dockerfile").exists():
-        ci_cd.add("Docker")
+        infrastructure.add("Docker")
+    if (repo_root / "docker-compose.yml").exists() or (
+        repo_root / "docker-compose.yaml"
+    ).exists():
+        infrastructure.add("Docker")
+
+    if any(
+        f.suffix in {".yaml", ".yml"} and "kind:" in f.read_text(errors="ignore")
+        for f in all_files
+    ):
+        infrastructure.add("Kubernetes")
+
+    if any(f.suffix == ".tf" for f in all_files):
+        infrastructure.add("Terraform")
 
     return {
         "languages": sorted(languages),
         "frameworks": sorted(frameworks),
         "databases": sorted(databases),
         "ci_cd": sorted(ci_cd),
+        "infrastructure": sorted(infrastructure),
     }
 
 
