@@ -1,3 +1,4 @@
+import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import Chat from "@/components/Chat";
 import TerminalLogs from "@/components/TerminalLogs";
@@ -25,6 +26,7 @@ export default async function Repository({
 }) {
   const { id } = await params;
   const repo = await GetRepository(Number(id));
+  const guide = await GetGuide(repo.id);
 
   const isReady = repo.status === "ready";
 
@@ -219,6 +221,30 @@ export default async function Repository({
 
                 <div>
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
+                    <DatabaseIcon size={12} /> Infrastructure
+                  </h3>
+                  {repo.detected_stack?.infrastructure?.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {repo.detected_stack.infrastructure?.map(
+                        (tool: string, i: number) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                          >
+                            {tool}
+                          </span>
+                        ),
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-(--muted-foreground)/50 italic">
+                      None detected
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
                     <GitBranchIcon size={12} />
                     CI/CD And Infra
                   </h3>
@@ -231,6 +257,31 @@ export default async function Repository({
                             className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
                           >
                             {tool}
+                          </span>
+                        ),
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-(--muted-foreground)/50 italic">
+                      None detected
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--primary) mb-1.5 flex items-center gap-1.5">
+                    <DatabaseIcon size={12} /> External
+                  </h3>
+                  {guide?.architecture_brief?.external_integrations?.length >
+                  0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {guide?.architecture_brief?.external_integrations?.map(
+                        (tool: string, i: number) => (
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                          >
+                            {tool.charAt(0).toUpperCase() + tool.slice(1)}
                           </span>
                         ),
                       )}

@@ -11,6 +11,7 @@ export default interface Repository {
     databases: string[];
     languages: string[];
     frameworks: string[];
+    infrastructure: string[];
   };
   entry_points: unknown;
   created_at: Date;
