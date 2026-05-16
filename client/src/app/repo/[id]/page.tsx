@@ -28,9 +28,10 @@ export default async function Repository({
 }) {
   const { id } = await params;
   const repo = await GetRepository(Number(id));
-  const guide = await GetGuide(repo.id);
 
   const isReady = repo.status === "ready";
+
+  const guide = isReady ? await GetGuide(repo.id) : null;
 
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value || "";
@@ -276,8 +277,8 @@ export default async function Repository({
                   <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--primary) mb-1.5 flex items-center gap-1.5">
                     <DatabaseIcon size={12} /> External
                   </h3>
-                  {guide?.architecture_brief?.external_integrations?.length >
-                  0 ? (
+                  {(guide?.architecture_brief?.external_integrations?.length ??
+                    0) > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                       {guide?.architecture_brief?.external_integrations?.map(
                         (tool: string, i: number) => (
