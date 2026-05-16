@@ -10,28 +10,26 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
     paths: dict[str, str] = {}
 
     for config_name in ("tsconfig.json", "jsconfig.json"):
-        for config_file in root.rglob(config_name):
-            if "node_modules" in config_file.parts:
-                continue
-            try:
-                data = json.loads(config_file.read_text(errors="ignore"))
-                compiler_options = data.get("compilerOptions", {})
-                base_url = compiler_options.get("baseUrl", ".")
-                raw_paths = compiler_options.get("paths", {})
-                for alias, targets in raw_paths.items():
-                    if targets:
-                        abs_target = (
-                            config_file.parent / base_url / targets[0].rstrip("*")
-                        ).resolve()
-                        try:
-                            rel_target = str(
-                                abs_target.relative_to(root.resolve())
-                            ).replace("\\", "/")
-                        except ValueError:
-                            continue
-                        paths[alias.rstrip("*")] = rel_target
-            except Exception:
-                pass
+        config_file = root / config_name
+        if not config_file.exists():
+            continue
+        try:
+            data = json.loads(config_file.read_text(errors="ignore"))
+            compiler_options = data.get("compilerOptions", {})
+            base_url = compiler_options.get("baseUrl", ".")
+            raw_paths = compiler_options.get("paths", {})
+            for alias, targets in raw_paths.items():
+                if targets:
+                    abs_target = (root / base_url / targets[0].rstrip("*")).resolve()
+                    try:
+                        rel_target = str(
+                            abs_target.relative_to(root.resolve())
+                        ).replace("\\", "/")
+                    except ValueError:
+                        continue
+                    paths[alias.rstrip("*")] = rel_target
+        except Exception:
+            pass
 
     return paths
 
