@@ -13,6 +13,11 @@ from uuid import UUID
 import git
 from app.models import AstSymbol, Dependency, File, Repository
 from app.services.embedder import generate_embeddings
+from app.services.import_resolver import (
+    load_ts_paths,
+    load_workspace_map,
+    resolve_import,
+)
 from app.services.parser import parse_file
 from sqlalchemy.orm import Session
 
@@ -211,7 +216,7 @@ def process_repository_files(
         f"Stored {processed} files in DB.",
     )
 
-    dep_count = resolve_dependencies(db, repo.id)
+    dep_count = resolve_dependencies(db, repo.id, str(repo_root))
     _publish_log(
         redis_client,
         str(repo.id),
@@ -279,16 +284,34 @@ def embed_repository_symbols(
     return count
 
 
-def resolve_dependencies(db: Session, repo_id: uuid.UUID) -> int:
+def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int:
     files = db.query(File).filter(File.repository_id == repo_id).all()
 
-    normalized_paths: dict[str, File] = {}
+    full_stem_map: dict[str, File] = {}
+    short_stem_map: dict[str, list[File]] = {}
+
     for f in files:
         normalized = f.path.replace("\\", "/")
         stem = normalized.rsplit(".", 1)[0]
-        normalized_paths[stem] = f
+        full_stem_map[stem] = f
+
         filename_stem = stem.split("/")[-1]
-        normalized_paths.setdefault(filename_stem, f)
+        short_stem_map.setdefault(filename_stem, []).append(f)
+
+    index_map: dict[str, File] = {}
+    for f in files:
+        normalized = f.path.replace("\\", "/")
+        stem = normalized.rsplit(".", 1)[0]
+        if stem.split("/")[-1] == "index":
+            dir_path = "/".join(stem.split("/")[:-1])
+            index_map[dir_path] = f
+
+    ts_paths = load_ts_paths(repo_root)
+    workspace_map = load_workspace_map(repo_root)
+
+    file_language: dict[uuid.UUID, str] = {f.id: (f.language or "") for f in files}
+
+    file_id_to_path: dict[uuid.UUID, str] = {f.id: f.path for f in files}
 
     imports = (
         db.query(AstSymbol)
@@ -305,53 +328,72 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID) -> int:
         .filter(AstSymbol.kind.in_(["function", "class", "method"]))
         .all()
     )
+
     file_id_to_symbols: dict[uuid.UUID, list[AstSymbol]] = {}
+    symbol_name_map: dict[tuple[uuid.UUID, str], AstSymbol] = {}
     for s in symbols:
         file_id_to_symbols.setdefault(s.file_id, []).append(s)
+        if s.name:
+            symbol_name_map[(s.file_id, s.name)] = s
 
     deps_to_insert = []
+    seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
     count = 0
 
     for imp in imports:
         if not imp.name or imp.name in ("<anonymous>", ""):
             continue
 
-        module_path = imp.name.replace("\\", "/").replace(".", "/").lstrip("./").strip()
-
-        for noise in (
-            " as aioredis",
-            " as ",
-        ):
-            if noise in module_path:
-                module_path = module_path.split(noise)[0].strip()
-
-        if not module_path:
+        language = file_language.get(imp.file_id, "")
+        importing_file = file_id_to_path.get(imp.file_id)
+        if not importing_file:
             continue
 
-        candidates = [
-            module_path,
-            module_path.split("/")[-1],
-        ]
+        resolved = resolve_import(
+            language=language,
+            import_name=imp.name,
+            importing_file=importing_file,
+            repo_root=repo_root,
+            ts_paths=ts_paths,
+            workspace_map=workspace_map,
+        )
 
-        matched_file: File | None = None
-        for candidate in candidates:
-            if candidate in normalized_paths:
-                target_file = normalized_paths[candidate]
-                if target_file.id != imp.file_id:
-                    matched_file = target_file
-                    break
+        if not resolved:
+            continue
+
+        matched_file: File | None = full_stem_map.get(resolved)
 
         if not matched_file:
+            matched_file = index_map.get(resolved)
+
+        if not matched_file:
+            short_stem = resolved.split("/")[-1]
+            candidates = short_stem_map.get(short_stem, [])
+            if len(candidates) == 1:
+                matched_file = candidates[0]
+
+        if not matched_file or matched_file.id == imp.file_id:
             continue
 
         targets = file_id_to_symbols.get(matched_file.id, [])
         if not targets:
             continue
 
+        last_segment = imp.name.split("/")[-1]
+        imported_name = last_segment.split(".")[-1].strip("_")
+        target_symbol = (
+            symbol_name_map.get((matched_file.id, imported_name)) or targets[0]
+        )
+
+        edge = (imp.id, target_symbol.id)
+        if edge in seen:
+            continue
+        seen.add(edge)
+
         deps_to_insert.append(
             Dependency(
                 source_symbol_id=imp.id,
-                target_symbol_id=targets[0].id,
+                target_symbol_id=target_symbol.id,
                 dep_type="imports",
             )
         )
