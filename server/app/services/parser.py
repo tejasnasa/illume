@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".py": "python",
     ".js": "javascript",
-    ".jsx": "javascript",
+    ".jsx": "jsx",
     ".ts": "typescript",
-    ".tsx": "typescript",
+    ".tsx": "tsx",
     ".go": "go",
     ".rs": "rust",
     ".java": "java",
@@ -53,6 +53,16 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
         "export_statement": "function",
     },
     "tsx": {
+        "function_declaration": "function",
+        "function_expression": "function",
+        "arrow_function": "function",
+        "class_declaration": "class",
+        "import_statement": "import",
+        "export_statement": "function",
+        "interface_declaration": "class",
+        "type_alias_declaration": "class",
+    },
+    "jsx": {
         "function_declaration": "function",
         "function_expression": "function",
         "arrow_function": "function",
@@ -154,10 +164,6 @@ def _extract_name(node, source_bytes: bytes) -> str:
             return name if name else "<anonymous>"
 
         for child in node.children:
-            if child.type in ("dotted_name", "aliased_import", "identifier"):
-                return source_bytes[child.start_byte : child.end_byte].decode(
-                    "utf-8", errors="replace"
-                )
             if child.type == "string":
                 raw = source_bytes[child.start_byte : child.end_byte].decode(
                     "utf-8", errors="replace"
@@ -172,6 +178,12 @@ def _extract_name(node, source_bytes: bytes) -> str:
                         ].decode("utf-8", errors="replace")
                         name = raw.strip("\"'`")
                         return name if name else "<anonymous>"
+
+        for child in node.children:
+            if child.type in ("dotted_name", "aliased_import", "identifier"):
+                return source_bytes[child.start_byte : child.end_byte].decode(
+                    "utf-8", errors="replace"
+                )
 
     name_node = node.child_by_field_name("name")
     if name_node:

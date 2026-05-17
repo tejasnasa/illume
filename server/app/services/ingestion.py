@@ -385,11 +385,12 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
                 lang = language.lower()
                 if lang == "python":
                     filtered = [c for c in candidates if (c.language or "") == "python"]
-                elif lang in ("javascript", "typescript"):
+                elif lang in ("javascript", "typescript", "tsx", "jsx"):
                     filtered = [
                         c
                         for c in candidates
-                        if (c.language or "") in ("javascript", "typescript")
+                        if (c.language or "")
+                        in ("javascript", "typescript", "tsx", "jsx")
                     ]
                 else:
                     filtered = candidates

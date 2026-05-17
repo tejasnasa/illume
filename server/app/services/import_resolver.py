@@ -20,7 +20,9 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
                 raw_paths = compiler_options.get("paths", {})
                 for alias, targets in raw_paths.items():
                     if targets:
-                        abs_target = (config_file.parent / base_url / targets[0].rstrip("*")).resolve()
+                        abs_target = (
+                            config_file.parent / base_url / targets[0].rstrip("*")
+                        ).resolve()
                         try:
                             rel_target = str(
                                 abs_target.relative_to(root.resolve())
@@ -69,7 +71,7 @@ def resolve_import(
         return None
     if language == "python":
         return _resolve_python_import(import_name, importing_file, repo_root)
-    elif language in ("javascript", "typescript"):
+    elif language in ("javascript", "typescript", "tsx", "jsx"):
         return _resolve_js_import(
             import_name, importing_file, repo_root, ts_paths, workspace_map
         )
@@ -121,7 +123,7 @@ def _resolve_js_import(
     if workspace_map:
         for pkg_name, pkg_dir in workspace_map.items():
             if import_name == pkg_name or import_name.startswith(pkg_name + "/"):
-                remainder = import_name[len(pkg_name):]
+                remainder = import_name[len(pkg_name) :]
                 return (pkg_dir + remainder).lstrip("/")
 
     if ts_paths:
