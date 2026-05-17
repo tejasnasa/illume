@@ -437,40 +437,21 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
         imported_name = last_segment.split(".")[-1].strip("_")
         target_symbol = symbol_name_map.get((matched_file.id, imported_name))
         if not target_symbol:
-            if len(targets) == 1:
-                target_symbol = targets[0]
-            else:
-                logger.debug(
-                    "No symbol match for '%s' in %s (%d candidates), dropping edge",
-                    imported_name,
-                    matched_file.path,
-                    len(targets),
-                )
-                continue
+            logger.debug(
+                "No symbol match for '%s' in %s, falling back to first symbol",
+                imported_name,
+                matched_file.path,
+            )
+            target_symbol = targets[0]
 
-        source_candidates = file_id_to_symbols.get(imp.file_id, [])
-        if not source_candidates:
-            continue
-
-        if len(source_candidates) == 1:
-            source_symbol = source_candidates[0]
-        else:
-            file_stem = importing_file.split("/")[-1].rsplit(".", 1)[0]
-            source_symbol = symbol_name_map.get((imp.file_id, file_stem))
-            if not source_symbol:
-                source_symbol = max(
-                    source_candidates,
-                    key=lambda s: (s.end_line or 0) - (s.start_line or 0),
-                )
-
-        edge = (source_symbol.id, target_symbol.id)
+        edge = (imp.file_id, matched_file.id)
         if edge in seen:
             continue
         seen.add(edge)
 
         deps_to_insert.append(
             Dependency(
-                source_symbol_id=source_symbol.id,
+                source_symbol_id=imp.id,
                 target_symbol_id=target_symbol.id,
                 dep_type="imports",
             )

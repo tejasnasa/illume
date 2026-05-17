@@ -117,9 +117,6 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
                 .join(File, AstSymbol.file_id == File.id)
                 .filter(File.repository_id == repo_id)
                 .filter(AstSymbol.kind.in_(["function", "class"]))
-                .filter(AstSymbol.name != "<anonymous>")
-                .filter(AstSymbol.name != "")
-                .filter(AstSymbol.name.isnot(None))
             )
         )
         .scalars()
@@ -133,7 +130,28 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
             "metadata": {"total_nodes": 0, "total_edges": 0, "clusters": 0},
         }
 
+    all_symbols = (
+        (
+            await db.execute(
+                select(AstSymbol)
+                .join(File, AstSymbol.file_id == File.id)
+                .filter(File.repository_id == repo_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    all_symbol_ids = {s.id for s in all_symbols}
     node_symbol_ids = {s.id for s in node_symbols}
+
+    file_to_node_ids: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for s in node_symbols:
+        file_to_node_ids[s.file_id].append(s.id)
+
+    import_symbol_to_file: dict[uuid.UUID, uuid.UUID] = {
+        s.id: s.file_id for s in all_symbols if s.kind == "import"
+    }
 
     file_ids = {s.file_id for s in node_symbols}
     files = (
@@ -146,21 +164,17 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
             "id": str(s.id),
             "label": s.name,
             "path": file_map[s.file_id].path if s.file_id in file_map else "unknown",
-            "group": (
-                _parent_dir(file_map[s.file_id].path)
-                if s.file_id in file_map
-                else "unknown"
-            ),
+            "group": _parent_dir(file_map[s.file_id].path)
+            if s.file_id in file_map
+            else "unknown",
             "kind": s.kind,
-            "loc": (
-                (s.end_line - s.start_line + 1) if s.start_line and s.end_line else 0
-            ),
+            "loc": (s.end_line - s.start_line + 1)
+            if s.start_line and s.end_line
+            else 0,
             "complexity": s.cyclomatic_complexity or 0,
-            "criticality": (
-                file_map[s.file_id].criticality or "medium"
-                if s.file_id in file_map
-                else "medium"
-            ),
+            "criticality": file_map[s.file_id].criticality or "medium"
+            if s.file_id in file_map
+            else "medium",
             "criticality_score": _CRITICALITY_SCORE.get(
                 file_map[s.file_id].criticality if s.file_id in file_map else None,
                 50.0,
@@ -173,8 +187,8 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
         (
             await db.execute(
                 select(Dependency)
-                .filter(Dependency.source_symbol_id.in_(node_symbol_ids))
-                .filter(Dependency.target_symbol_id.in_(node_symbol_ids))
+                .filter(Dependency.source_symbol_id.in_(all_symbol_ids))
+                .filter(Dependency.target_symbol_id.in_(all_symbol_ids))
             )
         )
         .scalars()
@@ -189,10 +203,22 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
         tgt_id = d.target_symbol_id
 
         if src_id not in node_symbol_ids:
-            continue
+            src_file_id = import_symbol_to_file.get(src_id)
+            if not src_file_id:
+                continue
+            candidates = file_to_node_ids.get(src_file_id, [])
+            if not candidates:
+                continue
+            src_id = candidates[0]
 
         if tgt_id not in node_symbol_ids:
-            continue
+            tgt_file_id = import_symbol_to_file.get(tgt_id)
+            if not tgt_file_id:
+                continue
+            candidates = file_to_node_ids.get(tgt_file_id, [])
+            if not candidates:
+                continue
+            tgt_id = candidates[0]
 
         if src_id == tgt_id:
             continue
