@@ -10,7 +10,9 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
     paths: dict[str, str] = {}
 
     for config_name in ("tsconfig.json", "jsconfig.json"):
-        config_file = root / config_name
+        for config_file in root.rglob(config_name):
+            if "node_modules" in config_file.parts:
+                continue
         if not config_file.exists():
             continue
         try:
