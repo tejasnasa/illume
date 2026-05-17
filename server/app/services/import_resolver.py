@@ -20,7 +20,7 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
             raw_paths = compiler_options.get("paths", {})
             for alias, targets in raw_paths.items():
                 if targets:
-                    abs_target = (root / base_url / targets[0].rstrip("*")).resolve()
+                    abs_target = (config_file.parent / base_url / targets[0].rstrip("*")).resolve()
                     try:
                         rel_target = str(
                             abs_target.relative_to(root.resolve())

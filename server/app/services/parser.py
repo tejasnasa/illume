@@ -156,6 +156,14 @@ def _extract_name(node, source_bytes: bytes) -> str:
                 )
                 name = raw.strip("\"'`").lstrip("./")
                 return name if name else "<anonymous>"
+            if child.type == "from_clause":
+                for subchild in child.children:
+                    if subchild.type == "string":
+                        raw = source_bytes[
+                            subchild.start_byte : subchild.end_byte
+                        ].decode("utf-8", errors="replace")
+                        name = raw.strip("\"'`").lstrip("./")
+                        return name if name else "<anonymous>"
 
     name_node = node.child_by_field_name("name")
     if name_node:
