@@ -67,13 +67,13 @@ def resolve_import(
 ) -> str | None:
     if not import_name or import_name in ("<anonymous>", ""):
         return None
-    if language == "Python":
+    if language == "python":
         return _resolve_python_import(import_name, importing_file, repo_root)
-    elif language in ("JavaScript", "TypeScript"):
+    elif language in ("javascript", "typescript"):
         return _resolve_js_import(
             import_name, importing_file, repo_root, ts_paths, workspace_map
         )
-    elif language == "Java":
+    elif language == "java":
         return _resolve_java_import(import_name)
     else:
         return _resolve_generic_import(import_name, importing_file, repo_root)
