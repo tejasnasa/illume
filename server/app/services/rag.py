@@ -50,23 +50,16 @@ async def _embed_query(client: AsyncOpenAI, query: str) -> list[float]:
 
 
 async def _vector_search(db: AsyncSession, repository_id, query_vector, top_k=TOP_K):
-    async def query_type(source_type, limit):
-        result = await db.execute(
-            select(Embedding)
-            .filter(
-                Embedding.repository_id == repository_id,
-                Embedding.source_type == source_type,
-            )
-            .order_by(Embedding.embedding.cosine_distance(query_vector))
-            .limit(limit)
+    result = await db.execute(
+        select(Embedding)
+        .filter(
+            Embedding.repository_id == repository_id,
+            Embedding.embedding.cosine_distance(query_vector) < 0.7,
         )
-        return result.scalars().all()
-
-    symbols = await query_type("symbol", 6)
-    commits = await query_type("commit", 2)
-    prs = await query_type("pull_request", 1)
-    docs = await query_type("document", 1)
-    return list(symbols) + list(commits) + list(prs) + list(docs)
+        .order_by(Embedding.embedding.cosine_distance(query_vector))
+        .limit(top_k)
+    )
+    return result.scalars().all()
 
 
 async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceReference:
@@ -161,7 +154,7 @@ async def answer_question(
     logger.info(f"Embedding query for repo {repository_id}: {query!r}")
     query_vector = await _embed_query(client, query)
 
-    chunks = await _vector_search(db, repository_id, query_vector)
+    chunks = await _vector_search(db, repository_id, query_vector, 10)
     logger.info(f"Retrieved {len(chunks)} chunks from pgvector")
 
     if not chunks:
