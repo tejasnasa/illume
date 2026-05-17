@@ -118,8 +118,11 @@ def _resolve_js_import(
     ts_paths: dict[str, str] | None,
     workspace_map: dict[str, str] | None,
 ) -> str | None:
-    if workspace_map and import_name in workspace_map:
-        return workspace_map[import_name]
+    if workspace_map:
+        for pkg_name, pkg_dir in workspace_map.items():
+            if import_name == pkg_name or import_name.startswith(pkg_name + "/"):
+                remainder = import_name[len(pkg_name):]
+                return (pkg_dir + remainder).lstrip("/")
 
     if ts_paths:
         resolved = _resolve_ts_alias(import_name, ts_paths)
@@ -165,7 +168,7 @@ def _resolve_java_import(import_name: str) -> str | None:
         return None
 
     last = parts[-1]
-    if last == last.upper() or last[0].islower():
+    if last == "*" or last == last.upper() or last[0].islower():
         parts = parts[:-1]
 
     return "/".join(parts) + ".java"

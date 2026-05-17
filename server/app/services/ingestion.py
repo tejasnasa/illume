@@ -377,15 +377,24 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
 
         targets = file_id_to_symbols.get(matched_file.id, [])
         if not targets:
+            logger.debug(
+                "Dropping dependency edge to %s — no symbols extracted (config/type-only file?)",
+                matched_file.path,
+            )
             continue
 
         last_segment = imp.name.split("/")[-1]
         imported_name = last_segment.split(".")[-1].strip("_")
-        target_symbol = (
-            symbol_name_map.get((matched_file.id, imported_name)) or targets[0]
-        )
+        target_symbol = symbol_name_map.get((matched_file.id, imported_name))
+        if not target_symbol:
+            logger.debug(
+                "No symbol match for '%s' in %s, falling back to first symbol",
+                imported_name,
+                matched_file.path,
+            )
+            target_symbol = targets[0]
 
-        edge = (imp.id, target_symbol.id)
+        edge = (imp.file_id, matched_file.id)
         if edge in seen:
             continue
         seen.add(edge)
