@@ -295,6 +295,11 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
         stem = normalized.rsplit(".", 1)[0]
         full_stem_map[stem] = f
 
+        parts = stem.split("/")
+        if len(parts) > 1:
+            alt_stem = "/".join(parts[1:])
+            full_stem_map.setdefault(alt_stem, f)
+
         filename_stem = stem.split("/")[-1]
         short_stem_map.setdefault(filename_stem, []).append(f)
 
@@ -302,9 +307,14 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
     for f in files:
         normalized = f.path.replace("\\", "/")
         stem = normalized.rsplit(".", 1)[0]
-        if stem.split("/")[-1] == "index":
+        if stem.split("/")[-1] in ("index", "__init__"):
             dir_path = "/".join(stem.split("/")[:-1])
             index_map[dir_path] = f
+
+            dir_parts = dir_path.split("/")
+            if len(dir_parts) > 1:
+                alt_dir = "/".join(dir_parts[1:])
+                index_map.setdefault(alt_dir, f)
 
     ts_paths = load_ts_paths(repo_root)
     workspace_map = load_workspace_map(repo_root)
@@ -371,6 +381,45 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
             candidates = short_stem_map.get(short_stem, [])
             if len(candidates) == 1:
                 matched_file = candidates[0]
+            elif len(candidates) > 1:
+                lang = language.lower()
+                if lang == "python":
+                    filtered = [c for c in candidates if (c.language or "") == "python"]
+                elif lang in ("javascript", "typescript"):
+                    filtered = [
+                        c
+                        for c in candidates
+                        if (c.language or "") in ("javascript", "typescript")
+                    ]
+                else:
+                    filtered = candidates
+
+                if not filtered:
+                    filtered = candidates
+
+                if len(filtered) == 1:
+                    matched_file = filtered[0]
+                elif len(filtered) > 1:
+                    best: File | None = None
+                    best_score = 0
+                    for c in filtered:
+                        c_stem = c.path.replace("\\", "/").rsplit(".", 1)[0]
+                        if c_stem.endswith(resolved):
+                            matched_file = c
+                            break
+                        r_parts = resolved.split("/")
+                        c_parts = c_stem.split("/")
+                        score = 0
+                        for rp, cp in zip(reversed(r_parts), reversed(c_parts)):
+                            if rp == cp:
+                                score += 1
+                            else:
+                                break
+                        if score > best_score:
+                            best_score = score
+                            best = c
+                    if not matched_file and best and best_score > 0:
+                        matched_file = best
 
         if not matched_file or matched_file.id == imp.file_id:
             continue

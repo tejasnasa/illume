@@ -145,6 +145,14 @@ def _extract_name(node, source_bytes: bytes) -> str:
                 break
 
     if node.type in ("import_statement", "import_from_statement"):
+        source_node = node.child_by_field_name("source")
+        if source_node:
+            raw = source_bytes[source_node.start_byte : source_node.end_byte].decode(
+                "utf-8", errors="replace"
+            )
+            name = raw.strip("\"'`")
+            return name if name else "<anonymous>"
+
         for child in node.children:
             if child.type in ("dotted_name", "aliased_import", "identifier"):
                 return source_bytes[child.start_byte : child.end_byte].decode(
