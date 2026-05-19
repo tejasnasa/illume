@@ -75,6 +75,11 @@ def load_workspace_map(repo_root: str) -> dict[str, str]:
                         entry = clean_target.rsplit(".", 1)[0]
                         workspace_map[name] = f"{pkg_dir}/{entry}"
                         has_root_export = True
+                        src_dir = str(Path(clean_target).parent)
+                        if src_dir and src_dir != ".":
+                            workspace_map[f"{name}/"] = f"{pkg_dir}/{src_dir}/"
+                        else:
+                            workspace_map[f"{name}/"] = f"{pkg_dir}/"
                     elif "*" in pattern:
                         pat_prefix = pattern.lstrip("./").split("*")[0]
                         tgt_prefix = clean_target.split("*")[0]
@@ -93,6 +98,11 @@ def load_workspace_map(repo_root: str) -> dict[str, str]:
                         entry.replace("dist/", "src/", 1) if "dist/" in entry else entry
                     )
                     workspace_map[name] = f"{pkg_dir}/{src_entry}"
+                    src_dir = str(Path(src_entry).parent)
+                    if src_dir and src_dir != ".":
+                        workspace_map[f"{name}/"] = f"{pkg_dir}/{src_dir}/"
+                    else:
+                        workspace_map[f"{name}/"] = f"{pkg_dir}/"
                 else:
                     workspace_map[name] = pkg_dir
 
