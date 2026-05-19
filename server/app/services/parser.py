@@ -261,10 +261,14 @@ def parse_file(file_path: Path) -> ParsedFile | None:
         node = nodes_to_visit.pop()
 
         actual_node = node
+        override_kind = None
+        override_name = None
         if node.type == "export_statement":
+            found_decl = False
             for child in node.children:
                 if child.type in ("function_declaration", "class_declaration"):
                     actual_node = child
+                    found_decl = True
                     break
                 elif child.type == "lexical_declaration":
                     for decl in child.children:
@@ -272,9 +276,32 @@ def parse_file(file_path: Path) -> ParsedFile | None:
                             for val in decl.children:
                                 if val.type in ("arrow_function", "function"):
                                     actual_node = val
+                                    found_decl = True
                                     break
+            if not found_decl:
+                for child in node.children:
+                    if child.type == "string":
+                        raw = source_bytes[child.start_byte : child.end_byte].decode(
+                            "utf-8", errors="replace"
+                        )
+                        override_kind = "import"
+                        override_name = raw.strip("\"'`")
+                        break
 
-        if actual_node.type in symbol_types:
+        if override_kind:
+            symbols.append(
+                ParsedSymbol(
+                    name=override_name or "<anonymous>",
+                    kind=override_kind,
+                    start_line=node.start_point[0] + 1,
+                    end_line=node.end_point[0] + 1,
+                    source_code=source_bytes[node.start_byte : node.end_byte].decode(
+                        "utf-8", errors="replace"
+                    ),
+                    cyclomatic_complexity=0,
+                )
+            )
+        elif actual_node.type in symbol_types:
             kind = symbol_types[actual_node.type]
             name = _extract_name(actual_node, source_bytes)
             source_code = source_bytes[

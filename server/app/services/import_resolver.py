@@ -37,10 +37,6 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
 
 
 def load_workspace_map(repo_root: str) -> dict[str, str]:
-    """
-    Scan all package.json files to build a map of workspace package name → directory.
-    e.g. {"@repo/ui": "packages/ui", "@repo/config": "packages/config"}
-    """
     root = Path(repo_root)
     workspace_map: dict[str, str] = {}
 
@@ -50,9 +46,56 @@ def load_workspace_map(repo_root: str) -> dict[str, str]:
         try:
             data = json.loads(pkg_file.read_text(errors="ignore"))
             name = data.get("name")
-            if name:
-                pkg_dir = str(pkg_file.parent.relative_to(root)).replace("\\", "/")
-                workspace_map[name] = pkg_dir
+            if not name:
+                continue
+            pkg_dir = str(pkg_file.parent.relative_to(root)).replace("\\", "/")
+
+            exports = data.get("exports", {})
+            has_root_export = False
+
+            if isinstance(exports, dict):
+                for pattern, target in exports.items():
+                    if isinstance(target, dict):
+                        resolved = (
+                            target.get("import")
+                            or target.get("types")
+                            or target.get("default")
+                        )
+                    elif isinstance(target, str):
+                        resolved = target
+                    else:
+                        continue
+
+                    if not resolved:
+                        continue
+
+                    clean_target = resolved.lstrip("./")
+
+                    if pattern == ".":
+                        entry = clean_target.rsplit(".", 1)[0]
+                        workspace_map[name] = f"{pkg_dir}/{entry}"
+                        has_root_export = True
+                    elif "*" in pattern:
+                        pat_prefix = pattern.lstrip("./").split("*")[0]
+                        tgt_prefix = clean_target.split("*")[0]
+                        key = f"{name}/{pat_prefix}" if pat_prefix else f"{name}/"
+                        workspace_map[key] = f"{pkg_dir}/{tgt_prefix}"
+                    else:
+                        clean_pattern = pattern.lstrip("./")
+                        entry = clean_target.rsplit(".", 1)[0]
+                        workspace_map[f"{name}/{clean_pattern}"] = f"{pkg_dir}/{entry}"
+
+            if not has_root_export:
+                main = data.get("main", "")
+                if main:
+                    entry = main.lstrip("./").rsplit(".", 1)[0]
+                    src_entry = (
+                        entry.replace("dist/", "src/", 1) if "dist/" in entry else entry
+                    )
+                    workspace_map[name] = f"{pkg_dir}/{src_entry}"
+                else:
+                    workspace_map[name] = pkg_dir
+
         except Exception:
             pass
 
@@ -121,10 +164,14 @@ def _resolve_js_import(
     workspace_map: dict[str, str] | None,
 ) -> str | None:
     if workspace_map:
-        for pkg_name, pkg_dir in workspace_map.items():
-            if import_name == pkg_name or import_name.startswith(pkg_name + "/"):
-                remainder = import_name[len(pkg_name) :]
-                return (pkg_dir + remainder).lstrip("/")
+        best_key = ""
+        for pkg_name in workspace_map:
+            if import_name == pkg_name or import_name.startswith(pkg_name):
+                if len(pkg_name) > len(best_key):
+                    best_key = pkg_name
+        if best_key:
+            remainder = import_name[len(best_key) :]
+            return (workspace_map[best_key] + remainder).lstrip("/")
 
     if ts_paths:
         resolved = _resolve_ts_alias(import_name, ts_paths)
