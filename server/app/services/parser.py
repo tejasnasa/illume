@@ -1,3 +1,4 @@
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".py": "python",
+    ".ipynb": "python",
     ".js": "javascript",
     ".jsx": "jsx",
     ".ts": "typescript",
@@ -232,17 +234,9 @@ def _count_complexity(node) -> int:
     return count
 
 
-def parse_file(file_path: Path) -> ParsedFile | None:
-    language = get_language(file_path)
-    if not language:
-        return None
-
-    try:
-        source_bytes = file_path.read_bytes()
-    except (OSError, PermissionError) as e:
-        logger.warning("Could not read %s: %s", file_path, e)
-        return None
-
+def _parse_source(
+    source_bytes: bytes, file_path: Path, language: str
+) -> ParsedFile | None:
     try:
         parser = get_parser(cast(SupportedLanguage, language))
         tree = parser.parse(source_bytes)
@@ -331,3 +325,47 @@ def parse_file(file_path: Path) -> ParsedFile | None:
         loc=loc,
         symbols=symbols,
     )
+
+
+def parse_notebook(file_path: Path) -> ParsedFile | None:
+    try:
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+        nb_data = json.loads(content)
+    except Exception as e:
+        logger.warning("Failed to parse notebook JSON %s: %s", file_path, e)
+        return None
+
+    cells = nb_data.get("cells", [])
+    code_pieces = []
+    for cell in cells:
+        if cell.get("cell_type") == "code":
+            source = cell.get("source", "")
+            if isinstance(source, list):
+                code_text = "".join(source)
+            else:
+                code_text = str(source)
+            if code_text:
+                if not code_text.endswith("\n"):
+                    code_text += "\n"
+                code_pieces.append(code_text)
+
+    python_source = "".join(code_pieces)
+    source_bytes = python_source.encode("utf-8")
+    return _parse_source(source_bytes, file_path, "python")
+
+
+def parse_file(file_path: Path) -> ParsedFile | None:
+    if file_path.suffix == ".ipynb":
+        return parse_notebook(file_path)
+
+    language = get_language(file_path)
+    if not language:
+        return None
+
+    try:
+        source_bytes = file_path.read_bytes()
+    except (OSError, PermissionError) as e:
+        logger.warning("Could not read %s: %s", file_path, e)
+        return None
+
+    return _parse_source(source_bytes, file_path, language)

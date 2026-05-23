@@ -38,6 +38,7 @@ CRITICAL_PATH_PATTERNS = [
 
 SOURCE_EXTENSIONS = {
     ".py",
+    ".ipynb",
     ".ts",
     ".tsx",
     ".js",
