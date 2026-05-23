@@ -577,6 +577,7 @@ def detect_stack(repo_root: Path) -> dict:
 
     ext_map = {
         ".py": "Python",
+        ".ipynb": "Python",
         ".ts": "TypeScript",
         ".tsx": "TypeScript",
         ".js": "JavaScript",
@@ -644,9 +645,30 @@ def detect_stack(repo_root: Path) -> dict:
                 pass
 
     for f in all_files:
-        if f.suffix == ".py":
+        if f.suffix in (".py", ".ipynb"):
             try:
-                text = f.read_text().lower()
+                if f.suffix == ".ipynb":
+                    try:
+                        content = f.read_text(encoding="utf-8", errors="replace")
+                        nb_data = json.loads(content)
+                        cells = nb_data.get("cells", [])
+                        code_pieces = []
+                        for cell in cells:
+                            if cell.get("cell_type") == "code":
+                                source = cell.get("source", "")
+                                if isinstance(source, list):
+                                    code_text = "".join(source)
+                                else:
+                                    code_text = str(source)
+                                if code_text:
+                                    if not code_text.endswith("\n"):
+                                        code_text += "\n"
+                                    code_pieces.append(code_text)
+                        text = "".join(code_pieces).lower()
+                    except Exception:
+                        continue
+                else:
+                    text = f.read_text().lower()
 
                 if re.search(
                     r"^\s*(import fastapi|from fastapi[\. ])", text, re.MULTILINE
