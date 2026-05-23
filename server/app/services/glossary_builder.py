@@ -16,7 +16,7 @@ BATCH_SIZE = 25
 
 
 def _get_top_symbols(
-    db: Session, repository_id: uuid.UUID, limit: int = 50
+    db: Session, repository_id: uuid.UUID, limit: int = 200
 ) -> list[Row[tuple[AstSymbol, File]]]:
     return (
         db.query(AstSymbol, File)
