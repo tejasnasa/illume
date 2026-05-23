@@ -23,12 +23,14 @@ export function useChat({ repoId }: { repoId: string }) {
       const id = crypto.randomUUID();
 
       setMessages((prev) => {
-        history = prev
+        const list: any[] = [];
+        prev
           .filter((m) => m.answer !== null)
-          .map((m) => ({
-            question: m.question,
-            answer: m.answer!.answer,
-          }));
+          .forEach((m) => {
+            list.push({ role: "user", content: m.question });
+            list.push({ role: "assistant", content: m.answer!.answer });
+          });
+        history = list;
 
         return [...prev, { id, question, answer: null }];
       });

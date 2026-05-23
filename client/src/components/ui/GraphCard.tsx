@@ -53,6 +53,8 @@ export default function GraphCard({
             className={`px-2.5 py-1 rounded-sm text-[10px] font-bold tracking-wider uppercase border ${
               selectedNode.criticality === "critical"
                 ? "bg-red-500/10 text-red-500 border-red-500/20"
+                : selectedNode.criticality === "caution"
+                ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20"
                 : "bg-green-500/10 text-green-500 border-green-500/20"
             }`}
           >
