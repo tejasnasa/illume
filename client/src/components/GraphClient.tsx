@@ -6,7 +6,9 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   GraphIcon,
+  MagnifyingGlassIcon,
   WarningDiamondIcon,
+  XIcon,
 } from "@phosphor-icons/react/dist/ssr";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -34,6 +36,15 @@ export default function GraphClient({
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [pageIndex, setPageIndex] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const isMatch = (node: any) => {
+    if (!searchQuery.trim()) return false;
+    const query = searchQuery.toLowerCase();
+    const labelMatch = node.label?.toLowerCase().includes(query);
+    const pathMatch = node.path?.toLowerCase().includes(query);
+    return !!(labelMatch || pathMatch);
+  };
 
   const nodeMap = Object.fromEntries(graphData.nodes.map((n) => [n.path, n]));
 
@@ -108,6 +119,12 @@ export default function GraphClient({
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span> Safe
         </div>
+        {searchQuery !== "" && (
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#a855f7]"></span>{" "}
+            Match
+          </div>
+        )}
         <div className="flex items-center gap-2 mt-2 pt-2 border-t border-(--border)">
           Size ∝ LOC
         </div>
@@ -175,6 +192,33 @@ export default function GraphClient({
         />
       )}
 
+      <div className="absolute bottom-4 right-4 z-20 p-2">
+        <form
+          onSubmit={(e) => e.preventDefault()}
+          className="relative w-80 group"
+        >
+          <MagnifyingGlassIcon
+            size={18}
+            className="absolute left-4 top-1/2 -translate-y-1/2 text-(--muted-foreground) group-focus-within:text-(--primary) transition-colors"
+          />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search nodes..."
+            className="w-full bg-(--secondary)/30 border border-(--border) rounded-sm pl-11 pr-12 py-2.5 text-sm outline-none focus:border-(--primary)/50 focus:ring-2 focus:ring-(--primary)/20 transition-all text-(--foreground)"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors"
+            >
+              <XIcon size={14} weight="bold" />
+            </button>
+          )}
+        </form>
+      </div>
+
       <section className="w-full h-full cursor-move">
         <ForceGraph3D
           graphData={graphData as any}
@@ -183,6 +227,7 @@ export default function GraphClient({
           }
           nodeVal={(node: any) => Math.sqrt(node.loc || 10) * 0.5}
           nodeColor={(node: any) => {
+            if (isMatch(node)) return "#a855f7";
             if (node.id === selectedNode?.id) return "#0078ff";
             if (node.criticality === "critical") return "#ef4444";
             if (node.criticality === "caution") return "#facc15";
