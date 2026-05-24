@@ -202,6 +202,30 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
         .all()
     )
 
+    barrel_file_targets: dict[uuid.UUID, list[uuid.UUID]] = defaultdict(list)
+    for d in deps:
+        src_sym = all_symbol_map.get(d.source_symbol_id)
+        tgt_sym = all_symbol_map.get(d.target_symbol_id)
+        if src_sym and tgt_sym and src_sym.file_id not in file_to_node_ids:
+            barrel_file_targets[src_sym.file_id].append(tgt_sym.file_id)
+
+    def _resolve_barrel_target(
+        file_id: uuid.UUID, visited: set[uuid.UUID] | None = None
+    ) -> list[uuid.UUID]:
+        """Follow barrel re-exports to find files with function/class nodes."""
+        if visited is None:
+            visited = set()
+        if file_id in visited:
+            return []
+        visited.add(file_id)
+        candidates = file_to_node_ids.get(file_id, [])
+        if candidates:
+            return candidates
+        result = []
+        for downstream_fid in barrel_file_targets.get(file_id, []):
+            result.extend(_resolve_barrel_target(downstream_fid, visited))
+        return result
+
     seen_edges: set[tuple[str, str]] = set()
     links = []
 
@@ -232,7 +256,9 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
                 continue
             candidates = file_to_node_ids.get(tgt_file_id, [])
             if not candidates:
-                continue
+                candidates = _resolve_barrel_target(tgt_file_id)
+                if not candidates:
+                    continue
             tgt_sym = all_symbol_map.get(d.target_symbol_id)
             tgt_name = tgt_sym.name if tgt_sym else None
             tgt_id = _pick_best_node(candidates, node_symbol_map, target_name=tgt_name)

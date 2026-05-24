@@ -48,7 +48,12 @@ def load_workspace_map(repo_root: str) -> dict[str, str]:
             name = data.get("name")
             if not name:
                 continue
+
             pkg_dir = str(pkg_file.parent.relative_to(root)).replace("\\", "/")
+
+            if "/" not in name and not data.get("exports"):
+                if pkg_dir == "." or not data.get("main"):
+                    continue
 
             exports = data.get("exports", {})
             has_root_export = False

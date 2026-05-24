@@ -347,6 +347,10 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
         if s.name:
             symbol_name_map[(s.file_id, s.name)] = s
 
+    file_id_to_import_symbols: dict[uuid.UUID, list[AstSymbol]] = {}
+    for imp_sym in imports:
+        file_id_to_import_symbols.setdefault(imp_sym.file_id, []).append(imp_sym)
+
     deps_to_insert = []
     seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
     count = 0
@@ -428,10 +432,27 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
 
         targets = file_id_to_symbols.get(matched_file.id, [])
         if not targets:
-            logger.debug(
-                "Dropping dependency edge to %s — no symbols extracted (config/type-only file?)",
-                matched_file.path,
+            barrel_imports = file_id_to_import_symbols.get(matched_file.id, [])
+            if not barrel_imports:
+                logger.debug(
+                    "Dropping dependency edge to %s — no symbols at all",
+                    matched_file.path,
+                )
+                continue
+
+            edge = (imp.file_id, matched_file.id)
+            if edge in seen:
+                continue
+            seen.add(edge)
+
+            deps_to_insert.append(
+                Dependency(
+                    source_symbol_id=imp.id,
+                    target_symbol_id=barrel_imports[0].id,
+                    dep_type="imports",
+                )
             )
+            count += 1
             continue
 
         last_segment = imp.name.split("/")[-1]
