@@ -142,6 +142,9 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
         .all()
     )
 
+    all_symbol_map: dict[uuid.UUID, AstSymbol] = {s.id: s for s in all_symbols}
+    node_symbol_map: dict[uuid.UUID, AstSymbol] = {s.id: s for s in node_symbols}
+
     all_symbol_ids = {s.id for s in all_symbols}
     node_symbol_ids = {s.id for s in node_symbols}
 
@@ -164,17 +167,21 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
             "id": str(s.id),
             "label": s.name,
             "path": file_map[s.file_id].path if s.file_id in file_map else "unknown",
-            "group": _parent_dir(file_map[s.file_id].path)
-            if s.file_id in file_map
-            else "unknown",
+            "group": (
+                _parent_dir(file_map[s.file_id].path)
+                if s.file_id in file_map
+                else "unknown"
+            ),
             "kind": s.kind,
-            "loc": (s.end_line - s.start_line + 1)
-            if s.start_line and s.end_line
-            else 0,
+            "loc": (
+                (s.end_line - s.start_line + 1) if s.start_line and s.end_line else 0
+            ),
             "complexity": s.cyclomatic_complexity or 0,
-            "criticality": file_map[s.file_id].criticality or "medium"
-            if s.file_id in file_map
-            else "medium",
+            "criticality": (
+                file_map[s.file_id].criticality or "medium"
+                if s.file_id in file_map
+                else "medium"
+            ),
             "criticality_score": _CRITICALITY_SCORE.get(
                 file_map[s.file_id].criticality if s.file_id in file_map else None,
                 50.0,
@@ -205,20 +212,30 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
         if src_id not in node_symbol_ids:
             src_file_id = import_symbol_to_file.get(src_id)
             if not src_file_id:
+                src_sym = all_symbol_map.get(src_id)
+                src_file_id = src_sym.file_id if src_sym else None
+            if not src_file_id:
                 continue
             candidates = file_to_node_ids.get(src_file_id, [])
             if not candidates:
                 continue
-            src_id = candidates[0]
+            src_sym = all_symbol_map.get(d.source_symbol_id)
+            src_name = src_sym.name if src_sym else None
+            src_id = _pick_best_node(candidates, node_symbol_map, target_name=src_name)
 
         if tgt_id not in node_symbol_ids:
             tgt_file_id = import_symbol_to_file.get(tgt_id)
+            if not tgt_file_id:
+                tgt_sym = all_symbol_map.get(tgt_id)
+                tgt_file_id = tgt_sym.file_id if tgt_sym else None
             if not tgt_file_id:
                 continue
             candidates = file_to_node_ids.get(tgt_file_id, [])
             if not candidates:
                 continue
-            tgt_id = candidates[0]
+            tgt_sym = all_symbol_map.get(d.target_symbol_id)
+            tgt_name = tgt_sym.name if tgt_sym else None
+            tgt_id = _pick_best_node(candidates, node_symbol_map, target_name=tgt_name)
 
         if src_id == tgt_id:
             continue
@@ -237,6 +254,29 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
             }
         )
 
+    for fid, sym_ids in file_to_node_ids.items():
+        if len(sym_ids) < 2:
+            continue
+        sorted_syms = sorted(
+            sym_ids,
+            key=lambda sid: node_symbol_map[sid].start_line or 0,
+        )
+        for i in range(len(sorted_syms) - 1):
+            a = sorted_syms[i]
+            b = sorted_syms[i + 1]
+            key = (str(a), str(b))
+            if key in seen_edges:
+                continue
+            seen_edges.add(key)
+            links.append(
+                {
+                    "source": str(a),
+                    "target": str(b),
+                    "type": "sibling",
+                    "weight": 1,
+                }
+            )
+
     return {
         "nodes": nodes,
         "links": links,
@@ -252,6 +292,35 @@ async def _build_symbol_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
             ),
         },
     }
+
+
+def _pick_best_node(
+    candidate_ids: list[uuid.UUID],
+    node_symbol_map: dict[uuid.UUID, AstSymbol],
+    target_name: str | None = None,
+) -> uuid.UUID:
+    if target_name and target_name not in ("<anonymous>", ""):
+        for cid in candidate_ids:
+            sym = node_symbol_map.get(cid)
+            if sym and sym.name == target_name:
+                return cid
+        target_lower = target_name.lower()
+        for cid in candidate_ids:
+            sym = node_symbol_map.get(cid)
+            if sym and sym.name and sym.name.lower() == target_lower:
+                return cid
+
+    for cid in candidate_ids:
+        sym = node_symbol_map.get(cid)
+        if sym and sym.kind == "function" and sym.name not in ("<anonymous>", "Props"):
+            return cid
+
+    for cid in candidate_ids:
+        sym = node_symbol_map.get(cid)
+        if sym and sym.kind == "class" and sym.name not in ("<anonymous>", "Props"):
+            return cid
+
+    return candidate_ids[0]
 
 
 def _parent_dir(path: str) -> str:
