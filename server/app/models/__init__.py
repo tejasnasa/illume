@@ -1,4 +1,5 @@
 from app.models.ast_symbol import AstSymbol
+from app.models.chat_message import ChatMessage
 from app.models.code_owner import CodeOwner
 from app.models.commit import Commit
 from app.models.dependency import Dependency
@@ -12,6 +13,7 @@ from app.models.user import User
 
 __all__ = [
     "AstSymbol",
+    "ChatMessage",
     "Dependency",
     "Embedding",
     "File",
