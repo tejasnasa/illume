@@ -141,13 +141,14 @@ export default function TerminalLogs({
                 [{log.time}]
               </span>
             )}
-            <span className="text-(--foreground)/30 shrink-0 select-none">{">"}</span>
+            <span className="text-(--foreground)/30 shrink-0 select-none">
+              {">"}
+            </span>
             <span className={getLogColor(log.type)}>{log.text}</span>
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
-
     </div>
   );
 }

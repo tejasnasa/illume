@@ -1,6 +1,7 @@
 "use client";
 
 import { useChat } from "@/hooks/useChat";
+import { TrashIcon } from "@phosphor-icons/react";
 import { RobotIcon } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 import Button from "./ui/Button";
@@ -8,9 +9,10 @@ import ChatBubble from "./ui/ChatBubble";
 import Textarea from "./ui/Textarea";
 
 export default function Chat({ repoId, url }: { repoId: string; url: string }) {
-  const { messages, isLoading, sendMessage } = useChat({
-    repoId,
-  });
+  const { messages, isLoading, sendMessage, deleteMessage, clearHistory } =
+    useChat({
+      repoId,
+    });
   const [input, setInput] = useState("");
 
   const handleSend = () => {
@@ -33,6 +35,16 @@ export default function Chat({ repoId, url }: { repoId: string; url: string }) {
           <span className="w-2.5 h-2.5 rounded-full bg-(--primary) shadow-[0_0_8px_var(--primary)] animate-pulse" />
           Chat with Codebase
         </h2>
+        {messages.length > 0 && (
+          <button
+            onClick={clearHistory}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-(--muted-foreground) hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 rounded-lg transition duration-200 cursor-pointer"
+            title="Clear Chat History"
+          >
+            <TrashIcon size={14} weight="bold" />
+            Clear Chat
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto flex flex-col gap-4 p-4 min-h-0 custom-scrollbar">
@@ -45,8 +57,16 @@ export default function Chat({ repoId, url }: { repoId: string; url: string }) {
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <ChatBubble key={i} question={msg.question} message={msg.answer} url={url} />
+        {messages.map((msg) => (
+          <ChatBubble
+            key={msg.id}
+            id={msg.id}
+            question={msg.question}
+            message={msg.answer}
+            error={msg.error}
+            url={url}
+            onDelete={deleteMessage}
+          />
         ))}
       </div>
 

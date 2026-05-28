@@ -106,11 +106,9 @@ function GithubLink({ href }: { href: string }) {
 
 export default function CitationCard({
   src,
-  index,
   url,
 }: {
   src: Source;
-  index: number;
   url: string;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -122,7 +120,7 @@ export default function CitationCard({
 
   return (
     <div
-      className={`overflow-hidden rounded-lg border transition-all duration-200 ${
+      className={`overflow-hidden rounded-lg border transition-all duration-200 h-min ${
         expanded
           ? "bg-(--card) border-(--primary)/40 shadow-sm"
           : "bg-(--secondary)/30 border-(--border) hover:border-(--primary)/20"
@@ -133,12 +131,6 @@ export default function CitationCard({
         className="w-full flex items-center justify-between p-2.5 text-left focus:outline-none h-13"
       >
         <div className="flex items-center gap-3 overflow-hidden">
-          <div className="flex items-center justify-center w-6 h-6 rounded-md bg-(--background) border border-(--border) shrink-0">
-            <span className="text-[10px] font-mono font-bold text-(--muted-foreground)">
-              {index + 1}
-            </span>
-          </div>
-
           <div
             className={`flex items-center justify-center w-6 h-6 rounded-md ${config.bg} shrink-0`}
           >
@@ -159,7 +151,7 @@ export default function CitationCard({
           {githubHref && <GithubLink href={githubHref} />}
           <CaretDownIcon
             size={16}
-            className={`text-(--muted-foreground) transition-transform duration-200 shrink-0 ml-2 ${
+            className={`text-(--muted-foreground) transition-transform duration-200 shrink-0 ${
               expanded ? "rotate-180" : ""
             }`}
           />
