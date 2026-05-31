@@ -47,7 +47,7 @@ EXTERNAL_INTEGRATION_PREFIXES = (
     "slack_sdk",
     "shopify",
     "hubspot",
-    "digitalocean"
+    "digitalocean",
 )
 
 
@@ -228,11 +228,23 @@ def _build_narrative_prompt(
     external_integrations: list[str],
     data_flow: list[dict],
     total_files: int,
+    readme_content: str | None = None,
 ) -> str:
+
     lines = [
         f"You are analyzing a software repository called '{repo_name}'.",
         f"It contains {total_files} source files.",
         "",
+    ]
+
+    if readme_content:
+        lines += [
+            "## README",
+            readme_content[:3000],
+            "",
+        ]
+
+    lines += [
         "## Tech Stack",
         f"Languages: {', '.join(detected_stack.get('languages', ['unknown']))}",
         f"Frameworks: {', '.join(detected_stack.get('frameworks', ['none detected']))}",
@@ -323,7 +335,9 @@ def _call_llm_narrative(prompt: str) -> str:
         return ""
 
 
-def generate_brief(db: Session, repo: Repository) -> OnboardingGuide:
+def generate_brief(
+    db: Session, repo: Repository, readme_content: str | None = None
+) -> OnboardingGuide:
     logger.info("brief_generator: starting for repo %s", repo.id)
 
     if not repo:
@@ -406,6 +420,7 @@ def generate_brief(db: Session, repo: Repository) -> OnboardingGuide:
         external_integrations=list(external_integrations),
         data_flow=list(data_flow),
         total_files=len(files),
+        readme_content=readme_content,
     )
 
     narrative = _call_llm_narrative(prompt)

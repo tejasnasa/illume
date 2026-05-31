@@ -83,7 +83,7 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             )
 
             publish("brief_started", "Synthesizing AI architecture brief...")
-            generate_brief(db, repo)
+            generate_brief(db, repo, readme_content=readme_content)
 
             repo.status = "ready"
             db.commit()
