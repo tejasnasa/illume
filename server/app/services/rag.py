@@ -105,6 +105,16 @@ async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceRefer
             pr_title=pr.title if pr else None,
         )
 
+    elif embedding.source_type == "file":
+        file = (
+            await db.execute(select(File).filter(File.id == embedding.file_id))
+        ).scalar_one_or_none()
+        return SourceReference(
+            source_type="file",
+            chunk_text=embedding.chunk_text,
+            file_path=file.path if file else None,
+        )
+
     else:
         return SourceReference(
             source_type="document",
@@ -122,6 +132,8 @@ def _build_prompt(query: str, sources: list[SourceReference]) -> str:
             header = f"[Source {i + 1}] [Commit] {src.commit_hash} by {src.author_name}"
         elif src.source_type == "pull_request":
             header = f"[Source {i + 1}] [PR #{src.pr_number}] {src.pr_title}"
+        elif src.source_type == "file":
+            header = f"[Source {i + 1}] [Code] {src.file_path}"
         else:
             header = f"[Source {i + 1}] [README]"
         context_blocks.append(f"{header}\n{src.chunk_text}")
@@ -129,7 +141,7 @@ def _build_prompt(query: str, sources: list[SourceReference]) -> str:
     context = "\n\n---\n\n".join(context_blocks)
     return f"""You are an expert code assistant analyzing a software repository.
             Answer the user's question using ONLY the context provided below.
-            Context includes code, commit messages, pull requests, and documentation.
+            Context includes code, commit messages, pull requests, files and documentation.
             Be specific — reference file names, function names, line numbers, commit hashes, or PR numbers where relevant.
             If the answer cannot be found in the context, say so clearly.
 

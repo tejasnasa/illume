@@ -302,11 +302,13 @@ def generate_embeddings(
         chunk_text = _build_file_chunk(file.path, file_symbols, annotation)
         if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
             file_chunks.append((file, chunk_text))
+    file_batches = list(_iter_batches(file_chunks, BATCH_SIZE))
+    total_file_batches = len(file_batches)
 
     for batch_idx, batch in enumerate(_iter_batches(file_chunks, BATCH_SIZE)):
         batch_texts = [t for _, t in batch]
         if publish_log:
-            publish_log(f"Embedding files batch {batch_idx + 1}...")
+            publish_log(f"Embedding files batch {batch_idx + 1}/{total_file_batches}...")
         response = client.embeddings.create(
             model="text-embedding-3-small", input=batch_texts
         )

@@ -2,14 +2,15 @@ import ChatMessage from "@/types/chat";
 import {
   CaretDownIcon,
   CodeIcon,
-  FileIcon,
+  FileDocIcon,
+  FileCodeIcon,
   GitCommitIcon,
   GitPullRequestIcon,
 } from "@phosphor-icons/react";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 
-type SourceType = "symbol" | "commit" | "pull_request" | "file";
+type SourceType = "symbol" | "commit" | "pull_request" | "file" | "document";
 type Source = ChatMessage["sources"][number];
 
 const TYPE_CONFIG: Record<
@@ -40,19 +41,25 @@ const TYPE_CONFIG: Record<
     label: "Pull Request",
   },
   file: {
-    icon: FileIcon,
+    icon: FileCodeIcon,
     color: "text-pink-500",
     bg: "bg-pink-500/10",
+    label: "File",
+  },
+  document: {
+    icon: FileDocIcon,
+    color: "text-pink-500",
+    bg: "bg-green-500/10",
     label: "File",
   },
 };
 
 function resolveType(src: Source): SourceType {
-  return (["symbol", "commit", "pull_request"] as SourceType[]).includes(
-    src.source_type as SourceType,
-  )
+  return (
+    ["symbol", "commit", "pull_request", "file"] as SourceType[]
+  ).includes(src.source_type as SourceType)
     ? (src.source_type as SourceType)
-    : "file";
+    : "document";
 }
 
 function resolvePrimaryLabel(type: SourceType, src: Source): string {
@@ -66,6 +73,8 @@ function resolvePrimaryLabel(type: SourceType, src: Source): string {
     case "pull_request":
       return `PR #${src.pr_number}`;
     case "file":
+      return src.file_path ? src.file_path.split("/").pop()! : "File";
+    case "document":
       return src.file_path ? src.file_path.split("/").pop()! : "Source";
   }
 }
@@ -80,14 +89,18 @@ function resolveSubLabel(type: SourceType, src: Source): string {
       return src.pr_title ?? "";
     case "file":
       return src.file_path ?? "";
+    case "document":
+      return src.file_path ?? "";
   }
 }
 
 function resolveGithubHref(src: Source, url: string): string | null {
-  if (src.file_path)
+  if (src.source_type === "symbol")
     return `${url}/blob/master/${src.file_path}#L${src.start_line}-L${src.end_line}`;
-  if (src.commit_hash) return `${url}/commit/${src.commit_hash}`;
-  if (src.pr_number) return `${url}/pull/${src.pr_number}`;
+  if (src.source_type === "file")
+    return `${url}/blob/master/${src.file_path}`;
+  if (src.source_type === "commit") return `${url}/commit/${src.commit_hash}`;
+  if (src.source_type === "pull_request") return `${url}/pull/${src.pr_number}`;
   return null;
 }
 

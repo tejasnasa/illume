@@ -94,6 +94,7 @@ async def reingest_repository(
 
     new_repo = Repository(
         id=repo_id,
+        repo_number=repo.repo_number,
         github_url=repo.github_url,
         name=repo.name,
         user_id=repo.user_id,
