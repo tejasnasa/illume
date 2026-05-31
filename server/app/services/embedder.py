@@ -134,6 +134,7 @@ def generate_embeddings(
     file_path_map: dict[UUID, str] = {f.id: f.path for f in files}
 
     symbol_ids = [s.id for s in symbols]
+    symbol_name_map = {s.id: s.name for s in symbols}
 
     glossary_map = {
         row.symbol_id: row.definition
@@ -149,7 +150,9 @@ def generate_embeddings(
         .filter(Dependency.dep_type == "calls")
         .all()
     ):
-        callers_map[dep.target_symbol_id].append(dep.source_symbol_id)
+        name = symbol_name_map.get(dep.source_symbol_id)
+        if name:
+            callers_map[dep.target_symbol_id].append(name)
 
     callees_map = defaultdict(list)
     for dep in (
@@ -158,7 +161,9 @@ def generate_embeddings(
         .filter(Dependency.dep_type == "calls")
         .all()
     ):
-        callees_map[dep.source_symbol_id].append(dep.target_symbol_id)
+        name = symbol_name_map.get(dep.target_symbol_id)
+        if name:
+            callees_map[dep.source_symbol_id].append(name)
 
     for symbol in symbols:
         file_path = file_path_map.get(symbol.file_id, "unknown")

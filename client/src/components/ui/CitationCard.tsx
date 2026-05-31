@@ -172,17 +172,12 @@ export default function CitationCard({
       </button>
 
       {expanded && src.chunk_text && (
-        <div className="p-3 pt-0 border-t border-(--border) bg-(--background)/50">
-          <div className="mt-2 p-2 rounded bg-(--secondary)/50 border border-(--border) max-h-35 overflow-y-auto custom-scrollbar">
+        <div className="p-2 pt-0 border-t border-(--border) bg-(--background)/50">
+          <div className="mt-2 p-2 rounded bg-(--secondary)/50 border border-(--border) h-35 overflow-y-auto custom-scrollbar">
             <pre className="text-[10px] font-mono text-(--muted-foreground) whitespace-pre-wrap leading-relaxed break-all">
               {src.chunk_text}
             </pre>
           </div>
-          {src.start_line && src.end_line && (
-            <p className="text-[10px] font-mono text-(--muted-foreground) mt-2 opacity-70">
-              Lines {src.start_line}-{src.end_line}
-            </p>
-          )}
         </div>
       )}
     </div>
