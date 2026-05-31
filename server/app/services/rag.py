@@ -1,6 +1,7 @@
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Literal, cast
+from typing import Literal, Sequence, cast
 from uuid import UUID
 
 from app.core.config import settings
@@ -13,6 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 TOP_K = 10
+
+TYPE_CAPS = {
+    "symbol": 5,
+    "commit": 2,
+    "pull_request": 1,
+    "document": 1,
+    "file": 2,
+}
 
 
 @dataclass
@@ -41,6 +50,29 @@ class ChatMessage:
     content: str
 
 
+def _apply_diversity_caps(
+    embeddings: Sequence[Embedding], total: int = TOP_K
+) -> list[Embedding]:
+    type_counts = defaultdict(int)
+    selected = []
+
+    for e in embeddings:
+        cap = TYPE_CAPS.get(e.source_type, 2)
+        if type_counts[e.source_type] < cap:
+            selected.append(e)
+            type_counts[e.source_type] += 1
+        if len(selected) == total:
+            return selected
+
+    for e in embeddings:
+        if e not in selected:
+            selected.append(e)
+        if len(selected) == total:
+            return selected
+
+    return selected
+
+
 async def _embed_query(client: AsyncOpenAI, query: str) -> list[float]:
     response = await client.embeddings.create(
         model="text-embedding-3-small",
@@ -57,9 +89,10 @@ async def _vector_search(db: AsyncSession, repository_id, query_vector, top_k=TO
             Embedding.embedding.cosine_distance(query_vector) < 0.7,
         )
         .order_by(Embedding.embedding.cosine_distance(query_vector))
-        .limit(top_k)
+        .limit(30)
     )
-    return result.scalars().all()
+    embeddings = result.scalars().all()
+    return _apply_diversity_caps(embeddings, top_k)
 
 
 async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceReference:
