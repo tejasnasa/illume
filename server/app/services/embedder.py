@@ -176,11 +176,11 @@ def generate_embeddings(
     total_inserted = 0
 
     commits = db.query(Commit).filter(Commit.repository_id == repository_id).all()
-    commit_chunks = [
-        (c, _build_commit_chunk(c))
-        for c in commits
-        if _token_estimate(_build_commit_chunk(c)) <= MAX_CHUNK_TOKENS
-    ]
+    commit_chunks = []
+    for c in commits:
+        chunk = _build_commit_chunk(c)
+        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
+            commit_chunks.append((c, chunk))
     commit_batches = list(_iter_batches(commit_chunks, BATCH_SIZE))
     total_commit_batches = len(commit_batches)
 
@@ -212,11 +212,11 @@ def generate_embeddings(
         total_inserted += len(batch)
 
     prs = db.query(PullRequest).filter(PullRequest.repository_id == repository_id).all()
-    pr_chunks = [
-        (p, _build_pr_chunk(p))
-        for p in prs
-        if _token_estimate(_build_pr_chunk(p)) <= MAX_CHUNK_TOKENS
-    ]
+    pr_chunks = []
+    for p in prs:
+        chunk = _build_pr_chunk(p)
+        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
+            pr_chunks.append((p, chunk))
     pr_batches = list(_iter_batches(pr_chunks, BATCH_SIZE))
     total_pr_batches = len(pr_batches)
 

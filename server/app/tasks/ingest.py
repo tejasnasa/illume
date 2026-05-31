@@ -1,8 +1,8 @@
+import json
 import logging
 import os
-import json
-from datetime import datetime, timezone
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 from app.core.celery import celery
 from app.core.database import get_sync_db
@@ -45,7 +45,7 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             "event": event,
             "message": message,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            **kwargs
+            **kwargs,
         }
         redis_client.publish(f"task:{repo_id}:logs", json.dumps(data))
 
@@ -72,16 +72,16 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             finally:
                 cleanup_clone(tmp_dir)
 
+            publish("glossary_started", "Building project glossary...")
+            build_glossary(db, repo)
+
             embed_repository_symbols(
                 db, redis_client, repo, readme_content=readme_content
             )
 
-            publish("glossary_started", "Building project glossary...")
-            build_glossary(db, repo)
-            
             publish("reading_order_started", "Generating recommended reading order...")
             build_reading_order(db, repo)
-            
+
             publish("brief_started", "Synthesizing AI architecture brief...")
             generate_brief(db, repo)
 
