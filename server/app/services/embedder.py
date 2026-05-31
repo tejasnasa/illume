@@ -1,4 +1,5 @@
 import logging
+import re
 from collections import defaultdict
 from typing import Generator
 from uuid import UUID
@@ -79,8 +80,17 @@ def _build_pr_chunk(pr: PullRequest) -> str:
     return f"# PR #{pr.number}: {pr.title}\n{desc}".strip()
 
 
-def _build_readme_chunk(content: str) -> str:
-    return f"# README\n{content}"
+def _build_readme_chunks(content: str) -> list[str]:
+    sections = re.split(r"(?=^##\s)", content, flags=re.MULTILINE)
+    chunks = []
+    for section in sections:
+        section = section.strip()
+        if not section:
+            continue
+        chunk = f"# README\n{section}"
+        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
+            chunks.append(chunk)
+    return chunks
 
 
 def _token_estimate(text: str) -> int:  # token estimate: 4 chars per token
@@ -260,25 +270,27 @@ def generate_embeddings(
         total_inserted += len(batch)
 
     if readme_content:
-        chunk_text = _build_readme_chunk(readme_content)
-        if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
+        readme_chunks = _build_readme_chunks(readme_content)
+        if readme_chunks:
             response = client.embeddings.create(
-                model="text-embedding-3-small", input=[chunk_text]
+                model="text-embedding-3-small",
+                input=readme_chunks,
             )
-            db.add(
-                Embedding(
-                    source_type="document",
-                    source_id=repository_id,
-                    file_id=None,
-                    repository_id=repository_id,
-                    chunk_text=chunk_text,
-                    embedding=response.data[0].embedding,
+            for i, embedding_data in enumerate(response.data):
+                db.add(
+                    Embedding(
+                        source_type="document",
+                        source_id=repository_id,
+                        file_id=None,
+                        repository_id=repository_id,
+                        chunk_text=readme_chunks[i],
+                        embedding=embedding_data.embedding,
+                    )
                 )
-            )
             db.commit()
-            total_inserted += 1
+            total_inserted += len(readme_chunks)
             if publish_log:
-                publish_log("README embedded.")
+                publish_log(f"README embedded ({len(readme_chunks)} sections).")
 
     guide = (
         db.query(OnboardingGuide)
@@ -308,7 +320,9 @@ def generate_embeddings(
     for batch_idx, batch in enumerate(_iter_batches(file_chunks, BATCH_SIZE)):
         batch_texts = [t for _, t in batch]
         if publish_log:
-            publish_log(f"Embedding files batch {batch_idx + 1}/{total_file_batches}...")
+            publish_log(
+                f"Embedding files batch {batch_idx + 1}/{total_file_batches}..."
+            )
         response = client.embeddings.create(
             model="text-embedding-3-small", input=batch_texts
         )
