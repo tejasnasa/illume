@@ -1,9 +1,18 @@
 import logging
+from collections import defaultdict
 from typing import Generator
 from uuid import UUID
 
 from app.core.config import settings
-from app.models import AstSymbol, Commit, Embedding, File, PullRequest
+from app.models import (
+    AstSymbol,
+    Commit,
+    Dependency,
+    Embedding,
+    File,
+    GlossaryEntry,
+    PullRequest,
+)
 from openai import OpenAI
 from sqlalchemy.orm import Session
 
@@ -16,8 +25,30 @@ MAX_CHUNK_TOKENS = 2048
 BATCH_SIZE = 100
 
 
-def _build_chunk_text(file_path: str, kind: str, name: str, source_code: str) -> str:
-    return f"# {file_path}\n## {kind}: {name}\n{source_code}"
+def _build_chunk_text(
+    file_path: str,
+    kind: str,
+    name: str,
+    source_code: str,
+    docstring: str | None = None,
+    glossary_def: str | None = None,
+    callers: list[str] | None = None,
+    callees: list[str] | None = None,
+) -> str:
+    parts = [f"# {file_path}", f"## {kind}: {name}"]
+
+    if glossary_def:
+        parts.append(f"Description: {glossary_def}")
+    elif docstring:
+        parts.append(f"Docstring: {docstring}")
+
+    if callers:
+        parts.append(f"Called by: {', '.join(callers[:5])}")
+    if callees:
+        parts.append(f"Calls: {', '.join(callees[:5])}")
+
+    parts.append(source_code)
+    return "\n".join(parts)
 
 
 def _build_commit_chunk(commit: Commit) -> str:
@@ -78,6 +109,33 @@ def generate_embeddings(
     files = db.query(File).filter(File.id.in_(file_ids)).all()
     file_path_map: dict[UUID, str] = {f.id: f.path for f in files}
 
+    symbol_ids = [s.id for s in symbols]
+
+    glossary_map = {
+        row.symbol_id: row.definition
+        for row in db.query(GlossaryEntry.symbol_id, GlossaryEntry.definition)
+        .filter(GlossaryEntry.symbol_id.in_(symbol_ids))
+        .all()
+    }
+
+    callers_map = defaultdict(list)
+    for dep in (
+        db.query(Dependency.target_symbol_id, Dependency.source_symbol_id)
+        .filter(Dependency.target_symbol_id.in_(symbol_ids))
+        .filter(Dependency.dep_type == "calls")
+        .all()
+    ):
+        callers_map[dep.target_symbol_id].append(dep.source_symbol_id)
+
+    callees_map = defaultdict(list)
+    for dep in (
+        db.query(Dependency.source_symbol_id, Dependency.target_symbol_id)
+        .filter(Dependency.source_symbol_id.in_(symbol_ids))
+        .filter(Dependency.dep_type == "calls")
+        .all()
+    ):
+        callees_map[dep.source_symbol_id].append(dep.target_symbol_id)
+
     for symbol in symbols:
         file_path = file_path_map.get(symbol.file_id, "unknown")
         chunk_text = _build_chunk_text(
@@ -85,6 +143,10 @@ def generate_embeddings(
             kind=symbol.kind,
             name=symbol.name,
             source_code=symbol.source_code,
+            docstring=symbol.docstring,
+            glossary_def=glossary_map.get(symbol.id),
+            callers=callers_map.get(symbol.id),
+            callees=callees_map.get(symbol.id),
         )
 
         if _token_estimate(chunk_text) > MAX_CHUNK_TOKENS:
