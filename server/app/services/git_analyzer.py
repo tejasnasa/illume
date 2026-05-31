@@ -325,6 +325,7 @@ def _bulk_insert_commits(db: Session, repo_id: str, parsed_commits: list[dict]) 
             "message": c["message"],
             "files_changed": len(c["files"]),
             "authored_at": c["timestamp"],
+            "changed_files_list": [f["path"] for f in c["files"]],
         }
         for c in parsed_commits
     ]

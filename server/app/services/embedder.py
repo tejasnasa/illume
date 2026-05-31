@@ -21,7 +21,12 @@ def _build_chunk_text(file_path: str, kind: str, name: str, source_code: str) ->
 
 
 def _build_commit_chunk(commit: Commit) -> str:
-    return f"# Commit {commit.hash[:8]} by {commit.author_name}\n{commit.message}"
+    parts = [f"# Commit {commit.hash[:8]} by {commit.author_name}"]
+    parts.append(f"Message: {commit.message}")
+    if commit.changed_files_list:
+        file_list = ", ".join(commit.changed_files_list[:20])
+        parts.append(f"Files changed: {file_list}")
+    return "\n".join(parts)
 
 
 def _build_pr_chunk(pr: PullRequest) -> str:
