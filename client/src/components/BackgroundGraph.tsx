@@ -7,7 +7,7 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ssr: false,
 });
 
-const ORBIT_SPEED = 0.002; // radians per frame
+const ORBIT_SPEED = 0.001; // radians per frame
 
 export default function BackgroundGraph({ graph }: { graph: Graph | null }) {
   const fgRef = useRef<any>(null);

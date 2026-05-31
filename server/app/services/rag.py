@@ -89,7 +89,7 @@ async def _vector_search(db: AsyncSession, repository_id, query_vector, top_k=TO
             Embedding.embedding.cosine_distance(query_vector) < 0.7,
         )
         .order_by(Embedding.embedding.cosine_distance(query_vector))
-        .limit(30)
+        .limit(50)
     )
     embeddings = result.scalars().all()
     return _apply_diversity_caps(embeddings, top_k)

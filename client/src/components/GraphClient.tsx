@@ -12,7 +12,8 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
 import GraphCard from "./ui/GraphCard";
 
 const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
@@ -47,6 +48,30 @@ export default function GraphClient({
   };
 
   const nodeMap = Object.fromEntries(graphData.nodes.map((n) => [n.path, n]));
+  const ringAnimations = useRef(new Map<any, { rings: any[] }>()).current;
+  const animFrameRef = useRef<number>(0);
+  const graphRef = useRef<any>(null);
+
+  useEffect(() => {
+    const animate = () => {
+      const now = performance.now();
+      ringAnimations.forEach(({ rings }) => {
+        rings.forEach((ring: any) => {
+          const t = (now / 1500 + ring.userData.phase) % 1;
+          ring.scale.setScalar(1 + t * 2.5);
+          ring.material.opacity = (1 - t) * 0.6;
+        });
+      });
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  useEffect(() => {
+    ringAnimations.clear();
+    graphRef.current?.refresh();
+  }, [searchQuery]);
 
   const orderedNodes = guide.reading_order
     .sort((a, b) => a.position - b.position)
@@ -94,7 +119,7 @@ export default function GraphClient({
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 z-10 p-2 rounded-sm flex flex-col gap-2">
+      <div className="absolute bottom-4 left-4 z-20 p-2 rounded-sm flex flex-col gap-2">
         <div className="flex items-center gap-3 mb-2 text-(--primary)">
           <GraphIcon size={28} weight="duotone" />
           <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
@@ -192,7 +217,7 @@ export default function GraphClient({
         />
       )}
 
-      <div className="absolute bottom-4 right-4 z-20 p-2">
+      <div className="absolute bottom-4 right-4 z-10 p-2">
         <form
           onSubmit={(e) => e.preventDefault()}
           className="relative w-80 group"
@@ -205,7 +230,7 @@ export default function GraphClient({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search nodes..."
-            className="w-full bg-(--secondary)/30 border border-(--border) rounded-sm pl-11 pr-12 py-2.5 text-sm outline-none focus:border-(--primary)/50 focus:ring-2 focus:ring-(--primary)/20 transition-all text-(--foreground)"
+            className="w-full backdrop-blur-xl border border-(--border) rounded-sm pl-11 pr-12 py-2.5 text-sm outline-none focus:border-(--primary)/50 focus:ring-2 focus:ring-(--primary)/20 transition-all text-(--foreground)"
           />
           {searchQuery && (
             <button
@@ -264,6 +289,38 @@ export default function GraphClient({
             setSelectedNode(null);
             setPageIndex(null);
           }}
+          nodeThreeObject={(node: any) => {
+            const group = new THREE.Group();
+            const r = 15;
+
+            if (isMatch(node)) {
+              const rings: any[] = [];
+              for (let i = 0; i < 6; i++) {
+                const geometry = new THREE.RingGeometry(r, r + 2, 32);
+                const ring = new THREE.Mesh(
+                  geometry,
+                  new THREE.MeshBasicMaterial({
+                    color: "#a855f7",
+                    transparent: true,
+                    opacity: 0,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                  }),
+                );
+
+                ring.onBeforeRender = (renderer, scene, camera) => {
+                  ring.quaternion.copy(camera.quaternion);
+                };
+                ring.userData.phase = i / 5;
+                rings.push(ring);
+                group.add(ring);
+              }
+              ringAnimations.set(node.id, { rings });
+            }
+
+            return group;
+          }}
+          nodeThreeObjectExtend={true}
         />
       </section>
     </main>
