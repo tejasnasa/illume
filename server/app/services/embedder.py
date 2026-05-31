@@ -11,6 +11,7 @@ from app.models import (
     Embedding,
     File,
     GlossaryEntry,
+    OnboardingGuide,
     PullRequest,
 )
 from openai import OpenAI
@@ -57,6 +58,19 @@ def _build_commit_chunk(commit: Commit) -> str:
     if commit.changed_files_list:
         file_list = ", ".join(commit.changed_files_list[:20])
         parts.append(f"Files changed: {file_list}")
+    return "\n".join(parts)
+
+
+def _build_file_chunk(file_path: str, symbols: list[AstSymbol], annotation: str) -> str:
+    parts = [f"# File: {file_path}"]
+    parts.append(f"Note: {annotation}")
+    symbol_names = [
+        f"{s.kind} {s.name}"
+        for s in symbols
+        if s.kind in ("function", "class", "method")
+    ]
+    if symbol_names:
+        parts.append(f"Contains: {', '.join(symbol_names[:15])}")
     return "\n".join(parts)
 
 
@@ -265,6 +279,51 @@ def generate_embeddings(
             total_inserted += 1
             if publish_log:
                 publish_log("README embedded.")
+
+    guide = (
+        db.query(OnboardingGuide)
+        .filter(OnboardingGuide.repository_id == repository_id)
+        .first()
+    )
+    annotation_map: dict[str, str] = {}
+    if guide and guide.reading_order:
+        annotation_map = {
+            item["path"]: item["annotation"]
+            for item in guide.reading_order
+            if item.get("annotation")
+        }
+
+    file_chunks = []
+    for file in all_files:
+        annotation = annotation_map.get(file.path, "")
+        if not annotation:
+            continue
+        file_symbols = [s for s in symbols if s.file_id == file.id]
+        chunk_text = _build_file_chunk(file.path, file_symbols, annotation)
+        if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
+            file_chunks.append((file, chunk_text))
+
+    for batch_idx, batch in enumerate(_iter_batches(file_chunks, BATCH_SIZE)):
+        batch_texts = [t for _, t in batch]
+        if publish_log:
+            publish_log(f"Embedding files batch {batch_idx + 1}...")
+        response = client.embeddings.create(
+            model="text-embedding-3-small", input=batch_texts
+        )
+        for i, embedding_data in enumerate(response.data):
+            file, chunk_text = batch[i]
+            db.add(
+                Embedding(
+                    source_type="file",
+                    source_id=file.id,
+                    file_id=file.id,
+                    repository_id=repository_id,
+                    chunk_text=chunk_text,
+                    embedding=embedding_data.embedding,
+                )
+            )
+        db.commit()
+        total_inserted += len(batch)
 
     batches = list(_iter_batches(chunks, BATCH_SIZE))
 

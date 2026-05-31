@@ -75,12 +75,12 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             publish("glossary_started", "Building project glossary...")
             build_glossary(db, repo)
 
+            publish("reading_order_started", "Generating recommended reading order...")
+            build_reading_order(db, repo)
+
             embed_repository_symbols(
                 db, redis_client, repo, readme_content=readme_content
             )
-
-            publish("reading_order_started", "Generating recommended reading order...")
-            build_reading_order(db, repo)
 
             publish("brief_started", "Synthesizing AI architecture brief...")
             generate_brief(db, repo)

@@ -28,6 +28,7 @@ class Embedding(Base):
             "commit",
             "pull_request",
             "document",
+            "file",
             name="source_type",
             native_enum=False,
         )
