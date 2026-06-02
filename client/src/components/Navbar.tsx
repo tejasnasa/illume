@@ -11,7 +11,11 @@ import Image from "next/image";
 import Link from "next/link";
 import OptionsMenu from "./ui/OptionsMenu";
 
-export default function Navbar({ userData }: { userData: User }) {
+export default function Navbar({
+  userData = null,
+}: {
+  userData?: User | null;
+}) {
   return (
     <header className="flex justify-between">
       <Link
@@ -40,7 +44,7 @@ export default function Navbar({ userData }: { userData: User }) {
         }
         items={[
           {
-            label: userData?.name || userData?.github_id,
+            label: userData?.name || userData?.github_id || "User",
             icon: <UserIcon size={"inherit"} />,
             disabled: true,
           },
