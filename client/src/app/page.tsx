@@ -185,31 +185,19 @@ export default function Home() {
         </div>
       </nav>
 
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-36 pb-20 text-center overflow-hidden">
+      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-48 pb-20 text-center overflow-hidden">
         <motion.div
           initial="hidden"
           animate="visible"
           variants={stagger}
           className="flex flex-col items-center"
         >
-          <motion.div variants={fadeUp} custom={0}>
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-(--chart-1)/20 bg-(--chart-1)/6 mb-6">
-              <PulseIcon
-                size={14}
-                className="text-(--chart-1) animate-pulse"
-                weight="bold"
-              />
-              <span className="text-xs font-medium text-(--chart-1) tracking-widest uppercase">
-                AI-Powered Onboarding Platform
-              </span>
-            </div>
-          </motion.div>
 
-          <motion.h1 variants={fadeUp} custom={1} className="max-w-6xl">
-            <span className="block text-[clamp(3rem,6vw,7rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
+          <motion.h1 variants={fadeUp} custom={1} className="max-w-7xl">
+            <span className="block text-[clamp(4rem,7vw,8rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
               Onboard engineers
             </span>
-            <span className="block text-[clamp(3rem,6vw,7rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
+            <span className="block text-[clamp(4rem,7vw,8rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
               in days, not weeks
             </span>
           </motion.h1>

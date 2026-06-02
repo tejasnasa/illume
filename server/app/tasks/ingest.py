@@ -38,6 +38,7 @@ def get_db_context():
 
 @celery.task(bind=True, max_retries=3)
 def ingest_repository(self, repo_id: str, access_token: str | None = None):
+    print(f"WORKER RECEIVED token: {access_token!r}", flush=True)
     redis_client = get_sync_redis()
 
     def publish(event: str, message: str, **kwargs):

@@ -34,6 +34,9 @@ class UserResponse(BaseModel):
     id: uuid.UUID
     email: str
     name: str
+    avatar_url: str
+    github_id: str
+    github_access_token: str
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -171,6 +174,7 @@ async def github_callback(
     if user:
         user.github_id = github_id
         user.github_access_token = github_token
+        user.avatar_url = github_user.get("avatar_url")
     else:
         user = User(
             email=primary_email,
@@ -178,6 +182,7 @@ async def github_callback(
             password=None,
             github_id=github_id,
             github_access_token=github_token,
+            avatar_url=github_user.get("avatar_url"),
         )
         db.add(user)
 

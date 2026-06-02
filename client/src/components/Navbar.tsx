@@ -1,5 +1,6 @@
 import logoutAction from "@/actions/logout";
 import avatar from "@/assets/loginart.jpg";
+import User from "@/types/user";
 import {
   GearSixIcon,
   SignOutIcon,
@@ -10,7 +11,7 @@ import Image from "next/image";
 import Link from "next/link";
 import OptionsMenu from "./ui/OptionsMenu";
 
-export default function Navbar() {
+export default function Navbar({ userData }: { userData: User }) {
   return (
     <header className="flex justify-between">
       <Link
@@ -30,14 +31,16 @@ export default function Navbar() {
       <OptionsMenu
         trigger={
           <Image
-            src={avatar}
+            src={userData?.avatar_url ?? avatar}
+            height={48}
+            width={48}
             alt="User Avatar"
             className="h-12 w-12 rounded-full m-6 hover:cursor-pointer"
           />
         }
         items={[
           {
-            label: "Tejas Nasa",
+            label: userData?.name || userData?.github_id,
             icon: <UserIcon size={"inherit"} />,
             disabled: true,
           },

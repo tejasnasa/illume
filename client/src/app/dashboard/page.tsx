@@ -1,3 +1,4 @@
+import GetMyData from "@/api/auth";
 import { getRepositories } from "@/api/repository";
 import DashboardRefresh from "@/components/DashboardRefresh";
 import Navbar from "@/components/Navbar";
@@ -9,10 +10,11 @@ import { DatabaseIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
 
 export default async function Dashboard() {
   const repositories = await getRepositories();
+  const myData = await GetMyData();
 
   return (
     <div className="min-h-screen">
-      <Navbar />
+      <Navbar userData={myData} />
       <DashboardRefresh repositories={repositories} />
 
       <main className="max-w-7xl mx-auto px-6 py-24">

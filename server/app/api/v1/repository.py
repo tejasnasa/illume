@@ -54,6 +54,7 @@ async def create_repository(
     await db.commit()
     await db.refresh(repo)
 
+    print(f"ENDPOINT sending token: {current_user.github_access_token!r}", flush=True)
     ingest_repository.delay(str(repo.id), current_user.github_access_token)
     logger.info("Queued ingestion for repo %s", repo.id)
 
@@ -99,6 +100,7 @@ async def reingest_repository(
     db.add(new_repo)
     await db.commit()
 
+    print(f"ENDPOINT sending token: {current_user.github_access_token!r}", flush=True)
     ingest_repository.delay(str(repo.id), current_user.github_access_token)
     logger.info("Re-ingestion queued for repo %s", repo.id)
 
