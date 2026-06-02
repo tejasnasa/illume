@@ -1,85 +1,82 @@
 "use client";
 
-import useLoginForm from "@/hooks/useLoginForm";
+import {
+  EyeIcon,
+  LockIcon,
+  ProhibitIcon,
+  StarFourIcon,
+} from "@phosphor-icons/react";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
+import { useState } from "react";
 import Button from "./ui/Button";
-import Input from "./ui/Input";
 
 export default function LoginForm() {
-  const { register, firstError, isSubmitting, onSubmit } = useLoginForm();
+  const [loading, setLoading] = useState(false);
+
   return (
-    <form
-      className="bg-transparent w-[55%] p-8 rounded-sm mb-24"
-      onSubmit={onSubmit}
-    >
-      <h2 className="text-2xl font-bold mb-1 text-center">
-        Login to your account
-      </h2>
-      <h4 className="text-(--muted-foreground) text-sm text-center mb-10">
-        Enter your email below to login to your account
-      </h4>
+    <div className="flex min-h-screen w-full items-center justify-center bg-(--background)">
+      <div className="relative w-full max-w-md overflow-hidden rounded-sm border p-16 flex flex-col items-center gap-4 mb-20">
+        <div className="pointer-events-none rounded-full bg-(--chart-1)/10 blur-3xl" />
 
-      <div className="flex flex-col my-4 gap-1">
-        <label htmlFor="email" className="text-sm">
-          Email
-        </label>
-        <Input
-          id="email"
-          type="email"
-          placeholder="tejas@example.com"
-          {...register("email")}
-        />
-      </div>
-
-      <div className="flex flex-col my-4 gap-1">
-        <label htmlFor="password" className="text-sm">
-          Password
-        </label>
-        <Input
-          id="password"
-          type="password"
-          placeholder="*********"
-          {...register("password")}
-        />
-      </div>
-
-      {firstError && (
-        <p className="text-(--destructive) my-2 text-sm">{firstError}</p>
-      )}
-
-      <Button className="w-full mt-1" size="sm" loading={isSubmitting}>
-        LOGIN
-      </Button>
-
-      <div className="flex items-center gap-3 w-full my-2">
-        <div className="h-px flex-1 bg-linear-to-r from-transparent via-(--border) to-transparent" />
-        <span className="text-xs text-(--muted-foreground)/80 tracking-wider font-medium">
-          OR
-        </span>
-        <div className="h-px flex-1 bg-linear-to-r from-transparent via-(--border) to-transparent" />
-      </div>
-
-      <Button
-        className="bg-white text-black w-full mb-4"
-        size="sm"
-        onClick={() =>
-          (window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/github`)
-        }
-      >
-        <GithubLogoIcon weight="bold" />
-        Continue With GitHub
-      </Button>
-
-      <div className="text-sm text-center">
-        Don't have an account?{" "}
         <Link
-          href="/signup"
-          className="text-(--primary) hover:text-(--primary)/90 transition-colors duration-200"
+          href="/"
+          className="relative flex h-16 w-16 items-center justify-center"
         >
-          Sign up
+          <div className="absolute inset-0 rounded-full bg-(--chart-1)/20 blur-lg" />
+          <div className="relative flex h-12 w-12 items-center justify-center rounded-full  ">
+            <StarFourIcon
+              weight="fill"
+              size={32}
+              className="text-(--chart-1)"
+            />
+          </div>
         </Link>
+
+        <div className="flex flex-col items-center gap-1 text-center">
+          <h1 className="text-4xl font-semibold tracking-tight text-(--foreground)">
+            Welcome to Illume
+          </h1>
+          <p className="text-sm text-(--muted-foreground)">
+            Login to analyze your codebase
+          </p>
+        </div>
+
+        <div className="w-full h-px bg-(--border)" />
+
+        <div className="w-full flex flex-col gap-3">
+          <Button
+            loading={loading}
+            size="sm"
+            className="w-full bg-white text-black hover:bg-(--foreground)/90 disabled:bg-white/70 font-semibold mb-4"
+            onClick={() => {
+              setLoading(true);
+              window.location.href = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/github`;
+            }}
+          >
+            <GithubLogoIcon weight="bold" size={16} />
+            Continue with GitHub
+          </Button>
+
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { icon: <EyeIcon />, label: "Read-only" },
+              { icon: <ProhibitIcon />, label: "Never stored" },
+              { icon: <LockIcon />, label: "Private repos" },
+            ].map(({ icon, label }) => (
+              <div
+                key={label}
+                className="flex flex-col items-center gap-1 rounded-lg border py-2 px-1"
+              >
+                <span className="text-2xl m-1 text-(--primary)">{icon}</span>
+                <span className="text-[11px] text-(--muted-foreground) text-center leading-tight">
+                  {label}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-    </form>
+    </div>
   );
 }
