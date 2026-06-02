@@ -109,7 +109,7 @@ async def github_login():
     params = {
         "client_id": settings.GITHUB_CLIENT_ID,
         "redirect_uri": settings.GITHUB_REDIRECT_URL,
-        "scope": "user:email",
+        "scope": "user:email repo",
     }
     query = "&".join(f"{k}={v}" for k, v in params.items())
     return RedirectResponse(f"https://github.com/login/oauth/authorize?{query}")
