@@ -2,8 +2,9 @@ import logging
 import uuid
 from datetime import datetime
 
+from app.api.deps import get_current_user
 from app.core.database import AsyncSession, get_async_db
-from app.models.repository import Repository
+from app.models import Repository, User
 from app.tasks.ingest import ingest_repository
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
@@ -42,21 +43,18 @@ async def create_repository(
     payload: RepositoryCreate,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
 ):
-    user_id = getattr(request.state, "user_id", None)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     repo = Repository(
         github_url=payload.github_url,
         name=_extract_repo_name(payload.github_url),
-        user_id=user_id,
+        user_id=current_user.id,
     )
     db.add(repo)
     await db.commit()
     await db.refresh(repo)
 
-    ingest_repository.delay(str(repo.id))
+    ingest_repository.delay(str(repo.id), current_user.github_access_token)
     logger.info("Queued ingestion for repo %s", repo.id)
 
     return {"repo_id": str(repo.id), "repo_num": repo.repo_number}
@@ -67,15 +65,12 @@ async def reingest_repository(
     repo_id: uuid.UUID,
     request: Request,
     db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
 ):
-    user_id = getattr(request.state, "user_id", None)
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
     result = await db.execute(
         select(Repository).where(
             Repository.id == repo_id,
-            Repository.user_id == user_id,
+            Repository.user_id == current_user.id,
         )
     )
     repo = result.scalar_one_or_none()
@@ -104,7 +99,7 @@ async def reingest_repository(
     db.add(new_repo)
     await db.commit()
 
-    ingest_repository.delay(str(repo.id))
+    ingest_repository.delay(str(repo.id), current_user.github_access_token)
     logger.info("Re-ingestion queued for repo %s", repo.id)
 
     return {"repo_id": str(repo.id), "repo_num": repo.repo_number}
