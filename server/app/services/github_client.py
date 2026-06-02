@@ -22,7 +22,7 @@ MAX_RETRIES = 3
 
 def fetch_pull_requests(
     repo,
-    # access_token: str,
+    access_token: str | None,
     db: Session,
     redis_client,
 ) -> int:
@@ -35,7 +35,7 @@ def fetch_pull_requests(
         f"Fetching merged PRs for {owner}/{repo_name}",
     )
 
-    prs = _fetch_merged_prs(owner, repo_name)
+    prs = _fetch_merged_prs(owner, repo_name, access_token)
 
     if not prs:
         _publish(redis_client, repo.id, "prs_fetch_complete", "No merged PRs found")
@@ -69,12 +69,16 @@ def _parse_github_url(github_url: str) -> tuple[str, str]:
     return owner, repo_name
 
 
-def _fetch_merged_prs(owner: str, repo_name: str) -> list[dict]:
+def _fetch_merged_prs(
+    owner: str, repo_name: str, access_token: str | None
+) -> list[dict]:
     headers = {
-        # "Authorization": f"Bearer {access_token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
+
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
 
     results: list[dict] = []
     page = 1
