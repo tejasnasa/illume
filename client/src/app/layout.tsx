@@ -21,8 +21,6 @@ export const metadata: Metadata = {
     "RAG",
     "developer tool",
   ],
-  authors: [{ name: "Tejas Nasa", url: "https://tejasnasa.me" }],
-  creator: "Tejas Nasa",
   applicationName: "Illume",
   openGraph: {
     type: "website",
@@ -78,11 +76,6 @@ export default function RootLayout({
               "@type": "WebApplication",
               name: "Illume",
               url: "https://illume.tejasnasa.me",
-              author: {
-                "@type": "Person",
-                name: "Tejas Nasa",
-                url: "https://tejasnasa.me",
-              },
               description:
                 "Transform dense repositories into interactive onboarding guides. Architecture briefs, reading orders, glossaries, and ownership maps — all automated.",
               applicationCategory: "DeveloperApplication",
