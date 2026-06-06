@@ -5,6 +5,7 @@ import {
   RepeatIcon,
   TrashIcon,
 } from "@phosphor-icons/react/dist/ssr";
+import ExportIllumeButton from "./ExportIllumeButton";
 import Button from "./ui/Button";
 import Modal from "./ui/Modal";
 
@@ -16,6 +17,27 @@ export default function RepoSettings({ repo_id }: { repo_id: string }) {
         <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
           Settings
         </h1>
+      </div>
+
+      <div className="mt-8 rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10 w-125">
+        <div className="px-5 py-3">
+          <p className="text-xs font-semibold uppercase tracking-widest text-(--primary)">
+            Export Repository
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-(--foreground)">
+              Download .illume file
+            </p>
+            <p className="text-xs text-(--muted-foreground) mt-0.5 max-w-[280px]">
+              Get a compressed codebase context file optimized for AI models to
+              read instantly.
+            </p>
+          </div>
+          <ExportIllumeButton repo_id={repo_id} />
+        </div>
       </div>
 
       <div className="mt-8 rounded-sm border border-red-500/20 divide-y divide-red-500/10 w-125">

@@ -17,7 +17,7 @@ export default function Login() {
         </p>
       </div>
 
-      <section className="md:flex w-1/2 hidden flex-col">
+      <section className="md:flex w-1/2 hidden flex-col mt-4">
         <Link
           href={"/"}
           className="relative h-16 w-16 flex items-center justify-center m-2"
