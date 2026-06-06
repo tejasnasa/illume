@@ -130,14 +130,20 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
     for (src_path, tgt_path), dep_dict in capped_edges:
         annotations = []
         for dep_type, syms in sorted(dep_dict.items()):
-            sorted_syms = sorted(syms)
+            filtered_syms = {s for s in syms if not (dep_type == "imports" and s == "<anonymous>")}
+            if not filtered_syms:
+                continue
+            sorted_syms = sorted(filtered_syms)
             capped_syms = sorted_syms[:5]
             syms_str = ",".join(capped_syms)
             if len(sorted_syms) > 5:
                 syms_str += ",..."
             annotations.append(f"{dep_type}:{syms_str}")
-        anno_str = "; ".join(annotations)
-        lines.append(f"{src_path} -> {tgt_path} [{anno_str}]")
+        if annotations:
+            anno_str = "; ".join(annotations)
+            lines.append(f"{src_path} -> {tgt_path} [{anno_str}]")
+        else:
+            lines.append(f"{src_path} -> {tgt_path}")
     if len(sorted_edges) > 500:
         lines.append(f"... and {len(sorted_edges) - 500} more edges")
     lines.append("")
@@ -199,10 +205,8 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
         sorted_reading = sorted(guide.reading_order, key=lambda x: x.get("position", 0))[:50]
         for item in sorted_reading:
             path = item.get("path") or item.get("file_path") or ""
-            annotation = item.get("annotation") or ""
             if path:
-                anno_str = f" — {annotation.strip()}" if annotation else ""
-                lines.append(f"{item.get('position', 0)}. {path}{anno_str}")
+                lines.append(f"{item.get('position', 0)}. {path}")
         if len(guide.reading_order) > 50:
             lines.append(f"... and {len(guide.reading_order) - 50} more files")
     else:

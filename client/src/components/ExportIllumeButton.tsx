@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr";
-import Button from "./ui/Button";
-import { toast } from "@/lib/use-toast";
 import { exportIllumeAction } from "@/actions/exportIllume";
+import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr";
+import { useState } from "react";
+import Button from "./ui/Button";
 
 export default function ExportIllumeButton({ repo_id }: { repo_id: string }) {
   const [loading, setLoading] = useState(false);
@@ -29,19 +28,9 @@ export default function ExportIllumeButton({ repo_id }: { repo_id: string }) {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
-      toast({
-        title: "Export Success",
-        description: `Successfully exported context to ${repoName}.illume`,
-        variant: "success",
-      });
     } catch (err) {
       console.error(err);
-      toast({
-        title: "Export Failed",
-        description: "An error occurred while generating the .illume file.",
-        variant: "error",
-      });
+      alert(err);
     } finally {
       setLoading(false);
     }
