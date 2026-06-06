@@ -1,16 +1,14 @@
 import uuid
+
 from datetime import datetime
 from collections import defaultdict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.models import (
     Repository,
     File,
     AstSymbol,
     Dependency,
-    GlossaryEntry,
-    OnboardingGuide,
 )
 
 async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | None:
@@ -28,18 +26,6 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
 
     file_ids = [f.id for f in files]
     file_id_to_path = {f.id: f.path for f in files}
-
-    guide = (
-        await db.execute(
-            select(OnboardingGuide).where(OnboardingGuide.repository_id == repo_id)
-        )
-    ).scalar_one_or_none()
-
-    glossary_entries = (
-        await db.execute(
-            select(GlossaryEntry).where(GlossaryEntry.repository_id == repo_id)
-        )
-    ).scalars().all()
 
     symbols = (
         await db.execute(select(AstSymbol).where(AstSymbol.file_id.in_(file_ids)))
@@ -173,44 +159,6 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
         max_cc = file_id_to_max_cc.get(h.id)
         cc_str = f",cc={max_cc}" if max_cc is not None else ""
         lines.append(f"{h.path} [{h.criticality.lower()},fan_in={h.fan_in or 0}{cc_str}]")
-    lines.append("")
-
-    lines.append("@@CLUSTERS")
-    clusters = defaultdict(list)
-    for f in files:
-        parts = f.path.replace("\\", "/").split("/")
-        cluster_name = parts[0] if len(parts) > 1 else "root"
-        clusters[cluster_name].append(f.path)
-
-    for cluster_name, paths in sorted(clusters.items()):
-        sorted_paths = sorted(paths)
-        capped_paths = sorted_paths[:20]
-        paths_str = ",".join(capped_paths)
-        if len(sorted_paths) > 20:
-            paths_str += ",..."
-        lines.append(f"{cluster_name}: {paths_str}")
-    lines.append("")
-
-    lines.append("@@GLOSSARY")
-    sorted_glossary = sorted(glossary_entries, key=lambda e: e.name)[:100]
-    for entry in sorted_glossary:
-        clean_def = entry.definition.replace("\n", " ").replace("\r", " ").strip()
-        lines.append(f"{entry.name}: {clean_def}")
-    if len(glossary_entries) > 100:
-        lines.append(f"... and {len(glossary_entries) - 100} more glossary entries")
-    lines.append("")
-
-    lines.append("@@READING_ORDER")
-    if guide and guide.reading_order:
-        sorted_reading = sorted(guide.reading_order, key=lambda x: x.get("position", 0))[:50]
-        for item in sorted_reading:
-            path = item.get("path") or item.get("file_path") or ""
-            if path:
-                lines.append(f"{item.get('position', 0)}. {path}")
-        if len(guide.reading_order) > 50:
-            lines.append(f"... and {len(guide.reading_order) - 50} more files")
-    else:
-        lines.append("No reading order available.")
     lines.append("")
 
     return "\n".join(lines)
