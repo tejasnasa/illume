@@ -63,4 +63,4 @@ jobs:
               --restart unless-stopped \
               --env-file /home/tejas/illume.env \
               ghcr.io/${{ env.IMAGE_NAME }}:latest \
-              celery -A app.core.celery worker --loglevel=info
+              celery -A app.core.celery worker --loglevel=info --pool=gevent --concurrency=8

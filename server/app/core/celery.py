@@ -16,4 +16,4 @@ celery.conf.update(
     enable_utc=True,
 )
 
-# uv run celery -A app.core.celery worker --loglevel=info --pool=solo
+# uv run celery -A app.core.celery worker --loglevel=info --pool=gevent --concurrency=8
