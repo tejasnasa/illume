@@ -35,7 +35,7 @@ async def get_async_db():
 
 sync_engine = create_engine(
     settings.SYNC_DATABASE_URL,
-    pool_size=10,
+    pool_size=5,
     max_overflow=10,
     echo=False,
 )
