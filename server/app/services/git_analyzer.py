@@ -10,6 +10,7 @@ from app.models import CodeOwner, Commit, File
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from app.services._publish import publish_log
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +36,13 @@ def analyze_git_history(
     repo,
     clone_path: Path,
 ) -> None:
-    _publish(
+    publish_log(
         redis_client, repo.id, "git_analysis_started", "Starting git history analysis"
     )
 
     raw_commits = _run_git_log(clone_path)
     parsed = _parse_git_log(raw_commits)
-    _publish(
+    publish_log(
         redis_client,
         repo.id,
         "commits_parsed",
@@ -50,7 +51,7 @@ def analyze_git_history(
 
     if not parsed:
         logger.warning("repo=%s  No commits found – skipping git analysis", repo.id)
-        _publish(
+        publish_log(
             redis_client,
             repo.id,
             "git_analysis_complete",
@@ -62,7 +63,7 @@ def analyze_git_history(
     logger.info("repo=%s  Inserted %d commit rows", repo.id, len(parsed))
 
     file_stats = _aggregate_file_stats(parsed)
-    _publish(
+    publish_log(
         redis_client,
         repo.id,
         "file_stats_aggregated",
@@ -75,7 +76,7 @@ def analyze_git_history(
     logger.info("repo=%s  Updated %d file rows", repo.id, len(file_stats))
 
     _bulk_insert_code_owners(db, repo.id, file_stats)
-    _publish(
+    publish_log(
         redis_client,
         repo.id,
         "ownership_written",
@@ -422,21 +423,4 @@ def _bulk_insert_code_owners(
     db.commit()
 
 
-def _publish(
-    redis_client,
-    repo_id: str,
-    event: str,
-    message: str,
-) -> None:
-    channel = f"task:{repo_id}:logs"
-    payload = json.dumps(
-        {
-            "event": event,
-            "message": message,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    try:
-        redis_client.publish(channel, payload)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Redis publish failed (channel=%s): %s", channel, exc)
+

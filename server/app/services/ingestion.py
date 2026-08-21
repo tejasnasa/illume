@@ -19,6 +19,7 @@ from app.services.import_resolver import (
     resolve_import,
 )
 from app.services.parser import parse_file
+from app.services._publish import publish_log
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -75,24 +76,10 @@ SKIP_DIRS = {
 }
 
 
-def _publish_log(
-    redis_client, repo_id: str, event: str, message: str, **kwargs
-) -> None:
-    channel = f"task:{repo_id}:logs"
-    data = {
-        "event": event,
-        "message": message,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        **kwargs,
-    }
-    redis_client.publish(channel, json.dumps(data))
-    logger.info("[%s] %s: %s", repo_id, event, message)
-
-
 def _update_status(db: Session, redis_client, repo: Repository, status: str) -> None:
     repo.status = status
     db.commit()
-    _publish_log(
+    publish_log(
         redis_client,
         str(repo.id),
         "status_update",
@@ -110,7 +97,7 @@ def clone_repository(
     commit_sha: str | None = None,
 ) -> tuple[Path, str, str]:
     _update_status(db, redis_client, repo, "cloning")
-    _publish_log(redis_client, str(repo.id), "clone_started", f"Cloning repository (branch={branch or 'default'}, commit={commit_sha or 'HEAD'})...")
+    publish_log(redis_client, str(repo.id), "clone_started", f"Cloning repository (branch={branch or 'default'}, commit={commit_sha or 'HEAD'})...")
 
     clone_url = _build_clone_url(repo.github_url, github_access_token)
     tmp_dir = tempfile.mkdtemp(prefix=f"illume_{repo.id}_")
@@ -129,7 +116,7 @@ def clone_repository(
         )
 
         if commit_sha:
-            _publish_log(redis_client, str(repo.id), "checkout_started", f"Checking out commit {commit_sha[:7]}...")
+            publish_log(redis_client, str(repo.id), "checkout_started", f"Checking out commit {commit_sha[:7]}...")
             git_repo.git.checkout(commit_sha)
 
         try:
@@ -142,7 +129,7 @@ def clone_repository(
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise RuntimeError(f"Git clone/checkout failed: {e.stderr.strip()}") from e
 
-    _publish_log(redis_client, str(repo.id), "clone_complete", f"Clone complete at branch={actual_branch}, commit={actual_sha[:7]}.")
+    publish_log(redis_client, str(repo.id), "clone_complete", f"Clone complete at branch={actual_branch}, commit={actual_sha[:7]}.")
     return Path(tmp_dir), actual_branch, actual_sha
 
 
@@ -180,13 +167,13 @@ def process_repository_files(
     repo_root: Path,
 ) -> int:
     _update_status(db, redis_client, repo, "parsing")
-    _publish_log(
+    publish_log(
         redis_client, str(repo.id), "parsing_started", "Starting file analysis..."
     )
 
     source_files = walk_source_files(repo_root)
     total = len(source_files)
-    _publish_log(
+    publish_log(
         redis_client, str(repo.id), "file_discovery", f"Found {total} source files."
     )
 
@@ -221,7 +208,7 @@ def process_repository_files(
             db.add(db_symbol)
 
         processed += 1
-        _publish_log(
+        publish_log(
             redis_client,
             str(repo.id),
             "file_processed",
@@ -229,7 +216,7 @@ def process_repository_files(
         )
 
     db.commit()
-    _publish_log(
+    publish_log(
         redis_client,
         str(repo.id),
         "db_storage_complete",
@@ -237,14 +224,14 @@ def process_repository_files(
     )
 
     dep_count = resolve_dependencies(db, repo.id, str(repo_root))
-    _publish_log(
+    publish_log(
         redis_client,
         str(repo.id),
         "deps_resolved",
         f"Resolved {dep_count} dependencies.",
     )
 
-    _publish_log(
+    publish_log(
         redis_client,
         str(repo.id),
         "metrics_started",
@@ -252,7 +239,7 @@ def process_repository_files(
     )
     compute_fan_metrics(db, repo.id)
 
-    _publish_log(
+    publish_log(
         redis_client, str(repo.id), "criticality_started", "Scoring file criticality..."
     )
     run_criticality_scoring(db, repo.id)
@@ -261,7 +248,7 @@ def process_repository_files(
     repo.entry_points = detect_entry_points(repo_root)
 
     db.commit()
-    _publish_log(
+    publish_log(
         redis_client,
         str(repo.id),
         "stack_detected",
@@ -278,7 +265,7 @@ def embed_repository_symbols(
     readme_content: str | None = None,
 ) -> int:
     _update_status(db, redis_client, repo, "embedding")
-    _publish_log(
+    publish_log(
         redis_client,
         str(repo.id),
         "embedding_started",
@@ -286,7 +273,7 @@ def embed_repository_symbols(
     )
 
     def publish_log(msg: str):
-        _publish_log(redis_client, str(repo.id), "embedding_progress", msg)
+        publish_log(redis_client, str(repo.id), "embedding_progress", msg)
 
     count = generate_embeddings(
         repository_id=repo.id,
@@ -295,7 +282,7 @@ def embed_repository_symbols(
         readme_content=readme_content,
     )
 
-    _publish_log(
+    publish_log(
         redis_client,
         str(repo.id),
         "embedding_complete",

@@ -10,6 +10,7 @@ import httpx
 from app.models import PullRequest
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from app.services._publish import publish_log
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def fetch_pull_requests(
 ) -> int:
     owner, repo_name = _parse_github_url(repo.github_url)
 
-    _publish(
+    publish_log(
         redis_client,
         repo.id,
         "prs_fetch_started",
@@ -38,12 +39,12 @@ def fetch_pull_requests(
     prs = _fetch_merged_prs(owner, repo_name, access_token)
 
     if not prs:
-        _publish(redis_client, repo.id, "prs_fetch_complete", "No merged PRs found")
+        publish_log(redis_client, repo.id, "prs_fetch_complete", "No merged PRs found")
         return 0
 
     inserted = _bulk_insert_pull_requests(db, repo.id, prs)
 
-    _publish(
+    publish_log(
         redis_client,
         repo.id,
         "prs_fetch_complete",
@@ -234,26 +235,6 @@ def _bulk_insert_pull_requests(
     db.execute(stmt)
     db.commit()
     return len(rows)
-
-
-def _publish(
-    redis_client,
-    repo_id: str,
-    event: str,
-    message: str,
-) -> None:
-    channel = f"task:{repo_id}:logs"
-    payload = json.dumps(
-        {
-            "event": event,
-            "message": message,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-    )
-    try:
-        redis_client.publish(channel, payload)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Redis publish failed (channel=%s): %s", channel, exc)
 
 
 class GitHubClientError(Exception):
