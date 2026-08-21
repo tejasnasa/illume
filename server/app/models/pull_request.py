@@ -1,3 +1,8 @@
+"""
+Pull request model definition.
+
+Stores metadata for pull requests associated with a repository.
+"""
 import uuid
 from datetime import datetime
 
@@ -17,6 +22,11 @@ from app.core.database import Base
 
 
 class PullRequest(Base):
+    """
+    SQLAlchemy model representing a GitHub pull request.
+    
+    Used to track historical PR data and review metrics.
+    """
     __tablename__ = "pull_requests"
 
     __table_args__ = (

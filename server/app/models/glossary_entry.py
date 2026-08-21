@@ -1,3 +1,8 @@
+"""
+Glossary entry model definition.
+
+Stores domain-specific terminology extracted from repository code and documentation.
+"""
 import uuid
 
 from app.core.database import Base
@@ -6,6 +11,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 
 class GlossaryEntry(Base):
+    """
+    SQLAlchemy model representing an automatically generated glossary term.
+    
+    Helps explain repository-specific jargon to users.
+    """
     __tablename__ = "glossary_entries"
 
     id: Mapped[uuid.UUID] = mapped_column(

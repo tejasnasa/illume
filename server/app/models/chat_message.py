@@ -1,3 +1,8 @@
+"""
+Chat message model definition.
+
+Stores user interactions (questions and AI answers) for repository-scoped chats.
+"""
 import uuid
 from datetime import datetime
 
@@ -9,6 +14,12 @@ from app.core.database import Base
 
 
 class ChatMessage(Base):
+    """
+    SQLAlchemy model representing a chat message.
+    
+    Stores the user's question, the AI's answer, and any code sources referenced.
+    Messages are scoped to a specific user and repository.
+    """
     __tablename__ = "chat_messages"
 
     id: Mapped[uuid.UUID] = mapped_column(

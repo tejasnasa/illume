@@ -1,3 +1,8 @@
+"""
+Code owner model definition.
+
+Tracks ownership and bus factor metrics for files based on Git history.
+"""
 import uuid
 
 from sqlalchemy import UUID, Boolean, ForeignKey, Integer, String
@@ -8,6 +13,11 @@ from app.core.database import Base
 
 
 class CodeOwner(Base):
+    """
+    SQLAlchemy model representing the ownership metrics of a file.
+    
+    Identifies the primary contributor and flags knowledge silos.
+    """
     __tablename__ = "code_owners"
 
     id: Mapped[uuid.UUID] = mapped_column(

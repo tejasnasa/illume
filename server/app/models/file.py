@@ -1,3 +1,8 @@
+"""
+File model definition.
+
+Represents a single source code file tracked within a repository.
+"""
 import uuid
 from datetime import datetime
 
@@ -9,6 +14,12 @@ from app.core.database import Base
 
 
 class File(Base):
+    """
+    SQLAlchemy model representing a tracked file in a repository.
+    
+    Stores file-level metadata such as LOC, fan-in/fan-out metrics, criticality,
+    and Git modification history.
+    """
     __tablename__ = "files"
 
     id: Mapped[uuid.UUID] = mapped_column(

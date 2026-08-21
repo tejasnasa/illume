@@ -1,3 +1,8 @@
+"""
+Onboarding guide model definition.
+
+Stores the generated architecture brief and reading order for a repository.
+"""
 import uuid
 from datetime import datetime
 
@@ -9,6 +14,11 @@ from app.core.database import Base
 
 
 class OnboardingGuide(Base):
+    """
+    SQLAlchemy model representing the onboarding materials for a repository.
+    
+    Contains the structured architecture narrative, key files, and recommended reading order.
+    """
     __tablename__ = "onboarding_guides"
 
     id: Mapped[uuid.UUID] = mapped_column(

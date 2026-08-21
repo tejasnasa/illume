@@ -1,3 +1,8 @@
+"""
+SQLAlchemy ORM models for the Illume application.
+
+This module exposes all database entities used across the application.
+"""
 from app.models.ast_symbol import AstSymbol
 from app.models.chat_message import ChatMessage
 from app.models.code_owner import CodeOwner

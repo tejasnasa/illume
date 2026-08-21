@@ -1,3 +1,8 @@
+"""
+Git commit model definition.
+
+Stores metadata for commits associated with a repository.
+"""
 import uuid
 from datetime import datetime
 
@@ -17,6 +22,11 @@ from app.core.database import Base
 
 
 class Commit(Base):
+    """
+    SQLAlchemy model representing a Git commit.
+    
+    Used for historical analysis and tracking changes over time.
+    """
     __tablename__ = "commits"
 
     __table_args__ = (

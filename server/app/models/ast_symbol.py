@@ -1,3 +1,8 @@
+"""
+AST symbol model definition.
+
+Represents an Abstract Syntax Tree symbol (e.g., function, class, method) extracted from a file.
+"""
 import uuid
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, text
@@ -7,6 +12,11 @@ from app.core.database import Base
 
 
 class AstSymbol(Base):
+    """
+    SQLAlchemy model representing an AST symbol extracted from source code.
+    
+    Used to track definitions, complexity metrics, and serve as targets for dependency resolution.
+    """
     __tablename__ = "ast_symbols"
 
     id: Mapped[uuid.UUID] = mapped_column(

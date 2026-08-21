@@ -1,3 +1,8 @@
+"""
+Vector embedding model definition.
+
+Stores pgvector embeddings for semantic search and Retrieval-Augmented Generation (RAG).
+"""
 import uuid
 
 from pgvector.sqlalchemy import Vector
@@ -8,6 +13,11 @@ from app.core.database import Base
 
 
 class Embedding(Base):
+    """
+    SQLAlchemy model representing a high-dimensional vector embedding.
+    
+    Powers semantic search functionality over code, commits, and documents.
+    """
     __tablename__ = "embeddings"
 
     id: Mapped[uuid.UUID] = mapped_column(

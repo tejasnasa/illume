@@ -1,3 +1,8 @@
+"""
+User model definition.
+
+Represents a registered user in the system.
+"""
 import uuid
 from datetime import datetime
 
@@ -8,6 +13,11 @@ from app.core.database import Base
 
 
 class User(Base):
+    """
+    SQLAlchemy model representing an application user.
+    
+    Stores authentication details, GitHub OAuth tokens, and profile information.
+    """
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(

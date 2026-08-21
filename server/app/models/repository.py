@@ -1,3 +1,8 @@
+"""
+Repository model definition.
+
+Represents a GitHub repository ingested into the system.
+"""
 import uuid
 from datetime import datetime
 
@@ -9,6 +14,11 @@ from app.core.database import Base
 
 
 class Repository(Base):
+    """
+    SQLAlchemy model representing an ingested GitHub repository.
+    
+    Stores metadata, analysis status, tech stack information, and ingestion tracking.
+    """
     __tablename__ = "repositories"
 
     id: Mapped[uuid.UUID] = mapped_column(

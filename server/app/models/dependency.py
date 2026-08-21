@@ -1,3 +1,8 @@
+"""
+Dependency model definition.
+
+Represents an edge in the dependency graph between two AST symbols.
+"""
 import uuid
 
 from sqlalchemy import Enum, ForeignKey, text
@@ -7,6 +12,11 @@ from app.core.database import Base
 
 
 class Dependency(Base):
+    """
+    SQLAlchemy model representing a code dependency edge.
+    
+    Links a source symbol to a target symbol, forming the basis of the dependency graph.
+    """
     __tablename__ = "dependencies"
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -1,3 +1,8 @@
+"""
+FastAPI application entry point.
+
+Registers all API routers, middleware (CORS, Auth), and handles application lifespan events.
+"""
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
