@@ -8,17 +8,13 @@ from app.core.celery import celery
 from app.core.database import get_sync_db
 from app.core.redis import get_sync_redis
 from app.models.repository import Repository
-from app.services.brief_generator import generate_brief
+from app.services.architecture_brief import generate_brief
 from app.services.git_analyzer import analyze_git_history
-from app.services.github_client import fetch_pull_requests
+from app.services.pr_fetcher import fetch_pull_requests
 from app.services.glossary_builder import build_glossary
-from app.services.ingestion import (
-    cleanup_clone,
-    clone_repository,
-    embed_repository_symbols,
-    process_repository_files,
-)
-from app.services.reading_order import build_reading_order
+from app.services.cloner import cleanup_clone, clone_repository
+from app.services.scanner import embed_repository_symbols, process_repository_files
+from app.services.onboarding import build_reading_order
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +40,6 @@ def ingest_repository(
     branch: str | None = None,
     commit_sha: str | None = None,
 ):
-    print(f"WORKER RECEIVED token: {access_token!r}, branch: {branch!r}, commit_sha: {commit_sha!r}", flush=True)
     redis_client = get_sync_redis()
 
     def publish(event: str, message: str, **kwargs):

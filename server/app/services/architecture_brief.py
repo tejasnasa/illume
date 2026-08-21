@@ -17,6 +17,7 @@ from openai import OpenAI
 from openai.types.responses import ResponseInputParam
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from app.services.onboarding import _upsert_guide
 
 logger = logging.getLogger(__name__)
 
@@ -331,14 +332,14 @@ def _call_llm_narrative(prompt: str) -> str:
         content = response.output_text
         return content.strip() if content else ""
     except Exception as exc:
-        logger.error("brief_generator: LLM narrative call failed: %s", exc)
+        logger.error("architecture_brief: LLM narrative call failed: %s", exc)
         return ""
 
 
 def generate_brief(
     db: Session, repo: Repository, readme_content: str | None = None
 ) -> OnboardingGuide:
-    logger.info("brief_generator: starting for repo %s", repo.id)
+    logger.info("architecture_brief: starting for repo %s", repo.id)
 
     if not repo:
         raise ValueError(f"Repository {repo.id} not found")
@@ -351,7 +352,7 @@ def generate_brief(
     file_ids = list(files_by_id.keys())
 
     if not files:
-        logger.warning("brief_generator: no files found for repo %s", repo.id)
+        logger.warning("architecture_brief: no files found for repo %s", repo.id)
         return _upsert_guide(db, repo.id, {})
 
     symbols: Sequence[AstSymbol] = (
@@ -427,7 +428,7 @@ def generate_brief(
     if not narrative:
         narrative = "Architecture summary could not be generated."
 
-    logger.info("brief_generator: narrative generated (%d chars)", len(narrative))
+    logger.info("architecture_brief: narrative generated (%d chars)", len(narrative))
 
     architecture_sections = {
         "narrative": narrative,
@@ -448,39 +449,6 @@ def generate_brief(
     repo.architecture_summary = narrative
     db.add(repo)
 
-    guide = _upsert_guide(db, repo.id, architecture_sections, critical_files)
-    logger.info("brief_generator: done for repo %s", repo.id)
-    return guide
-
-
-def _upsert_guide(
-    db: Session,
-    repo_id: UUID,
-    architecture_brief: dict,
-    critical_files: list | None = None,
-) -> OnboardingGuide:
-    guide = (
-        db.execute(
-            select(OnboardingGuide).where(OnboardingGuide.repository_id == repo_id)
-        )
-        .scalars()
-        .first()
-    )
-
-    if guide is None:
-        guide = OnboardingGuide(
-            repository_id=repo_id,
-            reading_order=[],
-            architecture_brief=architecture_brief,
-            critical_files=critical_files or [],
-            pdf_path=None,
-        )
-        db.add(guide)
-    else:
-        guide.architecture_brief = architecture_brief
-        if critical_files is not None:
-            guide.critical_files = critical_files
-
-    db.commit()
-    db.refresh(guide)
+    guide = _upsert_guide(db, repo.id, architecture_brief=architecture_sections, critical_files=critical_files)
+    logger.info("architecture_brief: done for repo %s", repo.id)
     return guide
