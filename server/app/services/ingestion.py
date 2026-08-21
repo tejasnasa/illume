@@ -106,25 +106,44 @@ def clone_repository(
     redis_client,
     repo: Repository,
     github_access_token: str | None = None,
-) -> Path:
+    branch: str | None = None,
+    commit_sha: str | None = None,
+) -> tuple[Path, str, str]:
     _update_status(db, redis_client, repo, "cloning")
-    _publish_log(redis_client, str(repo.id), "clone_started", "Cloning repository...")
+    _publish_log(redis_client, str(repo.id), "clone_started", f"Cloning repository (branch={branch or 'default'}, commit={commit_sha or 'HEAD'})...")
 
     clone_url = _build_clone_url(repo.github_url, github_access_token)
     tmp_dir = tempfile.mkdtemp(prefix=f"illume_{repo.id}_")
 
     try:
-        git.Repo.clone_from(
+        clone_kwargs = {}
+        if branch:
+            clone_kwargs["branch"] = branch
+        if not commit_sha:
+            clone_kwargs["single_branch"] = True
+
+        git_repo = git.Repo.clone_from(
             clone_url,
             tmp_dir,
-            single_branch=True,
+            **clone_kwargs
         )
+
+        if commit_sha:
+            _publish_log(redis_client, str(repo.id), "checkout_started", f"Checking out commit {commit_sha[:7]}...")
+            git_repo.git.checkout(commit_sha)
+
+        try:
+            actual_branch = git_repo.active_branch.name
+        except TypeError:
+            actual_branch = branch or "detached"
+        actual_sha = git_repo.head.commit.hexsha
+
     except git.GitCommandError as e:
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        raise RuntimeError(f"Git clone failed: {e.stderr.strip()}") from e
+        raise RuntimeError(f"Git clone/checkout failed: {e.stderr.strip()}") from e
 
-    _publish_log(redis_client, str(repo.id), "clone_complete", "Clone complete.")
-    return Path(tmp_dir)
+    _publish_log(redis_client, str(repo.id), "clone_complete", f"Clone complete at branch={actual_branch}, commit={actual_sha[:7]}.")
+    return Path(tmp_dir), actual_branch, actual_sha
 
 
 def walk_source_files(repo_root: Path) -> list[Path]:

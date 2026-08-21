@@ -11,11 +11,13 @@ export default function RepoNavbar({
   num_id,
   id,
   status,
+  github_url,
 }: {
   name: string;
   num_id: number;
   id: string;
   status: string;
+  github_url: string;
 }) {
   const path = usePathname();
   return (
@@ -80,7 +82,7 @@ export default function RepoNavbar({
               />
             }
           >
-            <RepoSettings repo_id={id} />
+            <RepoSettings repo_id={id} github_url={github_url} />
           </Modal>
         </section>
       )}
@@ -105,7 +107,7 @@ export default function RepoNavbar({
               />
             }
           >
-            <RepoSettings repo_id={id} />
+            <RepoSettings repo_id={id} github_url={github_url} />
           </Modal>
         </section>
       )}

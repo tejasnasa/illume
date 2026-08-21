@@ -140,16 +140,20 @@ html {
   scrollbar-width: thin;
   scrollbar-color: oklch(from var(--primary) l c h / 0.5) transparent;
 }
+
 .custom-scrollbar::-webkit-scrollbar {
   width: 4px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: oklch(from var(--primary) l c h / 0.2);
   border-radius: 10px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: oklch(from var(--primary) l c h / 0.4);
 }

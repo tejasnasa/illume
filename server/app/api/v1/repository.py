@@ -18,6 +18,13 @@ router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
 
 class RepositoryCreate(BaseModel):
     github_url: str
+    branch: str | None = None
+    commit_sha: str | None = None
+
+
+class RepositoryReingest(BaseModel):
+    branch: str | None = None
+    commit_sha: str | None = None
 
 
 class RepositoryResponse(BaseModel):
@@ -30,6 +37,8 @@ class RepositoryResponse(BaseModel):
     primary_language: str | None
     detected_stack: dict | None
     entry_points: dict | list | None
+    ingested_branch: str | None = None
+    ingested_commit_sha: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -57,8 +66,13 @@ async def create_repository(
     await db.refresh(repo)
 
     print(f"ENDPOINT sending token: {current_user.github_access_token!r}", flush=True)
-    ingest_repository.delay(str(repo.id), current_user.github_access_token)
-    logger.info("Queued ingestion for repo %s", repo.id)
+    ingest_repository.delay(
+        str(repo.id),
+        current_user.github_access_token,
+        branch=payload.branch,
+        commit_sha=payload.commit_sha,
+    )
+    logger.info("Queued ingestion for repo %s (branch=%s, commit_sha=%s)", repo.id, payload.branch, payload.commit_sha)
 
     return {"repo_id": str(repo.id), "repo_num": repo.repo_number}
 
@@ -66,7 +80,7 @@ async def create_repository(
 @router.put("/{repo_id}/reingest", status_code=202)
 async def reingest_repository(
     repo_id: uuid.UUID,
-    request: Request,
+    payload: RepositoryReingest | None = None,
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -90,6 +104,9 @@ async def reingest_repository(
     await db.execute(delete(Repository).where(Repository.id == repo_id))
     await db.commit()
 
+    branch = payload.branch if payload else None
+    commit_sha = payload.commit_sha if payload else None
+
     new_repo = Repository(
         id=repo_id,
         repo_number=repo.repo_number,
@@ -103,10 +120,15 @@ async def reingest_repository(
     await db.commit()
 
     print(f"ENDPOINT sending token: {current_user.github_access_token!r}", flush=True)
-    ingest_repository.delay(str(repo.id), current_user.github_access_token)
-    logger.info("Re-ingestion queued for repo %s", repo.id)
+    ingest_repository.delay(
+        str(repo_id),
+        current_user.github_access_token,
+        branch=branch,
+        commit_sha=commit_sha,
+    )
+    logger.info("Re-ingestion queued for repo %s (branch=%s, commit_sha=%s)", repo_id, branch, commit_sha)
 
-    return {"repo_id": str(repo.id), "repo_num": repo.repo_number}
+    return {"repo_id": str(repo_id), "repo_num": repo.repo_number}
 
 
 @router.get("/{repo_num}", response_model=RepositoryResponse)

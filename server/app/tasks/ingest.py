@@ -37,8 +37,14 @@ def get_db_context():
 
 
 @celery.task(bind=True, max_retries=3)
-def ingest_repository(self, repo_id: str, access_token: str | None = None):
-    print(f"WORKER RECEIVED token: {access_token!r}", flush=True)
+def ingest_repository(
+    self,
+    repo_id: str,
+    access_token: str | None = None,
+    branch: str | None = None,
+    commit_sha: str | None = None,
+):
+    print(f"WORKER RECEIVED token: {access_token!r}, branch: {branch!r}, commit_sha: {commit_sha!r}", flush=True)
     redis_client = get_sync_redis()
 
     def publish(event: str, message: str, **kwargs):
@@ -56,7 +62,13 @@ def ingest_repository(self, repo_id: str, access_token: str | None = None):
             if not repo:
                 raise ValueError(f"Repository {repo_id} not found")
 
-            tmp_dir = clone_repository(db, redis_client, repo, access_token)
+            tmp_dir, actual_branch, actual_sha = clone_repository(
+                db, redis_client, repo, access_token, branch=branch, commit_sha=commit_sha
+            )
+            
+            repo.ingested_branch = actual_branch
+            repo.ingested_commit_sha = actual_sha
+            db.commit()
 
             try:
                 process_repository_files(db, redis_client, repo, tmp_dir)

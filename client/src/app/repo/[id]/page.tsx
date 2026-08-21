@@ -50,9 +50,20 @@ export default async function Repository({
               <LinkIcon size={20} />
             </div>
             <div className="p-4 flex flex-col justify-between h-full">
-              <span className="text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
-                Repository
-              </span>
+              <div className="flex justify-between items-start">
+                <span className="text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
+                  Repository
+                </span>
+                {repo.ingested_branch && (
+                  <span className="text-[10px] font-mono bg-(--primary)/10 text-(--primary) px-2 py-0.5 rounded border border-(--primary)/20 flex items-center gap-1 shrink-0">
+                    <GitBranchIcon size={12} />
+                    {repo.ingested_branch}
+                    {repo.ingested_commit_sha && (
+                      <span className="opacity-75">@{repo.ingested_commit_sha.substring(0, 7)}</span>
+                    )}
+                  </span>
+                )}
+              </div>
               <h2 className="text-2xl font-bold flex items-center gap-3 text-(--foreground) truncate">
                 <GithubLogoIcon
                   size={28}

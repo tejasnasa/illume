@@ -63,6 +63,7 @@ export default async function RootLayout({
           num_id={Number(id)}
           id={repo.id}
           status={repo.status}
+          github_url={repo.github_url}
         />
       </Suspense>
 

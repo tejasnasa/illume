@@ -14,6 +14,8 @@ export default interface Repository {
     infrastructure: string[];
   };
   entry_points: unknown;
+  ingested_branch: string | null;
+  ingested_commit_sha: string | null;
   created_at: Date;
   updated_at: Date;
 }

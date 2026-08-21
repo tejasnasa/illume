@@ -76,6 +76,18 @@ export default function RepoCard({ repo }: { repo: Repository }) {
               {timeAgo(repo.updated_at)}
             </span>
           </div>
+          {repo.ingested_branch && (
+            <div className="flex items-center gap-1.5 mt-2 text-[11px] font-mono text-(--muted-foreground)/80 bg-(--secondary)/20 px-2 py-0.5 rounded-sm w-fit border border-(--border)">
+              <span className="text-(--primary)">🔀</span>
+              <span className="truncate max-w-[120px]">{repo.ingested_branch}</span>
+              {repo.ingested_commit_sha && (
+                <>
+                  <span className="opacity-40">@</span>
+                  <span className="text-(--primary) opacity-95">{repo.ingested_commit_sha.substring(0, 7)}</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -4,14 +4,62 @@ import {
   GearFineIcon,
   RepeatIcon,
   TrashIcon,
+  GitBranchIcon,
 } from "@phosphor-icons/react/dist/ssr";
 import ExportIllumeButton from "./ExportIllumeButton";
 import Button from "./ui/Button";
 import Modal from "./ui/Modal";
+import GitGraph from "./GitGraph";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
-export default function RepoSettings({ repo_id }: { repo_id: string }) {
+export default function RepoSettings({
+  repo_id,
+  github_url,
+}: {
+  repo_id: string;
+  github_url: string;
+}) {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const match = github_url.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/);
+  const owner = match ? match[1] : "";
+  const repoName = match ? match[2].replace(/\.git$/, "") : "";
+
+  const handleReingest = async (branch: string, commitSha: string | null) => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${repo_id}/reingest`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            branch,
+            commit_sha: commitSha,
+          }),
+        },
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to trigger re-ingestion");
+      }
+
+      router.push("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Failed to start re-ingestion process");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
-    <div className="p-4">
+    <div className="p-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
       <div className="flex items-center gap-3 mb-6 text-(--primary)">
         <GearFineIcon size={28} weight="duotone" />
         <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
@@ -123,6 +171,53 @@ export default function RepoSettings({ repo_id }: { repo_id: string }) {
             </Button>
           </Modal>
         </div>
+
+        {owner && repoName && (
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <p className="text-sm font-medium text-(--foreground)">
+                Ingest Different Version
+              </p>
+              <p className="text-xs text-(--muted-foreground) mt-0.5">
+                Re-ingest the repository from a specific branch or commit.
+              </p>
+            </div>
+            <Modal
+              className="w-full max-w-2xl p-6"
+              trigger={
+                <Button size="sm" className="gap-1.5 shrink-0">
+                  <GitBranchIcon weight="duotone" size={15} />
+                  Change Version
+                </Button>
+              }
+            >
+              <div className="flex flex-col gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-(--foreground) tracking-tight flex items-center gap-2">
+                    <GitBranchIcon className="text-(--primary)" />
+                    Re-ingest Specific Version
+                  </h1>
+                  <p className="text-xs text-(--muted-foreground) mt-1">
+                    Select a branch or commit from the repository history to re-analyze.
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+                    {error}
+                  </div>
+                )}
+
+                <GitGraph
+                  owner={owner}
+                  repo={repoName}
+                  onSelect={handleReingest}
+                  isSubmitting={isSubmitting}
+                />
+              </div>
+            </Modal>
+          </div>
+        )}
       </div>
     </div>
   );

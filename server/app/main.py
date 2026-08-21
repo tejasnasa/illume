@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import (
     auth,
     chat,
+    github_proxy,
     glossary,
     graph,
     guide,
@@ -42,6 +43,7 @@ app.include_router(auth.router)
 app.include_router(glossary.router)
 app.include_router(ownership.router)
 app.include_router(guide.router)
+app.include_router(github_proxy.router)
 
 
 @app.get("/healthz")

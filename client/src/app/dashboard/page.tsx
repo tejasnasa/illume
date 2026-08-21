@@ -2,7 +2,7 @@ import GetMyData from "@/api/auth";
 import { getRepositories } from "@/api/repository";
 import DashboardRefresh from "@/components/DashboardRefresh";
 import Navbar from "@/components/Navbar";
-import RepoForm from "@/components/RepoForm";
+import RepoPickerModal from "@/components/RepoPickerModal";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import RepoCard from "@/components/ui/RepoCard";
@@ -29,6 +29,7 @@ export default async function Dashboard() {
           </div>
 
           <Modal
+            className="w-2xl"
             trigger={
               <Button size="lg">
                 <PlusIcon weight="bold" size={20} />
@@ -36,15 +37,15 @@ export default async function Dashboard() {
               </Button>
             }
           >
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col">
               <h2 className="text-3xl font-bold mb-1 flex items-center gap-2">
                 <DatabaseIcon className="text-(--primary)" />
                 Index Repository
               </h2>
-              <p className="text-sm text-(--muted-foreground) mb-4">
-                Paste a GitHub URL to start the AI analysis pipeline.
+              <p className="text-sm text-(--muted-foreground) mb-6">
+                Connect and scan targeted versions of your GitHub codebases.
               </p>
-              <RepoForm />
+              <RepoPickerModal />
             </div>
           </Modal>
         </header>

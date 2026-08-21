@@ -43,6 +43,8 @@ class Repository(Base):
     detected_stack: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     entry_points: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     architecture_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ingested_branch: Mapped[str | None] = mapped_column(String, nullable=True)
+    ingested_commit_sha: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
