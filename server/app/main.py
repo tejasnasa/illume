@@ -12,6 +12,7 @@ from app.api.v1 import (
     guide,
     ownership,
     repository,
+    stats,
     ws,
 )
 from app.core.config import settings
@@ -43,6 +44,7 @@ app.include_router(auth.router)
 app.include_router(glossary.router)
 app.include_router(ownership.router)
 app.include_router(guide.router)
+app.include_router(stats.router)
 app.include_router(github_proxy.router)
 
 
