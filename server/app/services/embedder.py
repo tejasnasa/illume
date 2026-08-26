@@ -120,6 +120,79 @@ def _iter_batches(items: list, batch_size: int) -> Generator[list, None, None]:
         yield items[i : i + batch_size]
 
 
+def _embed_and_store(
+    client: OpenAI,
+    db: Session,
+    repository_id: UUID,
+    items: list,
+    source_type: str,
+    file_id_of=None,
+    publish_log=None,
+    label: str = "chunks",
+) -> int:
+    """Embed a list of ``(item, chunk_text)`` pairs and persist the vectors.
+
+    Single implementation of the embed-batch loop shared by all source types:
+    batches the chunks, calls OpenAI (response order matches input order), and
+    inserts one ``Embedding`` row per chunk. Each batch is committed as it
+    completes so partial progress survives a later API failure.
+
+    Args:
+        client: OpenAI client used for the embeddings API.
+        db: SQLAlchemy session for persistence.
+        repository_id: Repository the embeddings belong to.
+        items: List of ``(origin_row, chunk_text)`` tuples.
+        source_type: Value for ``Embedding.source_type`` (e.g. "commit").
+        file_id_of: Optional callable mapping an origin row to its
+            ``file_id``; when omitted, ``file_id`` is stored as None.
+        publish_log: Optional progress callback receiving status messages.
+        label: Human-readable noun for progress messages.
+
+    Returns:
+        Number of embeddings inserted.
+    """
+    inserted = 0
+    batches = list(_iter_batches(items, BATCH_SIZE))
+
+    for batch_idx, batch in enumerate(batches):
+        batch_texts = [chunk_text for _, chunk_text in batch]
+
+        if publish_log:
+            publish_log(f"Embedding {label} batch {batch_idx + 1}/{len(batches)}...")
+
+        try:
+            response = client.embeddings.create(
+                model="text-embedding-3-small",
+                input=batch_texts,
+            )
+        except Exception as e:
+            logger.error(
+                f"OpenAI embedding call failed on {label} batch {batch_idx + 1}: {e}"
+            )
+            raise
+
+        for i, embedding_data in enumerate(response.data):
+            item, chunk_text = batch[i]
+            db.add(
+                Embedding(
+                    source_type=source_type,
+                    source_id=item.id,
+                    file_id=file_id_of(item) if file_id_of else None,
+                    repository_id=repository_id,
+                    chunk_text=chunk_text,
+                    embedding=embedding_data.embedding,
+                )
+            )
+
+        db.commit()
+        inserted += len(batch)
+        logger.info(
+            f"{label} batch {batch_idx + 1}/{len(batches)} committed — {inserted} total embeddings so far"
+        )
+
+    return inserted
+
+
 def generate_embeddings(
     repository_id: UUID,
     db: Session,
@@ -275,79 +348,40 @@ def generate_embeddings(
     total_inserted = 0
 
     # --- Commits ---
+    # Embedded first because they're small and fast; their completion gives
+    # early searchable signal while bigger sets process.
     commits = db.query(Commit).filter(Commit.repository_id == repository_id).all()
-    commit_chunks = []
-    for c in commits:
-        chunk = _build_commit_chunk(c)
-        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
-            commit_chunks.append((c, chunk))
-    commit_batches = list(_iter_batches(commit_chunks, BATCH_SIZE))
-    total_commit_batches = len(commit_batches)
-
-    # Commits are embedded first because they're small and fast; their
-    # completion gives early searchable signal while bigger sets process.
-    for batch_idx, batch in enumerate(commit_batches):
-        batch_texts = [t for _, t in batch]
-
-        if publish_log:
-            publish_log(
-                f"Embedding commits batch {batch_idx + 1}/{total_commit_batches}..."
-            )
-
-        response = client.embeddings.create(
-            model="text-embedding-3-small", input=batch_texts
-        )
-
-        # Response order matches input order, so zip by index is safe.
-        for i, embedding_data in enumerate(response.data):
-            commit, chunk_text = batch[i]
-            db.add(
-                Embedding(
-                    source_type="commit",
-                    source_id=commit.id,
-                    file_id=None,
-                    repository_id=repository_id,
-                    chunk_text=chunk_text,
-                    embedding=embedding_data.embedding,
-                )
-            )
-        db.commit()
-        total_inserted += len(batch)
+    commit_chunks = [
+        (c, chunk)
+        for c in commits
+        if _token_estimate(chunk := _build_commit_chunk(c)) <= MAX_CHUNK_TOKENS
+    ]
+    total_inserted += _embed_and_store(
+        client,
+        db,
+        repository_id,
+        commit_chunks,
+        source_type="commit",
+        publish_log=publish_log,
+        label="commits",
+    )
 
     # --- Pull requests ---
     prs = db.query(PullRequest).filter(PullRequest.repository_id == repository_id).all()
-    pr_chunks = []
-    for p in prs:
-        chunk = _build_pr_chunk(p)
-        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
-            pr_chunks.append((p, chunk))
-    pr_batches = list(_iter_batches(pr_chunks, BATCH_SIZE))
-    total_pr_batches = len(pr_batches)
-
-    for batch_idx, batch in enumerate(pr_batches):
-        batch_texts = [t for _, t in batch]
-
-        if publish_log:
-            publish_log(f"Embedding PRs batch {batch_idx + 1}/{total_pr_batches}...")
-
-        response = client.embeddings.create(
-            model="text-embedding-3-small", input=batch_texts
-        )
-
-        for i, embedding_data in enumerate(response.data):
-            pr, chunk_text = batch[i]
-            db.add(
-                Embedding(
-                    source_type="pull_request",
-                    source_id=pr.id,
-                    file_id=None,
-                    repository_id=repository_id,
-                    chunk_text=chunk_text,
-                    embedding=embedding_data.embedding,
-                )
-            )
-        db.commit()
-        total_inserted += len(batch)
+    pr_chunks = [
+        (p, chunk)
+        for p in prs
+        if _token_estimate(chunk := _build_pr_chunk(p)) <= MAX_CHUNK_TOKENS
+    ]
+    total_inserted += _embed_and_store(
+        client,
+        db,
+        repository_id,
+        pr_chunks,
+        source_type="pull_request",
+        publish_log=publish_log,
+        label="PRs",
+    )
 
     # --- README ---
     # README sections are stored as repo-level documents (source_id = repo id),
@@ -401,83 +435,40 @@ def generate_embeddings(
         chunk_text = _build_file_chunk(file.path, file_symbols, annotation)
         if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
             file_chunks.append((file, chunk_text))
-    file_batches = list(_iter_batches(file_chunks, BATCH_SIZE))
-    total_file_batches = len(file_batches)
 
-    # NOTE: iterating _iter_batches again here re-generates batches instead of
-    # using `file_batches` above — same result, kept as-is to avoid touching logic.
-    for batch_idx, batch in enumerate(_iter_batches(file_chunks, BATCH_SIZE)):
-        batch_texts = [t for _, t in batch]
-        if publish_log:
-            publish_log(
-                f"Embedding files batch {batch_idx + 1}/{total_file_batches}..."
-            )
-        response = client.embeddings.create(
-            model="text-embedding-3-small", input=batch_texts
-        )
-        for i, embedding_data in enumerate(response.data):
-            file, chunk_text = batch[i]
-            # File-level embeddings point source_id at the file itself so
-            # lookups can resolve back to the path directly.
-            db.add(
-                Embedding(
-                    source_type="file",
-                    source_id=file.id,
-                    file_id=file.id,
-                    repository_id=repository_id,
-                    chunk_text=chunk_text,
-                    embedding=embedding_data.embedding,
-                )
-            )
-        db.commit()
-        total_inserted += len(batch)
+    def _file_self_id(file: File) -> UUID:
+        # File-level embeddings point source_id at the file itself so
+        # lookups can resolve back to the path directly.
+        return file.id
+
+    total_inserted += _embed_and_store(
+        client,
+        db,
+        repository_id,
+        file_chunks,
+        source_type="file",
+        file_id_of=_file_self_id,
+        publish_log=publish_log,
+        label="files",
+    )
 
     # Symbol/file chunks go last: they're the largest batch set, and each
     # committed batch represents durable progress if a later API call fails.
-    batches = list(_iter_batches(chunks, BATCH_SIZE))
+    def _symbol_file_id(item) -> UUID | None:
+        # Batch mixes AstSymbols with whole-file fallback chunks (File rows):
+        # symbols point at their parent file, files are their own source.
+        return item.file_id if isinstance(item, AstSymbol) else item.id
 
-    for batch_idx, batch in enumerate(batches):
-        batch_texts = [chunk_text for _, chunk_text in batch]
-
-        if publish_log:
-            publish_log(
-                f"Embedding batch {batch_idx + 1}/{len(batches)} ({len(batch_texts)} chunks)..."
-            )
-
-        try:
-            response = client.embeddings.create(
-                model="text-embedding-3-small",
-                input=batch_texts,
-            )
-        except Exception as e:
-            logger.error(f"OpenAI embedding call failed on batch {batch_idx + 1}: {e}")
-            raise
-
-        for i, embedding_data in enumerate(response.data):
-            item, chunk_text = batch[i]
-            # Batch mixes AstSymbols with whole-file fallback chunks (File
-            # rows): symbols point at themselves, files are their own source.
-            if isinstance(item, AstSymbol):
-                source_id = item.id
-                file_id = item.file_id
-            else:
-                source_id = item.id
-                file_id = item.id
-            db_embedding = Embedding(
-                source_type="symbol",
-                source_id=source_id,
-                file_id=file_id,
-                repository_id=repository_id,
-                chunk_text=chunk_text,
-                embedding=embedding_data.embedding,
-            )
-            db.add(db_embedding)
-
-        db.commit()
-        total_inserted += len(batch)
-        logger.info(
-            f"Batch {batch_idx + 1}/{len(batches)} committed — {total_inserted} total embeddings so far"
-        )
+    total_inserted += _embed_and_store(
+        client,
+        db,
+        repository_id,
+        chunks,
+        source_type="symbol",
+        file_id_of=_symbol_file_id,
+        publish_log=publish_log,
+        label="symbol chunks",
+    )
 
     if publish_log:
         publish_log(f"Embedding complete — {total_inserted} vectors stored.")

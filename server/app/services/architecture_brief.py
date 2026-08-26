@@ -26,6 +26,7 @@ from app.models import (
     OnboardingGuide,
     Repository,
 )
+from app.services.file_graph import build_dep_path_map
 from app.services.onboarding import _upsert_guide
 
 logger = logging.getLogger(__name__)
@@ -186,24 +187,13 @@ def _build_file_dep_map(
     files_by_id: dict[UUID, File],
 ) -> dict[UUID, list[str]]:
     """Map each file to the paths of files it depends on (deduplicated)."""
+    # Reuse the shared symbol->file edge collapse instead of a local join.
     sym_to_file: dict[UUID, UUID] = {s.id: s.file_id for s in symbols}
-    result: dict[UUID, list[str]] = defaultdict(list)
-    seen: set[tuple[UUID, UUID]] = set()
-
-    for dep in dependencies:
-        src_file_id = sym_to_file.get(dep.source_symbol_id)
-        tgt_file_id = sym_to_file.get(dep.target_symbol_id)
-        if not src_file_id or not tgt_file_id or src_file_id == tgt_file_id:
-            continue
-        edge = (src_file_id, tgt_file_id)
-        if edge in seen:
-            continue
-        seen.add(edge)
-        tgt_file = files_by_id.get(tgt_file_id)
-        if tgt_file:
-            result[src_file_id].append(tgt_file.path)
-
-    return result
+    edges = [
+        (sym_to_file.get(d.source_symbol_id), sym_to_file.get(d.target_symbol_id))
+        for d in dependencies
+    ]
+    return build_dep_path_map(edges, files_by_id)
 
 
 def _build_module_edges(

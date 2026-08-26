@@ -19,6 +19,158 @@ from app.services.import_resolver import (
 logger = logging.getLogger(__name__)
 
 
+def _build_stem_indexes(
+    files: list[File],
+) -> tuple[dict[str, File], dict[str, list[File]], dict[str, File]]:
+    """Build path-stem lookup indexes for fast import-to-file matching.
+
+    Args:
+        files: All files belonging to the repository.
+
+    Returns:
+        A tuple of ``(full_stem_map, short_stem_map, index_map)``:
+
+        - ``full_stem_map``: path stem (extension stripped) -> File, including
+          a variant with the top-level directory stripped to tolerate unknown
+          src-root prefixes (``src/``, ``lib/``, ``app/``).
+        - ``short_stem_map``: bare filename stem -> all Files with that name.
+        - ``index_map``: package directory -> its ``index``/``__init__``
+          entry-point file.
+    """
+    full_stem_map: dict[str, File] = {}
+    short_stem_map: dict[str, list[File]] = {}
+    index_map: dict[str, File] = {}
+
+    for f in files:
+        normalized = f.path.replace("\\", "/")
+        stem = normalized.rsplit(".", 1)[0]
+        full_stem_map[stem] = f
+
+        # Also index without the top-level dir so imports written relative to
+        # an unknown source root still match.
+        parts = stem.split("/")
+        if len(parts) > 1:
+            alt_stem = "/".join(parts[1:])
+            full_stem_map.setdefault(alt_stem, f)
+
+        filename_stem = stem.split("/")[-1]
+        short_stem_map.setdefault(filename_stem, []).append(f)
+
+        if stem.split("/")[-1] in ("index", "__init__"):
+            # `import pkg` resolves to pkg/index.* or pkg/__init__.*, so map
+            # each package directory to its entry-point file.
+            dir_path = "/".join(stem.split("/")[:-1])
+            index_map[dir_path] = f
+
+            dir_parts = dir_path.split("/")
+            if len(dir_parts) > 1:
+                alt_dir = "/".join(dir_parts[1:])
+                index_map.setdefault(alt_dir, f)
+
+    return full_stem_map, short_stem_map, index_map
+
+
+def _match_file(
+    resolved: str,
+    language: str,
+    full_stem_map: dict[str, File],
+    short_stem_map: dict[str, list[File]],
+    index_map: dict[str, File],
+) -> File | None:
+    """Match a resolved import specifier to a known file.
+
+    Applies the multi-strategy fallback chain documented on
+    :func:`resolve_dependencies`: exact stem, package index, unique short
+    stem, language-family narrowing, then suffix/segment scoring.
+
+    Args:
+        resolved: Repo-relative path stem produced by ``resolve_import``.
+        language: Language of the file containing the import.
+        full_stem_map: Exact-stem index from :func:`_build_stem_indexes`.
+        short_stem_map: Filename-only index from :func:`_build_stem_indexes`.
+        index_map: Package-entry index from :func:`_build_stem_indexes`.
+
+    Returns:
+        The matched File, or None if no strategy succeeds.
+    """
+    matched_file: File | None = full_stem_map.get(resolved)
+
+    if not matched_file:
+        matched_file = index_map.get(resolved)
+
+    if not matched_file:
+        short_stem = resolved.split("/")[-1]
+        candidates = short_stem_map.get(short_stem, [])
+        if len(candidates) == 1:
+            matched_file = candidates[0]
+        elif len(candidates) > 1:
+            matched_file = _disambiguate_candidates(candidates, language, resolved)
+
+    return matched_file
+
+
+def _disambiguate_candidates(
+    candidates: list[File], language: str, resolved: str
+) -> File | None:
+    """Pick the best file among several sharing the same filename.
+
+    Narrows candidates to the importer's language family first; if several
+    remain, prefers an exact suffix match on the resolved specifier, then the
+    candidate with the longest reversed path-segment overlap.
+
+    Args:
+        candidates: Files whose filename stem equals the resolved basename.
+        language: Language of the importing file.
+        resolved: The resolved import specifier being matched.
+
+    Returns:
+        The best-matching File, or None if no candidate stands out.
+    """
+    lang = language.lower()
+    # Narrow ambiguous same-named candidates to the importer's language
+    # family (a.py vs a.ts) before scoring.
+    if lang == "python":
+        filtered = [c for c in candidates if (c.language or "") == "python"]
+    elif lang in ("javascript", "typescript", "tsx", "jsx"):
+        filtered = [
+            c
+            for c in candidates
+            if (c.language or "") in ("javascript", "typescript", "tsx", "jsx")
+        ]
+    else:
+        filtered = candidates
+
+    if not filtered:
+        filtered = candidates
+
+    if len(filtered) == 1:
+        return filtered[0]
+
+    # Prefer exact suffix match; otherwise score candidates by how many
+    # trailing path segments overlap the specifier.
+    best: File | None = None
+    best_score = 0
+    for c in filtered:
+        c_stem = c.path.replace("\\", "/").rsplit(".", 1)[0]
+        if c_stem.endswith(resolved):
+            return c
+        # Compare path segments from the end: more shared trailing segments
+        # = deeper structural similarity.
+        r_parts = resolved.split("/")
+        c_parts = c_stem.split("/")
+        score = 0
+        for rp, cp in zip(reversed(r_parts), reversed(c_parts)):
+            if rp == cp:
+                score += 1
+            else:
+                break
+        if score > best_score:
+            best_score = score
+            best = c
+
+    return best if best_score > 0 else None
+
+
 def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int:
     """Resolve all import symbols for a repository into Dependency edges.
 
@@ -56,38 +208,7 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
     """
     files = db.query(File).filter(File.repository_id == repo_id).all()
 
-    full_stem_map: dict[str, File] = {}
-    short_stem_map: dict[str, list[File]] = {}
-
-    for f in files:
-        normalized = f.path.replace("\\", "/")
-        stem = normalized.rsplit(".", 1)[0]
-        full_stem_map[stem] = f
-
-        # Also index without the top-level dir (src/, lib/, app/) so imports
-        # written relative to an unknown source root still match.
-        parts = stem.split("/")
-        if len(parts) > 1:
-            alt_stem = "/".join(parts[1:])
-            full_stem_map.setdefault(alt_stem, f)
-
-        filename_stem = stem.split("/")[-1]
-        short_stem_map.setdefault(filename_stem, []).append(f)
-
-    index_map: dict[str, File] = {}
-    for f in files:
-        normalized = f.path.replace("\\", "/")
-        stem = normalized.rsplit(".", 1)[0]
-        if stem.split("/")[-1] in ("index", "__init__"):
-            # `import pkg` resolves to pkg/index.* or pkg/__init__.*, so map
-            # each package directory to its entry-point file.
-            dir_path = "/".join(stem.split("/")[:-1])
-            index_map[dir_path] = f
-
-            dir_parts = dir_path.split("/")
-            if len(dir_parts) > 1:
-                alt_dir = "/".join(dir_parts[1:])
-                index_map.setdefault(alt_dir, f)
+    full_stem_map, short_stem_map, index_map = _build_stem_indexes(files)
 
     ts_paths = load_ts_paths(repo_root)
     workspace_map = load_workspace_map(repo_root)
@@ -148,62 +269,9 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
         if not resolved:
             continue
 
-        matched_file: File | None = full_stem_map.get(resolved)
-
-        if not matched_file:
-            matched_file = index_map.get(resolved)
-
-        if not matched_file:
-            short_stem = resolved.split("/")[-1]
-            candidates = short_stem_map.get(short_stem, [])
-            if len(candidates) == 1:
-                matched_file = candidates[0]
-            if len(candidates) > 1:
-                lang = language.lower()
-                # Narrow ambiguous same-named candidates to the importer's
-                # language family (a.py vs a.ts) before scoring.
-                if lang == "python":
-                    filtered = [c for c in candidates if (c.language or "") == "python"]
-                elif lang in ("javascript", "typescript", "tsx", "jsx"):
-                    filtered = [
-                        c
-                        for c in candidates
-                        if (c.language or "")
-                        in ("javascript", "typescript", "tsx", "jsx")
-                    ]
-                else:
-                    filtered = candidates
-
-                if not filtered:
-                    filtered = candidates
-
-                if len(filtered) == 1:
-                    matched_file = filtered[0]
-                elif len(filtered) > 1:
-                    # Prefer exact suffix match; otherwise score candidates by
-                    # how many trailing path segments overlap the specifier.
-                    best: File | None = None
-                    best_score = 0
-                    for c in filtered:
-                        c_stem = c.path.replace("\\", "/").rsplit(".", 1)[0]
-                        if c_stem.endswith(resolved):
-                            matched_file = c
-                            break
-                        # Compare path segments from the end: more shared
-                        # trailing segments = deeper structural similarity.
-                        r_parts = resolved.split("/")
-                        c_parts = c_stem.split("/")
-                        score = 0
-                        for rp, cp in zip(reversed(r_parts), reversed(c_parts)):
-                            if rp == cp:
-                                score += 1
-                            else:
-                                break
-                        if score > best_score:
-                            best_score = score
-                            best = c
-                    if not matched_file and best and best_score > 0:
-                        matched_file = best
+        matched_file = _match_file(
+            resolved, language, full_stem_map, short_stem_map, index_map
+        )
 
         if not matched_file or matched_file.id == imp.file_id:
             continue

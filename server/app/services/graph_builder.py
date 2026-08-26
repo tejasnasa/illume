@@ -25,6 +25,33 @@ _CRITICALITY_SCORE: dict[str | None, float] = {
 }
 
 
+def _file_edge_stmt(file_ids: set):
+    """Build the symbol->file self-join query used by both graph levels.
+
+    Shared by ``_build_file_graph`` and ``_build_symbol_graph`` so the join
+    logic lives in exactly one place.
+
+    Args:
+        file_ids: File ids the edges must connect (both endpoints filtered).
+
+    Returns:
+        A SQLAlchemy select of ``(dep_type, src_file_id, tgt_file_id)`` rows.
+    """
+    SourceSymbol = AstSymbol.__table__.alias("src_sym")
+    TargetSymbol = AstSymbol.__table__.alias("tgt_sym")
+    return (
+        select(
+            Dependency.dep_type,
+            SourceSymbol.c.file_id.label("src_file_id"),
+            TargetSymbol.c.file_id.label("tgt_file_id"),
+        )
+        .join(SourceSymbol, Dependency.source_symbol_id == SourceSymbol.c.id)
+        .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.c.id)
+        .filter(SourceSymbol.c.file_id.in_(file_ids))
+        .filter(TargetSymbol.c.file_id.in_(file_ids))
+    )
+
+
 async def build_graph(
     db: AsyncSession,
     repo_id: uuid.UUID,
@@ -85,22 +112,9 @@ async def _build_file_graph(db: AsyncSession, repo_id: uuid.UUID) -> dict:
     ]
 
     SourceSymbol = AstSymbol.__table__.alias("src_sym")
-    # Self-join on AstSymbol to resolve each dependency's source/target symbol to its file.
     TargetSymbol = AstSymbol.__table__.alias("tgt_sym")
 
-    rows = (
-        await db.execute(
-            select(
-                Dependency.dep_type,
-                SourceSymbol.c.file_id.label("src_file_id"),
-                TargetSymbol.c.file_id.label("tgt_file_id"),
-            )
-            .join(SourceSymbol, Dependency.source_symbol_id == SourceSymbol.c.id)
-            .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.c.id)
-            .filter(SourceSymbol.c.file_id.in_(file_ids))
-            .filter(TargetSymbol.c.file_id.in_(file_ids))
-        )
-    ).all()
+    rows = (await db.execute(_file_edge_stmt(file_ids))).all()
 
     type_counter: dict[tuple[str, str], dict[str, int]] = defaultdict(
         lambda: defaultdict(int)

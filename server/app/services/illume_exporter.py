@@ -17,6 +17,7 @@ from app.models import (
     File,
     Repository,
 )
+from app.services.file_graph import query_file_edges_async
 
 
 async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | None:
@@ -72,34 +73,20 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
         if s.kind in ("function", "class", "method"):
             file_id_to_symbols[s.file_id].append(s)
 
-    SourceSymbol = AstSymbol.__table__.alias("src_sym")
-    TargetSymbol = AstSymbol.__table__.alias("tgt_sym")
-
-    rows = (
-        await db.execute(
-            select(
-                Dependency.dep_type,
-                SourceSymbol.c.file_id.label("src_file_id"),
-                TargetSymbol.c.file_id.label("tgt_file_id"),
-                TargetSymbol.c.name.label("tgt_symbol_name"),
-            )
-            .join(SourceSymbol, Dependency.source_symbol_id == SourceSymbol.c.id)
-            .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.c.id)
-            .filter(SourceSymbol.c.file_id.in_(file_ids))
-            .filter(TargetSymbol.c.file_id.in_(file_ids))
-        )
-    ).all()
+    # Shared symbol->file edge query (with target names for annotations).
+    rows = await query_file_edges_async(db, repo_id, include_target_symbol=True)
 
     total_edges = len(rows)
 
     edge_symbols = defaultdict(lambda: defaultdict(set))
     # Aggregate raw dependency rows into one entry per file pair, keyed by
     # dep_type, with the set of target symbols referenced under each type.
-    for row in rows:
-        src_path = file_id_to_path.get(row.src_file_id)
-        tgt_path = file_id_to_path.get(row.tgt_file_id)
+    # Row shape: (dep_type, src_file_id, tgt_file_id, tgt_symbol_name).
+    for dep_type, src_file_id, tgt_file_id, tgt_symbol_name in rows:
+        src_path = file_id_to_path.get(src_file_id)
+        tgt_path = file_id_to_path.get(tgt_file_id)
         if src_path and tgt_path and src_path != tgt_path:
-            edge_symbols[(src_path, tgt_path)][row.dep_type].add(row.tgt_symbol_name)
+            edge_symbols[(src_path, tgt_path)][dep_type].add(tgt_symbol_name)
 
     lines = []
 

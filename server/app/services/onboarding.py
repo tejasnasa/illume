@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.core.config import settings
 from app.models import AstSymbol, Dependency, File, OnboardingGuide, Repository
+from app.services.file_graph import build_file_graph
 
 logger = logging.getLogger(__name__)
 
@@ -30,31 +31,7 @@ def _build_file_graph(
     repo_id: UUID,
 ) -> tuple[dict[UUID, set[UUID]], dict[UUID, set[UUID]]]:
     """Build forward (deps) and reverse (rdeps) file-level dependency maps."""
-    TargetSymbol = aliased(AstSymbol, name="tgt_sym")
-
-    repo_file_ids = select(File.id).where(File.repository_id == repo_id)
-
-    rows = (
-        db.query(
-            AstSymbol.file_id.label("src_file"),
-            TargetSymbol.file_id.label("tgt_file"),
-        )
-        .join(Dependency, Dependency.source_symbol_id == AstSymbol.id)
-        .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.id)
-        .filter(File.id.in_(repo_file_ids))
-        .all()
-    )
-
-    deps: dict[UUID, set[UUID]] = defaultdict(set)
-    rdeps: dict[UUID, set[UUID]] = defaultdict(set)
-
-    for src_file, tgt_file in rows:
-        if src_file == tgt_file:
-            continue
-        deps[src_file].add(tgt_file)
-        rdeps[tgt_file].add(src_file)
-
-    return deps, rdeps
+    return build_file_graph(db, repo_id)
 
 
 def _topological_sort(
