@@ -1,8 +1,19 @@
+"""Builds and stores vector embeddings for a repository's content.
+
+Collects embeddable text chunks from AST symbols (functions, classes,
+methods), git commits, pull requests, README sections, and annotated
+onboarding files, then generates embeddings via the OpenAI embeddings API
+and persists them as `Embedding` rows for later pgvector retrieval.
+"""
+
 import logging
 import re
 from collections import defaultdict
 from typing import Generator
 from uuid import UUID
+
+from openai import OpenAI
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import (
@@ -15,13 +26,13 @@ from app.models import (
     OnboardingGuide,
     PullRequest,
 )
-from openai import OpenAI
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
+# Symbol kinds worth embedding individually.
 EMBEDDABLE_KINDS = {"function", "class", "method"}
 
+# Chunks above this estimated size are skipped to stay within model limits.
 MAX_CHUNK_TOKENS = 2048
 
 BATCH_SIZE = 100
@@ -37,6 +48,7 @@ def _build_chunk_text(
     callers: list[str] | None = None,
     callees: list[str] | None = None,
 ) -> str:
+    """Builds a labeled chunk for a symbol with context metadata."""
     parts = [f"# {file_path}", f"## {kind}: {name}"]
 
     if glossary_def:
@@ -54,6 +66,7 @@ def _build_chunk_text(
 
 
 def _build_commit_chunk(commit: Commit) -> str:
+    """Builds a chunk summarizing a commit's message and changed files."""
     parts = [f"# Commit {commit.hash[:8]} by {commit.author_name}"]
     parts.append(f"Message: {commit.message}")
     if commit.changed_files_list:
@@ -63,6 +76,7 @@ def _build_commit_chunk(commit: Commit) -> str:
 
 
 def _build_file_chunk(file_path: str, symbols: list[AstSymbol], annotation: str) -> str:
+    """Builds a chunk pairing an onboarding annotation with the file's symbols."""
     parts = [f"# File: {file_path}"]
     parts.append(f"Note: {annotation}")
     symbol_names = [
@@ -76,11 +90,13 @@ def _build_file_chunk(file_path: str, symbols: list[AstSymbol], annotation: str)
 
 
 def _build_pr_chunk(pr: PullRequest) -> str:
+    """Builds a chunk from a PR's number, title, and description."""
     desc = pr.description or ""
     return f"# PR #{pr.number}: {pr.title}\n{desc}".strip()
 
 
 def _build_readme_chunks(content: str) -> list[str]:
+    """Splits README markdown into per-`##`-section chunks within the token cap."""
     sections = re.split(r"(?=^##\s)", content, flags=re.MULTILINE)
     chunks = []
     for section in sections:
@@ -94,10 +110,12 @@ def _build_readme_chunks(content: str) -> list[str]:
 
 
 def _token_estimate(text: str) -> int:  # token estimate: 4 chars per token
+    """Rough token count assuming ~4 characters per token."""
     return len(text) // 4
 
 
 def _iter_batches(items: list, batch_size: int) -> Generator[list, None, None]:
+    """Yields successive fixed-size slices of `items`."""
     for i in range(0, len(items), batch_size):
         yield items[i : i + batch_size]
 
@@ -108,8 +126,45 @@ def generate_embeddings(
     publish_log=None,
     readme_content: str | None = None,
 ) -> int:
+    """Generate and persist vector embeddings for a repository.
+
+    Builds text chunks from four source types and embeds each with the
+    OpenAI ``text-embedding-3-small`` model in batches of ``BATCH_SIZE``:
+
+    - **Symbols**: functions/classes/methods with source code, enriched
+      with glossary definitions (preferred over docstrings), caller/callee
+      names (up to 5 each), and file paths. Files whose symbols were all
+      skipped as oversized get one fallback chunk of their concatenated
+      symbol source, so they remain searchable at coarse granularity.
+    - **Commits**: hash, author, message, and up to 20 changed files.
+    - **Pull requests**: number, title, and description.
+    - **README**: split into per-section chunks prefixed with a header.
+    - **Annotated files**: files listed in the repository's onboarding
+      guide reading order get a chunk combining the annotation with the
+      file's symbol names.
+
+    Any chunk whose estimated token count exceeds ``MAX_CHUNK_TOKENS`` is
+    skipped rather than truncated. Each batch is committed to the database
+    as it completes, so partial progress survives failures.
+
+    Args:
+        repository_id: ID of the repository to embed.
+        db: SQLAlchemy session used for queries and persistence.
+        publish_log: Optional callback receiving progress messages
+            (e.g. for streaming status to a client).
+        readme_content: Optional raw README markdown to embed as documents.
+
+    Returns:
+        Total number of embeddings inserted.
+
+    Raises:
+        Exception: If an OpenAI embeddings API call fails; the error is
+            logged and re-raised after earlier batches have been committed.
+    """
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
+    # Only functions/classes/methods with actual source are embeddable;
+    # imports and empty symbols would produce low-value chunks.
     symbols = (
         db.query(AstSymbol)
         .join(File, AstSymbol.file_id == File.id)
@@ -126,6 +181,8 @@ def generate_embeddings(
         logger.warning(f"No embeddable symbols found for repo {repository_id}")
         return 0
 
+    # Each chunk keeps a reference to its origin row so the batch loop later
+    # can build Embedding rows with the right source_id/file_id.
     chunks = []
     skipped = 0
 
@@ -136,6 +193,8 @@ def generate_embeddings(
     symbol_ids = [s.id for s in symbols]
     symbol_name_map = {s.id: s.name for s in symbols}
 
+    # Bulk-load enrichment data up front so chunk building stays in memory
+    # instead of issuing a query per symbol.
     glossary_map = {
         row.symbol_id: row.definition
         for row in db.query(GlossaryEntry.symbol_id, GlossaryEntry.definition)
@@ -143,6 +202,8 @@ def generate_embeddings(
         .all()
     }
 
+    # Precompute call-graph context so each symbol chunk can include who
+    # calls it and what it calls — useful signal for retrieval relevance.
     callers_map = defaultdict(list)
     for dep in (
         db.query(Dependency.target_symbol_id, Dependency.source_symbol_id)
@@ -154,6 +215,7 @@ def generate_embeddings(
         if name:
             callers_map[dep.target_symbol_id].append(name)
 
+    # Mirror of the callers query, keyed by the calling symbol instead.
     callees_map = defaultdict(list)
     for dep in (
         db.query(Dependency.source_symbol_id, Dependency.target_symbol_id)
@@ -167,6 +229,8 @@ def generate_embeddings(
 
     for symbol in symbols:
         file_path = file_path_map.get(symbol.file_id, "unknown")
+        # Glossary definition wins over docstring — it's written for humans,
+        # not extracted from code, so it embeds better retrieval context.
         chunk_text = _build_chunk_text(
             file_path=file_path,
             kind=symbol.kind,
@@ -178,6 +242,8 @@ def generate_embeddings(
             callees=callees_map.get(symbol.id),
         )
 
+        # Drop rather than truncate: a cut-off chunk would embed misleading
+        # partial code and exceed model input limits anyway.
         if _token_estimate(chunk_text) > MAX_CHUNK_TOKENS:
             logger.debug(f"Skipping oversized chunk: {symbol.name} in {file_path}")
             skipped += 1
@@ -189,11 +255,15 @@ def generate_embeddings(
         f"Repo {repository_id}: {len(chunks)} chunks to embed, {skipped} skipped (oversized)"
     )
 
+    # Fallback: files with no surviving symbol chunks still get one whole-file
+    # chunk so they aren't invisible to code search.
     embedded_file_ids = {s.file_id for s, _ in chunks}
     all_files = db.query(File).filter(File.repository_id == repository_id).all()
     for file in all_files:
         if file.id in embedded_file_ids:
             continue
+        # Include non-embeddable symbols too (e.g. variables) — this is a
+        # coarse-grained catch-all, not a re-embed of the surviving chunks.
         file_symbols = db.query(AstSymbol).filter(AstSymbol.file_id == file.id).all()
         symbol_lines = "\n".join(s.source_code for s in file_symbols if s.source_code)
         if not symbol_lines.strip():
@@ -204,6 +274,7 @@ def generate_embeddings(
 
     total_inserted = 0
 
+    # --- Commits ---
     commits = db.query(Commit).filter(Commit.repository_id == repository_id).all()
     commit_chunks = []
     for c in commits:
@@ -213,6 +284,8 @@ def generate_embeddings(
     commit_batches = list(_iter_batches(commit_chunks, BATCH_SIZE))
     total_commit_batches = len(commit_batches)
 
+    # Commits are embedded first because they're small and fast; their
+    # completion gives early searchable signal while bigger sets process.
     for batch_idx, batch in enumerate(commit_batches):
         batch_texts = [t for _, t in batch]
 
@@ -225,6 +298,7 @@ def generate_embeddings(
             model="text-embedding-3-small", input=batch_texts
         )
 
+        # Response order matches input order, so zip by index is safe.
         for i, embedding_data in enumerate(response.data):
             commit, chunk_text = batch[i]
             db.add(
@@ -240,6 +314,7 @@ def generate_embeddings(
         db.commit()
         total_inserted += len(batch)
 
+    # --- Pull requests ---
     prs = db.query(PullRequest).filter(PullRequest.repository_id == repository_id).all()
     pr_chunks = []
     for p in prs:
@@ -274,6 +349,9 @@ def generate_embeddings(
         db.commit()
         total_inserted += len(batch)
 
+    # --- README ---
+    # README sections are stored as repo-level documents (source_id = repo id),
+    # since they don't belong to any single file or symbol.
     if readme_content:
         readme_chunks = _build_readme_chunks(readme_content)
         if readme_chunks:
@@ -304,17 +382,21 @@ def generate_embeddings(
     )
     annotation_map: dict[str, str] = {}
     if guide and guide.reading_order:
+        # Path -> why-read-this annotation, written during onboarding-guide
+        # generation; only annotated files get a dedicated file-level chunk.
         annotation_map = {
             item["path"]: item["annotation"]
             for item in guide.reading_order
             if item.get("annotation")
         }
 
+    # --- Annotated files ---
     file_chunks = []
     for file in all_files:
         annotation = annotation_map.get(file.path, "")
         if not annotation:
             continue
+        # Reuse the already-loaded symbol list rather than re-querying.
         file_symbols = [s for s in symbols if s.file_id == file.id]
         chunk_text = _build_file_chunk(file.path, file_symbols, annotation)
         if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
@@ -322,6 +404,8 @@ def generate_embeddings(
     file_batches = list(_iter_batches(file_chunks, BATCH_SIZE))
     total_file_batches = len(file_batches)
 
+    # NOTE: iterating _iter_batches again here re-generates batches instead of
+    # using `file_batches` above — same result, kept as-is to avoid touching logic.
     for batch_idx, batch in enumerate(_iter_batches(file_chunks, BATCH_SIZE)):
         batch_texts = [t for _, t in batch]
         if publish_log:
@@ -333,6 +417,8 @@ def generate_embeddings(
         )
         for i, embedding_data in enumerate(response.data):
             file, chunk_text = batch[i]
+            # File-level embeddings point source_id at the file itself so
+            # lookups can resolve back to the path directly.
             db.add(
                 Embedding(
                     source_type="file",
@@ -346,6 +432,8 @@ def generate_embeddings(
         db.commit()
         total_inserted += len(batch)
 
+    # Symbol/file chunks go last: they're the largest batch set, and each
+    # committed batch represents durable progress if a later API call fails.
     batches = list(_iter_batches(chunks, BATCH_SIZE))
 
     for batch_idx, batch in enumerate(batches):
@@ -367,6 +455,8 @@ def generate_embeddings(
 
         for i, embedding_data in enumerate(response.data):
             item, chunk_text = batch[i]
+            # Batch mixes AstSymbols with whole-file fallback chunks (File
+            # rows): symbols point at themselves, files are their own source.
             if isinstance(item, AstSymbol):
                 source_id = item.id
                 file_id = item.file_id

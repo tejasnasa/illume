@@ -1,3 +1,10 @@
+"""GitHub pull request fetching service.
+
+Fetches merged pull requests from the GitHub API (paginated, with rate-limit
+retry handling) and persists them for a repository, publishing progress
+events to Redis along the way.
+"""
+
 from __future__ import annotations
 
 import json
@@ -7,9 +14,10 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import httpx
-from app.models import PullRequest
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+
+from app.models import PullRequest
 from app.services._publish import publish_log
 
 logger = logging.getLogger(__name__)
@@ -27,6 +35,30 @@ def fetch_pull_requests(
     db: Session,
     redis_client,
 ) -> int:
+    """Fetch merged PRs from GitHub and store them in the database.
+
+    Parses the repository's ``github_url``, fetches up to ``MAX_PRS`` merged
+    pull requests via the GitHub REST API (paginated at ``PER_PAGE`` per page,
+    stopping early when a short page or an unmerged PR run is exhausted), and
+    bulk-inserts them idempotently on ``(repository_id, number)``. Progress is
+    published to Redis before and after the fetch.
+
+    Args:
+        repo: Repository model instance with ``id`` and ``github_url``.
+        access_token: Optional GitHub token; unauthenticated requests are
+            subject to stricter rate limits.
+        db: SQLAlchemy session used to persist the PR rows.
+        redis_client: Redis client for publishing progress log events.
+
+    Returns:
+        The number of PR rows written (including rows that already existed and
+        were skipped by the conflict clause).
+
+    Raises:
+        GitHubClientError: If the URL cannot be parsed, the API returns an
+            error status, the token is invalid/expired, or the rate limit is
+            exceeded after ``MAX_RETRIES`` retries.
+    """
     owner, repo_name = _parse_github_url(repo.github_url)
 
     publish_log(
@@ -55,6 +87,7 @@ def fetch_pull_requests(
 
 
 def _parse_github_url(github_url: str) -> tuple[str, str]:
+    """Extract (owner, repo_name) from a GitHub URL, stripping a .git suffix."""
     url = github_url.strip().rstrip("/")
     if not url.startswith("http"):
         url = f"https://{url}"
@@ -73,6 +106,7 @@ def _parse_github_url(github_url: str) -> tuple[str, str]:
 def _fetch_merged_prs(
     owner: str, repo_name: str, access_token: str | None
 ) -> list[dict]:
+    """Page through closed PRs, keeping only merged ones, capped at MAX_PRS."""
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -94,10 +128,14 @@ def _fetch_merged_prs(
 
             raw_page = _get_with_retry(client, url, headers)
 
+            # Empty page means we've walked past the last PR.
             if not raw_page:
                 break
 
             for pr in raw_page:
+                # Closed-but-unmerged PRs are rejected; since results are
+                # sorted by updated desc, unmerged runs can still be followed
+                # by merged ones, so keep scanning rather than stopping here.
                 if pr.get("merged_at") is None:
                     continue
                 results.append(_normalise_pr(pr))
@@ -105,6 +143,7 @@ def _fetch_merged_prs(
                 if len(results) >= MAX_PRS:
                     break
 
+            # A short page is the API's signal there are no further pages.
             if len(raw_page) < PER_PAGE:
                 break
 
@@ -118,6 +157,7 @@ def _get_with_retry(
     url: str,
     headers: dict,
 ) -> list[dict]:
+    """GET a URL, retrying on 429/403 rate limits using Retry-After hints."""
     for attempt in range(1, MAX_RETRIES + 1):
         try:
             response = client.get(url, headers=headers)
@@ -128,6 +168,8 @@ def _get_with_retry(
             return response.json()
 
         if response.status_code in (429, 403):
+            # 403 is included because GitHub also signals rate limiting with it;
+            # honour the server-provided wait instead of a fixed backoff.
             retry_after = _parse_retry_after(response)
             logger.warning(
                 "GitHub rate limit hit (attempt %d/%d). Waiting %ds.",
@@ -159,6 +201,9 @@ def _get_with_retry(
 
 
 def _parse_retry_after(response: httpx.Response) -> int:
+    """Derive wait seconds from Retry-After / X-RateLimit-Reset, default 60."""
+    # Prefer Retry-After (explicit delay); fall back to computing seconds
+    # until the reset epoch timestamp; both are optional on real responses.
     if retry_after := response.headers.get("Retry-After"):
         try:
             return int(retry_after)
@@ -168,6 +213,7 @@ def _parse_retry_after(response: httpx.Response) -> int:
     if reset_ts := response.headers.get("X-RateLimit-Reset"):
         try:
             wait = int(reset_ts) - int(time.time())
+            # Clock skew could yield <=0; always sleep at least 1s.
             return max(wait, 1)
         except ValueError:
             pass
@@ -176,9 +222,11 @@ def _parse_retry_after(response: httpx.Response) -> int:
 
 
 def _normalise_pr(raw: dict) -> dict:
+    """Map a raw GitHub PR payload to the shape used for DB insertion."""
     reviewers: list[str] = [
         r["login"]
         for r in (raw.get("requested_reviewers") or [])
+        # GitHub occasionally returns null entries or logins-only payloads.
         if isinstance(r, dict) and r.get("login")
     ]
 
@@ -188,6 +236,7 @@ def _normalise_pr(raw: dict) -> dict:
     merged_at: datetime | None = None
     if merged_at_raw:
         try:
+            # 'Z' isn't accepted by fromisoformat before Python 3.11.
             merged_at = datetime.fromisoformat(merged_at_raw.replace("Z", "+00:00"))
         except ValueError:
             logger.warning("Could not parse merged_at %r", merged_at_raw)
@@ -208,6 +257,7 @@ def _bulk_insert_pull_requests(
     repo_id: str,
     prs: list[dict],
 ) -> int:
+    """Bulk-insert PR rows, skipping duplicates on (repository_id, number)."""
 
     if not prs:
         return 0
@@ -229,6 +279,8 @@ def _bulk_insert_pull_requests(
     stmt = (
         pg_insert(PullRequest)
         .values(rows)
+        # Refetches overlap heavily with stored PRs; skip existing rows so
+        # reruns are idempotent. Returned count includes skipped rows.
         .on_conflict_do_nothing(index_elements=["repository_id", "number"])
     )
 
@@ -238,4 +290,6 @@ def _bulk_insert_pull_requests(
 
 
 class GitHubClientError(Exception):
+    """Raised for any GitHub API failure (bad URL, HTTP error, rate limits)."""
+
     pass

@@ -1,15 +1,59 @@
+"""Internal dependency resolution between repository files.
+
+Resolves parsed import symbols to concrete target files and inserts Dependency
+edges, then computes file-level fan-in/fan-out metrics from those edges.
+"""
+
 import logging
-import uuid
 from collections import defaultdict
 
-from app.models import AstSymbol, Dependency, File
-from app.services.import_resolver import load_ts_paths, load_workspace_map, resolve_import
 from sqlalchemy.orm import Session
+
+from app.models import AstSymbol, Dependency, File
+from app.services.import_resolver import (
+    load_ts_paths,
+    load_workspace_map,
+    resolve_import,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int:
+    """Resolve all import symbols for a repository into Dependency edges.
+
+    For each stored ``import`` symbol, the import specifier is resolved to a
+    candidate path (language-aware, via ``resolve_import``), then matched to a
+    known File using a multi-strategy fallback chain:
+
+    1. **Full stem map** — exact match on the resolved path's stem (extension
+       stripped), including a variant with the top-level directory stripped to
+       tolerate unknown src-root prefixes.
+    2. **Index map** — the resolved stem refers to a package directory whose
+       entry point is an ``index``/``__init__`` file.
+    3. **Short stem** — match on filename alone; only accepted when exactly one
+       candidate exists.
+    4. **Language filter** — when several candidates share a filename, narrow
+       them to files matching the importer's language family (Python vs JS/TS).
+    5. **Suffix scoring** — among remaining candidates, prefer one whose full
+       path ends with the resolved specifier; otherwise pick the candidate with
+       the longest reversed path-segment overlap.
+
+    Each edge points from the import symbol to a concrete symbol in the target
+    file (matched by imported name, falling back to the first symbol). Imports
+    into files with no definitions but existing imports are treated as barrel
+    re-exports and linked to their first import symbol. Duplicate (source,
+    target) edges and self-imports are skipped.
+
+    Args:
+        db: Database session used to query files/symbols and insert edges.
+        repo_id: ID of the repository being processed.
+        repo_root: Root directory of the cloned repository on disk (used for
+            tsconfig paths and workspace package maps).
+
+    Returns:
+        Number of dependency edges inserted.
+    """
     files = db.query(File).filter(File.repository_id == repo_id).all()
 
     full_stem_map: dict[str, File] = {}
@@ -20,6 +64,8 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
         stem = normalized.rsplit(".", 1)[0]
         full_stem_map[stem] = f
 
+        # Also index without the top-level dir (src/, lib/, app/) so imports
+        # written relative to an unknown source root still match.
         parts = stem.split("/")
         if len(parts) > 1:
             alt_stem = "/".join(parts[1:])
@@ -33,6 +79,8 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
         normalized = f.path.replace("\\", "/")
         stem = normalized.rsplit(".", 1)[0]
         if stem.split("/")[-1] in ("index", "__init__"):
+            # `import pkg` resolves to pkg/index.* or pkg/__init__.*, so map
+            # each package directory to its entry-point file.
             dir_path = "/".join(stem.split("/")[:-1])
             index_map[dir_path] = f
 
@@ -110,8 +158,10 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
             candidates = short_stem_map.get(short_stem, [])
             if len(candidates) == 1:
                 matched_file = candidates[0]
-            elif len(candidates) > 1:
+            if len(candidates) > 1:
                 lang = language.lower()
+                # Narrow ambiguous same-named candidates to the importer's
+                # language family (a.py vs a.ts) before scoring.
                 if lang == "python":
                     filtered = [c for c in candidates if (c.language or "") == "python"]
                 elif lang in ("javascript", "typescript", "tsx", "jsx"):
@@ -130,6 +180,8 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
                 if len(filtered) == 1:
                     matched_file = filtered[0]
                 elif len(filtered) > 1:
+                    # Prefer exact suffix match; otherwise score candidates by
+                    # how many trailing path segments overlap the specifier.
                     best: File | None = None
                     best_score = 0
                     for c in filtered:
@@ -137,6 +189,8 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
                         if c_stem.endswith(resolved):
                             matched_file = c
                             break
+                        # Compare path segments from the end: more shared
+                        # trailing segments = deeper structural similarity.
                         r_parts = resolved.split("/")
                         c_parts = c_stem.split("/")
                         score = 0
@@ -156,6 +210,8 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
 
         targets = file_id_to_symbols.get(matched_file.id, [])
         if not targets:
+            # No definitions but existing imports => barrel/re-export file;
+            # link to its first import symbol so the edge isn't lost.
             barrel_imports = file_id_to_import_symbols.get(matched_file.id, [])
             if not barrel_imports:
                 logger.debug(
@@ -180,6 +236,8 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
             continue
 
         last_segment = imp.name.split("/")[-1]
+        # Strip module-path prefix and leading/trailing underscores so e.g.
+        # "pkg/_helper.py" matches an import of "helper".
         imported_name = last_segment.split(".")[-1].strip("_")
         target_symbol = symbol_name_map.get((matched_file.id, imported_name))
         if not target_symbol:
@@ -211,6 +269,12 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
 
 
 def compute_fan_metrics(db: Session, repo_id: uuid.UUID) -> None:
+    """Compute per-file fan-in/fan-out counts from dependency edges.
+
+    Args:
+        db: Database session used to read dependencies and update files.
+        repo_id: ID of the repository whose files should be scored.
+    """
     fan_in: dict[uuid.UUID, int] = defaultdict(int)
     fan_out: dict[uuid.UUID, int] = defaultdict(int)
 

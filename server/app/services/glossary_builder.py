@@ -1,23 +1,32 @@
-# services/glossary_builder.py
+"""Builds plain-English glossary definitions for a repository's key symbols.
+
+Selects the most-referenced symbols (by file fan-in), asks an LLM in small
+batches to write 1-2 sentence definitions from each symbol's docstring and
+source, parses the JSON responses, and replaces the repository's stored
+`GlossaryEntry` rows with the results.
+"""
 
 import json
 import logging
 import uuid
 
-from app.core.config import settings
-from app.models import AstSymbol, File, GlossaryEntry, Repository
 from openai import OpenAI
 from sqlalchemy import Row
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.models import AstSymbol, File, GlossaryEntry, Repository
+
 logger = logging.getLogger(__name__)
 
+# Symbols per LLM request; keeps prompts and JSON responses well under limits.
 BATCH_SIZE = 25
 
 
 def _get_top_symbols(
     db: Session, repository_id: uuid.UUID, limit: int = 200
 ) -> list[Row[tuple[AstSymbol, File]]]:
+    """Fetches the top symbols by file fan-in, joined with their files."""
     return (
         db.query(AstSymbol, File)
         .join(File, AstSymbol.file_id == File.id)
@@ -30,6 +39,7 @@ def _get_top_symbols(
 
 
 def _build_prompt(pairs: list[Row[tuple[AstSymbol, File]]]) -> str:
+    """Builds the batch prompt requesting JSON name/definition pairs."""
     entries = []
     for symbol, file in pairs:
         parts = [
@@ -56,8 +66,10 @@ Symbols:
 
 
 def _parse_response(text: str) -> dict[str, str]:
+    """Parses the LLM's JSON array into a name-to-definition map; returns {} on malformed output."""
     clean = (
         text.strip()
+        # Models often wrap JSON in markdown fences; strip them before parsing.
         .removeprefix("```json")
         .removeprefix("```")
         .removesuffix("```")
@@ -74,6 +86,21 @@ def _parse_response(text: str) -> dict[str, str]:
 
 
 def build_glossary(db: Session, repo: Repository) -> int:
+    """Regenerate glossary definitions for a repository.
+
+    Deletes all existing `GlossaryEntry` rows for the repository, selects
+    up to 200 of its most-referenced symbols, requests plain-English
+    definitions from the LLM in batches of ``BATCH_SIZE``, and persists one
+    entry per symbol that received a definition. Name matching is done
+    case-insensitively to tolerate LLM casing drift.
+
+    Args:
+        db: SQLAlchemy session used for queries and persistence.
+        repo: Repository whose glossary should be rebuilt.
+
+    Returns:
+        Number of glossary entries created.
+    """
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
     logger.info(f"[glossary] Starting for repo {repo.id}")
@@ -94,6 +121,8 @@ def build_glossary(db: Session, repo: Repository) -> int:
         batch = pairs[i : i + BATCH_SIZE]
         prompt = _build_prompt(batch)
 
+        # Small batches keep prompts/responses within token limits; a failed
+        # or malformed batch just yields fewer definitions, not a total loss.
         response = client.responses.create(
             model=settings.AI_MODEL,
             reasoning={"effort": "minimal"},
@@ -107,10 +136,11 @@ def build_glossary(db: Session, repo: Repository) -> int:
             f"[glossary] Batch {i // BATCH_SIZE + 1} done ({len(definitions)} definitions)"
         )
 
+    # Rebuild a lowercase lookup per pair rather than once — cheap here, but
+    # matching is case-insensitive because the LLM may alter capitalization.
     created = 0
+    lower_definitions = {k.lower(): v for k, v in all_definitions.items()}
     for symbol, file in pairs:
-        lower_definitions = {k.lower(): v for k, v in all_definitions.items()}
-
         definition = lower_definitions.get(symbol.name.lower())
         if not definition:
             logger.warning(f"[glossary] Missing definition for: {symbol.name}")

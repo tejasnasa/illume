@@ -1,3 +1,10 @@
+"""AST-based source parsing via tree-sitter.
+
+Parses source files (and Jupyter notebooks) into a flat list of symbols —
+functions, classes, methods, and imports — with line ranges, raw source,
+and cyclomatic complexity for functions/methods.
+"""
+
 import json
 import logging
 from dataclasses import dataclass, field
@@ -8,6 +15,7 @@ from tree_sitter_language_pack import SupportedLanguage, get_parser
 
 logger = logging.getLogger(__name__)
 
+# Maps file extensions to tree-sitter language identifiers.
 EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".py": "python",
     ".ipynb": "python",
@@ -29,6 +37,7 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
     ".kt": "kotlin",
 }
 
+# Per-language mapping of tree-sitter node types to symbol kinds.
 SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
     "python": {
         "function_definition": "function",
@@ -100,6 +109,7 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
     },
 }
 
+# Fallback node-type map for languages without an explicit entry above.
 DEFAULT_SYMBOL_TYPES = {
     "function_definition": "function",
     "function_declaration": "function",
@@ -111,6 +121,8 @@ DEFAULT_SYMBOL_TYPES = {
 
 @dataclass
 class ParsedSymbol:
+    """A single extracted symbol (function, class, method, or import)."""
+
     name: str
     kind: str
     start_line: int
@@ -121,6 +133,8 @@ class ParsedSymbol:
 
 @dataclass
 class ParsedFile:
+    """Parse result for one file: its language, LOC, and extracted symbols."""
+
     path: str
     language: str
     loc: int
@@ -128,13 +142,16 @@ class ParsedFile:
 
 
 def get_language(file_path: Path) -> str | None:
+    """Return the tree-sitter language id for a file's extension, or None."""
     return EXTENSION_TO_LANGUAGE.get(file_path.suffix)
 
 
 def _extract_name(node, source_bytes: bytes) -> str:
+    """Best-effort extraction of a symbol's name from its AST node."""
     if node.type in ("arrow_function", "function") and node.parent:
         parent = node.parent
         if parent.type == "variable_declarator":
+            # Anonymous functions get their name from the variable they're assigned to.
             for child in parent.children:
                 if child.type == "identifier":
                     return source_bytes[child.start_byte : child.end_byte].decode(
@@ -142,6 +159,8 @@ def _extract_name(node, source_bytes: bytes) -> str:
                     )
 
     if node.type == "lexical_declaration":
+        # `const handler = () => {}` / `const x = function() {}`: the arrow or
+        # function expression itself is anonymous, so take the declared name.
         for child in node.children:
             if child.type == "variable_declarator":
                 for subchild in child.children:
@@ -151,12 +170,17 @@ def _extract_name(node, source_bytes: bytes) -> str:
                         ].decode("utf-8", errors="replace")
 
     if node.type == "decorated_definition":
+        # The decorator wrapper isn't a symbol itself; descend to the
+        # decorated function/class for kind, name, and source.
         for child in node.children:
             if child.type in ("function_definition", "class_definition"):
                 node = child
                 break
 
     if node.type in ("import_statement", "import_from_statement"):
+        # Imports are named by their module path; try the `source` field first,
+        # then fall back to scanning child string/from-clause nodes since the
+        # field name varies across grammars (Python vs JS).
         source_node = node.child_by_field_name("source")
         if source_node:
             raw = source_bytes[source_node.start_byte : source_node.end_byte].decode(
@@ -183,6 +207,7 @@ def _extract_name(node, source_bytes: bytes) -> str:
 
         for child in node.children:
             if child.type in ("dotted_name", "aliased_import", "identifier"):
+                # Plain `import x.y` has no string source; use the dotted name.
                 return source_bytes[child.start_byte : child.end_byte].decode(
                     "utf-8", errors="replace"
                 )
@@ -193,6 +218,8 @@ def _extract_name(node, source_bytes: bytes) -> str:
             "utf-8", errors="replace"
         )
 
+    # Last resort: first identifier-ish child (covers grammars where the
+    # name isn't in a named field).
     for child in node.children:
         if child.type in ("identifier", "name"):
             return source_bytes[child.start_byte : child.end_byte].decode(
@@ -203,6 +230,7 @@ def _extract_name(node, source_bytes: bytes) -> str:
 
 
 def _count_complexity(node) -> int:
+    """Compute cyclomatic complexity by counting decision-point nodes in a subtree."""
     DECISION_TYPES = {
         "if_statement",
         "else_clause",
@@ -230,6 +258,7 @@ def _count_complexity(node) -> int:
         current = stack.pop()
         if current.type in DECISION_TYPES:
             count += 1
+        # Iterative traversal avoids recursion limits on deeply nested code.
         stack.extend(current.children)
     return count
 
@@ -237,6 +266,19 @@ def _count_complexity(node) -> int:
 def _parse_source(
     source_bytes: bytes, file_path: Path, language: str
 ) -> ParsedFile | None:
+    """Parse raw source bytes with tree-sitter and extract symbols.
+
+    Args:
+        source_bytes: Raw file contents encoded as UTF-8.
+        file_path: Path of the file being parsed (used for logging and the
+            returned record).
+        language: Tree-sitter language identifier.
+
+    Returns:
+        A ``ParsedFile`` with all top-level symbols, or None if tree-sitter
+        cannot parse the source. Class bodies are descended into so nested
+        methods are captured.
+    """
     try:
         parser = get_parser(cast(SupportedLanguage, language))
         tree = parser.parse(source_bytes)
@@ -258,6 +300,8 @@ def _parse_source(
         override_kind = None
         override_name = None
         if node.type == "export_statement":
+            # `export function f()` / `export const x = () => ...` wrap the real
+            # declaration; bare `export ... from ...` is a re-export (an import).
             found_decl = False
             for child in node.children:
                 if child.type in ("function_declaration", "class_declaration"):
@@ -275,6 +319,8 @@ def _parse_source(
             if not found_decl:
                 for child in node.children:
                     if child.type == "string":
+                        # No declaration inside => bare re-export
+                        # (`export ... from "..."`), treated as an import.
                         raw = source_bytes[child.start_byte : child.end_byte].decode(
                             "utf-8", errors="replace"
                         )
@@ -317,6 +363,9 @@ def _parse_source(
             )
 
             if kind == "class":
+                # Descend into class bodies so methods are captured too;
+                # function bodies are not descended to avoid double-counting
+                # nested defs as top-level symbols.
                 nodes_to_visit.extend(actual_node.children)
 
     return ParsedFile(
@@ -328,6 +377,16 @@ def _parse_source(
 
 
 def parse_notebook(file_path: Path) -> ParsedFile | None:
+    """Parse a Jupyter notebook by concatenating its code cells into one
+    Python source and running the standard parser over it.
+
+    Args:
+        file_path: Path to the ``.ipynb`` file.
+
+    Returns:
+        A ``ParsedFile`` for the combined code cells, or None if the
+        notebook JSON is malformed.
+    """
     try:
         content = file_path.read_text(encoding="utf-8", errors="replace")
         nb_data = json.loads(content)
@@ -338,13 +397,17 @@ def parse_notebook(file_path: Path) -> ParsedFile | None:
     cells = nb_data.get("cells", [])
     code_pieces = []
     for cell in cells:
+        # Markdown cells are skipped; only code cells contain parseable Python.
         if cell.get("cell_type") == "code":
             source = cell.get("source", "")
+            # nbformat allows source as either a list of lines or a single string.
             if isinstance(source, list):
                 code_text = "".join(source)
             else:
                 code_text = str(source)
             if code_text:
+                # Ensure cell boundaries are newline-separated so symbols from
+                # adjacent cells don't merge onto one line.
                 if not code_text.endswith("\n"):
                     code_text += "\n"
                 code_pieces.append(code_text)
@@ -355,6 +418,18 @@ def parse_notebook(file_path: Path) -> ParsedFile | None:
 
 
 def parse_file(file_path: Path) -> ParsedFile | None:
+    """Parse any supported source file into a ``ParsedFile``.
+
+    Routes notebooks to :func:`parse_notebook`; other files are parsed with
+    the tree-sitter grammar matching their extension.
+
+    Args:
+        file_path: Path to the source file.
+
+    Returns:
+        A ``ParsedFile`` on success, or None if the extension is unsupported,
+        the file can't be read, or parsing fails.
+    """
     if file_path.suffix == ".ipynb":
         return parse_notebook(file_path)
 

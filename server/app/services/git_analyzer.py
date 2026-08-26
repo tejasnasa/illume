@@ -1,3 +1,10 @@
+"""Git history analysis service.
+
+Extracts commit and file-ownership data from a cloned repository's git
+history and persists it: commits, per-file change statistics, primary code
+owners, contributor breakdowns, and test-file detection.
+"""
+
 import json
 import logging
 import re
@@ -6,10 +13,11 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.models import CodeOwner, Commit, File
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+
+from app.models import CodeOwner, Commit, File
 from app.services._publish import publish_log
 
 logger = logging.getLogger(__name__)
@@ -36,6 +44,31 @@ def analyze_git_history(
     repo,
     clone_path: Path,
 ) -> None:
+    """Analyze a cloned repository's git history and persist the results.
+
+    Runs the full pipeline:
+
+    1. Run ``git log --numstat`` against the clone (capped at
+       ``GIT_LOG_MAX_COMMITS`` commits).
+    2. Parse the raw log into structured commit records.
+    3. Bulk-insert the commits (idempotent on ``(repository_id, hash)``).
+    4. Aggregate per-file ownership stats (change frequency, contributors,
+       primary owner, knowledge-silo flag).
+    5. Detect which tracked files have corresponding test files.
+    6. Bulk-update ``File`` rows and upsert ``CodeOwner`` rows.
+
+    Progress is published to Redis at each stage via :func:`publish_log`.
+    If no commits are found, the analysis completes early without writing.
+
+    Args:
+        db: SQLAlchemy session used for all database writes.
+        redis_client: Redis client for publishing progress log events.
+        repo: Repository model instance whose history is analyzed.
+        clone_path: Path to the local git clone of the repository.
+
+    Raises:
+        RuntimeError: If the underlying ``git log`` command fails or times out.
+    """
     publish_log(
         redis_client, repo.id, "git_analysis_started", "Starting git history analysis"
     )
@@ -87,6 +120,7 @@ def analyze_git_history(
 
 
 def _run_git_log(clone_path: Path) -> str:
+    """Run ``git log --numstat`` in the clone and return raw stdout."""
     cmd = [
         "git",
         "-C",
@@ -113,6 +147,7 @@ def _run_git_log(clone_path: Path) -> str:
 
 
 def _parse_git_log(raw: str) -> list[dict]:
+    """Parse raw ``git log --numstat`` output into structured commit dicts."""
 
     commits: list[dict] = []
     current: dict | None = None
@@ -121,7 +156,10 @@ def _parse_git_log(raw: str) -> list[dict]:
         if not line.strip():
             continue
 
+        # A header line is one whose first field is a commit hash; anything
+        # else (numstat rows, blank separators) falls through to file parsing.
         if "|" in line and _looks_like_header(line):
+            # Flush the previous commit before starting a new record.
             if current is not None:
                 commits.append(current)
             parts = line.split("|", 4)
@@ -143,6 +181,7 @@ def _parse_git_log(raw: str) -> list[dict]:
             if file_entry:
                 current["files"].append(file_entry)
 
+    # The final commit has no successor header to trigger the flush above.
     if current is not None:
         commits.append(current)
 
@@ -150,20 +189,26 @@ def _parse_git_log(raw: str) -> list[dict]:
 
 
 def _looks_like_header(line: str) -> bool:
+    """Check whether a line starts with a commit hash (log header heuristic)."""
+    # Commit messages can contain '|' too, so only a hex-hash first field
+    # reliably distinguishes a header from message/numstat content.
     candidate = line.split("|", 1)[0].strip()
     return bool(re.fullmatch(r"[0-9a-f]{7,40}", candidate))
 
 
 def _parse_numstat_line(line: str) -> dict | None:
+    """Parse one numstat line into {path, added, deleted}; None if malformed."""
     parts = line.split("\t", 2)
     if len(parts) != 3:
         return None
 
     added_raw, deleted_raw, path_raw = parts
     path = _normalise_rename_path(path_raw.strip())
+    # Git emits OS-native separators; normalise to '/' so paths match File rows.
     path = path.replace("\\", "/")
 
     try:
+        # '-' means binary content, which numstat cannot count.
         added = int(added_raw) if added_raw != "-" else 0
         deleted = int(deleted_raw) if deleted_raw != "-" else 0
     except ValueError:
@@ -176,14 +221,17 @@ _RENAME_RE = re.compile(r"^(.*?)\{(.+?) => (.+?)\}(.*)$")
 
 
 def _normalise_rename_path(path: str) -> str:
+    """Collapse git rename syntax like ``dir/{old => new}/file.py`` to the new path."""
     m = _RENAME_RE.match(path)
     if not m:
         return path
     prefix, _old, new, suffix = m.groups()
+    # Keep only the post-rename segment; collapse '//' left by empty old/new parts.
     return f"{prefix}{new}{suffix}".replace("//", "/")
 
 
 def _parse_git_date(date_str: str) -> datetime:
+    """Parse a git date string to UTC; falls back to now(UTC) if unparseable."""
     try:
         dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S %z")
         return dt.astimezone(timezone.utc)
@@ -193,6 +241,7 @@ def _parse_git_date(date_str: str) -> datetime:
 
 
 def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
+    """Aggregate per-commit data into per-file ownership statistics."""
 
     file_author_counts: dict[str, dict[str, dict]] = defaultdict(dict)
     file_last_modified: dict[str, datetime] = {}
@@ -212,6 +261,7 @@ def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
                     "last_commit": ts,
                 }
             else:
+                # Commits aren't guaranteed chronological in the parsed list.
                 if ts > file_author_counts[path][email]["last_commit"]:
                     file_author_counts[path][email]["last_commit"] = ts
             file_author_counts[path][email]["commit_count"] += 1
@@ -251,6 +301,7 @@ def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
             "primary_owner_email": primary_email,
             "primary_owner_name": primary_name,
             "contributors": contributors,
+            # Silo = exactly one author ever touched this file.
             "is_knowledge_silo": len(author_map) == 1,
         }
 
@@ -258,8 +309,11 @@ def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
 
 
 def _detect_test_files(clone_path: Path, file_paths: list[str]) -> dict[str, bool]:
+    """Map each file path to whether a matching test file exists in the clone."""
     root = Path(clone_path)
 
+    # Snapshot every real file once up front; membership checks against this
+    # set are far cheaper than probing the filesystem per candidate path.
     all_clone_paths: set[str] = set()
     for p in root.rglob("*"):
         if p.is_file():
@@ -287,6 +341,7 @@ def _generate_test_candidates(
     stem: str,
     suffix: str,
 ) -> list[str]:
+    """Generate plausible sibling/standard-dir paths where tests might live."""
     candidate_names: list[str] = []
     for template in _TEST_TEMPLATES:
         try:
@@ -295,6 +350,8 @@ def _generate_test_candidates(
         except KeyError:
             pass
 
+    # Look beside the source file, then in conventional test directories;
+    # repo-root test dirs are skipped for files already at the root (no-op).
     search_dirs: list[Path] = [
         parent,
         parent / "tests",
@@ -314,6 +371,7 @@ def _generate_test_candidates(
 
 
 def _bulk_insert_commits(db: Session, repo_id: str, parsed_commits: list[dict]) -> None:
+    """Bulk-insert commit rows, skipping duplicates on (repository_id, hash)."""
     if not parsed_commits:
         return
 
@@ -334,6 +392,8 @@ def _bulk_insert_commits(db: Session, repo_id: str, parsed_commits: list[dict]) 
     stmt = (
         pg_insert(Commit)
         .values(rows)
+        # Re-analysis of an already-cloned repo re-emits the same commits;
+        # the unique index on (repository_id, hash) makes reruns idempotent.
         .on_conflict_do_nothing(index_elements=["repository_id", "hash"])
     )
     db.execute(stmt)
@@ -346,10 +406,12 @@ def _bulk_update_files(
     file_stats: dict[str, dict],
     has_tests_map: dict[str, bool],
 ) -> None:
+    """Bulk-update File rows with stats and test flags; skips unknown paths."""
     if not file_stats:
         return
 
     file_rows = db.query(File.id, File.path).filter(File.repository_id == repo_id).all()
+    # Normalise separators so git-parsed paths match however they were stored.
     path_to_id: dict[str, str] = {
         row.path.replace("\\", "/"): str(row.id) for row in file_rows
     }
@@ -384,6 +446,7 @@ def _bulk_insert_code_owners(
     repo_id: str,
     file_stats: dict[str, dict],
 ) -> None:
+    """Upsert CodeOwner rows from aggregated stats (keyed by file_id)."""
     if not file_stats:
         return
 
@@ -411,6 +474,8 @@ def _bulk_insert_code_owners(
         return
 
     stmt = pg_insert(CodeOwner).values(rows)
+    # One owner row per file: overwrite stats on re-analysis rather than
+    # duplicating, but keep bus_factor derived from the fresh contributor list.
     stmt = stmt.on_conflict_do_update(
         index_elements=["file_id"],
         set_={
@@ -421,6 +486,3 @@ def _bulk_insert_code_owners(
     )
     db.execute(stmt)
     db.commit()
-
-
-

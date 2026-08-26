@@ -1,8 +1,17 @@
+"""Heuristic tech-stack and entry-point detection.
+
+Scans package manifests (package.json, go.mod, Cargo.toml, Gemfile,
+composer.json, pom.xml, build.gradle), CI/infra files, and raw source text to
+infer a repository's languages, frameworks, databases, CI/CD systems, and
+infrastructure — plus likely entry-point files. All detection is best-effort
+pattern matching; unreadable files are silently skipped.
+"""
+
 import json
 import re
 from pathlib import Path
 
-
+# Extensions counted when tallying source-file languages.
 SOURCE_EXTENSIONS = {
     ".py",
     ".ipynb",
@@ -24,6 +33,7 @@ SOURCE_EXTENSIONS = {
     ".kt",
 }
 
+# Directories excluded from all scanning (vendored/generated content).
 SKIP_DIRS = {
     ".git",
     "node_modules",
@@ -43,6 +53,22 @@ SKIP_DIRS = {
 
 
 def detect_stack(repo_root: Path) -> dict:
+    """Heuristically detect a repository's stack by scanning manifests and source.
+
+    This is a best-effort heuristic scanner: it walks all files (skipping
+    vendored dirs) and infers the stack from file extensions, dependency
+    manifests (package.json, go.mod, Cargo.toml, Gemfile, composer.json,
+    pom.xml, build.gradle), import statements in Python/notebook sources,
+    well-known config filenames, and CI/infra file presence. Any unreadable or
+    malformed file is skipped rather than raising.
+
+    Args:
+        repo_root: Root directory of the cloned repository.
+
+    Returns:
+        Dict with sorted lists under the keys ``languages``, ``frameworks``,
+        ``databases``, ``ci_cd``, and ``infrastructure``.
+    """
     languages: set[str] = set()
     frameworks: set[str] = set()
     databases: set[str] = set()
@@ -123,6 +149,9 @@ def detect_stack(repo_root: Path) -> dict:
             try:
                 if f.suffix == ".ipynb":
                     try:
+                        # Notebooks store code as JSON; concatenate code-cell
+                        # sources (which may be str or list-of-str) into one
+                        # script so the same regexes apply.
                         content = f.read_text(encoding="utf-8", errors="replace")
                         nb_data = json.loads(content)
                         cells = nb_data.get("cells", [])
@@ -135,6 +164,8 @@ def detect_stack(repo_root: Path) -> dict:
                                 else:
                                     code_text = str(source)
                                 if code_text:
+                                    # Newline separator keeps imports on distinct
+                                    # lines so MULTILINE regexes match per-cell.
                                     if not code_text.endswith("\n"):
                                         code_text += "\n"
                                     code_pieces.append(code_text)
@@ -312,6 +343,19 @@ def detect_stack(repo_root: Path) -> dict:
 
 
 def detect_entry_points(repo_root: Path) -> list[str]:
+    """Heuristically identify likely application entry-point files.
+
+    Matches conventional entry filenames (main.py, index.ts, manage.py,
+    Dockerfile, etc.), framework-specific locations (Next.js pages/app
+    routes), and source patterns such as ``if __name__ == "__main__"`` or
+    ``func main()``.
+
+    Args:
+        repo_root: Root directory of the cloned repository.
+
+    Returns:
+        Sorted list of repo-relative paths of candidate entry points.
+    """
     entry_points: set[str] = set()
 
     all_files = [
@@ -321,6 +365,7 @@ def detect_entry_points(repo_root: Path) -> list[str]:
     ]
 
     def rel(f: Path) -> str:
+        """Return a file's path relative to the repo root with forward slashes."""
         return str(f.relative_to(repo_root)).replace("\\", "/")
 
     for f in all_files:
@@ -349,6 +394,8 @@ def detect_entry_points(repo_root: Path) -> list[str]:
             "server.ts",
             "main.ts",
         }:
+            # Generic index/main names are too common in UI code to always be
+            # entry points; only trust them in server-ish locations.
             if "src" not in path or "server" in path or "api" in path:
                 entry_points.add(path)
 
@@ -367,6 +414,7 @@ def detect_entry_points(repo_root: Path) -> list[str]:
         if name in {"manage.py", "wsgi.py", "asgi.py"}:
             entry_points.add(path)
 
+        # Build/manifest files mark runnable projects even without source hits.
         if name in {"pom.xml", "build.gradle", "build.gradle.kts"}:
             entry_points.add(path)
 
@@ -377,6 +425,8 @@ def detect_entry_points(repo_root: Path) -> list[str]:
             entry_points.add(path)
 
     for f in all_files:
+        # Second pass over sources: framework bootstrap calls are stronger
+        # entry-point signals than filenames alone.
         if f.suffix not in {".py", ".js", ".ts", ".go", ".rs", ".java", ".cs"}:
             continue
 

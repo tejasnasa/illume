@@ -1,3 +1,10 @@
+"""Onboarding guide generation.
+
+Builds a suggested file reading order for a repository using a tiered
+topological sort of its dependency graph, enriches it with LLM-generated
+"why read this" annotations, and persists the result on an OnboardingGuide.
+"""
+
 import json
 import logging
 from collections import defaultdict, deque
@@ -5,10 +12,11 @@ from typing import Any
 from uuid import UUID
 
 import openai
-from app.core.config import settings
-from app.models import AstSymbol, Dependency, File, OnboardingGuide, Repository
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
+
+from app.core.config import settings
+from app.models import AstSymbol, Dependency, File, OnboardingGuide, Repository
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +29,7 @@ def _build_file_graph(
     db: Session,
     repo_id: UUID,
 ) -> tuple[dict[UUID, set[UUID]], dict[UUID, set[UUID]]]:
+    """Build forward (deps) and reverse (rdeps) file-level dependency maps."""
     TargetSymbol = aliased(AstSymbol, name="tgt_sym")
 
     repo_file_ids = select(File.id).where(File.repository_id == repo_id)
@@ -53,9 +62,11 @@ def _topological_sort(
     deps: dict[UUID, set[UUID]],
     rdeps: dict[UUID, set[UUID]],
 ) -> list[list[File]]:
+    """Group files into tiers via Kahn-style topological sort; cycles land in the final tier."""
     file_map: dict[UUID, File] = {f.id: f for f in files}
     all_ids: set[UUID] = set(file_map)
 
+    # In-degree = number of dependencies a file still has; deps with 0 are readable first.
     in_degree: dict[UUID, int] = {fid: len(deps.get(fid, set())) for fid in all_ids}
 
     queue: deque[UUID] = deque(fid for fid in all_ids if in_degree[fid] == 0)
@@ -68,6 +79,8 @@ def _topological_sort(
         queue.clear()
         visited.update(current_tier_ids)
 
+        # Everything currently in the queue is mutually unblocked -> one tier.
+        # Sort within the tier by fan-in so the most-imported files come first.
         current_tier = sorted(
             [file_map[fid] for fid in current_tier_ids if fid in file_map],
             key=lambda f: f.fan_in or 0,
@@ -81,12 +94,15 @@ def _topological_sort(
             for importer_id in rdeps.get(fid, set()):
                 if importer_id in visited:
                     continue
+                # Satisfying this dep may unlock the importer for the next tier.
                 deps[importer_id].discard(fid)
                 in_degree[importer_id] -= 1
                 if in_degree[importer_id] == 0:
                     next_candidates.add(importer_id)
         queue.extend(next_candidates)
 
+    # Anything never dequeued sits on a dependency cycle; emit as a catch-all
+    # final tier instead of dropping those files from the guide.
     remaining = [file_map[fid] for fid in all_ids - visited if fid in file_map]
     if remaining:
         logger.warning(
@@ -100,6 +116,7 @@ def _topological_sort(
 
 
 def _build_annotation_prompt(batch: list[dict[str, Any]]) -> str:
+    """Render one LLM prompt covering a batch of files in reading order."""
     items = "\n".join(
         f"{i + 1}. file_path={item['path']} | fan_in={item['fan_in']} "
         f"| fan_out={item['fan_out']} | tier={item['tier']} "
@@ -123,6 +140,7 @@ Respond ONLY with a JSON array, no markdown fences, no preamble:
 
 
 def _annotate_files(ordered_files: list[dict[str, Any]]) -> dict[str, str]:
+    """Request LLM annotations in batches; failures skip the batch silently."""
     client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
     annotations: dict[str, str] = {}
 
@@ -141,6 +159,8 @@ def _annotate_files(ordered_files: list[dict[str, Any]]) -> dict[str, str]:
             )
             raw = response.output_text or "[]"
             raw = raw.strip()
+            # Strip markdown fences even though the prompt forbids them;
+            # models add them often enough that parsing would otherwise fail.
             if raw.startswith("```"):
                 raw = raw.split("```")[1]
                 if raw.startswith("json"):
@@ -163,6 +183,22 @@ def _annotate_files(ordered_files: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def build_reading_order(db: Session, repo: Repository) -> OnboardingGuide:
+    """Build and persist a suggested file reading order for a repository.
+
+    Constructs the file-level dependency graph from symbol dependencies,
+    orders files into tiers with a topological sort (files inside dependency
+    cycles are appended as a final tier), then asks the LLM to annotate up to
+    ``MAX_ANNOTATED_FILES`` files explaining why each should be read at that
+    point in onboarding. The result is stored on the repository's
+    OnboardingGuide (created if absent).
+
+    Args:
+        db: SQLAlchemy database session.
+        repo: The repository to build the reading order for.
+
+    Returns:
+        The upserted OnboardingGuide containing the annotated reading order.
+    """
     logger.info("reading_order: starting for repo %s", repo.id)
 
     files: list[File] = db.query(File).filter(File.repository_id == repo.id).all()
@@ -219,6 +255,7 @@ def _upsert_guide(
     repo_id: UUID,
     reading_order: list[dict[str, Any]],
 ) -> OnboardingGuide:
+    """Create or update the OnboardingGuide row for a repository."""
     guide = (
         db.query(OnboardingGuide)
         .filter(OnboardingGuide.repository_id == repo_id)

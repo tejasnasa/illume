@@ -1,5 +1,13 @@
+"""Repository file processing pipeline.
+
+Walks a cloned repository's source files, parses them into AST symbols,
+persists files/symbols/dependencies to the database, computes fan metrics and
+criticality scores, detects the tech stack, and generates embeddings.
+"""
+
 import logging
-from pathlib import Path
+
+from sqlalchemy.orm import Session
 
 from app.models import AstSymbol, File, Repository
 from app.services._publish import publish_log
@@ -7,13 +15,18 @@ from app.services.criticality import run_criticality_scoring
 from app.services.dependency_resolver import compute_fan_metrics, resolve_dependencies
 from app.services.embedder import generate_embeddings
 from app.services.parser import parse_file
-from app.services.stack_detector import SKIP_DIRS, SOURCE_EXTENSIONS, detect_entry_points, detect_stack
-from sqlalchemy.orm import Session
+from app.services.stack_detector import (
+    SKIP_DIRS,
+    SOURCE_EXTENSIONS,
+    detect_entry_points,
+    detect_stack,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _update_status(db: Session, redis_client, repo: Repository, status: str) -> None:
+    """Persist a new repo status and broadcast it over the log stream."""
     repo.status = status
     db.commit()
     publish_log(
@@ -26,10 +39,23 @@ def _update_status(db: Session, redis_client, repo: Repository, status: str) -> 
 
 
 def walk_source_files(repo_root: Path) -> list[Path]:
+    """Recursively collect source files under ``repo_root``.
+
+    Skips vendored/generated directories (see ``SKIP_DIRS``) and keeps only
+    files whose extension is in ``SOURCE_EXTENSIONS``.
+
+    Args:
+        repo_root: Root directory of the cloned repository.
+
+    Returns:
+        List of absolute paths to parseable source files.
+    """
     import os
+
     source_files: list[Path] = []
 
     for root, dirs, files in os.walk(repo_root):
+        # Mutating dirs in-place prunes the walk from descending into skipped dirs.
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
 
         for filename in files:
@@ -46,6 +72,22 @@ def process_repository_files(
     repo: Repository,
     repo_root: Path,
 ) -> int:
+    """Parse all source files in a repository and persist the analysis results.
+
+    Runs the full indexing pipeline: parses each file into AST symbols, stores
+    files and symbols in the database, resolves inter-file dependencies,
+    computes fan-in/fan-out metrics and criticality scores, and detects the
+    repository's stack and entry points. Progress is published via Redis logs.
+
+    Args:
+        db: Database session used for all persistence.
+        redis_client: Redis client for publishing progress logs.
+        repo: Repository record being indexed (updated with detected stack).
+        repo_root: Root directory of the cloned repository on disk.
+
+    Returns:
+        Number of source files successfully parsed and stored.
+    """
     _update_status(db, redis_client, repo, "parsing")
     publish_log(
         redis_client, str(repo.id), "parsing_started", "Starting file analysis..."
@@ -62,6 +104,7 @@ def process_repository_files(
     for file_path in source_files:
         parsed = parse_file(file_path)
         if not parsed:
+            # Unparseable or unsupported file; skip rather than abort the run.
             continue
 
         relative_path = file_path.relative_to(repo_root).as_posix()
@@ -73,6 +116,7 @@ def process_repository_files(
             loc=parsed.loc,
         )
         db.add(db_file)
+        # Flush now so db_file.id exists for the symbol rows below.
         db.flush()
 
         for symbol in parsed.symbols:
@@ -144,6 +188,18 @@ def embed_repository_symbols(
     repo: Repository,
     readme_content: str | None = None,
 ) -> int:
+    """Generate vector embeddings for a repository's indexed symbols.
+
+    Args:
+        db: Database session used by the embedder.
+        redis_client: Redis client for publishing progress logs.
+        repo: Repository record whose symbols should be embedded.
+        readme_content: Optional README text included as extra context for
+            embedding generation.
+
+    Returns:
+        Number of embedding vectors stored.
+    """
     _update_status(db, redis_client, repo, "embedding")
     publish_log(
         redis_client,
@@ -153,6 +209,7 @@ def embed_repository_symbols(
     )
 
     def publish_progress(msg: str):
+        """Forward embedder messages to the repo's log stream."""
         publish_log(redis_client, str(repo.id), "embedding_progress", msg)
 
     count = generate_embeddings(

@@ -1,7 +1,20 @@
+"""Architecture brief generation.
+
+Aggregates structural signals about a repository (key modules, critical
+files, module-level dependency edges, data flow from entry points, and
+external integrations), asks the LLM for a narrative architecture summary,
+and stores the resulting sections on the repository's OnboardingGuide.
+"""
+
 import logging
 from collections import defaultdict
 from typing import Sequence, cast
 from uuid import UUID
+
+from openai import OpenAI
+from openai.types.responses import ResponseInputParam
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import (
@@ -13,10 +26,6 @@ from app.models import (
     OnboardingGuide,
     Repository,
 )
-from openai import OpenAI
-from openai.types.responses import ResponseInputParam
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 from app.services.onboarding import _upsert_guide
 
 logger = logging.getLogger(__name__)
@@ -53,6 +62,7 @@ EXTERNAL_INTEGRATION_PREFIXES = (
 
 
 def _get_key_modules(files: Sequence[File]) -> Sequence[dict]:
+    """Return the top fan-in files as compact dicts."""
     sorted_files = sorted(files, key=lambda f: f.fan_in or 0, reverse=True)
     return [
         {
@@ -67,6 +77,7 @@ def _get_key_modules(files: Sequence[File]) -> Sequence[dict]:
 
 
 def _get_critical_files(files: Sequence[File]) -> list[dict]:
+    """Return files flagged critical/caution, critical first then by fan-in."""
     critical = [f for f in files if f.criticality in ("critical", "caution")]
     critical.sort(
         key=lambda f: (0 if f.criticality == "critical" else 1, -(f.fan_in or 0))
@@ -88,9 +99,11 @@ def _trace_data_flow(
     deps: dict[UUID, list[str]],
     hops: int = DATA_FLOW_HOPS,
 ) -> Sequence[dict]:
+    """BFS from entry points collecting file-to-file edges up to ``hops`` deep."""
     flow: list[dict] = []
     seen: set[tuple[str, str]] = set()
 
+    # Cap entry points so a repo with many mains doesn't dominate the trace.
     for entry in entry_paths[:5]:
         file = files_by_path.get(entry)
         if not file:
@@ -102,6 +115,7 @@ def _trace_data_flow(
                 continue
             for target_path in deps.get(current_id, []):
                 edge = (current_path, target_path)
+                # Dedup across entries: an edge reached via several paths is shown once.
                 if edge in seen:
                     continue
                 seen.add(edge)
@@ -110,16 +124,20 @@ def _trace_data_flow(
                 if target_file:
                     queue.append((target_path, target_file.id, hop + 1))
                 if len(flow) >= 40:
+                    # Hard cap keeps the LLM prompt section bounded.
                     return flow
     return flow
 
 
 def _detect_external_integrations(symbols: Sequence[AstSymbol]) -> Sequence[str]:
+    """Find external services referenced by import symbols."""
     found: set[str] = set()
     for sym in symbols:
         if sym.kind != "import":
             continue
         name_lower = (sym.name or "").lower()
+        # Match on dotted import prefix (e.g. "google.cloud"), then report
+        # only the vendor root so variants collapse to one integration.
         for prefix in EXTERNAL_INTEGRATION_PREFIXES:
             if name_lower.startswith(prefix):
                 found.add(prefix.split(".")[0])
@@ -128,6 +146,7 @@ def _detect_external_integrations(symbols: Sequence[AstSymbol]) -> Sequence[str]
 
 
 def _get_ownership_summary(db: Session, file_ids: list[UUID]) -> list[dict]:
+    """Summarize code ownership records for the given files."""
     owners = (
         db.execute(select(CodeOwner).where(CodeOwner.file_id.in_(file_ids)))
         .scalars()
@@ -145,6 +164,7 @@ def _get_ownership_summary(db: Session, file_ids: list[UUID]) -> list[dict]:
 
 
 def _get_glossary_preview(db: Session, repo_id: UUID, limit: int = 10) -> list[dict]:
+    """Fetch a small preview of the repo's glossary entries."""
     entries = (
         db.execute(
             select(GlossaryEntry)
@@ -165,6 +185,7 @@ def _build_file_dep_map(
     dependencies: Sequence[Dependency],
     files_by_id: dict[UUID, File],
 ) -> dict[UUID, list[str]]:
+    """Map each file to the paths of files it depends on (deduplicated)."""
     sym_to_file: dict[UUID, UUID] = {s.id: s.file_id for s in symbols}
     result: dict[UUID, list[str]] = defaultdict(list)
     seen: set[tuple[UUID, UUID]] = set()
@@ -190,6 +211,7 @@ def _build_module_edges(
     sym_to_file: dict[UUID, UUID],
     file_to_module: dict[UUID, str],
 ) -> list[tuple[str, str]]:
+    """Collapse file dependencies into unique module-to-module edges."""
     edges: set[tuple[str, str]] = set()
     for dep in dependencies:
         src_file = sym_to_file.get(dep.source_symbol_id)
@@ -206,11 +228,13 @@ def _build_module_edges(
 def _group_symbols_by_module(
     symbols: Sequence[AstSymbol], files_by_id: dict[UUID, File]
 ) -> dict[str, list[str]]:
+    """Group function/class/method symbols under their top-level module directory."""
     modules: dict[str, list[str]] = defaultdict(list)
     for sym in symbols:
         file = files_by_id.get(sym.file_id)
         if not file or sym.kind not in ("function", "class", "method"):
             continue
+        # A module is just the first path segment; single-segment paths are top-level.
         parts = file.path.replace("\\", "/").split("/")
         module = parts[0] if len(parts) > 1 else "root"
         modules[module].append(
@@ -231,6 +255,7 @@ def _build_narrative_prompt(
     total_files: int,
     readme_content: str | None = None,
 ) -> str:
+    """Render the LLM prompt describing repo structure and the summary task."""
 
     lines = [
         f"You are analyzing a software repository called '{repo_name}'.",
@@ -308,6 +333,7 @@ def _build_narrative_prompt(
 
 
 def _call_llm_narrative(prompt: str) -> str:
+    """Call the LLM for a narrative; returns empty string on failure."""
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
     try:
@@ -339,6 +365,25 @@ def _call_llm_narrative(prompt: str) -> str:
 def generate_brief(
     db: Session, repo: Repository, readme_content: str | None = None
 ) -> OnboardingGuide:
+    """Generate an architecture brief for a repository.
+
+    Aggregates key modules (highest fan-in), critical files, module-level
+    dependency edges, a data-flow trace from detected entry points, external
+    integrations, ownership and glossary previews, then prompts the LLM for a
+    narrative summary. The narrative is stored on the repository and all
+    sections are persisted on the OnboardingGuide's ``architecture_brief``.
+
+    Args:
+        db: SQLAlchemy database session.
+        repo: The repository to summarize.
+        readme_content: Optional README text included in the LLM prompt.
+
+    Returns:
+        The upserted OnboardingGuide with populated architecture sections.
+
+    Raises:
+        ValueError: If ``repo`` is falsy.
+    """
     logger.info("architecture_brief: starting for repo %s", repo.id)
 
     if not repo:
@@ -379,6 +424,7 @@ def generate_brief(
     critical_files = _get_critical_files(files)
 
     sym_to_file: dict[UUID, UUID] = {s.id: s.file_id for s in symbols}
+    # Module identity = first path segment; files without a directory go to "root".
     file_to_module: dict[UUID, str] = {
         f.id: (
             f.path.replace("\\", "/").split("/")[0]
@@ -425,6 +471,7 @@ def generate_brief(
     )
 
     narrative = _call_llm_narrative(prompt)
+    # Persist a placeholder rather than failing the whole brief when the LLM is down.
     if not narrative:
         narrative = "Architecture summary could not be generated."
 
@@ -449,6 +496,11 @@ def generate_brief(
     repo.architecture_summary = narrative
     db.add(repo)
 
-    guide = _upsert_guide(db, repo.id, architecture_brief=architecture_sections, critical_files=critical_files)
+    guide = _upsert_guide(
+        db,
+        repo.id,
+        architecture_brief=architecture_sections,
+        critical_files=critical_files,
+    )
     logger.info("architecture_brief: done for repo %s", repo.id)
     return guide
