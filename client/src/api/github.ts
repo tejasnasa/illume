@@ -1,3 +1,8 @@
+/**
+ * GitHub proxy fetches using the linked OAuth token (client-side).
+ * @module GitHubApi
+ */
+
 import {
   GitHubBranch,
   GitHubCommit,
@@ -7,6 +12,15 @@ import {
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
+/**
+ * Lists the authenticated user's GitHub repositories, newest first.
+ *
+ * @param page - 1-indexed page number.
+ * @param search - Case-insensitive name substring filter.
+ * @param signal - Optional abort signal to cancel in-flight requests.
+ * @returns Filtered repository items for the requested page.
+ * @throws Error if GitHub is not linked or the fetch fails.
+ */
 export async function getMyGitHubRepos(
   page: number = 1,
   search: string = "",
@@ -28,6 +42,7 @@ export async function getMyGitHubRepos(
   );
 
   if (!res.ok) {
+    // 403 specifically means the OAuth account isn't linked yet.
     if (res.status === 403) {
       throw new Error("GitHub account not linked");
     }
@@ -37,6 +52,14 @@ export async function getMyGitHubRepos(
   return res.json();
 }
 
+/**
+ * Lists branches for a GitHub repository with the default flagged.
+ *
+ * @param owner - GitHub repository owner.
+ * @param repo - GitHub repository name.
+ * @returns Branch items marking which one is the default.
+ * @throws Error if the fetch fails.
+ */
 export async function getRepoBranches(
   owner: string,
   repo: string,
@@ -55,6 +78,16 @@ export async function getRepoBranches(
   return res.json();
 }
 
+/**
+ * Lists commits for a branch or ref with pagination.
+ *
+ * @param owner - GitHub repository owner.
+ * @param repo - GitHub repository name.
+ * @param sha - Optional branch or commit ref to list from.
+ * @param page - 1-indexed page number.
+ * @returns Commit items with first-line messages.
+ * @throws Error if the fetch fails.
+ */
 export async function getRepoCommits(
   owner: string,
   repo: string,
@@ -79,6 +112,14 @@ export async function getRepoCommits(
   return res.json();
 }
 
+/**
+ * Lists recent commits merged across branches, newest first.
+ *
+ * @param owner - GitHub repository owner.
+ * @param repo - GitHub repository name.
+ * @returns Up to 100 merged commits with branch attribution.
+ * @throws Error if the fetch fails.
+ */
 export async function getRepoCommitsMultiBranch(
   owner: string,
   repo: string,

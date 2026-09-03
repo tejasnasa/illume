@@ -1,6 +1,20 @@
+/**
+ * Glossary browsing and search fetches.
+ * @module GlossaryApi
+ */
+
 import Glossary from "@/types/glossary";
 import { headers } from "next/headers";
 
+/**
+ * Browses glossary entries alphabetically with pagination.
+ *
+ * @param id - ID of the repository whose glossary to browse.
+ * @param page - 1-indexed page number.
+ * @param page_size - Entries per page.
+ * @returns Paginated entries plus total count.
+ * @throws Error if the fetch fails.
+ */
 export async function GetGlossary(
   id: string,
   page: number,
@@ -21,6 +35,16 @@ export async function GetGlossary(
   return data;
 }
 
+/**
+ * Searches glossary entries by name or definition substring.
+ *
+ * @param id - ID of the repository whose glossary to search.
+ * @param q - Case-insensitive substring; encoded to survive special characters.
+ * @param page - 1-indexed page number.
+ * @param page_size - Entries per page.
+ * @returns Paginated matching entries plus total count.
+ * @throws Error if the fetch fails.
+ */
 export async function GetGlossarySearchResults(
   id: string,
   q: string,

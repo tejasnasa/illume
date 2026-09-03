@@ -1,8 +1,19 @@
+/**
+ * Server action re-ingesting a repository and returning to the dashboard.
+ * @module RegenerateRepoAction
+ */
+
 "use server";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
+/**
+ * Re-runs full ingestion for a finished repository.
+ *
+ * @param repoId - ID of the repository to re-ingest.
+ * @throws Error if re-ingestion cannot start (e.g. still in progress).
+ */
 export default async function regenerateRepoAction(repoId: string) {
   const cookieStore = await cookies();
 
