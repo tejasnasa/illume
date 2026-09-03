@@ -1,3 +1,9 @@
+"""Repository statistics route aggregating files, languages, and ownership.
+
+Computes totals (files, LOC, dependencies), per-language breakdowns, and
+contributor/silo counts from the indexed tables in a single request.
+"""
+
 import logging
 import uuid
 
@@ -15,17 +21,23 @@ router = APIRouter(prefix="/api/v1/repository", tags=["stats"])
 
 
 class LanguageBreakdownItem(BaseModel):
+    """Per-language file and lines-of-code totals."""
+
     language: str
     file_count: int
     loc_count: int
 
 
 class TopContributorItem(BaseModel):
+    """Contributor ranked by number of owned files."""
+
     name: str
     files_owned: int
 
 
 class StatsResponse(BaseModel):
+    """Aggregated repository statistics for dashboard display."""
+
     repository_id: uuid.UUID
     total_files: int
     total_loc: int
@@ -42,6 +54,19 @@ async def get_repository_stats(
     repo_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db),
 ) -> StatsResponse:
+    """Aggregate file, language, ownership, and dependency stats.
+
+    Args:
+        request: Request carrying the authenticated user ID in state.
+        repo_id: ID of the repository to summarize.
+        db: Async database session.
+
+    Returns:
+        Totals plus language breakdown and top-5 contributors.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if the repo is not found.
+    """
 
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
@@ -56,6 +81,7 @@ async def get_repository_stats(
         ).where(File.repository_id == repo_id)
     )
     f_stats = file_stats_query.one()
+    # SUM returns NULL on empty repos, so coerce to zero.
     total_files = f_stats.total_files or 0
     total_loc = int(f_stats.total_loc or 0)
 

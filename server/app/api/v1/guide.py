@@ -1,3 +1,9 @@
+"""Onboarding guide route serving reading order and architecture brief.
+
+Parses the stored OnboardingGuide JSON blobs (reading order, critical
+files, architecture brief) into typed response models for the frontend.
+"""
+
 import logging
 import uuid
 from pathlib import Path
@@ -16,6 +22,8 @@ router = APIRouter(prefix="/api/v1/repository", tags=["guide"])
 
 
 class ReadingOrderItem(BaseModel):
+    """One file in suggested reading order with its annotation."""
+
     position: int
     file_path: str
     annotation: str
@@ -23,6 +31,8 @@ class ReadingOrderItem(BaseModel):
 
 
 class CriticalFile(BaseModel):
+    """File flagged by criticality scoring with reasons."""
+
     file_path: str
     criticality: str
     reasons: list[str]
@@ -32,12 +42,16 @@ class CriticalFile(BaseModel):
 
 
 class DataFlowStep(BaseModel):
+    """Single directed edge in the architecture data-flow trace."""
+
     from_: str = Field(alias="from")
     to: str
     step: int | None = None
 
 
 class ArchitectureBrief(BaseModel):
+    """Narrative architecture summary sections produced by the LLM."""
+
     entry_points: list[str] | None = None
     directory_summary: dict | None = None
     external_integrations: list[str] | None = None
@@ -48,6 +62,8 @@ class ArchitectureBrief(BaseModel):
 
 
 class GuideResponse(BaseModel):
+    """Full onboarding guide payload for a repository."""
+
     repository_id: uuid.UUID
     reading_order: list[ReadingOrderItem]
     critical_files: list[CriticalFile]
@@ -57,10 +73,8 @@ class GuideResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-
-
-
 async def _get_guide(repo_id: uuid.UUID, db: AsyncSession) -> OnboardingGuide:
+    """Load the stored guide or raise 404 if ingestion hasn't produced one."""
     result = await db.execute(
         select(OnboardingGuide).where(OnboardingGuide.repository_id == repo_id)
     )
@@ -74,6 +88,7 @@ async def _get_guide(repo_id: uuid.UUID, db: AsyncSession) -> OnboardingGuide:
 
 
 def _parse_reading_order(raw: list | None) -> list[ReadingOrderItem]:
+    """Parse stored reading-order JSON into sorted response items."""
     if not raw:
         return []
     items = []
@@ -92,6 +107,7 @@ def _parse_reading_order(raw: list | None) -> list[ReadingOrderItem]:
 
 
 def _parse_critical_files(raw: list | None) -> list[CriticalFile]:
+    """Parse stored critical-file JSON, sorted critical-first."""
     if not raw:
         return []
     items = []
@@ -108,11 +124,13 @@ def _parse_critical_files(raw: list | None) -> list[CriticalFile]:
                 has_tests=entry.get("has_tests", False),
             )
         )
+    # Most severe files first so the riskiest changes stand out.
     order = {"critical": 0, "caution": 1, "safe": 2}
     return sorted(items, key=lambda x: order.get(x.criticality, 3))
 
 
 def _parse_architecture_brief(raw: dict | None) -> ArchitectureBrief | None:
+    """Parse the stored architecture-brief JSON blob, if present."""
     if not raw:
         return None
     return ArchitectureBrief(
@@ -132,6 +150,19 @@ async def get_onboarding_guide(
     repo_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db),
 ) -> GuideResponse:
+    """Return the parsed onboarding guide for a repository.
+
+    Args:
+        request: Request carrying the authenticated user ID in state.
+        repo_id: ID of the repository whose guide to fetch.
+        db: Async database session.
+
+    Returns:
+        Reading order, critical files, architecture brief, and PDF readiness.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if repo or guide missing.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")

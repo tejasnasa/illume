@@ -1,3 +1,9 @@
+"""WebSocket route streaming live ingestion logs.
+
+Authenticates via cookie or query token, verifies repository ownership,
+then relays the per-repository Redis log channel until DONE/ERROR.
+"""
+
 import asyncio
 import logging
 import uuid
@@ -20,8 +26,16 @@ async def ingest_ws(
     repo_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db),
 ):
+    """Stream ingestion progress logs for a repository over WebSocket.
+
+    Args:
+        websocket: Accepted WebSocket connection to push logs to.
+        repo_id: ID of the repository whose log channel to relay.
+        db: Async database session used for the ownership check.
+    """
     await websocket.accept()
 
+    # Query-param fallback supports EventSource-style clients that can't send cookies.
     token = websocket.cookies.get("access_token") or websocket.query_params.get("token")
     if not token:
         logger.error("WebSocket auth failed: No token provided")
@@ -55,12 +69,14 @@ async def ingest_ws(
 
     try:
         async for message in pubsub.listen():
+            # Skip subscribe-confirmation frames; only relay real log payloads.
             if message["type"] != "message":
                 continue
 
             data = message["data"]
             await websocket.send_text(data)
 
+            # Terminal markers end the stream so the socket doesn't linger.
             if data in ("DONE", "ERROR"):
                 break
 

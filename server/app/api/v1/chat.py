@@ -1,3 +1,9 @@
+"""Repository chat routes backed by the RAG pipeline.
+
+Asks questions against an ingested repository, persists each Q&A turn,
+and exposes history listing plus single-message and full-history deletion.
+"""
+
 import logging
 import uuid
 from datetime import datetime
@@ -17,16 +23,22 @@ router = APIRouter(prefix="/api/v1/repository", tags=["chat"])
 
 
 class ChatMessageRequest(BaseModel):
+    """One prior conversation turn sent by the client."""
+
     role: Literal["user", "assistant"]
     content: str
 
 
 class ChatRequest(BaseModel):
+    """Question plus optional client-side history for follow-ups."""
+
     question: str
     history: list[ChatMessageRequest] = []
 
 
 class SourceReferenceResponse(BaseModel):
+    """Citation backing part of an answer, across all source types."""
+
     source_type: str
     chunk_text: str
     file_path: str | None = None
@@ -40,12 +52,16 @@ class SourceReferenceResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    """Newly created chat turn with generated answer and sources."""
+
     id: uuid.UUID
     answer: str
     sources: list[SourceReferenceResponse]
 
 
 class ChatMessageHistoryResponse(BaseModel):
+    """Persisted chat turn returned by the history endpoint."""
+
     id: uuid.UUID
     repository_id: uuid.UUID
     user_id: uuid.UUID
@@ -64,6 +80,23 @@ async def chat(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
+    """Answer a question against a ready repository and persist the turn.
+
+    Only the last 5 history turns are forwarded to the RAG pipeline to bound
+    prompt size; sources are serialized onto the stored record.
+
+    Args:
+        repo_id: ID of the repository to query.
+        payload: Question plus optional conversation history.
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        The new chat record's ID, answer text, and source citations.
+
+    Raises:
+        HTTPException: 404 if the repo is not found, 400 if not ready.
+    """
     user_id = getattr(request.state, "user_id", None)
     repo = (
         await db.execute(
@@ -81,6 +114,7 @@ async def chat(
             detail=f"Repository is not ready for querying (status: {repo.status})",
         )
 
+    # Cap forwarded history so long sessions don't blow up the LLM prompt.
     history = payload.history[-5:]
 
     result = await answer_question(
@@ -144,6 +178,19 @@ async def get_chat_history(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
+    """List a user's chat history for a repository in chronological order.
+
+    Args:
+        repo_id: ID of the repository whose history to list.
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        Chronologically ordered chat turns.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if the repo is not found.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -183,6 +230,20 @@ async def delete_chat_message(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
+    """Delete one chat turn scoped to the user and repository.
+
+    Args:
+        repo_id: ID of the repository the message belongs to.
+        message_id: ID of the chat message to delete.
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        None (204 No Content).
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if not found.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -211,6 +272,19 @@ async def clear_chat_history(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
+    """Delete all of the user's chat history for a repository.
+
+    Args:
+        repo_id: ID of the repository whose history to clear.
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        None (204 No Content).
+
+    Raises:
+        HTTPException: 401 if unauthenticated.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")

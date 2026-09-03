@@ -1,3 +1,9 @@
+"""Dependency graph route for file- and symbol-level visualization.
+
+Delegates to the graph builder service and only serves repositories that
+have finished ingestion.
+"""
+
 import logging
 import uuid
 from typing import Literal
@@ -20,6 +26,21 @@ async def get_graph(
     level: Literal["file", "symbol"] = Query("file", enum=["file", "symbol"]),
     db: AsyncSession = Depends(get_async_db),
 ):
+    """Build the dependency graph JSON for a ready repository.
+
+    Args:
+        repo_id: ID of the repository to visualize.
+        request: Request carrying the authenticated user ID in state.
+        level: Graph granularity, either file-level or symbol-level.
+        db: Async database session.
+
+    Returns:
+        Graph payload with nodes and edges at the requested level.
+
+    Raises:
+        HTTPException: 404 if not found, 409 if ingestion is incomplete,
+            500 if the graph build fails.
+    """
     user_id = getattr(request.state, "user_id", None)
     repo = (
         await db.execute(
@@ -40,6 +61,7 @@ async def get_graph(
     try:
         graph = await build_graph(db, repo_id, level=level)
     except Exception:
+        # Log the traceback server-side but return a generic error to the client.
         logger.exception("Graph build failed for repo %s", repo_id)
         raise HTTPException(status_code=500, detail="Failed to build graph")
 

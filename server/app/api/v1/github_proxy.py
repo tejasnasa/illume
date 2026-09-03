@@ -1,3 +1,10 @@
+"""GitHub API proxy routes using the linked OAuth token.
+
+Proxies repository listing, branch listing, and commit history (including a
+multi-branch merged view) so the frontend never handles GitHub tokens
+directly.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -19,6 +26,8 @@ TIMEOUT = 15.0
 
 
 class GitHubRepoItem(BaseModel):
+    """Repository entry from the authenticated user's GitHub account."""
+
     full_name: str
     name: str
     private: bool
@@ -31,12 +40,16 @@ class GitHubRepoItem(BaseModel):
 
 
 class GitHubBranch(BaseModel):
+    """Branch with head SHA and default-branch marker."""
+
     name: str
     sha: str
     is_default: bool = False
 
 
 class GitHubCommitItem(BaseModel):
+    """Single commit with first-line message and author details."""
+
     sha: str
     short_sha: str
     message: str
@@ -46,6 +59,8 @@ class GitHubCommitItem(BaseModel):
 
 
 class GitHubMultiBranchCommit(BaseModel):
+    """Commit merged across branches with parent SHAs and branch names."""
+
     sha: str
     short_sha: str
     message: str
@@ -57,6 +72,7 @@ class GitHubMultiBranchCommit(BaseModel):
 
 
 def _gh_headers(token: str) -> dict[str, str]:
+    """Build authenticated GitHub API headers for a user token."""
     return {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
@@ -65,6 +81,7 @@ def _gh_headers(token: str) -> dict[str, str]:
 
 
 def _require_token(user: User) -> str:
+    """Return the user's GitHub token or raise 403 if not linked."""
     if not user.github_access_token:
         raise HTTPException(
             status_code=403,
@@ -80,6 +97,21 @@ async def list_my_repos(
     q: str = Query("", description="Filter repos by name substring"),
     current_user: User = Depends(get_current_user),
 ):
+    """List the authenticated user's GitHub repositories, newest first.
+
+    Args:
+        page: 1-indexed GitHub API page.
+        per_page: Repos per page (max 100).
+        q: Optional case-insensitive name substring filter applied locally.
+        current_user: User whose linked GitHub token is used.
+
+    Returns:
+        Filtered repository items for the requested page.
+
+    Raises:
+        HTTPException: 403 if GitHub is not linked, 401 if the token
+            expired, 502 if GitHub returns an error.
+    """
     token = _require_token(current_user)
 
     url = f"{GITHUB_API}/user/repos?sort=updated&direction=desc&per_page={per_page}&page={page}&type=owner"
@@ -129,6 +161,19 @@ async def list_repo_branches(
     repo: str,
     current_user: User = Depends(get_current_user),
 ):
+    """List branches for a GitHub repository with the default flagged.
+
+    Args:
+        owner: GitHub repository owner.
+        repo: GitHub repository name.
+        current_user: User whose linked GitHub token is used.
+
+    Returns:
+        Branch items marking which one is the default.
+
+    Raises:
+        HTTPException: 404 if the repo is not found, 502 on GitHub errors.
+    """
     token = _require_token(current_user)
 
     repo_url = f"{GITHUB_API}/repos/{owner}/{repo}"
@@ -172,6 +217,22 @@ async def list_repo_commits(
     per_page: int = Query(40, ge=1, le=100),
     current_user: User = Depends(get_current_user),
 ):
+    """List commits for a branch/SHA with pagination.
+
+    Args:
+        owner: GitHub repository owner.
+        repo: GitHub repository name.
+        sha: Optional branch or commit ref to list from.
+        page: 1-indexed GitHub API page.
+        per_page: Commits per page (max 100).
+        current_user: User whose linked GitHub token is used.
+
+    Returns:
+        Commit items with first-line messages and fallback author handling.
+
+    Raises:
+        HTTPException: 404 if repo/branch missing, 502 on GitHub errors.
+    """
     token = _require_token(current_user)
 
     url = f"{GITHUB_API}/repos/{owner}/{repo}/commits?per_page={per_page}&page={page}"
@@ -221,6 +282,23 @@ async def list_repo_commits_multibranch(
     repo: str,
     current_user: User = Depends(get_current_user),
 ):
+    """List recent commits merged across up to 5 branches, newest first.
+
+    Fetches the default branch plus up to 4 others concurrently, dedupes
+    commits by SHA while recording every branch each commit appears on,
+    and returns the 100 most recent.
+
+    Args:
+        owner: GitHub repository owner.
+        repo: GitHub repository name.
+        current_user: User whose linked GitHub token is used.
+
+    Returns:
+        Up to 100 merged commits sorted by authored date descending.
+
+    Raises:
+        HTTPException: 404 if the repo is not found, 502 on GitHub errors.
+    """
     token = _require_token(current_user)
 
     repo_url = f"{GITHUB_API}/repos/{owner}/{repo}"
@@ -244,15 +322,18 @@ async def list_repo_commits_multibranch(
             raise HTTPException(status_code=502, detail="Failed to fetch branches")
 
     raw_branches = branches_res.json()
+    # Default branch first so its commits anchor the merged view.
     branch_names = [default_branch]
     for b in raw_branches:
         name = b["name"]
         if name != default_branch:
             branch_names.append(name)
 
+    # Cap fan-out to bound GitHub API usage per request.
     target_branches = branch_names[:5]
 
     async def fetch_branch_commits(branch_name: str):
+        """Fetch recent commits for one branch, returning empty on failure."""
         url = f"{GITHUB_API}/repos/{owner}/{repo}/commits?sha={branch_name}&per_page=30"
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             res = await client.get(url, headers=_gh_headers(token))
@@ -263,6 +344,8 @@ async def list_repo_commits_multibranch(
     tasks = [fetch_branch_commits(name) for name in target_branches]
     results = await asyncio.gather(*tasks)
 
+    # Dedupe by SHA: a commit reachable from several branches is stored once
+    # with every branch name attached.
     commit_dict = {}
     for branch_name, branch_commits in results:
         for c in branch_commits:

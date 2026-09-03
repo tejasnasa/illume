@@ -1,3 +1,10 @@
+"""Glossary browsing and search routes.
+
+Exposes paginated, alphabetically ordered glossary entries per repository,
+with optional exact file-path filtering and case-insensitive name/definition
+search.
+"""
+
 import logging
 import uuid
 
@@ -15,6 +22,8 @@ router = APIRouter(prefix="/api/v1/repository", tags=["glossary"])
 
 
 class GlossaryEntryResponse(BaseModel):
+    """Single glossary term with its location and defining symbol."""
+
     id: uuid.UUID
     name: str
     definition: str
@@ -26,6 +35,8 @@ class GlossaryEntryResponse(BaseModel):
 
 
 class GlossaryListResponse(BaseModel):
+    """Paginated glossary page with total count for the query."""
+
     entries: list[GlossaryEntryResponse]
     total: int
     page: int
@@ -43,6 +54,22 @@ async def browse_glossary(
     ),
     db: AsyncSession = Depends(get_async_db),
 ) -> GlossaryListResponse:
+    """Browse glossary entries alphabetically with pagination.
+
+    Args:
+        request: Request carrying the authenticated user ID in state.
+        repo_id: ID of the repository whose glossary to browse.
+        page: 1-indexed page number.
+        page_size: Entries per page (max 100).
+        file_path: Optional exact file-path filter.
+        db: Async database session.
+
+    Returns:
+        Paginated entries plus total count.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if the repo is not found.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -54,6 +81,7 @@ async def browse_glossary(
     if file_path is not None:
         base_query = base_query.where(GlossaryEntry.file_path == file_path)
 
+    # Count via subquery so the total reflects filters before pagination.
     count_result = await db.execute(
         select(func.count()).select_from(base_query.subquery())
     )
@@ -87,6 +115,22 @@ async def search_glossary(
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_async_db),
 ) -> GlossaryListResponse:
+    """Search glossary entries by name or definition substring.
+
+    Args:
+        request: Request carrying the authenticated user ID in state.
+        repo_id: ID of the repository whose glossary to search.
+        q: Case-insensitive substring matched against name and definition.
+        page: 1-indexed page number.
+        page_size: Entries per page (max 100).
+        db: Async database session.
+
+    Returns:
+        Paginated matching entries plus total count.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if the repo is not found.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")

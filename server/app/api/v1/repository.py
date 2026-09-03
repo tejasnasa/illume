@@ -1,3 +1,10 @@
+"""Repository ingestion and management routes.
+
+Handles creating repositories (which queues a Celery ingestion task),
+re-ingesting, fetching/listing, deleting, and exporting the ``.illume``
+bundle for ready repositories.
+"""
+
 import logging
 import uuid
 from datetime import datetime
@@ -17,17 +24,23 @@ router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
 
 
 class RepositoryCreate(BaseModel):
+    """Payload for ingesting a new repository at an optional ref."""
+
     github_url: str
     branch: str | None = None
     commit_sha: str | None = None
 
 
 class RepositoryReingest(BaseModel):
+    """Payload for re-ingesting an existing repository at an optional ref."""
+
     branch: str | None = None
     commit_sha: str | None = None
 
 
 class RepositoryResponse(BaseModel):
+    """Serialized repository with analysis status and detected metadata."""
+
     id: uuid.UUID
     github_url: str
     name: str
@@ -46,6 +59,7 @@ class RepositoryResponse(BaseModel):
 
 
 def _extract_repo_name(github_url: str) -> str:
+    """Derive the repo name from its GitHub URL's trailing segment."""
     return github_url.rstrip("/").split("/")[-1]
 
 
@@ -56,6 +70,17 @@ async def create_repository(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Create a repository record and queue background ingestion.
+
+    Args:
+        payload: GitHub URL plus optional branch/commit to ingest.
+        request: Incoming request (unused beyond auth).
+        db: Async database session.
+        current_user: Owner the new repository is attributed to.
+
+    Returns:
+        Dict with the new ``repo_id`` and ``repo_num``.
+    """
     repo = Repository(
         github_url=payload.github_url,
         name=_extract_repo_name(payload.github_url),
@@ -83,6 +108,23 @@ async def reingest_repository(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Delete and recreate a repository to re-run full ingestion.
+
+    Only repositories in ``ready`` or ``failed`` state can be re-ingested;
+    the replacement row keeps the same ID and repo number.
+
+    Args:
+        repo_id: ID of the repository to re-ingest.
+        payload: Optional branch/commit overrides.
+        db: Async database session.
+        current_user: Owner of the repository.
+
+    Returns:
+        Dict with the reused ``repo_id`` and ``repo_num``.
+
+    Raises:
+        HTTPException: 404 if not found, 400 if ingestion is still in progress.
+    """
     result = await db.execute(
         select(Repository).where(
             Repository.id == repo_id,
@@ -135,6 +177,19 @@ async def get_repository(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
+    """Fetch one repository by its user-scoped repo number.
+
+    Args:
+        repo_num: Human-friendly per-user repository number.
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        The matching repository.
+
+    Raises:
+        HTTPException: 404 if not found or owned by another user.
+    """
     user_id = getattr(request.state, "user_id", None)
     repo = (
         await db.execute(
@@ -150,6 +205,16 @@ async def get_repository(
 
 @router.get("", response_model=list[RepositoryResponse])
 async def list_repositories(request: Request, db: AsyncSession = Depends(get_async_db)):
+    """List the caller's repositories newest-first with truncated summaries.
+
+    Args:
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        List of the user's repositories; long architecture summaries are
+        truncated to 200 characters for the list view.
+    """
     user_id = getattr(request.state, "user_id", None)
 
     repositories = (
@@ -181,6 +246,19 @@ async def delete_repository(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
+    """Delete a repository owned by the caller.
+
+    Args:
+        repo_id: ID of the repository to delete.
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        None (204 No Content).
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if not found.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -209,6 +287,20 @@ async def export_repository_illume(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Export a ready repository as a downloadable ``.illume`` bundle.
+
+    Args:
+        repo_id: ID of the repository to export.
+        request: Incoming request (unused beyond auth).
+        db: Async database session.
+        current_user: Owner of the repository.
+
+    Returns:
+        Plain-text bundle with a download filename header.
+
+    Raises:
+        HTTPException: 404 if not found, 400 if ingestion is incomplete.
+    """
     result = await db.execute(
         select(Repository).where(
             Repository.id == repo_id,

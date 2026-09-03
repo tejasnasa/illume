@@ -1,3 +1,9 @@
+"""Code ownership routes exposing per-file owners and knowledge silos.
+
+Serves the paginated ownership map (with optional file filter) and the
+subset of files flagged as knowledge silos (bus factor of one).
+"""
+
 import logging
 import uuid
 
@@ -16,6 +22,8 @@ router = APIRouter(prefix="/api/v1/repository", tags=["ownership"])
 
 
 class Contributor(BaseModel):
+    """One contributor's share of a file's commit history."""
+
     name: str
     email: str | None
     percentage: float | None
@@ -23,6 +31,8 @@ class Contributor(BaseModel):
 
 
 class FileOwnershipResponse(BaseModel):
+    """Ownership summary for a single file."""
+
     file_id: uuid.UUID
     file_path: str
     primary_owner: str | None
@@ -34,16 +44,21 @@ class FileOwnershipResponse(BaseModel):
 
 
 class OwnershipMapResponse(BaseModel):
+    """Paginated ownership map page."""
+
     files: list[FileOwnershipResponse]
     total: int
 
 
 class SilosResponse(BaseModel):
+    """All knowledge-silo files (single-owner risk spots)."""
+
     silos: list[FileOwnershipResponse]
     total: int
 
 
 def _build_file_ownership(owner: CodeOwner, file: File) -> FileOwnershipResponse:
+    """Combine a CodeOwner row and its File into a response model."""
     raw_contributors: list[dict] = owner.contributors or []
     contributors = [
         Contributor(
@@ -73,6 +88,22 @@ async def get_ownership_map(
     file_path: str | None = Query(None),
     db: AsyncSession = Depends(get_async_db),
 ) -> OwnershipMapResponse:
+    """List per-file ownership ordered by path, with pagination.
+
+    Args:
+        request: Request carrying the authenticated user ID in state.
+        repo_id: ID of the repository whose ownership map to list.
+        page: 1-indexed page number.
+        page_size: Entries per page (max 200).
+        file_path: Optional exact file-path filter.
+        db: Async database session.
+
+    Returns:
+        Paginated ownership entries plus total count.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if the repo is not found.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -114,6 +145,19 @@ async def get_knowledge_silos(
     repo_id: uuid.UUID,
     db: AsyncSession = Depends(get_async_db),
 ) -> SilosResponse:
+    """List files flagged as knowledge silos (bus factor of one).
+
+    Args:
+        request: Request carrying the authenticated user ID in state.
+        repo_id: ID of the repository whose silos to list.
+        db: Async database session.
+
+    Returns:
+        All silo files plus total count.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if the repo is not found.
+    """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
