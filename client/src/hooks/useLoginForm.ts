@@ -1,9 +1,19 @@
+/**
+ * Login form state with validation and session creation.
+ * @module UseLoginForm
+ */
+
 import { loginSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+/**
+ * Manages the login form: validation, submit, and dashboard redirect.
+ *
+ * @returns Register function, first error, submitting flag, and submit handler.
+ */
 export default function useLoginForm() {
   const router = useRouter();
   const form = useForm<z.infer<typeof loginSchema>>({
@@ -11,6 +21,7 @@ export default function useLoginForm() {
     defaultValues: { email: "", password: "" },
   });
 
+  // Surface a single banner error instead of one per field.
   const { email, password, root } = form.formState.errors;
   const firstError = email?.message || password?.message || root?.message;
 
@@ -35,6 +46,7 @@ export default function useLoginForm() {
 
       router.push("/dashboard");
     } catch (error) {
+      // Backend message lands in root so the banner shows it (not a field).
       form.setError("root", {
         message:
           (error as { message?: string }).message ??

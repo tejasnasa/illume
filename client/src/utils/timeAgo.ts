@@ -1,3 +1,15 @@
+/**
+ * Human-readable relative time formatting ("3 days ago").
+ * @module TimeAgo
+ */
+
+/**
+ * Formats a date as relative time (past or future).
+ *
+ * @param dateInput - Date value, string, or undefined (renders as "Never").
+ * @returns Relative description like "2 hours ago", "in 3 days", or "just now".
+ * @throws Error if the input cannot be parsed as a date.
+ */
 export const timeAgo = (dateInput: string | Date | undefined) => {
   if (!dateInput) return "Never";
   const date = new Date(dateInput);
@@ -8,6 +20,7 @@ export const timeAgo = (dateInput: string | Date | undefined) => {
     throw new Error("Invalid date input");
   }
 
+  // Largest-first buckets so the first match is the coarsest fitting unit.
   const intervals = [
     { label: "year", seconds: 31536000 },
     { label: "month", seconds: 2592000 },
@@ -18,6 +31,7 @@ export const timeAgo = (dateInput: string | Date | undefined) => {
     { label: "second", seconds: 1 },
   ];
 
+  // Future dates render as "in X units" rather than "X ago".
   if (seconds < 0) {
     const absSeconds = Math.abs(seconds);
     for (const interval of intervals) {
@@ -28,6 +42,7 @@ export const timeAgo = (dateInput: string | Date | undefined) => {
     }
   }
 
+  // Sub-5s deltas read as "just now" to avoid "0 seconds ago" flicker.
   if (seconds < 5) return "just now";
 
   for (const interval of intervals) {

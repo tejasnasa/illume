@@ -1,12 +1,27 @@
+/**
+ * Git branch and multi-branch commit state for the git graph view.
+ * @module UseGitGraph
+ */
+
 import { getRepoBranches, getRepoCommitsMultiBranch } from "@/api/github";
 import { GitHubBranch, GitHubMultiBranchCommit } from "@/types/github";
 import { useEffect, useState } from "react";
 
+/**
+ * Props identifying the GitHub repository to visualize.
+ */
 export interface UseGitGraphProps {
   owner: string;
   repo: string;
 }
 
+/**
+ * Loads branches and merged commit history for a repository.
+ *
+ * @param owner - GitHub repository owner.
+ * @param repo - GitHub repository name.
+ * @returns Branches, commits, selection state, and loading/error flags.
+ */
 export function useGitGraph({ owner, repo }: UseGitGraphProps) {
   const [branches, setBranches] = useState<GitHubBranch[]>([]);
   const [commits, setCommits] = useState<GitHubMultiBranchCommit[]>([]);
@@ -24,6 +39,7 @@ export function useGitGraph({ owner, repo }: UseGitGraphProps) {
     getRepoBranches(owner, repo)
       .then((data) => {
         setBranches(data);
+        // Prefer the flagged default; fall back to first branch, then "main".
         const defaultB = data.find((b) => b.is_default)?.name || data[0]?.name || "main";
         setDefaultBranch(defaultB);
       })

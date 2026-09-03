@@ -1,9 +1,19 @@
+/**
+ * Signup form state with validation and account creation.
+ * @module UseSignupForm
+ */
+
 import { signupSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+/**
+ * Manages the signup form: validation, submit, and dashboard redirect.
+ *
+ * @returns Register function, first error, submitting flag, and submit handler.
+ */
 export default function useSignupForm() {
   const router = useRouter();
   const form = useForm<z.infer<typeof signupSchema>>({
@@ -11,6 +21,7 @@ export default function useSignupForm() {
     defaultValues: { name: "", email: "", password: "" },
   });
 
+  // Surface a single banner error instead of one per field.
   const { name, email, password, root } = form.formState.errors;
   const firstError =
     name?.message || email?.message || password?.message || root?.message;
@@ -36,6 +47,7 @@ export default function useSignupForm() {
 
       router.push("/dashboard");
     } catch (error) {
+      // Backend message lands in root so the banner shows it (not a field).
       form.setError("root", {
         message:
           (error as { message?: string }).message ??

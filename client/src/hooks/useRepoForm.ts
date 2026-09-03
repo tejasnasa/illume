@@ -1,9 +1,19 @@
+/**
+ * Repository creation form state with ingestion kick-off.
+ * @module UseRepoForm
+ */
+
 import { repoCreateSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+/**
+ * Manages the new-repository form and navigates to the created repo page.
+ *
+ * @returns Register function, first error, submitting flag, and submit handler.
+ */
 export default function useRepoForm() {
   const router = useRouter();
   const form = useForm<z.infer<typeof repoCreateSchema>>({

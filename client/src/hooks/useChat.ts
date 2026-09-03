@@ -1,8 +1,16 @@
+/**
+ * Chat state hook with optimistic updates and history persistence.
+ * @module UseChat
+ */
+
 "use client";
 
 import ChatMessage from "@/types/chat";
 import { useCallback, useEffect, useState } from "react";
 
+/**
+ * One conversation turn; pending turns have a null answer until resolved.
+ */
 interface Message {
   id: string;
   question: string;
@@ -10,6 +18,12 @@ interface Message {
   error?: boolean;
 }
 
+/**
+ * Manages repository chat: history loading, sending, and deletion.
+ *
+ * @param repoId - ID of the repository whose chat to manage.
+ * @returns Messages, loading flag, and send/delete/clear actions.
+ */
 export function useChat({ repoId }: { repoId: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,6 +56,12 @@ export function useChat({ repoId }: { repoId: string }) {
     fetchHistory();
   }, [repoId]);
 
+  /**
+   * Sends a question with an optimistic placeholder, then swaps in the answer.
+   *
+   * Forwards the last answered turns as history so follow-ups stay grounded.
+   * @param question - The user's question text.
+   */
   const sendMessage = useCallback(
     async (question: string) => {
       if (!question.trim() || isLoading) return;
@@ -97,6 +117,7 @@ export function useChat({ repoId }: { repoId: string }) {
           ),
         );
       } catch {
+        // Keep the turn visible with an inline error so the user can retry.
         setMessages((curr) =>
           curr.map((m) =>
             m.id === id
@@ -118,12 +139,18 @@ export function useChat({ repoId }: { repoId: string }) {
     [isLoading, repoId],
   );
 
+  /**
+   * Removes a message locally and deletes persisted turns server-side.
+   *
+   * @param messageId - ID of the message to delete.
+   */
   const deleteMessage = useCallback(
     async (messageId: string) => {
       const msgToDelete = messages.find((m) => m.id === messageId);
 
       setMessages((curr) => curr.filter((m) => m.id !== messageId));
 
+      // Optimistic placeholders and error turns were never persisted.
       if (msgToDelete && !msgToDelete.error) {
         try {
           await fetch(
@@ -141,6 +168,9 @@ export function useChat({ repoId }: { repoId: string }) {
     [repoId, messages],
   );
 
+  /**
+   * Clears all local messages and wipes server-side history.
+   */
   const clearHistory = useCallback(async () => {
     setMessages([]);
 
