@@ -1,6 +1,18 @@
+/**
+ * Numbered glossary entry card with a source-file link.
+ * @module GlossaryEntry
+ */
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
+/**
+ * Renders one glossary term with its definition and file reference.
+ * @param entry The glossary entry with name, definition, file path, and line number.
+ * @param start The base offset added to idx for the displayed entry number.
+ * @param idx The zero-based index of this entry within the current page.
+ * @param github_url The repository base URL for the source-file link.
+ * @returns The rendered glossary entry element.
+ */
 export default function GlossaryEntry({
   entry,
   start,

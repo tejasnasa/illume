@@ -1,3 +1,7 @@
+/**
+ * Expandable citation card for a single RAG source.
+ * @module CitationCard
+ */
 import ChatMessage from "@/types/chat";
 import {
   CaretDownIcon,
@@ -10,7 +14,9 @@ import {
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 
+/** Known source kinds; anything else falls back to "document". */
 type SourceType = "symbol" | "commit" | "pull_request" | "file" | "document";
+/** A single citation entry from a chat message. */
 type Source = ChatMessage["sources"][number];
 
 const TYPE_CONFIG: Record<
@@ -54,6 +60,11 @@ const TYPE_CONFIG: Record<
   },
 };
 
+/**
+ * Normalizes a raw source_type string to a known SourceType.
+ * @param src The citation source to classify.
+ * @returns The matching SourceType, or "document" for unknown values.
+ */
 function resolveType(src: Source): SourceType {
   return (
     ["symbol", "commit", "pull_request", "file"] as SourceType[]
@@ -62,6 +73,12 @@ function resolveType(src: Source): SourceType {
     : "document";
 }
 
+/**
+ * Resolves the primary display label for a citation.
+ * @param type The normalized source type.
+ * @param src The citation source.
+ * @returns The headline label shown on the card.
+ */
 function resolvePrimaryLabel(type: SourceType, src: Source): string {
   switch (type) {
     case "symbol":
@@ -79,6 +96,12 @@ function resolvePrimaryLabel(type: SourceType, src: Source): string {
   }
 }
 
+/**
+ * Resolves the secondary display label for a citation.
+ * @param type The normalized source type.
+ * @param src The citation source.
+ * @returns The sub-label shown beneath the primary label.
+ */
 function resolveSubLabel(type: SourceType, src: Source): string {
   switch (type) {
     case "symbol":
@@ -94,6 +117,12 @@ function resolveSubLabel(type: SourceType, src: Source): string {
   }
 }
 
+/**
+ * Builds a GitHub deep link for a citation when one applies.
+ * @param src The citation source.
+ * @param url The repository base URL.
+ * @returns The GitHub URL, or null when the type has no link target.
+ */
 function resolveGithubHref(src: Source, url: string): string | null {
   if (src.source_type === "symbol")
     return `${url}/blob/master/${src.file_path}#L${src.start_line}-L${src.end_line}`;
@@ -104,6 +133,11 @@ function resolveGithubHref(src: Source, url: string): string | null {
   return null;
 }
 
+/**
+ * Renders the GitHub icon link for a citation.
+ * @param href The GitHub URL to open in a new tab.
+ * @returns The rendered external link element.
+ */
 function GithubLink({ href }: { href: string }) {
   return (
     <a
@@ -117,6 +151,12 @@ function GithubLink({ href }: { href: string }) {
   );
 }
 
+/**
+ * Renders an expandable card summarizing one cited source.
+ * @param src The citation source to display.
+ * @param url The repository base URL for GitHub links.
+ * @returns The rendered citation card element.
+ */
 export default function CitationCard({
   src,
   url,

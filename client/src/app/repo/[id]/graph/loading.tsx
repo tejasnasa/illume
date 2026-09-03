@@ -1,3 +1,13 @@
+/**
+ * Spinner fallback for the dependency graph route.
+ * @module GraphLoading
+ */
+
+/**
+ * Renders a centered loading spinner over the graph canvas.
+ *
+ * @returns Full-viewport graph loading overlay.
+ */
 export default function GraphLoading() {
   return (
     <main className="backdrop-blur-xs relative w-full h-[calc(100vh-64px)] flex flex-col items-center justify-center overflow-hidden">

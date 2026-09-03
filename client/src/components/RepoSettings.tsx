@@ -1,3 +1,7 @@
+/**
+ * Repository management panel with export and danger-zone actions.
+ * @module RepoSettings
+ */
 import deleteRepoAction from "@/actions/deleteRepo";
 import regenerateRepoAction from "@/actions/regenerateRepo";
 import {
@@ -13,6 +17,13 @@ import GitGraph from "./GitGraph";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+/**
+ * Renders export, delete, regenerate, and version re-ingest controls.
+ *
+ * @param repo_id - ID of the repository under management.
+ * @param github_url - Repository URL parsed for version selection.
+ * @returns Settings panel with confirmation modals for destructive actions.
+ */
 export default function RepoSettings({
   repo_id,
   github_url,
@@ -24,10 +35,17 @@ export default function RepoSettings({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Owner/name feed the version graph; empty strings hide that section.
   const match = github_url.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/);
   const owner = match ? match[1] : "";
   const repoName = match ? match[2].replace(/\.git$/, "") : "";
 
+  /**
+   * Re-ingests the repo at the chosen branch/commit, then returns to dashboard.
+   *
+   * @param branch - Branch to re-ingest.
+   * @param commitSha - Optional pinned commit; null re-ingests the branch tip.
+   */
   const handleReingest = async (branch: string, commitSha: string | null) => {
     setIsSubmitting(true);
     setError(null);

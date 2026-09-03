@@ -1,3 +1,7 @@
+/**
+ * Non-interactive ambient 3D force graph for page backgrounds.
+ * @module BackgroundGraph
+ */
 "use client";
 import Graph from "@/types/graph";
 import dynamic from "next/dynamic";
@@ -9,14 +13,22 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
 
 const ORBIT_SPEED = 0.001; // radians per frame
 
+/**
+ * Renders a slowly orbiting, non-interactive graph behind page content.
+ *
+ * @param graph - Graph payload to visualize; renders nothing when null.
+ * @returns Fixed background canvas, or null while graph is unavailable.
+ */
 export default function BackgroundGraph({ graph }: { graph: Graph | null }) {
   const fgRef = useRef<any>(null);
   const angleRef = useRef(0);
   const forcesSet = useRef(false);
 
+  /** Slowly orbits the camera around the graph until unmounted. */
   useEffect(() => {
     let rafId: number;
 
+    /** Advances the camera one frame along its circular orbit. */
     const spin = () => {
       const fg = fgRef.current;
       if (fg) {
@@ -55,6 +67,7 @@ export default function BackgroundGraph({ graph }: { graph: Graph | null }) {
         enablePointerInteraction={false}
         showNavInfo={false}
         onEngineTick={() => {
+          // Apply custom repulsion/spacing once the engine is running.
           if (forcesSet.current) return;
           const fg = fgRef.current;
           if (!fg) return;

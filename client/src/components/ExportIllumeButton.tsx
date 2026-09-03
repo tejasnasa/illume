@@ -1,3 +1,7 @@
+/**
+ * One-click download of the compressed `.illume` context file.
+ * @module ExportIllumeButton
+ */
 "use client";
 
 import { exportIllumeAction } from "@/actions/exportIllume";
@@ -5,9 +9,16 @@ import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 import Button from "./ui/Button";
 
+/**
+ * Exports repository context and saves it as a local file.
+ *
+ * @param repo_id - ID of the repository to export.
+ * @returns Button that triggers the export download.
+ */
 export default function ExportIllumeButton({ repo_id }: { repo_id: string }) {
   const [loading, setLoading] = useState(false);
 
+  /** Fetches export text and saves it via a temporary anchor download. */
   const handleExport = async () => {
     setLoading(true);
     try {

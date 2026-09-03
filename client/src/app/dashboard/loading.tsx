@@ -1,3 +1,7 @@
+/**
+ * Skeleton fallback for the dashboard route.
+ * @module DashboardLoading
+ */
 import Navbar from "@/components/Navbar";
 import Skeleton from "@/components/ui/Skeleton";
 import {
@@ -6,6 +10,11 @@ import {
   SparkleIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Renders placeholder repo cards while dashboard data loads.
+ *
+ * @returns Skeleton dashboard layout mirroring the real page structure.
+ */
 export default function LoadingDashboard() {
   return (
     <div className="min-h-screen text-(--muted-foreground)">

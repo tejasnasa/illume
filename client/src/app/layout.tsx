@@ -1,3 +1,7 @@
+/**
+ * Root application layout with fonts, metadata, and toast host.
+ * @module RootLayout
+ */
 import { Toast } from "@/components/ui/Toast";
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
@@ -58,6 +62,12 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Root HTML shell: applies the app font, global styles, and toast portal.
+ *
+ * @param children - Page content rendered inside the body.
+ * @returns HTML document structure with SEO metadata applied.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -1,9 +1,16 @@
+/**
+ * File explorer panel with reading-order navigation and tree table.
+ * @module FileTreePanel
+ */
 import { FileNode, TreeNode } from "@/types/explorer";
 import { FolderOpenIcon } from "@phosphor-icons/react";
 import { ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react/dist/ssr";
 import { motion } from "motion/react";
 import TreeNodeRenderer from "./TreeNodeRenderer";
 
+/**
+ * Props for the FileTreePanel component.
+ */
 interface Props {
   fileTree: TreeNode;
   selectedFile: FileNode | null;
@@ -15,6 +22,18 @@ interface Props {
   onNavigate: (index: number) => void;
 }
 
+/**
+ * Renders the repository tree with pager controls and selection state.
+ * @param fileTree Root tree node to render.
+ * @param selectedFile Currently selected file, центering the panel when null.
+ * @param expandedDirs Set of expanded directory paths.
+ * @param onFileClick Handler invoked when a file row is clicked.
+ * @param onToggleDir Handler invoked when a directory is expanded or collapsed.
+ * @param pageIndex Current reading-order page, or null before it loads.
+ * @param totalPages Total number of reading-order pages.
+ * @param onNavigate Handler invoked with the target page index.
+ * @returns The rendered file tree panel element.
+ */
 export default function FileTreePanel({
   fileTree,
   selectedFile,

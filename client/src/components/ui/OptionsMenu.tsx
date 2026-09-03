@@ -1,6 +1,13 @@
+/**
+ * Click-to-toggle dropdown menu with outside-click dismissal.
+ * @module OptionsMenu
+ */
 "use client";
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * A single selectable menu row.
+ */
 interface OptionItem {
   label: string;
   icon?: React.ReactNode;
@@ -9,6 +16,9 @@ interface OptionItem {
   onClick?: () => void;
 }
 
+/**
+ * Props for the OptionMenu component.
+ */
 interface OptionMenuProps {
   trigger: React.ReactNode;
   items: OptionItem[];
@@ -17,6 +27,15 @@ interface OptionMenuProps {
   className?: string;
 }
 
+/**
+ * Renders a trigger that opens a positioned list of action items.
+ * @param trigger The element that toggles the menu when clicked.
+ * @param items The menu items rendered as buttons.
+ * @param size Size variant controlling item text and icon sizing.
+ * @param direction Whether the menu aligns to the left or right edge.
+ * @param className Additional class names applied to the menu panel.
+ * @returns The rendered menu element.
+ */
 export default function OptionMenu({
   trigger,
   items,

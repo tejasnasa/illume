@@ -1,9 +1,18 @@
+/**
+ * URL input for adding a repository to the dashboard.
+ * @module RepoForm
+ */
 "use client";
 
 import useRepoForm from "@/hooks/useRepoForm";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
 
+/**
+ * Renders the add-repository form with validation feedback.
+ *
+ * @returns Form with GitHub URL input and submit button.
+ */
 export default function RepoForm() {
   const { register, onSubmit, isSubmitting, firstError } = useRepoForm();
   return (

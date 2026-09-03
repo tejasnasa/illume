@@ -1,3 +1,7 @@
+/**
+ * Repository-scoped chat panel with history and streaming input.
+ * @module Chat
+ */
 "use client";
 
 import { useChat } from "@/hooks/useChat";
@@ -8,6 +12,13 @@ import Button from "./ui/Button";
 import ChatBubble from "./ui/ChatBubble";
 import Textarea from "./ui/Textarea";
 
+/**
+ * Displays codebase Q&A history with a composer for new questions.
+ *
+ * @param repoId - ID of the repository whose chat history to show.
+ * @param url - Repository URL forwarded to message bubbles for links.
+ * @returns Chat panel with history, empty state, and input row.
+ */
 export default function Chat({ repoId, url }: { repoId: string; url: string }) {
   const { messages, isLoading, sendMessage, deleteMessage, clearHistory } =
     useChat({
@@ -15,12 +26,14 @@ export default function Chat({ repoId, url }: { repoId: string; url: string }) {
     });
   const [input, setInput] = useState("");
 
+  /** Sends the trimmed composer text and clears the input. */
   const handleSend = () => {
     if (!input.trim()) return;
     sendMessage(input.trim());
     setInput("");
   };
 
+  /** Submits on Enter while preserving Shift+Enter newlines. */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

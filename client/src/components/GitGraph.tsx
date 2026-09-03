@@ -1,3 +1,7 @@
+/**
+ * Unified commit timeline with branch rails and ingest targeting.
+ * @module GitGraph
+ */
 "use client";
 
 import { useGitGraph } from "@/hooks/useGitGraph";
@@ -9,6 +13,7 @@ import {
   SpinnerIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
+/** Props for the repository timeline selector. */
 interface GitGraphProps {
   owner: string;
   repo: string;
@@ -25,8 +30,23 @@ const colors = [
   "#60a5fa",
 ];
 
+/**
+ * Maps a rail index to a stable color, cycling the palette.
+ *
+ * @param trackIndex - Zero-based rail column.
+ * @returns Hex color for the rail.
+ */
 const getRailColor = (trackIndex: number) => colors[trackIndex % colors.length];
 
+/**
+ * Renders multi-branch history and reports the ingest target.
+ *
+ * @param owner - GitHub repository owner.
+ * @param repo - GitHub repository name.
+ * @param onSelect - Called with the chosen branch and optional commit SHA.
+ * @param isSubmitting - Disables ingest while the parent submits.
+ * @returns Timeline panel with rail graph, commit list, and ingest footer.
+ */
 export default function GitGraph({
   owner,
   repo,
@@ -50,6 +70,7 @@ export default function GitGraph({
   const tracks: number[] = [];
   const activeTracks: (string | null)[] = [];
 
+  // Assign each commit a rail column, threading parent SHAs down the rails.
   for (let r = 0; r < commits.length; r++) {
     const commit = commits[r];
     const sha = commit.sha;
@@ -98,9 +119,12 @@ export default function GitGraph({
   const paddingX = 16;
   const paddingY = 28;
 
+  /** Converts a rail column to an SVG x-coordinate. */
   const getX = (col: number) => col * columnWidth + paddingX;
+  /** Converts a commit row to an SVG y-coordinate. */
   const getY = (row: number) => row * rowHeight + paddingY;
 
+  // Bezier links from each commit to its parents; stubs when parent is absent.
   const links: { path: string; stroke: string }[] = [];
   commits.forEach((commit, r) => {
     const col = tracks[r];
@@ -127,6 +151,11 @@ export default function GitGraph({
     });
   });
 
+  /**
+   * Toggles selection of a commit row.
+   *
+   * @param commit - Commit that was clicked.
+   */
   const handleCommitClick = (commit: GitHubMultiBranchCommit) => {
     if (selectedCommit?.sha === commit.sha) {
       setSelectedCommit(null);
@@ -135,6 +164,7 @@ export default function GitGraph({
     }
   };
 
+  /** Reports the selected commit (or default branch) to the parent. */
   const handleIngest = () => {
     const targetBranch = selectedCommit?.branches[0] || defaultBranch;
     const targetSha = selectedCommit?.sha || null;

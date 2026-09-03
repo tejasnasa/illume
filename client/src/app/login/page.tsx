@@ -1,9 +1,18 @@
+/**
+ * Split-screen login route with desktop-only guard.
+ * @module LoginPage
+ */
 import loginimg from "@/assets/loginart6.jpg";
 import LoginForm from "@/components/LoginForm";
 import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 import Image from "next/image";
 import Link from "next/link";
 
+/**
+ * Renders the login form beside cover art, with a mobile fallback notice.
+ *
+ * @returns Login page layout.
+ */
 export default function Login() {
   return (
     <main className="md:flex h-dvh w-dvw overflow-hidden">

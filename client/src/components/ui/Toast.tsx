@@ -1,3 +1,7 @@
+/**
+ * Toast notification stack wired to the global toast store.
+ * @module Toast
+ */
 "use client";
 
 import { useToastStore } from "@/lib/use-toast";
@@ -8,6 +12,10 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import { useEffect } from "react";
 
+/**
+ * Renders active toasts from the toast store in a fixed stack.
+ * @returns The rendered toast stack element.
+ */
 export function Toast() {
   const { state, subscribe } = useToastStore();
 
@@ -24,6 +32,13 @@ export function Toast() {
   );
 }
 
+/**
+ * Renders a single toast with variant-specific styling and icon.
+ * @param title Optional toast heading.
+ * @param description Optional toast body text.
+ * @param variant Visual variant controlling border color and icon.
+ * @returns The rendered toast item element.
+ */
 function ToastItem({
   title,
   description,

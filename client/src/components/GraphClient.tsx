@@ -1,3 +1,7 @@
+/**
+ * Interactive 3D dependency graph with search and reading-order tour.
+ * @module GraphClient
+ */
 "use client";
 
 import Graph from "@/types/graph";
@@ -20,6 +24,16 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ssr: false,
 });
 
+/**
+ * Renders the explorable dependency graph and its detail card.
+ *
+ * @param graphData - Nodes and links for the force-graph canvas.
+ * @param currentLevel - Active granularity ("file" or "symbol").
+ * @param repoId - Repository ID used for level-change navigation.
+ * @param github_url - Repository URL for source links in the detail card.
+ * @param guide - Guide with reading order and per-file annotations.
+ * @returns Full-viewport graph view with legend, search, and tour controls.
+ */
 export default function GraphClient({
   graphData,
   currentLevel,
@@ -39,6 +53,12 @@ export default function GraphClient({
   const [pageIndex, setPageIndex] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  /**
+   * Checks whether a node matches the current search text.
+   *
+   * @param node - Graph node with label/path fields.
+   * @returns True when the label or path contains the query.
+   */
   const isMatch = (node: any) => {
     if (!searchQuery.trim()) return false;
     const query = searchQuery.toLowerCase();
@@ -52,6 +72,7 @@ export default function GraphClient({
   const animFrameRef = useRef<number>(0);
   const graphRef = useRef<any>(null);
 
+  /** Pulsates search-match halo rings until unmounted. */
   useEffect(() => {
     const animate = () => {
       const now = performance.now();
@@ -68,16 +89,23 @@ export default function GraphClient({
     return () => cancelAnimationFrame(animFrameRef.current);
   }, []);
 
+  /** Clears stale halos when the query changes so matches re-register. */
   useEffect(() => {
     ringAnimations.clear();
     graphRef.current?.refresh();
   }, [searchQuery]);
 
+  /** Guide reading order resolved to graph nodes, in position order. */
   const orderedNodes = guide.reading_order
     .sort((a, b) => a.position - b.position)
     .map((entry) => nodeMap[entry.file_path])
     .filter(Boolean);
 
+  /**
+   * Selects the tour node at the given reading-order index.
+   *
+   * @param index - Position in the ordered node list.
+   */
   const navigateToPage = (index: number) => {
     const node = orderedNodes[index];
     if (!node) return;
@@ -85,10 +113,16 @@ export default function GraphClient({
     setSelectedNode(node);
   };
 
+  /** Reading-order entries keyed by file path. */
   const readingOrderMap = Object.fromEntries(
     guide.reading_order.map((entry) => [entry.file_path, entry]),
   );
 
+  /**
+   * Switches graph granularity via a route change with a loading veil.
+   *
+   * @param level - Target granularity ("file" or "symbol").
+   */
   const handleLevelChange = (level: string) => {
     setSelectedNode(null);
     setPageIndex(null);
@@ -96,6 +130,7 @@ export default function GraphClient({
     router.push(`/repo/${repoId}/graph?level=${level}`);
   };
 
+  /** Clears the level-switch veil once fresh graph data arrives. */
   useEffect(() => {
     setIsLoading(false);
   }, [graphData]);
@@ -294,6 +329,7 @@ export default function GraphClient({
             const r = 15;
 
             if (isMatch(node)) {
+              // Attach expanding halo rings; phases stagger the pulse loop above.
               const rings: any[] = [];
               for (let i = 0; i < 6; i++) {
                 const geometry = new THREE.RingGeometry(r, r + 2, 32);

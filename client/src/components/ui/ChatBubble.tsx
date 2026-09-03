@@ -1,9 +1,16 @@
+/**
+ * Chat message bubble pairing a user question with its AI answer.
+ * @module ChatBubble
+ */
 import ChatMessage from "@/types/chat";
 import { BookBookmarkIcon, TrashIcon } from "@phosphor-icons/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CitationCard from "./CitationCard";
 
+/**
+ * Props for the ChatBubble component.
+ */
 interface Props {
   id: string;
   question: string;
@@ -13,6 +20,16 @@ interface Props {
   onDelete?: (id: string) => void;
 }
 
+/**
+ * Renders a question bubble and its markdown answer with source citations.
+ * @param id Message identifier passed to onDelete.
+ * @param question The user's question text.
+ * @param message The answer payload, or null while the response is pending.
+ * @param error When true, styles the answer as an error message.
+ * @param url Repository URL used to build citation links.
+ * @param onDelete Optional handler to delete this message.
+ * @returns The rendered chat bubble element.
+ */
 export default function ChatBubble({
   id,
   question,

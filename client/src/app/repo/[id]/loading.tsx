@@ -1,6 +1,15 @@
+/**
+ * Skeleton fallback for the repository overview route.
+ * @module RepoLoading
+ */
 import Skeleton from "@/components/ui/Skeleton";
 import { GithubLogoIcon, LinkIcon } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Renders placeholder overview and chat panels while the repo loads.
+ *
+ * @returns Skeleton repository overview layout.
+ */
 export default function LoadingDashboard() {
   return (
     <main className="p-4 h-[calc(100vh-64px)] flex gap-4 max-w-7xl mx-auto">

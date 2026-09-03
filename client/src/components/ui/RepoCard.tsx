@@ -1,3 +1,7 @@
+/**
+ * Repository overview card with status, summary, and detected stack.
+ * @module RepoCard
+ */
 "use client";
 
 import Repository from "@/types/repository";
@@ -13,6 +17,11 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
+/**
+ * Renders a link card summarizing one repository's ingestion state.
+ * @param repo The repository record with status, summary, and stack metadata.
+ * @returns The rendered repository card element.
+ */
 export default function RepoCard({ repo }: { repo: Repository }) {
   const isReady = repo.status === "ready";
   const isFailed = repo.status === "failed";
@@ -109,6 +118,7 @@ export default function RepoCard({ repo }: { repo: Repository }) {
             {(() => {
               const langs = repo.detected_stack?.languages ?? [];
               const frameworks = repo.detected_stack?.frameworks ?? [];
+              // Merge languages and frameworks into one chip row.
               const all = [...langs, ...frameworks];
 
               return all.length > 0 ? (

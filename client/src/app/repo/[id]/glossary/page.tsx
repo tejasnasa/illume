@@ -1,3 +1,7 @@
+/**
+ * Paginated glossary route for domain terms and symbols.
+ * @module GlossaryPage
+ */
 import { GetGlossary } from "@/api/glossary";
 import { GetRepository } from "@/api/repository";
 import GlossarySearch from "@/components/GlossarySearch";
@@ -6,6 +10,13 @@ import Link from "next/link";
 
 const PAGE_SIZE = 10;
 
+/**
+ * Server-rendered glossary page with page-based navigation.
+ *
+ * @param params - Route params promise resolving to the repository id.
+ * @param searchParams - Query params promise carrying the page number.
+ * @returns Glossary search wrapper with entries and pagination controls.
+ */
 export default async function GlossaryPage({
   params,
   searchParams,
@@ -16,6 +27,7 @@ export default async function GlossaryPage({
   const { id } = await params;
   const repo = await GetRepository(Number(id));
   const { page: pageParam } = await searchParams;
+  // Clamp to page 1 so malformed query values can't produce empty offsets.
   const currentPage = Math.max(1, Number(pageParam) || 1);
   const data = await GetGlossary(repo.id, currentPage, PAGE_SIZE);
 

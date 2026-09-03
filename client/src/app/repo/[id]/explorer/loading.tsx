@@ -1,6 +1,15 @@
+/**
+ * Skeleton fallback for the file explorer route.
+ * @module ExplorerLoading
+ */
 import Skeleton from "@/components/ui/Skeleton";
 import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Renders placeholder explorer rows while the file tree loads.
+ *
+ * @returns Skeleton file explorer table.
+ */
 export default function ExplorerLoading() {
   return (
     <main className="max-w-4xl mx-auto pt-12 text-(--muted-foreground) overflow-hidden h-[calc(100vh-64px)] animate-pulse">

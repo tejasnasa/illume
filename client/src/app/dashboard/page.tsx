@@ -1,3 +1,7 @@
+/**
+ * User dashboard listing indexed repositories.
+ * @module DashboardPage
+ */
 import GetMyData from "@/api/auth";
 import { getRepositories } from "@/api/repository";
 import DashboardRefresh from "@/components/DashboardRefresh";
@@ -8,6 +12,11 @@ import Modal from "@/components/ui/Modal";
 import RepoCard from "@/components/ui/RepoCard";
 import { DatabaseIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Server-rendered dashboard with repo grid and index-repository modal.
+ *
+ * @returns Dashboard layout with navbar, refresh handler, and repo cards.
+ */
 export default async function Dashboard() {
   const repositories = await getRepositories();
   const myData = await GetMyData();

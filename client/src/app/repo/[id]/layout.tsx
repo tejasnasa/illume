@@ -1,3 +1,7 @@
+/**
+ * Shared layout for repository sub-routes with background graph.
+ * @module RepoLayout
+ */
 import { getRepoGraph } from "@/api/graph";
 import { GetRepository } from "@/api/repository";
 import AnimatedLayout from "@/components/AnimatedLayout";
@@ -12,6 +16,13 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
+/**
+ * Builds the per-repository document title from the repo name.
+ *
+ * @param params - Route params promise resolving to the repository id.
+ * @param parent - Parent route metadata being resolved.
+ * @returns Title metadata for the repository or the not-found fallback.
+ */
 export async function generateMetadata(
   { params }: Props,
   parent: ResolvingMetadata,
@@ -30,6 +41,13 @@ export async function generateMetadata(
   }
 }
 
+/**
+ * Wraps repo pages with navbar, ambient background graph, and transitions.
+ *
+ * @param children - Nested repo route content.
+ * @param params - Route params promise resolving to the repository id.
+ * @returns Repository shell layout.
+ */
 export default async function RootLayout({
   children,
   params,
@@ -47,6 +65,7 @@ export default async function RootLayout({
 
   let graph = null;
   try {
+    // Background decor only needs a ready repo; skip the fetch while indexing.
     if (repo.status === "ready") {
       graph = await getRepoGraph(repo.id, "file");
     }

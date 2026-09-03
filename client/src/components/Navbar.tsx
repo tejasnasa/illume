@@ -1,3 +1,7 @@
+/**
+ * Global header with branding and user account menu.
+ * @module Navbar
+ */
 "use client";
 
 import avatar from "@/assets/loginart.jpg";
@@ -13,6 +17,12 @@ import Image from "next/image";
 import Link from "next/link";
 import OptionsMenu from "./ui/OptionsMenu";
 
+/**
+ * Renders the top bar with home link and avatar dropdown.
+ *
+ * @param userData - Current user for avatar/name display; falls back to defaults.
+ * @returns Header with brand icon and settings/logout menu.
+ */
 export default function Navbar({
   userData = null,
 }: {

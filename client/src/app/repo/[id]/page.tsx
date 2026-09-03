@@ -1,3 +1,7 @@
+/**
+ * Repository overview with architecture summary, tech stack, and chat.
+ * @module RepositoryPage
+ */
 import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import Chat from "@/components/Chat";
@@ -21,6 +25,12 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+/**
+ * Server-rendered overview: chat when ready, live logs while indexing.
+ *
+ * @param params - Route params promise resolving to the repository id.
+ * @returns Repository overview with summary, stack, and chat/logs panels.
+ */
 export default async function Repository({
   params,
 }: {
@@ -31,6 +41,7 @@ export default async function Repository({
 
   const isReady = repo.status === "ready";
 
+  // Guide is only available after indexing; live logs need the auth token.
   const guide = isReady ? await GetGuide(repo.id) : null;
 
   const cookieStore = await cookies();

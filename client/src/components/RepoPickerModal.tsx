@@ -1,3 +1,7 @@
+/**
+ * Two-step modal for picking a repo and its ingest version.
+ * @module RepoPickerModal
+ */
 "use client";
 
 import { getMyGitHubRepos } from "@/api/github";
@@ -15,6 +19,7 @@ import GitGraph from "./GitGraph";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
 
+/** Props for the repository picker modal. */
 interface RepoPickerModalProps {
   onClose?: () => void;
 }
@@ -22,6 +27,12 @@ interface RepoPickerModalProps {
 type Mode = "picker" | "graph";
 type Tab = "my-repos" | "external";
 
+/**
+ * Lets users choose a GitHub repo, then a branch/commit to ingest.
+ *
+ * @param onClose - Optional callback after successful ingestion starts.
+ * @returns Picker UI or version graph depending on the current mode.
+ */
 export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("picker");
@@ -47,6 +58,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  /** Debounces the search box to avoid a request per keystroke. */
   useEffect(() => {
     const handle = setTimeout(() => {
       setDebouncedSearch(search);
@@ -55,6 +67,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     return () => clearTimeout(handle);
   }, [search]);
 
+  /** Reloads page one whenever the debounced query or tab changes. */
   useEffect(() => {
     if (activeTab !== "my-repos") return;
     setPage(1);
@@ -64,6 +77,13 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     fetchRepos(1, debouncedSearch, true);
   }, [debouncedSearch, activeTab]);
 
+  /**
+   * Loads one page of the user's repos, aborting any in-flight request.
+   *
+   * @param pageNumber - 1-indexed page to fetch.
+   * @param searchTerm - Name filter sent to the backend.
+   * @param reset - Replaces the list instead of appending.
+   */
   const fetchRepos = async (
     pageNumber: number,
     searchTerm: string,
@@ -106,6 +126,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
 
   const observerRef = useRef<HTMLDivElement | null>(null);
 
+  /** Appends the next page when the scroll sentinel becomes visible. */
   useEffect(() => {
     if (!hasMoreRepos || loadingRepos || activeTab !== "my-repos") return;
     const observer = new IntersectionObserver(
@@ -131,6 +152,11 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     };
   }, [hasMoreRepos, loadingRepos, page, debouncedSearch, activeTab]);
 
+  /**
+   * Records the clicked repo and advances to version selection.
+   *
+   * @param repo - Repository chosen from the list.
+   */
   const handleSelectMyRepo = (repo: GitHubRepo) => {
     const [owner, name] = repo.full_name.split("/");
     setSelectedRepoOwner(owner);
@@ -139,6 +165,11 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     setMode("graph");
   };
 
+  /**
+   * Validates an external GitHub URL and advances to version selection.
+   *
+   * @param e - Form submit event.
+   */
   const handleExternalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setExternalError("");
@@ -160,6 +191,12 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     setMode("graph");
   };
 
+  /**
+   * Posts the chosen branch/commit to start ingestion, then navigates.
+   *
+   * @param branch - Branch to ingest.
+   * @param commitSha - Optional pinned commit; null ingests the branch tip.
+   */
   const handleVersionSelect = (branch: string, commitSha: string | null) => {
     setIngestError(null);
     startTransition(async () => {

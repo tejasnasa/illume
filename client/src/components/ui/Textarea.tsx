@@ -1,5 +1,15 @@
+/**
+ * Styled multi-line textarea with fixed height.
+ * @module Textarea
+ */
 import { TextareaHTMLAttributes } from "react";
 
+/**
+ * Renders a themed non-resizable textarea forwarding all native attributes.
+ * @param className Additional class names appended to the base styles.
+ * @param props Remaining native textarea attributes.
+ * @returns The rendered textarea element.
+ */
 export default function Textarea({
   className,
   ...props

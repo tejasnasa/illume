@@ -1,8 +1,19 @@
+/**
+ * Dependency graph route with file/symbol granularity.
+ * @module GraphPage
+ */
 import { getRepoGraph } from "@/api/graph";
 import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import GraphClient from "@/components/GraphClient";
 
+/**
+ * Server-rendered graph page: loads graph data and guide for the client view.
+ *
+ * @param params - Route params promise resolving to the repository id.
+ * @param searchParams - Query params promise carrying the graph level.
+ * @returns Graph client visualization.
+ */
 export default async function GraphPage({
   params,
   searchParams,
@@ -14,6 +25,7 @@ export default async function GraphPage({
   const repo = await GetRepository(Number(id));
   const { level } = await searchParams;
 
+  // Default to file-level when no level query is present.
   const currentLevel = (level as string) || "file";
 
   const graphData = await getRepoGraph(

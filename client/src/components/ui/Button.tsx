@@ -1,5 +1,12 @@
+/**
+ * Primary button with size variants and a loading state.
+ * @module Button
+ */
 import { SpinnerIcon } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Props for the Button component.
+ */
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: "xs" | "sm" | "md" | "lg";
   ratio?: number;
@@ -20,6 +27,16 @@ const iconSizes = {
   lg: "h-5 w-5",
 };
 
+/**
+ * Renders a styled button that shows a spinner and disables itself while loading.
+ * @param className Additional class names appended to the base styles.
+ * @param size Size variant controlling padding, height, and icon size.
+ * @param ratio Optional aspect ratio applied via inline style.
+ * @param style Inline styles merged with the aspect-ratio style.
+ * @param loading When true, shows a spinner and disables the button.
+ * @param props Remaining native button attributes including children.
+ * @returns The rendered button element.
+ */
 export default function Button({
   className = "",
   size = "md",

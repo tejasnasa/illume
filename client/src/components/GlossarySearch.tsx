@@ -1,3 +1,7 @@
+/**
+ * Glossary header with live search over codebase definitions.
+ * @module GlossarySearch
+ */
 "use client";
 
 import { useGlossarySearch } from "@/hooks/useGlossarySearch";
@@ -8,6 +12,14 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import GlossaryEntry from "./ui/GlossaryEntry";
 
+/**
+ * Shows the glossary heading and swaps default content for search results.
+ *
+ * @param repoId - ID of the repository whose glossary to search.
+ * @param children - Default glossary content shown when idle.
+ * @param github_url - Repository URL for source links in entries.
+ * @returns Header with search box plus results or fallback content.
+ */
 export default function GlossarySearch({
   repoId,
   children,

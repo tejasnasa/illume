@@ -1,3 +1,7 @@
+/**
+ * Email/password and GitHub OAuth registration form.
+ * @module SignupForm
+ */
 "use client";
 
 import useSignupForm from "@/hooks/useSignupForm";
@@ -6,6 +10,11 @@ import Link from "next/link";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
 
+/**
+ * Renders the sign-up form with validation and OAuth alternative.
+ *
+ * @returns Registration form linking to the login page.
+ */
 export default function SignupForm() {
   const { register, firstError, isSubmitting, onSubmit } = useSignupForm();
   return (

@@ -1,3 +1,7 @@
+/**
+ * Global 404 page styled like the repository overview.
+ * @module NotFoundPage
+ */
 import RepoNavSkel from "@/components/ui/RepoNavSkel";
 import {
   GithubLogoIcon,
@@ -7,6 +11,11 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
+/**
+ * Renders the not-found state with a dashboard recovery link.
+ *
+ * @returns 404 page mirroring the repo overview layout.
+ */
 export default function NotFound() {
   return (
     <>

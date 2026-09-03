@@ -1,3 +1,7 @@
+/**
+ * File explorer route showing the repository tree with guardrails.
+ * @module ExplorerPage
+ */
 import { getRepoGraph } from "@/api/graph";
 import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
@@ -7,12 +11,19 @@ import {
   WarningDiamondIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Server-rendered explorer: loads file-level graph and reading guide.
+ *
+ * @param params - Route params promise resolving to the repository id.
+ * @returns Explorer client view, or an error card when the graph is missing.
+ */
 export default async function ExplorerPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  // Route param arrives as a string; numeric id is required by the API layer.
   const repo = await GetRepository(Number(id));
 
   const graphData = await getRepoGraph(repo.id, "file");

@@ -1,3 +1,7 @@
+/**
+ * Repository header with section links and settings access.
+ * @module RepoNavbar
+ */
 "use client";
 
 import { GearFineIcon, StarFourIcon } from "@phosphor-icons/react/dist/ssr";
@@ -6,6 +10,16 @@ import { usePathname } from "next/navigation";
 import RepoSettings from "./RepoSettings";
 import Modal from "./ui/Modal";
 
+/**
+ * Shows repo identity, status, and navigation to its sections.
+ *
+ * @param name - Display name of the repository.
+ * @param num_id - Numeric ID used in section routes.
+ * @param id - UUID used for settings actions.
+ * @param status - Ingestion status; non-ready repos show placeholder links.
+ * @param github_url - Repository URL forwarded to settings.
+ * @returns Sticky header with active-link highlighting and settings modal.
+ */
 export default function RepoNavbar({
   name,
   num_id,

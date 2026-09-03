@@ -1,3 +1,7 @@
+/**
+ * Floating inspector card for a selected dependency-graph node.
+ * @module GraphCard
+ */
 import {
   CodeIcon,
   FileCodeIcon,
@@ -5,6 +9,15 @@ import {
   XIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Renders metadata, metrics, and a GitHub link for the selected graph node.
+ * @param selectedNode The selected node with label, path, metrics, and badges.
+ * @param setSelectedNode Setter used to clear the selection on close.
+ * @param currentLevel The active graph level ("file" or "symbol"), controlling which metrics show.
+ * @param github_url The repository base URL for the GitHub link.
+ * @param annotation Optional note shown for file-level nodes.
+ * @returns The rendered graph inspector element.
+ */
 export default function GraphCard({
   selectedNode,
   setSelectedNode,

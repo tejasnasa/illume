@@ -1,14 +1,28 @@
+/**
+ * Trigger-driven modal dialog rendered via a React portal.
+ * @module Modal
+ */
 "use client";
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+/**
+ * Props for the Modal component.
+ */
 type Props = {
   trigger: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 };
 
+/**
+ * Renders a clickable trigger that opens dialog content in a portal overlay.
+ * @param trigger The element that opens the modal when clicked.
+ * @param children The dialog content rendered inside the modal panel.
+ * @param className Additional class names applied to the modal panel.
+ * @returns The rendered trigger and conditional portal element.
+ */
 export default function Modal({ trigger, children, className = "" }: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -52,6 +66,7 @@ export default function Modal({ trigger, children, className = "" }: Props) {
               style={{ animation: "scale-in 0.3s ease-out" }}
               onClick={(e) => {
                 const target = e.target as HTMLElement | null;
+                // Close when content uses the alert-dialog opt-out attribute.
                 if (target?.closest("[data-alert-dialog-close]")) {
                   setOpen(false);
                 }

@@ -1,6 +1,14 @@
+/**
+ * Loading placeholder for the repository navigation header.
+ * @module RepoNavSkel
+ */
 import { GearFineIcon, StarFourIcon } from "@phosphor-icons/react/dist/ssr";
 import Skeleton from "./Skeleton";
 
+/**
+ * Renders a skeleton header shown while repository nav data loads.
+ * @returns The rendered skeleton header element.
+ */
 export default function RepoNavSkel() {
   return (
     <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10 print:hidden">

@@ -1,3 +1,7 @@
+/**
+ * Skeleton fallback for the glossary route.
+ * @module GlossaryLoading
+ */
 import Skeleton from "@/components/ui/Skeleton";
 import {
   BookOpenTextIcon,
@@ -5,6 +9,11 @@ import {
   MagnifyingGlassIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Renders placeholder glossary cards while entries load.
+ *
+ * @returns Skeleton glossary list with search and filter placeholders.
+ */
 export default function GlossaryLoading() {
   return (
     <main className="max-w-5xl mx-auto p-6 pt-12 text-(--muted-foreground) overflow-hidden h-[calc(100vh-64px)]">

@@ -1,3 +1,7 @@
+/**
+ * Live ingestion log viewer over the backend WebSocket stream.
+ * @module TerminalLogs
+ */
 "use client";
 
 import {
@@ -7,6 +11,13 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * Streams ingestion events and refreshes the route on completion.
+ *
+ * @param repoId - Repository whose ingestion channel to subscribe to.
+ * @param token - Auth token passed as a WebSocket query parameter.
+ * @returns Terminal-styled panel with auto-scrolling log lines.
+ */
 export default function TerminalLogs({
   repoId,
   token,
@@ -21,10 +32,12 @@ export default function TerminalLogs({
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  /** Keeps the newest log line visible as entries append. */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  /** Opens the ingest socket and appends lifecycle/message events. */
   useEffect(() => {
     const wsUrl =
       process.env.NEXT_PUBLIC_BACKEND_URL!.replace(/^http/, "ws") +
@@ -111,6 +124,12 @@ export default function TerminalLogs({
     };
   }, [repoId, token, router]);
 
+  /**
+   * Maps a log event type to its terminal color class.
+   *
+   * @param type - Event or status string from the ingest stream.
+   * @returns Tailwind text color for the log line.
+   */
   const getLogColor = (type: string) => {
     if (type === "error" || type.includes("failed")) return "text-red-400";
     if (type === "success" || type === "done") return "text-green-400";

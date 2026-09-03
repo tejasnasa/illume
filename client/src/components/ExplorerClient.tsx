@@ -1,3 +1,7 @@
+/**
+ * Guided file explorer with tree navigation and ownership details.
+ * @module ExplorerClient
+ */
 "use client";
 
 import { GetOwnership } from "@/api/ownership";
@@ -9,6 +13,12 @@ import { useMemo, useState } from "react";
 import FileDetailCard from "./ui/FileDetailCard";
 import FileTreePanel from "./ui/FileTreePanel";
 
+/**
+ * Builds a nested directory tree from a flat file list.
+ *
+ * @param files - Flat file nodes with slash-separated paths.
+ * @returns Root tree node containing the full hierarchy.
+ */
 const buildTree = (files: FileNode[]): TreeNode => {
   const root: TreeNode = {
     name: "root",
@@ -41,6 +51,15 @@ const buildTree = (files: FileNode[]): TreeNode => {
   return root;
 };
 
+/**
+ * Renders the file tree alongside the selected file's detail card.
+ *
+ * @param graphData - Graph payload whose nodes carry file metadata.
+ * @param guide - Onboarding guide with reading order and annotations.
+ * @param github_url - Repository URL for outbound source links.
+ * @param repoId - ID used for ownership lookups.
+ * @returns Explorer layout with navigable tree and detail panel.
+ */
 export default function ExplorerClient({
   graphData,
   guide,
@@ -57,12 +76,14 @@ export default function ExplorerClient({
   const [isLoadingOwnership, setIsLoadingOwnership] = useState(false);
   const [pageIndex, setPageIndex] = useState<number | null>(null);
 
+  /** Fast lookup of file nodes by path for reading-order resolution. */
   const fileNodeMap = useMemo(() => {
     const map = new Map<string, FileNode>();
     (graphData.nodes as any as FileNode[]).forEach((f) => map.set(f.path, f));
     return map;
   }, [graphData]);
 
+  /** Guide reading order resolved to file nodes, in position order. */
   const orderedFiles = useMemo(
     () =>
       guide.reading_order
@@ -72,6 +93,11 @@ export default function ExplorerClient({
     [guide, fileNodeMap],
   );
 
+  /**
+   * Selects the reading-order entry at the given index and expands its path.
+   *
+   * @param index - Position in the ordered reading list.
+   */
   const navigateToPage = (index: number) => {
     const file = orderedFiles[index];
     if (!file) return;
@@ -89,15 +115,18 @@ export default function ExplorerClient({
     });
   };
 
+  /** Annotation text keyed by file path. */
   const annotationMap = Object.fromEntries(
     guide.reading_order.map((entry) => [entry.file_path, entry.annotation]),
   );
 
+  /** Nested tree derived from the flat graph node list. */
   const fileTree = useMemo(
     () => buildTree(graphData.nodes as any as FileNode[]),
     [graphData],
   );
 
+  /** Top-level directories expanded by default for orientation. */
   const defaultExpanded = useMemo(() => {
     const set = new Set<string>();
     Object.values(fileTree.children).forEach((child) => {
@@ -109,6 +138,11 @@ export default function ExplorerClient({
   const [expandedDirs, setExpandedDirs] =
     useState<Set<string>>(defaultExpanded);
 
+  /**
+   * Toggles a directory's expanded state in the tree.
+   *
+   * @param path - Directory path to expand or collapse.
+   */
   const toggleDir = (path: string) => {
     setExpandedDirs((prev) => {
       const next = new Set(prev);
@@ -117,6 +151,11 @@ export default function ExplorerClient({
     });
   };
 
+  /**
+   * Loads single-file ownership data for the detail card.
+   *
+   * @param path - File path to look up.
+   */
   const fetchOwnership = async (path: string) => {
     setIsLoadingOwnership(true);
     try {
@@ -129,6 +168,12 @@ export default function ExplorerClient({
     }
   };
 
+  /**
+   * Selects or deselects a file and syncs its ownership and page index.
+   *
+   * @param e - Click event whose default navigation is suppressed.
+   * @param file - File node that was clicked.
+   */
   const handleFileClick = (e: React.MouseEvent, file: FileNode) => {
     e.preventDefault();
     if (selectedFile?.path === file.path) {
@@ -143,6 +188,7 @@ export default function ExplorerClient({
     }
   };
 
+  /** Clears the current selection and its detail panel. */
   const handleClose = () => {
     setSelectedFile(null);
     setOwnershipData(null);

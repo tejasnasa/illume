@@ -1,3 +1,7 @@
+/**
+ * Slide-in detail card showing file metadata and ownership stats.
+ * @module FileDetailCard
+ */
 import { FileNode } from "@/types/explorer";
 import {
   CrownIcon,
@@ -10,6 +14,9 @@ import {
 import { motion } from "motion/react";
 import Link from "next/link";
 
+/**
+ * Props for the FileDetailCard component.
+ */
 interface Props {
   file: FileNode;
   ownershipData: any;
@@ -19,6 +26,16 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Renders file badges, ownership breakdown, and contributor distribution.
+ * @param file The selected file node with language and criticality metadata.
+ * @param ownershipData Ownership payload with primary owner, bus factor, and contributors.
+ * @param isLoading When true, shows the ownership loading state.
+ * @param githubUrl Repository URL used for the "view on GitHub" link.
+ * @param annotation Optional note appended below the ownership section.
+ * @param onClose Handler invoked when the close button is clicked.
+ * @returns The rendered detail card element.
+ */
 export default function FileDetailCard({
   file,
   ownershipData,

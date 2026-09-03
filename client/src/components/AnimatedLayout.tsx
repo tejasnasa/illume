@@ -1,8 +1,18 @@
+/**
+ * Route-transition wrapper with slide-and-fade page animation.
+ * @module AnimatedLayout
+ */
 "use client";
 
 import { motion } from "motion/react";
 import { usePathname } from "next/navigation";
 
+/**
+ * Wraps page content in a motion container keyed by route.
+ *
+ * @param children - React subtree to animate on route change.
+ * @returns Animated wrapper that replays its entrance on navigation.
+ */
 export default function AnimatedLayout({
   children,
 }: {

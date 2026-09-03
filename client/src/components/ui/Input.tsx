@@ -1,5 +1,15 @@
+/**
+ * Styled single-line text input.
+ * @module Input
+ */
 import { InputHTMLAttributes } from "react";
 
+/**
+ * Renders a themed input forwarding all native attributes.
+ * @param className Additional class names appended to the base styles.
+ * @param props Remaining native input attributes.
+ * @returns The rendered input element.
+ */
 export default function Input({
   className = "",
   ...props

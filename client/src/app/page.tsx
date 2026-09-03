@@ -1,3 +1,7 @@
+/**
+ * Marketing landing page with features, pipeline, and previews.
+ * @module HomePage
+ */
 "use client";
 
 import dashboard from "@/assets/dashboard.png";
@@ -26,6 +30,9 @@ import { motion, type Variants } from "motion/react";
 import Image from "next/image";
 import Link from "next/link";
 
+/**
+ * Shared fade-up motion variant with index-based staggering.
+ */
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 32 },
   visible: (i: number) => ({
@@ -39,10 +46,16 @@ const fadeUp: Variants = {
   }),
 };
 
+/**
+ * Parent stagger preset for hero entrance sequencing.
+ */
 const stagger = {
   visible: { transition: { staggerChildren: 0.08 } },
 };
 
+/**
+ * Feature cards shown in the landing features grid.
+ */
 const FEATURES = [
   {
     icon: MapTrifoldIcon,
@@ -88,6 +101,9 @@ const FEATURES = [
   },
 ];
 
+/**
+ * Ingestion pipeline steps shown in the how-it-works section.
+ */
 const PIPELINE_STEPS = [
   {
     icon: GitBranchIcon,
@@ -111,6 +127,11 @@ const PIPELINE_STEPS = [
   },
 ];
 
+/**
+ * Renders the full landing page: hero, features, pipeline, previews, footer.
+ *
+ * @returns Marketing homepage.
+ */
 export default function Home() {
   return (
     <main className="relative">
@@ -316,6 +337,7 @@ export default function Home() {
                 <div
                   className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
                   style={{
+                    // color-mix keeps icon tiles tinted from each feature's color.
                     backgroundColor: `color-mix(in oklch, ${f.color} 12%, transparent)`,
                     border: `1px solid color-mix(in oklch, ${f.color} 20%, transparent)`,
                   }}

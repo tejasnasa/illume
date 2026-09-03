@@ -1,3 +1,7 @@
+/**
+ * Recursive renderer for file-explorer tree nodes.
+ * @module TreeNodeRenderer
+ */
 import { FileNode, TreeNode } from "@/types/explorer";
 import {
   FileTextIcon,
@@ -5,6 +9,9 @@ import {
   FolderOpenIcon,
 } from "@phosphor-icons/react/dist/ssr";
 
+/**
+ * Props for the TreeNodeRenderer component.
+ */
 interface Props {
   node: TreeNode;
   level?: number;
@@ -14,6 +21,16 @@ interface Props {
   onToggleDir: (path: string) => void;
 }
 
+/**
+ * Renders a file row or an expandable directory with sorted children.
+ * @param node The tree node to render.
+ * @param level Indentation depth used for padding and guide lines.
+ * @param selectedFile Currently selected file used to highlight the active row.
+ * @param expandedDirs Set of expanded directory paths.
+ * @param onFileClick Handler invoked when a file row is clicked.
+ * @param onToggleDir Handler invoked when a directory is expanded or collapsed.
+ * @returns The rendered tree node element.
+ */
 export default function TreeNodeRenderer({
   node,
   level = 0,
@@ -67,6 +84,7 @@ export default function TreeNodeRenderer({
     );
   }
 
+  // Directories first, then files, each sorted alphabetically.
   const sortedChildren = Object.values(node.children).sort((a, b) => {
     if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
     return a.name.localeCompare(b.name);

@@ -1,3 +1,7 @@
+/**
+ * GitHub OAuth entry screen for existing users.
+ * @module LoginForm
+ */
 "use client";
 
 import {
@@ -11,6 +15,11 @@ import Link from "next/link";
 import { useState } from "react";
 import Button from "./ui/Button";
 
+/**
+ * Renders the centered login card with a GitHub continue action.
+ *
+ * @returns Login screen that redirects to backend GitHub OAuth.
+ */
 export default function LoginForm() {
   const [loading, setLoading] = useState(false);
 
