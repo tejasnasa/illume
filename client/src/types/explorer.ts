@@ -1,3 +1,11 @@
+/**
+ * File explorer shapes for the tree and graph views.
+ * @module ExplorerTypes
+ */
+
+/**
+ * Flat file entry with metrics used for coloring and grouping nodes.
+ */
 export interface FileNode {
   id: string;
   label: string;
@@ -11,6 +19,9 @@ export interface FileNode {
   fan_out: number;
 }
 
+/**
+ * Nested directory tree node; leaves carry the file payload.
+ */
 export interface TreeNode {
   name: string;
   path: string;

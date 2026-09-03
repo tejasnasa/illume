@@ -1,3 +1,11 @@
+/**
+ * Onboarding guide and repository stats response shapes.
+ * @module GuideTypes
+ */
+
+/**
+ * Full onboarding guide: reading order, critical files, and architecture brief.
+ */
 export default interface Guide {
   repository_id: string;
   reading_order: {
@@ -16,6 +24,7 @@ export default interface Guide {
   }[];
   architecture_brief: {
     entry_points: string[];
+    // Free-form LLM section; shape varies per repository.
     directory_summary: unknown;
     external_integrations: string[];
     data_flow: {
@@ -43,6 +52,9 @@ export default interface Guide {
   };
 }
 
+/**
+ * Aggregated repository statistics for dashboard display.
+ */
 export interface Stats {
   repository_id: string;
   total_files: number;

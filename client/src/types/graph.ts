@@ -1,3 +1,11 @@
+/**
+ * Dependency graph payload for file- and symbol-level visualization.
+ * @module GraphTypes
+ */
+
+/**
+ * Graph nodes, weighted edges, and aggregate counts for the canvas.
+ */
 export default interface Graph {
   nodes: {
     id: string;

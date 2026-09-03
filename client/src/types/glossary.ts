@@ -1,3 +1,11 @@
+/**
+ * Paginated glossary response shapes.
+ * @module GlossaryTypes
+ */
+
+/**
+ * Alphabetically ordered glossary page with total count for the query.
+ */
 export default interface Glossary {
   entries: {
     id: string;

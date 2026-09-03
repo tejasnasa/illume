@@ -1,3 +1,11 @@
+/**
+ * Repository record with analysis status and detected metadata.
+ * @module RepositoryTypes
+ */
+
+/**
+ * Ingested repository as returned by the repository endpoints.
+ */
 export default interface Repository {
   id: string;
   github_url: string;
@@ -13,6 +21,7 @@ export default interface Repository {
     frameworks: string[];
     infrastructure: string[];
   };
+  // Shape varies by stack (map or list of entry-point candidates).
   entry_points: unknown;
   ingested_branch: string | null;
   ingested_commit_sha: string | null;

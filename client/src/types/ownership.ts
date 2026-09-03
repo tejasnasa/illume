@@ -1,3 +1,11 @@
+/**
+ * Code ownership map and knowledge-silo response shapes.
+ * @module OwnershipTypes
+ */
+
+/**
+ * Paginated per-file ownership entries with total count.
+ */
 export default interface Ownership {
   files: {
     file_id: string;
@@ -15,6 +23,9 @@ export default interface Ownership {
   total: number;
 }
 
+/**
+ * Files flagged as knowledge silos (bus factor of one).
+ */
 export interface Silo {
   silos: {
     file_id: string;

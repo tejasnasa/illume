@@ -1,3 +1,11 @@
+/**
+ * Chat response shapes for repository Q&A.
+ * @module ChatTypes
+ */
+
+/**
+ * Answer to a repository question with its RAG source citations.
+ */
 export default interface ChatMessage {
   answer: string;
   sources: {
