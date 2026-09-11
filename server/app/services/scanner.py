@@ -6,6 +6,7 @@ criticality scores, detects the tech stack, and generates embeddings.
 """
 
 import logging
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 

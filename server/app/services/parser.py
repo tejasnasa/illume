@@ -50,6 +50,7 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
         "function_declaration": "function",
         "function_expression": "function",
         "arrow_function": "function",
+        "method_definition": "method",
         "class_declaration": "class",
         "import_statement": "import",
     },
@@ -57,6 +58,7 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
         "function_declaration": "function",
         "function_expression": "function",
         "arrow_function": "function",
+        "method_definition": "method",
         "class_declaration": "class",
         "import_statement": "import",
         "interface_declaration": "class",
@@ -67,6 +69,7 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
         "function_declaration": "function",
         "function_expression": "function",
         "arrow_function": "function",
+        "method_definition": "method",
         "class_declaration": "class",
         "import_statement": "import",
         "export_statement": "function",
@@ -77,6 +80,7 @@ SYMBOL_NODE_TYPES: dict[str, dict[str, str]] = {
         "function_declaration": "function",
         "function_expression": "function",
         "arrow_function": "function",
+        "method_definition": "method",
         "class_declaration": "class",
         "import_statement": "import",
         "export_statement": "function",
@@ -117,6 +121,27 @@ DEFAULT_SYMBOL_TYPES = {
     "class_declaration": "class",
     "import_statement": "import",
 }
+
+CLASS_BODY_NODE_TYPES = frozenset(
+    {"block", "class_body", "declaration_list", "field_declaration_list"}
+)
+
+EXPORTABLE_DECLARATIONS = (
+    "function_declaration",
+    "class_declaration",
+    "interface_declaration",
+    "type_alias_declaration",
+    "enum_declaration",
+    "lexical_declaration",
+)
+
+
+def _class_body(node):
+    """Return the child node holding a class's members, or None if there is none."""
+    for child in node.children:
+        if child.type in CLASS_BODY_NODE_TYPES:
+            return child
+    return None
 
 
 @dataclass
@@ -304,18 +329,22 @@ def _parse_source(
             # declaration; bare `export ... from ...` is a re-export (an import).
             found_decl = False
             for child in node.children:
-                if child.type in ("function_declaration", "class_declaration"):
-                    actual_node = child
-                    found_decl = True
-                    break
-                elif child.type == "lexical_declaration":
-                    for decl in child.children:
-                        if decl.type == "variable_declarator":
-                            for val in decl.children:
-                                if val.type in ("arrow_function", "function"):
-                                    actual_node = val
-                                    found_decl = True
-                                    break
+                if child.type in EXPORTABLE_DECLARATIONS:
+                    if child.type == "lexical_declaration":
+                        # `export const handler = () => {}` wraps an anonymous function;
+                        # the declarator holds the name, so unwrap one level further.
+                        for decl in child.children:
+                            if decl.type == "variable_declarator":
+                                for val in decl.children:
+                                    if val.type in ("arrow_function", "function"):
+                                        actual_node = val
+                                        found_decl = True
+                                        break
+                    else:
+                        actual_node = child
+                        found_decl = True
+                    if found_decl:
+                        break
             if not found_decl:
                 for child in node.children:
                     if child.type == "string":
@@ -363,10 +392,15 @@ def _parse_source(
             )
 
             if kind == "class":
-                # Descend into class bodies so methods are captured too;
-                # function bodies are not descended to avoid double-counting
-                # nested defs as top-level symbols.
-                nodes_to_visit.extend(actual_node.children)
+                # Descend into the class body so methods are captured. The body is a
+                # wrapper node that is not itself a symbol, so its children -- not the
+                # class's immediate children -- are what need queueing. Function bodies
+                # are still not descended, so a nested def inside a method is not
+                # reported as a top-level symbol.
+                body = _class_body(actual_node)
+                nodes_to_visit.extend(
+                    body.children if body is not None else actual_node.children
+                )
 
     return ParsedFile(
         path=file_path.as_posix(),

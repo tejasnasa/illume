@@ -44,7 +44,7 @@ async def ingest_ws(
 
     user_id = decode_access_token(token)
     if not user_id:
-        logger.error(f"WebSocket auth failed: Invalid token {token}")
+        logger.warning("WebSocket auth failed: invalid token for repo %s", repo_id)
         await websocket.close(code=1008, reason="Invalid token")
         return
 

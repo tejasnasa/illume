@@ -44,14 +44,19 @@ class MessageResponse(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """Public user profile returned by the /me endpoint."""
+    """Public user profile returned by the /me endpoint.
+
+    The GitHub fields are optional because they are only populated once the account has
+    been linked through OAuth; a user who registered with an email and password has None
+    for all of them. Declaring them as required made response validation fail for those
+    users and turned /me into a 500.
+    """
 
     id: uuid.UUID
     email: str
     name: str
-    avatar_url: str
-    github_id: str
-    github_access_token: str
+    avatar_url: str | None = None
+    github_id: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 GIT_LOG_MAX_COMMITS = 500
 
+FIELD_SEPARATOR = "\x1f"
+
+GIT_LOG_FORMAT = FIELD_SEPARATOR.join(["%H", "%ae", "%an", "%s", "%ai"])
+
 _TEST_TEMPLATES = [
     "test_{stem}{suffix}",
     "{stem}.test{suffix}",
@@ -127,7 +131,7 @@ def _run_git_log(clone_path: Path) -> str:
         clone_path,
         "log",
         "--numstat",
-        "--format=%H|%ae|%an|%s|%ai",
+        f"--format={GIT_LOG_FORMAT}",
         f"-n{GIT_LOG_MAX_COMMITS}",
     ]
     try:
@@ -158,11 +162,11 @@ def _parse_git_log(raw: str) -> list[dict]:
 
         # A header line is one whose first field is a commit hash; anything
         # else (numstat rows, blank separators) falls through to file parsing.
-        if "|" in line and _looks_like_header(line):
+        if FIELD_SEPARATOR in line and _looks_like_header(line):
             # Flush the previous commit before starting a new record.
             if current is not None:
                 commits.append(current)
-            parts = line.split("|", 4)
+            parts = line.split(FIELD_SEPARATOR, 4)
             if len(parts) < 5:
                 continue
             hash_, email, name, message, date_str = parts
@@ -190,9 +194,9 @@ def _parse_git_log(raw: str) -> list[dict]:
 
 def _looks_like_header(line: str) -> bool:
     """Check whether a line starts with a commit hash (log header heuristic)."""
-    # Commit messages can contain '|' too, so only a hex-hash first field
-    # reliably distinguishes a header from message/numstat content.
-    candidate = line.split("|", 1)[0].strip()
+    # The separator cannot appear in a commit message, so a hex first field is enough
+    # to tell a header apart from a numstat row.
+    candidate = line.split(FIELD_SEPARATOR, 1)[0].strip()
     return bool(re.fullmatch(r"[0-9a-f]{7,40}", candidate))
 
 
@@ -217,7 +221,12 @@ def _parse_numstat_line(line: str) -> dict | None:
     return {"path": path, "added": added, "deleted": deleted}
 
 
-_RENAME_RE = re.compile(r"^(.*?)\{(.+?) => (.+?)\}(.*)$")
+# Both sides of the arrow may be empty: git writes `dir/{ => sub}/file.py` when a file
+# moves into a new directory and `dir/{sub => }/file.py` when it moves back up. The
+# groups are `.*?` rather than `.+?` for exactly that reason -- requiring a character on
+# each side silently skipped those paths, leaving the literal braces in the name so the
+# path matched no File row and the file's ownership data was dropped.
+_RENAME_RE = re.compile(r"^(.*?)\{(.*?) => (.*?)\}(.*)$")
 
 
 def _normalise_rename_path(path: str) -> str:

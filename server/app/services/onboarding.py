@@ -230,9 +230,28 @@ def build_reading_order(db: Session, repo: Repository) -> OnboardingGuide:
 def _upsert_guide(
     db: Session,
     repo_id: UUID,
-    reading_order: list[dict[str, Any]],
+    reading_order: list[dict[str, Any]] | None = None,
+    *,
+    architecture_brief: dict[str, Any] | None = None,
+    critical_files: list[dict[str, Any]] | None = None,
 ) -> OnboardingGuide:
-    """Create or update the OnboardingGuide row for a repository."""
+    """Create or update the OnboardingGuide row for a repository.
+
+    The guide is written in two passes by two different services: the reading order runs
+    first, then the architecture brief. Each pass supplies only the columns it owns, and
+    an omitted argument leaves that column untouched rather than clearing it -- otherwise
+    the second pass would wipe the first pass's work.
+
+    Args:
+        db: SQLAlchemy database session.
+        repo_id: Repository the guide belongs to.
+        reading_order: Annotated reading-order steps, or None to leave unchanged.
+        architecture_brief: Architecture sections, or None to leave unchanged.
+        critical_files: Critical file summaries, or None to leave unchanged.
+
+    Returns:
+        The created or updated OnboardingGuide.
+    """
     guide = (
         db.query(OnboardingGuide)
         .filter(OnboardingGuide.repository_id == repo_id)
@@ -243,13 +262,18 @@ def _upsert_guide(
         guide = OnboardingGuide(
             repository_id=repo_id,
             reading_order=reading_order,
-            architecture_brief={},
-            critical_files=[],
+            architecture_brief=architecture_brief if architecture_brief is not None else {},
+            critical_files=critical_files if critical_files is not None else [],
             pdf_path=None,
         )
         db.add(guide)
     else:
-        guide.reading_order = reading_order
+        if reading_order is not None:
+            guide.reading_order = reading_order
+        if architecture_brief is not None:
+            guide.architecture_brief = architecture_brief
+        if critical_files is not None:
+            guide.critical_files = critical_files
 
     db.commit()
     db.refresh(guide)

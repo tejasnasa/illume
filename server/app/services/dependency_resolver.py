@@ -5,6 +5,7 @@ edges, then computes file-level fan-in/fan-out metrics from those edges.
 """
 
 import logging
+import uuid
 from collections import defaultdict
 
 from sqlalchemy.orm import Session

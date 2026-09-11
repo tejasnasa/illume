@@ -388,7 +388,7 @@ def generate_brief(
 
     if not files:
         logger.warning("architecture_brief: no files found for repo %s", repo.id)
-        return _upsert_guide(db, repo.id, {})
+        return _upsert_guide(db, repo.id)
 
     symbols: Sequence[AstSymbol] = (
         db.execute(select(AstSymbol).where(AstSymbol.file_id.in_(file_ids)))
