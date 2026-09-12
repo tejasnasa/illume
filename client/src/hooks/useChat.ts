@@ -68,21 +68,16 @@ export function useChat({ repoId }: { repoId: string }) {
 
       setIsLoading(true);
 
-      let history: any[] = [];
       const id = crypto.randomUUID();
 
-      setMessages((prev) => {
-        const list: any[] = [];
-        prev
-          .filter((m) => m.answer !== null && !m.error)
-          .forEach((m) => {
-            list.push({ role: "user", content: m.question });
-            list.push({ role: "assistant", content: m.answer!.answer });
-          });
-        history = list;
+      const history = messages
+        .filter((m) => m.answer !== null && !m.error)
+        .flatMap((m) => [
+          { role: "user", content: m.question },
+          { role: "assistant", content: m.answer!.answer },
+        ]);
 
-        return [...prev, { id, question, answer: null }];
-      });
+      setMessages((prev) => [...prev, { id, question, answer: null }]);
 
       try {
         const res = await fetch(
@@ -136,7 +131,7 @@ export function useChat({ repoId }: { repoId: string }) {
         setIsLoading(false);
       }
     },
-    [isLoading, repoId],
+    [isLoading, messages, repoId],
   );
 
   /**

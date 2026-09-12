@@ -29,7 +29,7 @@ export default function GlossarySearch({
   children: React.ReactNode;
   github_url: string;
 }) {
-  const { form, onSubmit, results, page, loading, goToPage, reset } =
+  const { form, onSubmit, results, page, loading, error, goToPage, reset } =
     useGlossarySearch(repoId);
   const isSearching = results !== null;
 
@@ -71,6 +71,12 @@ export default function GlossarySearch({
           )}
         </form>
       </div>
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
 
       {isSearching ? (
         <div className="w-full">

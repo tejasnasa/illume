@@ -3,6 +3,7 @@
  * @module UseRepoForm
  */
 
+import apiError from "@/lib/apiError";
 import { repoCreateSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -37,10 +38,7 @@ export default function useRepoForm() {
       );
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(
-          error.message ?? "Something went wrong. Please try again.",
-        );
+        throw await apiError(res, "Something went wrong. Please try again.");
       }
       const result = await res.json();
       router.push(`/repo/${result.repo_num}`);

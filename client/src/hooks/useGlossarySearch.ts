@@ -24,6 +24,7 @@ export function useGlossarySearch(repoId: string) {
   const [results, setResults] = useState<Glossary | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [lastQuery, setLastQuery] = useState("");
 
   const form = useForm<SearchForm>({ defaultValues: { query: "" } });
@@ -35,7 +36,10 @@ export function useGlossarySearch(repoId: string) {
    * @param p - 1-indexed page number.
    */
   async function fetchPage(query: string, p: number) {
+    if (!query.trim()) return;
+
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${repoId}/glossary/search?q=${encodeURIComponent(query)}&page=${p}&page_size=${PAGE_SIZE}`,
@@ -45,6 +49,8 @@ export function useGlossarySearch(repoId: string) {
       const data: Glossary = await res.json();
       setResults(data);
       setPage(p);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Search failed");
     } finally {
       setLoading(false);
     }
@@ -68,9 +74,10 @@ export function useGlossarySearch(repoId: string) {
   const reset = () => {
     setResults(null);
     setPage(1);
+    setError(null);
     setLastQuery("");
     form.reset();
   };
 
-  return { form, onSubmit, results, page, loading, goToPage, reset };
+  return { form, onSubmit, results, page, loading, error, goToPage, reset };
 }

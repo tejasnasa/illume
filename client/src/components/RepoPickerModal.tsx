@@ -5,6 +5,7 @@
 "use client";
 
 import { getMyGitHubRepos } from "@/api/github";
+import apiError from "@/lib/apiError";
 import { GitHubRepo } from "@/types/github";
 import {
   ArrowLeftIcon,
@@ -216,8 +217,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
         );
 
         if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.message || "Failed to trigger ingestion");
+          throw await apiError(res, "Failed to trigger ingestion");
         }
 
         const result = await res.json();

@@ -3,6 +3,7 @@
  * @module UseSignupForm
  */
 
+import apiError from "@/lib/apiError";
 import { signupSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -39,10 +40,7 @@ export default function useSignupForm() {
       );
 
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(
-          error.message ?? "Something went wrong. Please try again.",
-        );
+        throw await apiError(res, "Something went wrong. Please try again.");
       }
 
       router.push("/dashboard");
