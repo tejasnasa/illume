@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 
 from app.api.deps import get_current_user
+from app.api.validation import FreeText, OptionalFreeText
 from app.core.database import AsyncSession, get_async_db
 from app.models import Repository, User
 from app.services.illume_exporter import generate_illume_file
@@ -26,16 +27,16 @@ router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
 class RepositoryCreate(BaseModel):
     """Payload for ingesting a new repository at an optional ref."""
 
-    github_url: str
-    branch: str | None = None
-    commit_sha: str | None = None
+    github_url: FreeText
+    branch: OptionalFreeText = None
+    commit_sha: OptionalFreeText = None
 
 
 class RepositoryReingest(BaseModel):
     """Payload for re-ingesting an existing repository at an optional ref."""
 
-    branch: str | None = None
-    commit_sha: str | None = None
+    branch: OptionalFreeText = None
+    commit_sha: OptionalFreeText = None
 
 
 class RepositoryResponse(BaseModel):

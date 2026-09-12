@@ -7,7 +7,10 @@ subset of files flagged as knowledge silos (bus factor of one).
 import logging
 import uuid
 
+from typing import Annotated
+
 from app.api.deps import get_repo_for_user
+from app.api.validation import NoControlCharacters, PageNumber
 from app.core.database import get_async_db
 from app.models.code_owner import CodeOwner
 from app.models.file import File
@@ -83,9 +86,11 @@ def _build_file_ownership(owner: CodeOwner, file: File) -> FileOwnershipResponse
 async def get_ownership_map(
     request: Request,
     repo_id: uuid.UUID,
-    page: int = Query(1, ge=1),
+    page: PageNumber = 1,
     page_size: int = Query(50, ge=1, le=200),
-    file_path: str | None = Query(None),
+    file_path: Annotated[
+        str | None, Query(), NoControlCharacters
+    ] = None,
     db: AsyncSession = Depends(get_async_db),
 ) -> OwnershipMapResponse:
     """List per-file ownership ordered by path, with pagination.

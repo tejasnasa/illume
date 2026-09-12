@@ -8,7 +8,10 @@ search.
 import logging
 import uuid
 
+from typing import Annotated
+
 from app.api.deps import get_repo_for_user
+from app.api.validation import NoControlCharacters, PageNumber
 from app.core.database import get_async_db
 from app.models import GlossaryEntry
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -47,11 +50,13 @@ class GlossaryListResponse(BaseModel):
 async def browse_glossary(
     request: Request,
     repo_id: uuid.UUID,
-    page: int = Query(1, ge=1),
+    page: PageNumber = 1,
     page_size: int = Query(50, ge=1, le=100),
-    file_path: str | None = Query(
-        None, description="Filter entries by file path (exact match)"
-    ),
+    file_path: Annotated[
+        str | None,
+        Query(description="Filter entries by file path (exact match)"),
+        NoControlCharacters,
+    ] = None,
     db: AsyncSession = Depends(get_async_db),
 ) -> GlossaryListResponse:
     """Browse glossary entries alphabetically with pagination.
@@ -106,12 +111,15 @@ async def browse_glossary(
 async def search_glossary(
     request: Request,
     repo_id: uuid.UUID,
-    q: str = Query(
-        ...,
-        min_length=1,
-        description="Search term (matched against name and definition)",
-    ),
-    page: int = Query(1, ge=1),
+    q: Annotated[
+        str,
+        Query(
+            min_length=1,
+            description="Search term (matched against name and definition)",
+        ),
+        NoControlCharacters,
+    ],
+    page: PageNumber = 1,
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_async_db),
 ) -> GlossaryListResponse:
@@ -137,13 +145,14 @@ async def search_glossary(
 
     await get_repo_for_user(repo_id, user_id, db)
 
-    pattern = f"%{q}%"
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
 
     base_query = select(GlossaryEntry).where(
         GlossaryEntry.repository_id == repo_id,
         or_(
-            GlossaryEntry.name.ilike(pattern),
-            GlossaryEntry.definition.ilike(pattern),
+            GlossaryEntry.name.ilike(pattern, escape="\\"),
+            GlossaryEntry.definition.ilike(pattern, escape="\\"),
         ),
     )
 

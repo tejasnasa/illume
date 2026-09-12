@@ -5,6 +5,7 @@ then relays the per-repository Redis log channel until DONE/ERROR.
 """
 
 import asyncio
+import json
 import logging
 import uuid
 
@@ -18,6 +19,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
+
+_TERMINAL_MARKERS = ("DONE", "ERROR")
+
+
+def _is_terminal(data: str) -> bool:
+    """Report whether a raw log frame is the ingestion task's end-of-stream marker.
+
+    The decoded `message` field is what carries the marker, which is why the raw frame
+    cannot be compared directly. A bare marker is still accepted so that a future
+    publisher that skips the JSON wrapper does not silently reintroduce the same bug.
+
+    Args:
+        data: Raw frame as it came off the Redis channel.
+
+    Returns:
+        True if the frame marks the end of the stream.
+    """
+    try:
+        payload = json.loads(data)
+    except (TypeError, ValueError):
+        return data in _TERMINAL_MARKERS
+    if isinstance(payload, dict):
+        return payload.get("message") in _TERMINAL_MARKERS
+    return payload in _TERMINAL_MARKERS
 
 
 @router.websocket("/ws/ingest/{repo_id}")
@@ -74,16 +99,20 @@ async def ingest_ws(
                 continue
 
             data = message["data"]
+            # The frame is relayed verbatim -- the client renders it by parsing
+            # `parsed.message` -- so only the terminal *check* decodes it.
             await websocket.send_text(data)
 
-            # Terminal markers end the stream so the socket doesn't linger.
-            if data in ("DONE", "ERROR"):
+            if _is_terminal(data):
                 break
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected for repo %s", repo_id)
     except asyncio.CancelledError:
-        pass
+        # Re-raised, so that `task.cancel()` and `asyncio.wait_for(...)` can bound this
+        # handler. Absorbing it made the task look like it had completed normally, which
+        # left `wait_for` unable to time the stream out.
+        raise
     finally:
         await pubsub.unsubscribe(channel)
         await redis_client.aclose()

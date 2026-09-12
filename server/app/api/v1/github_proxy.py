@@ -10,9 +10,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
+from typing import Annotated
 
 import httpx
 from app.api.deps import get_current_user
+from app.api.validation import NoControlCharacters, PageNumber
 from app.models import User
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -80,6 +82,38 @@ def _gh_headers(token: str) -> dict[str, str]:
     }
 
 
+async def _gh_get(client: httpx.AsyncClient, url: str, token: str) -> httpx.Response:
+    """GET a GitHub URL, turning transport failures into HTTP errors.
+
+    The callers below map *status codes*; this covers the case where no response is
+    produced at all. `httpx` raises on a timeout or a connection failure rather than
+    returning, so without this the exception escapes the handler and becomes an
+    opaque 500 -- indistinguishable, from the client, from a bug in this service.
+
+    Args:
+        client: Client to issue the request with.
+        url: Absolute GitHub API URL.
+        token: User's GitHub OAuth token.
+
+    Returns:
+        The response, whatever its status code.
+
+    Raises:
+        HTTPException: 504 if GitHub did not respond within the client's timeout,
+            502 for any other transport-level failure.
+    """
+    try:
+        return await client.get(url, headers=_gh_headers(token))
+    except httpx.TimeoutException as exc:
+        logger.warning("GitHub request timed out: %s", url)
+        raise HTTPException(
+            status_code=504, detail="GitHub did not respond in time"
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("GitHub request failed: %s (%s)", url, exc)
+        raise HTTPException(status_code=502, detail="Could not reach GitHub") from exc
+
+
 def _require_token(user: User) -> str:
     """Return the user's GitHub token or raise 403 if not linked."""
     if not user.github_access_token:
@@ -92,9 +126,13 @@ def _require_token(user: User) -> str:
 
 @router.get("/repos", response_model=list[GitHubRepoItem])
 async def list_my_repos(
-    page: int = Query(1, ge=1),
+    page: PageNumber = 1,
     per_page: int = Query(30, ge=1, le=100),
-    q: str = Query("", description="Filter repos by name substring"),
+    q: Annotated[
+        str,
+        Query(description="Filter repos by name substring"),
+        NoControlCharacters,
+    ] = "",
     current_user: User = Depends(get_current_user),
 ):
     """List the authenticated user's GitHub repositories, newest first.
@@ -117,7 +155,7 @@ async def list_my_repos(
     url = f"{GITHUB_API}/user/repos?sort=updated&direction=desc&per_page={per_page}&page={page}&type=owner"
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        res = await client.get(url, headers=_gh_headers(token))
+        res = await _gh_get(client, url, token)
 
     if res.status_code == 401:
         raise HTTPException(
@@ -180,7 +218,7 @@ async def list_repo_branches(
     branches_url = f"{GITHUB_API}/repos/{owner}/{repo}/branches?per_page=100"
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        repo_res = await client.get(repo_url, headers=_gh_headers(token))
+        repo_res = await _gh_get(client, repo_url, token)
         if repo_res.status_code == 404:
             raise HTTPException(
                 status_code=404, detail="Repository not found on GitHub"
@@ -192,7 +230,7 @@ async def list_repo_branches(
 
         default_branch = repo_res.json().get("default_branch", "main")
 
-        branches_res = await client.get(branches_url, headers=_gh_headers(token))
+        branches_res = await _gh_get(client, branches_url, token)
         if branches_res.status_code != 200:
             raise HTTPException(status_code=502, detail="Failed to fetch branches")
 
@@ -213,7 +251,7 @@ async def list_repo_commits(
     owner: str,
     repo: str,
     sha: str = Query("", description="Branch name or commit SHA to list commits from"),
-    page: int = Query(1, ge=1),
+    page: PageNumber = 1,
     per_page: int = Query(40, ge=1, le=100),
     current_user: User = Depends(get_current_user),
 ):
@@ -240,7 +278,7 @@ async def list_repo_commits(
         url += f"&sha={sha}"
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        res = await client.get(url, headers=_gh_headers(token))
+        res = await _gh_get(client, url, token)
 
     if res.status_code == 404:
         raise HTTPException(status_code=404, detail="Repository or branch not found")
@@ -305,7 +343,7 @@ async def list_repo_commits_multibranch(
     branches_url = f"{GITHUB_API}/repos/{owner}/{repo}/branches?per_page=30"
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        repo_res = await client.get(repo_url, headers=_gh_headers(token))
+        repo_res = await _gh_get(client, repo_url, token)
         if repo_res.status_code == 404:
             raise HTTPException(
                 status_code=404, detail="Repository not found on GitHub"
@@ -317,7 +355,7 @@ async def list_repo_commits_multibranch(
 
         default_branch = repo_res.json().get("default_branch", "main")
 
-        branches_res = await client.get(branches_url, headers=_gh_headers(token))
+        branches_res = await _gh_get(client, branches_url, token)
         if branches_res.status_code != 200:
             raise HTTPException(status_code=502, detail="Failed to fetch branches")
 
@@ -336,7 +374,10 @@ async def list_repo_commits_multibranch(
         """Fetch recent commits for one branch, returning empty on failure."""
         url = f"{GITHUB_API}/repos/{owner}/{repo}/commits?sha={branch_name}&per_page=30"
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            res = await client.get(url, headers=_gh_headers(token))
+            try:
+                res = await _gh_get(client, url, token)
+            except HTTPException:
+                return branch_name, []
             if res.status_code == 200:
                 return branch_name, res.json()
             return branch_name, []

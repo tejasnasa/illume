@@ -9,6 +9,7 @@ import uuid
 
 import httpx
 from app.api.deps import get_current_user
+from app.api.validation import FreeText
 from app.core.config import settings
 from app.core.database import get_async_db
 from app.core.security import create_access_token, hash_password, verify_password
@@ -26,7 +27,7 @@ class RegisterRequest(BaseModel):
     """Registration payload with basic length validation."""
 
     email: EmailStr
-    name: str = Field(min_length=3, max_length=100)
+    name: FreeText = Field(min_length=3, max_length=100)
     password: str = Field(min_length=8)
 
 

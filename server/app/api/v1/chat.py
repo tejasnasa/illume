@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
+from app.api.validation import FreeText
 from app.core.database import AsyncSession, get_async_db
 from app.models.chat_message import ChatMessage as ChatMessageModel
 from app.models.repository import Repository
@@ -26,13 +27,13 @@ class ChatMessageRequest(BaseModel):
     """One prior conversation turn sent by the client."""
 
     role: Literal["user", "assistant"]
-    content: str
+    content: FreeText
 
 
 class ChatRequest(BaseModel):
     """Question plus optional client-side history for follow-ups."""
 
-    question: str
+    question: FreeText
     history: list[ChatMessageRequest] = []
 
 
