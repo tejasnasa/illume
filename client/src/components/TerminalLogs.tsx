@@ -54,7 +54,7 @@ export default function TerminalLogs({
     };
 
     ws.onmessage = (event) => {
-      let data = event.data;
+      const data = event.data;
       let logMessage = data;
       let eventType = "info";
 
@@ -66,9 +66,11 @@ export default function TerminalLogs({
         if (eventType === "status_update") {
           router.refresh();
         }
-      } catch (e) {}
-
-      if (data === "DONE") {
+      } catch {
+        // A frame that is not JSON still renders below, via the `data` fallback.
+      }
+      
+      if (logMessage === "DONE") {
         setLogs((prev) => [
           ...prev,
           {
@@ -80,7 +82,7 @@ export default function TerminalLogs({
         setTimeout(() => {
           router.refresh();
         }, 1000);
-      } else if (data === "ERROR") {
+      } else if (logMessage === "ERROR") {
         setLogs((prev) => [
           ...prev,
           { text: "Ingestion failed!", type: "error", time: "" },

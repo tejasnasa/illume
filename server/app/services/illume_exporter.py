@@ -6,7 +6,7 @@ Renders a single text document with @@META, @@ARCH, @@GRAPH, @@SYMBOLS and
 
 import uuid
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,7 +95,7 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
     lines.append(f"url={repo.github_url or ''}")
     lines.append(f"branch={repo.default_branch or 'main'}")
     lines.append(f"lang={repo.primary_language or 'unknown'}")
-    lines.append(f"generated={datetime.utcnow().strftime('%Y-%m-%d')}")
+    lines.append(f"generated={datetime.now(UTC).strftime('%Y-%m-%d')}")
     lines.append(f"files={len(files)} symbols={len(symbols)} edges={total_edges}")
 
     stack_parts = []
