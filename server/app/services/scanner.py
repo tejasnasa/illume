@@ -93,6 +93,8 @@ def process_repository_files(
     publish_log(
         redis_client, str(repo.id), "parsing_started", "Starting file analysis..."
     )
+    db.query(File).filter(File.repository_id == repo.id).delete()
+    db.commit()
 
     source_files = walk_source_files(repo_root)
     total = len(source_files)
