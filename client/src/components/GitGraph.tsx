@@ -194,7 +194,7 @@ export default function GitGraph({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar relative">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar relative">
         {error && (
           <div className="p-4 m-4 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
             {error}
@@ -244,7 +244,7 @@ export default function GitGraph({
             </svg>
 
             <div
-              className="absolute top-0 right-0 left-0 flex flex-col"
+              className="absolute top-0 right-0 left-0 flex flex-col overflow-hidden"
               style={{
                 paddingLeft: `${activeTracksCount * columnWidth + paddingX * 2}px`,
                 paddingRight: "16px",
@@ -261,7 +261,7 @@ export default function GitGraph({
                     onClick={() => handleCommitClick(commit)}
                   >
                     <div
-                      className={`flex-1 glass-card px-3 py-1.5 rounded-sm border transition-all duration-300 flex items-center justify-between gap-4 ${
+                      className={`flex-1 min-w-0 glass-card px-3 py-1.5 rounded-sm border transition-all duration-300 flex items-center justify-between gap-4 ${
                         isSelected
                           ? "border-(--primary)/50 bg-(--primary)/5 shadow-md shadow-(--primary)/5"
                           : "border-(--border) hover:border-(--primary)/30 hover:bg-(--secondary)/5"

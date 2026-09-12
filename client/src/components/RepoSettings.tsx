@@ -6,16 +6,16 @@ import deleteRepoAction from "@/actions/deleteRepo";
 import regenerateRepoAction from "@/actions/regenerateRepo";
 import {
   GearFineIcon,
+  GitBranchIcon,
   RepeatIcon,
   TrashIcon,
-  GitBranchIcon,
 } from "@phosphor-icons/react/dist/ssr";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import ExportIllumeButton from "./ExportIllumeButton";
+import GitGraph from "./GitGraph";
 import Button from "./ui/Button";
 import Modal from "./ui/Modal";
-import GitGraph from "./GitGraph";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 /**
  * Renders export, delete, regenerate, and version re-ingest controls.
@@ -36,7 +36,9 @@ export default function RepoSettings({
   const [error, setError] = useState<string | null>(null);
 
   // Owner/name feed the version graph; empty strings hide that section.
-  const match = github_url.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/);
+  const match = github_url.match(
+    /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/,
+  );
   const owner = match ? match[1] : "";
   const repoName = match ? match[2].replace(/\.git$/, "") : "";
 
@@ -77,7 +79,7 @@ export default function RepoSettings({
   };
 
   return (
-    <div className="p-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+    <div className="p-4 max-h-[90vh] overflow-y-auto custom-scrollbar min-w-2xl">
       <div className="flex items-center gap-3 mb-6 text-(--primary)">
         <GearFineIcon size={28} weight="duotone" />
         <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
@@ -85,7 +87,7 @@ export default function RepoSettings({
         </h1>
       </div>
 
-      <div className="mt-8 rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10 w-125">
+      <div className="mt-8 rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10">
         <div className="px-5 py-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-(--primary)">
             Export Repository
@@ -106,51 +108,11 @@ export default function RepoSettings({
         </div>
       </div>
 
-      <div className="mt-8 rounded-sm border border-red-500/20 divide-y divide-red-500/10 w-125">
+      <div className="mt-8 rounded-sm border border-red-500/20 divide-y divide-red-500/10">
         <div className="px-5 py-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-red-400">
             Danger Zone
           </p>
-        </div>
-
-        <div className="flex items-center justify-between px-5 py-4">
-          <div>
-            <p className="text-sm font-medium text-(--foreground)">
-              Delete Repository
-            </p>
-            <p className="text-xs text-(--muted-foreground) mt-0.5">
-              Permanently remove this repository and all its data.
-            </p>
-          </div>
-          <Modal
-            className="p-4 w-120"
-            trigger={
-              <Button
-                size="sm"
-                className="border-red-500/40 bg-white text-red-500 hover:border-red-500/60 gap-1.5 shrink-0"
-              >
-                <TrashIcon weight="duotone" size={15} />
-                Delete
-              </Button>
-            }
-          >
-            <div className="flex items-center gap-3 mb-1 text-red-400 text-2xl">
-              <TrashIcon weight="duotone" />
-              <h1 className="font-bold text-(--foreground) tracking-tight">
-                Delete Repository
-              </h1>
-            </div>
-            <p className="text-(--muted-foreground) mb-12 text-sm">
-              Are you sure you want to delete this repository?
-            </p>
-            <Button
-              onClick={() => deleteRepoAction(repo_id)}
-              size="sm"
-              className="font-semibold absolute bottom-4 right-4 bg-red-500 hover:bg-red-600 text-white border-none"
-            >
-              DELETE
-            </Button>
-          </Modal>
         </div>
 
         <div className="flex items-center justify-between px-5 py-4">
@@ -201,7 +163,7 @@ export default function RepoSettings({
               </p>
             </div>
             <Modal
-              className="w-full max-w-2xl p-6"
+              className="w-full min-w-2xl p-6"
               trigger={
                 <Button size="sm" className="gap-1.5 shrink-0">
                   <GitBranchIcon weight="duotone" size={15} />
@@ -209,14 +171,15 @@ export default function RepoSettings({
                 </Button>
               }
             >
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 max-w-2xl">
                 <div>
                   <h1 className="text-2xl font-bold text-(--foreground) tracking-tight flex items-center gap-2">
                     <GitBranchIcon className="text-(--primary)" />
                     Re-ingest Specific Version
                   </h1>
                   <p className="text-xs text-(--muted-foreground) mt-1">
-                    Select a branch or commit from the repository history to re-analyze.
+                    Select a branch or commit from the repository history to
+                    re-analyze.
                   </p>
                 </div>
 
@@ -236,6 +199,46 @@ export default function RepoSettings({
             </Modal>
           </div>
         )}
+
+        <div className="flex items-center justify-between px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-(--foreground)">
+              Delete Repository
+            </p>
+            <p className="text-xs text-(--muted-foreground) mt-0.5">
+              Permanently remove this repository and all its data.
+            </p>
+          </div>
+          <Modal
+            className="p-4 w-120"
+            trigger={
+              <Button
+                size="sm"
+                className="border-red-500 bg-white text-red-500 hover:border-red-700 border-2 gap-1.5 shrink-0"
+              >
+                <TrashIcon weight="duotone" size={15} />
+                Delete
+              </Button>
+            }
+          >
+            <div className="flex items-center gap-3 mb-1 text-red-400 text-2xl">
+              <TrashIcon weight="duotone" />
+              <h1 className="font-bold text-(--foreground) tracking-tight">
+                Delete Repository
+              </h1>
+            </div>
+            <p className="text-(--muted-foreground) mb-12 text-sm">
+              Are you sure you want to delete this repository?
+            </p>
+            <Button
+              onClick={() => deleteRepoAction(repo_id)}
+              size="sm"
+              className="font-semibold absolute bottom-4 right-4 bg-red-500 hover:bg-red-600 text-white border-none"
+            >
+              DELETE
+            </Button>
+          </Modal>
+        </div>
       </div>
     </div>
   );
