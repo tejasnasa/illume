@@ -32,7 +32,7 @@ export default async function GraphPage({
     repo.id,
     currentLevel as "file" | "symbol",
   );
-  const guide = await GetGuide(repo.id);
+  const guide = await GetGuide(repo.id).catch(() => null);
 
   return (
     <GraphClient

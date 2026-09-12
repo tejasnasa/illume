@@ -14,6 +14,7 @@ type Props = {
   trigger: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  label?: string;
 };
 
 /**
@@ -21,9 +22,15 @@ type Props = {
  * @param trigger The element that opens the modal when clicked.
  * @param children The dialog content rendered inside the modal panel.
  * @param className Additional class names applied to the modal panel.
+ * @param label Accessible name, for a trigger that is not already a control.
  * @returns The rendered trigger and conditional portal element.
  */
-export default function Modal({ trigger, children, className = "" }: Props) {
+export default function Modal({
+  trigger,
+  children,
+  className = "",
+  label,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -39,17 +46,30 @@ export default function Modal({ trigger, children, className = "" }: Props) {
     return () => document.removeEventListener("keydown", handleEsc);
   }, [open]);
 
+  const triggerClassName = "inline-flex w-full sm:w-auto h-full";
+  const openModal = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOpen(true);
+  };
+
   return (
     <>
-      <div
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen(true);
-        }}
-        className="inline-flex w-full sm:w-auto h-full"
-      >
-        {trigger}
-      </div>
+      {label ? (
+        <button
+          type="button"
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={openModal}
+          className={triggerClassName}
+        >
+          {trigger}
+        </button>
+      ) : (
+        <div onClick={openModal} className={triggerClassName}>
+          {trigger}
+        </div>
+      )}
 
       {open &&
         mounted &&

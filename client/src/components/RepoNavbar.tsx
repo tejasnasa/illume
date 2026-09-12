@@ -89,6 +89,7 @@ export default function RepoNavbar({
             Graph
           </Link>
           <Modal
+            label="Repository settings"
             trigger={
               <GearFineIcon
                 size={24}
@@ -114,6 +115,7 @@ export default function RepoNavbar({
             Graph
           </div>
           <Modal
+            label="Repository settings"
             trigger={
               <GearFineIcon
                 size={24}

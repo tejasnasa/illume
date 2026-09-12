@@ -42,7 +42,7 @@ export default function GraphClient({
   guide,
 }: {
   graphData: Graph;
-  guide: Guide;
+  guide: Guide | null;
   currentLevel: string;
   repoId: string;
   github_url: string;
@@ -95,8 +95,10 @@ export default function GraphClient({
     graphRef.current?.refresh();
   }, [searchQuery]);
 
+  const readingOrder = guide?.reading_order ?? [];
+
   /** Guide reading order resolved to graph nodes, in position order. */
-  const orderedNodes = guide.reading_order
+  const orderedNodes = [...readingOrder]
     .sort((a, b) => a.position - b.position)
     .map((entry) => nodeMap[entry.file_path])
     .filter(Boolean);
@@ -115,7 +117,7 @@ export default function GraphClient({
 
   /** Reading-order entries keyed by file path. */
   const readingOrderMap = Object.fromEntries(
-    guide.reading_order.map((entry) => [entry.file_path, entry]),
+    readingOrder.map((entry) => [entry.file_path, entry]),
   );
 
   /**
@@ -214,7 +216,9 @@ export default function GraphClient({
           </button>
         </div>
 
-        {currentLevel === "file" && (
+        {/* Hidden rather than disabled when there is no guide: the tour has nothing
+            to walk, and a row reading "Reading Order: — / 0" is not actionable. */}
+        {currentLevel === "file" && orderedNodes.length > 0 && (
           <div className="flex items-center gap-2 p-2">
             <div className="font-medium uppercase text-(--foreground)/90">
               Reading Order:
@@ -241,14 +245,14 @@ export default function GraphClient({
           </div>
         )}
       </section>
-
+      
       {selectedNode && (
         <GraphCard
           selectedNode={selectedNode}
           setSelectedNode={setSelectedNode}
           currentLevel={currentLevel}
           github_url={github_url}
-          annotation={readingOrderMap[selectedNode?.path].annotation ?? null}
+          annotation={readingOrderMap[selectedNode?.path]?.annotation ?? null}
         />
       )}
 

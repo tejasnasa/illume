@@ -82,7 +82,9 @@ function resolveType(src: Source): SourceType {
 function resolvePrimaryLabel(type: SourceType, src: Source): string {
   switch (type) {
     case "symbol":
-      return src.symbol_name !== "<anonymous>" ? src.symbol_name : "";
+      return src.symbol_name && src.symbol_name !== "<anonymous>"
+        ? src.symbol_name
+        : "";
     case "commit":
       return src.commit_hash
         ? src.commit_hash.slice(0, 7)
@@ -185,6 +187,9 @@ export default function CitationCard({
       >
         <div className="flex items-center gap-3 overflow-hidden">
           <div
+            role="img"
+            aria-label={config.label}
+            title={config.label}
             className={`flex items-center justify-center w-6 h-6 rounded-md ${config.bg} shrink-0`}
           >
             <Icon size={14} className={config.color} weight="bold" />

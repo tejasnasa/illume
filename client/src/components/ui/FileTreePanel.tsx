@@ -25,7 +25,7 @@ interface Props {
 /**
  * Renders the repository tree with pager controls and selection state.
  * @param fileTree Root tree node to render.
- * @param selectedFile Currently selected file, центering the panel when null.
+ * @param selectedFile Currently selected file, centering the panel when null.
  * @param expandedDirs Set of expanded directory paths.
  * @param onFileClick Handler invoked when a file row is clicked.
  * @param onToggleDir Handler invoked when a directory is expanded or collapsed.

@@ -58,7 +58,15 @@ export default function OptionMenu({
 
   return (
     <div className="relative inline-block" ref={ref}>
-      <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="block border-0 bg-transparent p-0"
+      >
+        {trigger}
+      </button>
 
       {open && (
         <div
