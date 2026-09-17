@@ -14,6 +14,10 @@
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg?logo=docker&logoColor=white&style=flat-square)](https://www.docker.com)
 [![Celery](https://img.shields.io/badge/Celery-5.6%2B-37814A.svg?logo=celery&logoColor=white&style=flat-square)](https://docs.celeryq.dev)
 
+[![CI](https://github.com/tejasnasa/illume/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tejasnasa/illume/actions/workflows/ci.yml)
+[![Backend coverage](https://img.shields.io/badge/backend%20coverage-80%25-brightgreen?style=flat-square)](#-running-tests)
+[![Frontend coverage](https://img.shields.io/badge/frontend%20coverage-62%25-brightgreen?style=flat-square)](#-running-tests)
+
 
 [Live Demo](https://illume.tejasnasa.me) · [Architecture Deep-Dive](#-system-architecture) · [Key Features](#-core-capabilities) · [Getting Started](#-installation--getting-started)
 
@@ -197,6 +201,74 @@ npm run dev
 ```
 
 The Web Interface is now accessible at **`http://localhost:3000`**. You can sign up locally, create a user workspace, submit any public or private GitHub repository, and watch the ingestion pipeline run in real-time!
+
+---
+
+## 🧪 Running Tests
+
+> **📖 Full guide: [`docs/testing.md`](docs/testing.md).** It covers all three suites in
+> depth — what each layer is for, every command and flag, how the fixtures and mocks work,
+> the coverage gates, and how to write a new test. What follows here is the quick version.
+
+The backend suite needs a real PostgreSQL (with `pgvector`) and Redis. A compose file is
+committed for exactly this, on ports **5433** and **6380** so it never collides with the
+dev stack on 5432 and 6379.
+
+```bash
+docker compose -f docker-compose.test.yml up -d      # test infra (or: make test-infra)
+```
+
+**Backend** (`server/`) — `uv`, `pytest`:
+
+```bash
+cd server
+uv run pytest -m smoke                          # fast boot check, no infra assumptions
+uv run pytest -m "not slow"                     # full PR suite
+uv run pytest --cov=app --cov-report=term-missing -n auto
+uv run ruff check tests/ && uv run mypy tests/
+```
+
+**Frontend** (`client/`) — `vitest`:
+
+```bash
+cd client
+npm test                    # watch mode
+npm run test:run            # single pass
+npm run test:coverage       # with coverage
+npm run lint && npx tsc --noEmit
+```
+
+**End-to-end** (`client/e2e/`, Playwright) — the same test infrastructure, plus a real
+browser against a real API and a production build:
+
+```bash
+docker compose -f docker-compose.test.yml up -d
+cd client
+npm run test:e2e            # or: npm run test:e2e -- --ui
+```
+
+The suite starts the API, a stub OpenAI server, and a Next production build itself, and
+seeds a user and two ingested repositories directly. It never calls GitHub or OpenAI, and
+it needs no Celery worker. `E2E_API_PORT` and `E2E_CLIENT_PORT` move it off the default
+ports when a dev stack is already running. It runs nightly and on `main` rather than on
+every PR — see `.github/workflows/ci.yml`.
+
+### Coverage ratchet
+
+Both suites enforce a floor, recorded in a committed `.coverage-floor` file
+(`server/.coverage-floor`, `client/.coverage-floor`). CI fails if measured coverage drops
+below it. There is no absolute target: the floor only moves up, and a PR that raises
+coverage is expected to raise the file in the same commit so the reviewer sees the bump.
+The shields at the top of this file carry the floor values, not a last-measured number, so
+they stay true between runs — update them in the same commit that moves a floor.
+
+`make test` runs both suites; `make lint` runs both linters. Test markers: `smoke`,
+`unit`, `integration`, `security`, `migration`, `slow`.
+
+> **Note:** `tests/conftest.py` points the app at the test database by setting environment
+> variables *before* importing anything under `app`. Settings and both database engines are
+> constructed at import time, so this ordering is required — see the module docstring before
+> moving those imports.
 
 ---
 
