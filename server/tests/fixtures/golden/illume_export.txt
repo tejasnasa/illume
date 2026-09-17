@@ -1,0 +1,24 @@
+@@META
+repo=ingested-repo
+url=https://github.com/example/example-repo
+branch=main
+lang=python
+generated=<date>
+files=3 symbols=3 edges=2
+stack=
+entry=
+
+@@ARCH
+No architecture summary generated.
+
+@@GRAPH
+src/module_0.py -> src/module_1.py [imports:func_1]
+src/module_1.py -> src/module_2.py [imports:func_2]
+
+@@SYMBOLS
+src/module_2.py: fn:func_2
+src/module_1.py: fn:func_1
+src/module_0.py: fn:func_0
+
+@@HOTSPOTS
+src/module_2.py [critical,fan_in=2,cc=1]
