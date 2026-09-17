@@ -23,3 +23,62 @@ dependencies = [
     "tree-sitter>=0.25.2",
     "tree-sitter-language-pack>=1.5.0",
 ]
+
+[dependency-groups]
+dev = [
+    "fakeredis>=2.38.0",
+    "freezegun>=1.5.5",
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-randomly>=5.0.0",
+    "pytest-xdist>=3.8.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.7",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+# The project is not an installed package, so put the server root on sys.path to make
+# `import app.*` work from any test module.
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = [
+    "smoke: boots the app and proves the critical paths respond",
+    "unit: a single function or class in isolation, externals mocked",
+    "integration: real FastAPI app plus real Postgres and Redis",
+    "security: auth bypass, IDOR, injection, token leakage",
+    "migration: Alembic upgrade and round-trip correctness",
+    "slow: excluded from the default PR run",
+    "xfail_leak: asserts a known credential leak is absent; expected to fail until fixed",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["alembic/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+# Deliberately lenient while the suite is built out. Tighten per-module later rather
+# than blocking on a strict run the existing code was never written against.
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = false
+exclude = ["alembic/"]
+
+[[tool.mypy.overrides]]
+module = "app.services.*"
+check_untyped_defs = false
