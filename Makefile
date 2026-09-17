@@ -43,5 +43,7 @@ lint: lint-be lint-fe
 lint-be:
 	cd server && uv run ruff check tests/ && uv run ruff format --check tests/ && uv run mypy tests/ --follow-imports=silent
 
+# `next typegen` first: `next-env.d.ts` is gitignored, so on a fresh checkout `tsc` has
+# none of the Next.js global types and fails on every asset import. CI does the same.
 lint-fe:
-	cd client && npx tsc --noEmit && npx eslint tests/ e2e/ vitest.config.ts
+	cd client && npx next typegen && npx tsc --noEmit && npx eslint tests/ e2e/ vitest.config.ts

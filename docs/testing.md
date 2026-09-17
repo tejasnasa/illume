@@ -201,8 +201,13 @@ individual commands are:
 
 ```bash
 cd server && uv run ruff check tests/ && uv run ruff format --check tests/ && uv run mypy tests/ --follow-imports=silent
-cd client && npx tsc --noEmit && npx eslint tests/ e2e/ vitest.config.ts
+cd client && npx next typegen && npx tsc --noEmit && npx eslint tests/ e2e/ vitest.config.ts
 ```
+
+`next typegen` runs first on the client because `next-env.d.ts` is gitignored. It carries
+the `next/image-types/global` reference that declares the module types for asset imports,
+so on a fresh checkout `tsc` reports `TS2307` for every `import x from "./y.png"` until it
+has been generated.
 
 Python is formatted with **ruff** at a line length of 100; TypeScript follows the **Prettier**
 settings in `.zed/settings.json`. Matching the surrounding style is preferable to introducing a new

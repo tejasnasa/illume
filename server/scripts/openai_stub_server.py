@@ -36,7 +36,15 @@ from pydantic import BaseModel
 # Running this as a script puts `scripts/` on sys.path, not the server root.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from tests.factories import RETRIEVABLE_VECTOR  # noqa: E402
+# Imported from the fixtures module, not from `tests.factories`, and that matters.
+# `factories.py` pulls in `app.core.security`, which imports `app.core.config` and
+# instantiates `Settings()` at import time -- every field of which is required, with
+# `.env` as the only other source. This process is started by Playwright with no
+# application environment (it needs none; it never touches the database), so importing
+# `factories` made it die with a pydantic ValidationError before binding its port.
+# `tests/fixtures/openai_stub.py` is stdlib-only, which is exactly why the constant
+# lives there.
+from tests.fixtures.openai_stub import RETRIEVABLE_VECTOR  # noqa: E402
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 

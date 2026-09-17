@@ -72,6 +72,13 @@ jobs:
 
       - run: npm ci
 
+      # `next-env.d.ts` is gitignored, so a fresh checkout does not have it -- and it is
+      # what pulls in `next/image-types/global`, which declares the module types for
+      # `import logo from "./x.jpg"`. Without it `tsc` reports TS2307 on every asset
+      # import. `next typegen` writes it (and the route types) without a full build.
+      - name: Generate Next.js types
+        run: npx next typegen
+
       - name: Typecheck
         run: npx tsc --noEmit
 
@@ -90,6 +97,28 @@ jobs:
     defaults:
       run:
         working-directory: server
+    # `.env` is gitignored, so a fresh checkout has none, and `Settings` declares every
+    # field below as required with `env_file=".env"` as the only other source. Without
+    # this block the `alembic upgrade head` step dies instantiating `Settings` before it
+    # reaches the database -- pytest itself is fine, because `tests/conftest.py` sets its
+    # own environment before importing anything under `app`.
+    #
+    # Values mirror `server/.env.test.example`, and the ports match the service
+    # containers above.
+    env:
+      DATABASE_URL: postgresql+asyncpg://illume:test@localhost:5433/illume_test
+      SYNC_DATABASE_URL: postgresql://illume:test@localhost:5433/illume_test
+      REDIS_URL: redis://localhost:6380/0
+      SECRET_KEY: test-secret-key-not-for-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+      FRONTEND_URL: http://localhost:3000
+      ENVIRONMENT: development
+      GITHUB_CLIENT_ID: test-github-client-id
+      GITHUB_CLIENT_SECRET: test-github-client-secret
+      GITHUB_REDIRECT_URL: http://localhost:8000/api/v1/auth/github/callback
+      DOMAIN: localhost
+      OPENAI_API_KEY: test-openai-key
+      AI_MODEL: gpt-4o-mini
     services:
       postgres:
         image: pgvector/pgvector:pg16
