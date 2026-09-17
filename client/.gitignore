@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/e2e/.auth/
+# The config's `outputDir` resolves against the config file (`e2e/`) while the HTML
+# reporter's default resolves against the working directory (`client/`), so the two
+# land in different places and both need naming.
+/e2e/test-results/

@@ -1,0 +1,41 @@
+# Test infrastructure for the Illume backend suite.
+#
+# Ports are deliberately offset from the dev defaults (5432 / 6379) so a running dev
+# stack and the test stack never collide or get mistaken for one another.
+#
+#   docker compose -f docker-compose.test.yml up -d
+#
+# Host ports: Postgres 5433, Redis 6380.
+services:
+  postgres-test:
+    image: pgvector/pgvector:pg16
+    container_name: illume-postgres-test
+    environment:
+      POSTGRES_USER: illume
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: illume_test
+    ports:
+      - "5433:5432"
+    # No init script needed: the first Alembic revision runs
+    # `CREATE EXTENSION IF NOT EXISTS vector` (ec40440330d3:25), and the illume
+    # role is a superuser in this image so it is permitted to do so.
+    tmpfs:
+      # Ephemeral storage: the test DB is recreated from migrations on every run,
+      # so there is nothing worth persisting between runs.
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U illume -d illume_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-test:
+    image: redis:7
+    container_name: illume-redis-test
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

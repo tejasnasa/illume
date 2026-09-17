@@ -12,6 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright output. The HTML report and the traces are bundled JavaScript, so linting
+    // them reports hundreds of errors in generated code and buries the real ones -- and
+    // they only exist after an E2E run, which makes `npm run lint` fail depending on
+    // whether someone happened to run the E2E suite first.
+    "playwright-report/**",
+    "test-results/**",
+    "blob-report/**",
+    "coverage/**",
   ]),
 ]);
 
