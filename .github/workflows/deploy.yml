@@ -1,17 +1,34 @@
 name: Deploy Backend
 
+# Runs **after CI succeeds on main**, not in parallel with it.
+#
+# The previous trigger was `push` on `server/**`, which meant a red main deployed: tests,
+# lint, and types could all be failing and the image still went to the droplet. Gating on
+# the CI run is what makes the checks load-bearing rather than advisory.
+#
+# The `paths: server/**` filter is gone with the push trigger, deliberately.
+#
+# `workflow_run` carries no push payload, so the range a push introduced is not
+# recoverable from it -- `head_sha~1` would diff only the tip commit and miss a server
+# change made in an earlier commit of the same push, which is exactly the silent skip the
+# filter existed to avoid being wrong about. The trade-off taken here is the other way:
+# a documentation-only commit now rebuilds and restarts the backend for nothing, which
+# costs a few seconds of API downtime. A missed backend deploy costs more than that.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "server/**"
-      - ".github/workflows/deploy.yml"
 
 env:
   IMAGE_NAME: ${{ github.repository_owner }}/illume-server
 
 jobs:
   build-and-deploy:
+    # A failed or cancelled CI run, or one from another branch, must not reach the droplet.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -20,8 +37,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The commit CI validated, not the branch tip -- those differ whenever a newer
+          # push landed while CI was running, and deploying the tip would ship something
+          # no check has seen.
+          ref: ${{ github.event.workflow_run.head_sha }}
+
 
       - name: Log in to GHCR
+
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -29,6 +53,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
+
         uses: docker/build-push-action@v5
         with:
           context: ./server
@@ -36,6 +61,7 @@ jobs:
           tags: ghcr.io/${{ env.IMAGE_NAME }}:latest
 
       - name: Deploy to Droplet
+
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
