@@ -22,10 +22,20 @@ from typing import Annotated
 from fastapi import Query
 from pydantic import AfterValidator
 
-# Far above any page count that can correspond to real rows -- the offset this
-# bounds is meaningless long before it is reached -- and low enough that the
-# largest offset it can produce (MAX_PAGE * 200) stays comfortably inside int64.
-MAX_PAGE = 100_000
+# The largest `page_size` any paginated route accepts, used to derive the bound below.
+MAX_PAGE_SIZE = 200
+
+# PostgreSQL's OFFSET is a signed 64-bit integer, and routes compute `(page - 1) *
+# page_size` in Python, where the integer is unbounded. A page large enough for that
+# product to exceed int64 therefore reaches asyncpg as an unrepresentable value, which
+# raises DataError -- an unhandled 500.
+#
+# Derived from the limit rather than picked. An arbitrary "practical" ceiling would
+# reject pages that work today: `page=1000000000` returns an empty page quite happily,
+# and the suite's control test pins exactly that, because the boundary really is int64
+# and not some smaller number. Deriving it also means raising a route's `page_size`
+# ceiling cannot silently invalidate the bound.
+MAX_PAGE = 2**63 // MAX_PAGE_SIZE
 
 
 def _no_control_characters(value: str | None) -> str | None:

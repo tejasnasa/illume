@@ -10,11 +10,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from typing import Annotated
 
 import httpx
 from app.api.deps import get_current_user
-from app.api.validation import NoControlCharacters, PageNumber
+from app.api.validation import PageNumber
 from app.models import User
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -128,11 +127,11 @@ def _require_token(user: User) -> str:
 async def list_my_repos(
     page: PageNumber = 1,
     per_page: int = Query(30, ge=1, le=100),
-    q: Annotated[
-        str,
-        Query(description="Filter repos by name substring"),
-        NoControlCharacters,
-    ] = "",
+    # Deliberately left unvalidated. This filter is applied to GitHub's response in
+    # Python and never reaches a statement, so a control character is inert rather than
+    # dangerous -- and rejecting it would turn a request that currently succeeds into a
+    # 422. The control-character rule belongs on values that reach the database.
+    q: str = Query("", description="Filter repos by name substring"),
     current_user: User = Depends(get_current_user),
 ):
     """List the authenticated user's GitHub repositories, newest first.
