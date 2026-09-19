@@ -20,6 +20,12 @@ from app.models import AstSymbol, Dependency, File
 def query_file_edges(db: Session, repo_id: UUID) -> list[tuple[UUID, UUID]]:
     """Query all symbol dependencies for a repo, collapsed to file pairs.
 
+    Both the source and target symbols are filtered to the requested repo.
+    Filtering only one side would let an out-of-repo target land in the
+    result set, inflating in-degree and dumping in-repo files into the cycle
+    tier. The earlier filter existed because the resolver restricts targets,
+    but the asymmetry is unnecessary and risky.
+
     Args:
         db: Synchronous SQLAlchemy session.
         repo_id: Repository whose dependency edges should be read.
@@ -30,6 +36,8 @@ def query_file_edges(db: Session, repo_id: UUID) -> list[tuple[UUID, UUID]]:
     """
     TargetSymbol = aliased(AstSymbol, name="tgt_sym")
 
+    file_ids_for_repo = select(File.id).where(File.repository_id == repo_id)
+
     rows = (
         db.query(
             AstSymbol.file_id.label("src_file"),
@@ -37,9 +45,8 @@ def query_file_edges(db: Session, repo_id: UUID) -> list[tuple[UUID, UUID]]:
         )
         .join(Dependency, Dependency.source_symbol_id == AstSymbol.id)
         .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.id)
-        .filter(
-            AstSymbol.file_id.in_(select(File.id).where(File.repository_id == repo_id))
-        )
+        .filter(AstSymbol.file_id.in_(file_ids_for_repo))
+        .filter(TargetSymbol.file_id.in_(file_ids_for_repo))
         .all()
     )
     return [(r.src_file, r.tgt_file) for r in rows]
@@ -123,16 +130,8 @@ async def query_file_edges_async(
         select(*columns)
         .join(SourceSymbol, Dependency.source_symbol_id == SourceSymbol.c.id)
         .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.c.id)
-        .filter(
-            SourceSymbol.c.file_id.in_(
-                select(File.id).where(File.repository_id == repo_id)
-            )
-        )
-        .filter(
-            TargetSymbol.c.file_id.in_(
-                select(File.id).where(File.repository_id == repo_id)
-            )
-        )
+        .filter(SourceSymbol.c.file_id.in_(select(File.id).where(File.repository_id == repo_id)))
+        .filter(TargetSymbol.c.file_id.in_(select(File.id).where(File.repository_id == repo_id)))
     )
     return (await db.execute(stmt)).all()
 

@@ -26,8 +26,17 @@ CRITICAL_PATH_PATTERNS = [
 ]
 
 
-def _score_file(file: File) -> tuple[str, list[str]]:
-    """Score a single file and return (criticality level, reasons)."""
+def _score_file(file: File, repo_has_tests: bool = True) -> tuple[str, list[str]]:
+    """Score a single file and return (criticality level, reasons).
+
+    Args:
+        file: The file row being scored. Attributes read: ``path``,
+            ``fan_in``, ``has_tests``, ``git_last_modified``.
+        repo_has_tests: Whether the repository has any test files at all.
+            The "no test coverage" rule is meaningful only when some tests
+            exist; without it, the penalty fires for every file and makes
+            the entire repo look untested.
+    """
     score = 0
     reasons: list[str] = []
     now = datetime.now(tz=timezone.utc)
@@ -53,8 +62,10 @@ def _score_file(file: File) -> tuple[str, list[str]]:
             score += 1
             reasons.append("untouched for 6+ months")
 
-    if not file.has_tests:
-        # Untested code is riskier to change, so it scores higher.
+    if repo_has_tests and not file.has_tests:
+        # Untested code is riskier to change, so it scores higher. The penalty
+        # is reserved for repos that actually have tests; otherwise *every*
+        # file looks untested and the rule stops identifying risk.
         score += 1
         reasons.append("no test coverage")
 
@@ -68,20 +79,30 @@ def _score_file(file: File) -> tuple[str, list[str]]:
     return criticality, reasons
 
 
-def run_criticality_scoring(db: Session, repo_id: UUID) -> int:
+def run_criticality_scoring(db: Session, repo_id: UUID, repo_has_tests: bool | None = None) -> int:
     """Score every file in a repository and persist the results.
 
     Args:
         db: Database session used to read files and persist scores.
         repo_id: ID of the repository whose files should be scored.
+        repo_has_tests: Whether the repository as a whole has at least one
+            detected test file. The "no test coverage" penalty is applied to
+            individual files *only* when this is true — otherwise the
+            penalty fires for every file in a repo with no tests at all,
+            turning every `safe` file into `caution`. When ``None``, the
+            function looks it up from the file rows so it is still
+            idempotent for callers that do not know it up front.
 
     Returns:
         Number of files scored.
     """
     files = db.query(File).filter(File.repository_id == repo_id).all()
 
+    if repo_has_tests is None:
+        repo_has_tests = any(f.has_tests for f in files)
+
     for f in files:
-        f.criticality, f.criticality_reasons = _score_file(f)
+        f.criticality, f.criticality_reasons = _score_file(f, repo_has_tests=repo_has_tests)
 
     db.commit()
     return len(files)

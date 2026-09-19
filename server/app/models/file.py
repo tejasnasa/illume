@@ -3,10 +3,11 @@ File model definition.
 
 Represents a single source code file tracked within a repository.
 """
+
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,11 +17,14 @@ from app.core.database import Base
 class File(Base):
     """
     SQLAlchemy model representing a tracked file in a repository.
-    
+
     Stores file-level metadata such as LOC, fan-in/fan-out metrics, criticality,
     and Git modification history.
     """
     __tablename__ = "files"
+    __table_args__ = (
+        UniqueConstraint("repository_id", "path", name="uq_file_repo_path"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, server_default=text("gen_random_uuid()")
@@ -37,5 +41,9 @@ class File(Base):
     criticality_reasons: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     change_frequency: Mapped[float | None] = mapped_column(Float, nullable=True)
     has_tests: Mapped[bool] = mapped_column(Boolean, default=False)
-    git_last_modified: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=text("now()"))
+    git_last_modified: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
+    )

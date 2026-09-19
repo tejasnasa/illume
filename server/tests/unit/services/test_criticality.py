@@ -218,3 +218,70 @@ class TestLevelThresholds:
         level, _ = _score_file(make_file(fan_in=fan_in, path=path, has_tests=has_tests))
 
         assert level == expected
+
+
+class TestCalibration:
+    """
+    The ``no test coverage`` penalty is reserved for repos that actually have
+    tests. Without the guard, a repo with no tests at all penalises every file
+    and the entire codebase tips into ``caution``.
+    """
+
+    def test_a_repo_with_no_tests_does_not_penalise_every_file(self):
+        """
+        With ``repo_has_tests=False`` the no-coverage reason must stay silent
+        even when the file itself has ``has_tests=False``.
+        """
+        level, reasons = _score_file(
+            make_file(has_tests=False, git_last_modified=STALE),
+            repo_has_tests=False,
+        )
+
+        assert "no test coverage" not in reasons
+        # Without the calibration STALE+untested would land at score 2 = caution.
+        # With it only staleness fires (1 point), so the file stays safe.
+        assert level == "safe"
+
+    def test_a_repo_with_tests_keeps_the_penalty(self):
+        """With ``repo_has_tests=True`` the rule behaves as before."""
+        _, reasons = _score_file(
+            make_file(has_tests=False),
+            repo_has_tests=True,
+        )
+
+        assert "no test coverage" in reasons
+
+    def test_a_repo_with_no_tests_and_a_pattern_match_stays_at_pattern_score(self):
+        """
+        Files matching a critical-path pattern (2 points) keep that score in a
+        repo with no tests -- they would climb to 3 (caution) with the
+        uncalibrated rule.
+        """
+        level, reasons = _score_file(
+            make_file(path="app/core/database.py", has_tests=False),
+            repo_has_tests=False,
+        )
+
+        assert level == "caution"  # 2 from path pattern alone
+        assert "core infrastructure file" in reasons
+        assert "no test coverage" not in reasons
+
+    def test_stale_and_untested_only_adds_one_when_repo_has_no_tests(self):
+        """
+        Two reasons (stale + untested) = 2 points = ``caution``. With the
+        calibration the untested reason disappears and the file moves back to
+        ``safe``.
+        """
+        level, reasons = _score_file(
+            make_file(has_tests=False, git_last_modified=STALE),
+            repo_has_tests=False,
+        )
+
+        assert level == "safe"  # only staleness remains, which is 1 point
+        assert reasons == ["untouched for 6+ months"]
+
+    def test_default_repo_has_tests_is_true_so_legacy_callers_are_unaffected(self):
+        """Omitting ``repo_has_tests`` keeps the old behaviour."""
+        _, reasons = _score_file(make_file(has_tests=False))
+
+        assert "no test coverage" in reasons

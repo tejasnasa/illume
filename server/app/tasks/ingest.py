@@ -9,25 +9,39 @@ from app.core.database import get_sync_db
 from app.core.redis import get_sync_redis
 from app.models.repository import Repository
 from app.services.architecture_brief import generate_brief
-from app.services.git_analyzer import analyze_git_history
-from app.services.pr_fetcher import fetch_pull_requests
-from app.services.glossary_builder import build_glossary
 from app.services.cloner import cleanup_clone, clone_repository
-from app.services.scanner import embed_repository_symbols, process_repository_files
+from app.services.criticality import run_criticality_scoring
+from app.services.git_analyzer import analyze_git_history
+from app.services.glossary_builder import build_glossary
 from app.services.onboarding import build_reading_order
+from app.services.pr_fetcher import fetch_pull_requests
+from app.services.scanner import embed_repository_symbols, process_repository_files
 
 logger = logging.getLogger(__name__)
 
 
 @contextmanager
 def get_db_context():
+    """Wrap ``get_sync_db`` so its ``except`` rollback branch actually runs.
+
+    ``get_sync_db`` is a generator with an ``except Exception: rollback`` arm, but the
+    original wrapper resumed it with ``next(gen)``, which exits cleanly and silently
+    skips the rollback. Threading the exception back in with ``gen.throw`` makes the
+    rollback reachable.
+    """
     gen = get_sync_db()
     db = next(gen)
+    exc: BaseException | None = None
     try:
         yield db
+    except BaseException as e:
+        exc = e
     finally:
         try:
-            next(gen)
+            if exc is not None:
+                gen.throw(exc)
+            else:
+                next(gen)
         except StopIteration:
             pass
 
@@ -60,7 +74,7 @@ def ingest_repository(
             tmp_dir, actual_branch, actual_sha = clone_repository(
                 db, redis_client, repo, access_token, branch=branch, commit_sha=commit_sha
             )
-            
+
             repo.ingested_branch = actual_branch
             repo.ingested_commit_sha = actual_sha
             db.commit()
@@ -80,15 +94,16 @@ def ingest_repository(
             finally:
                 cleanup_clone(tmp_dir)
 
+            publish("criticality_started", "Scoring file criticality...")
+            run_criticality_scoring(db, repo.id)
+
             publish("glossary_started", "Building project glossary...")
             build_glossary(db, repo)
 
             publish("reading_order_started", "Generating recommended reading order...")
             build_reading_order(db, repo)
 
-            embed_repository_symbols(
-                db, redis_client, repo, readme_content=readme_content
-            )
+            embed_repository_symbols(db, redis_client, repo, readme_content=readme_content)
 
             publish("brief_started", "Synthesizing AI architecture brief...")
             generate_brief(db, repo, readme_content=readme_content)
@@ -100,6 +115,7 @@ def ingest_repository(
 
         except Exception as exc:
             logger.exception("Ingestion failed for repo %s", repo_id)
+            db.rollback()
             try:
                 repo = db.query(Repository).filter(Repository.id == repo_id).first()
                 if repo:

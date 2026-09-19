@@ -671,6 +671,268 @@ class TestReRun:
         assert commit_count(pipeline_repo) == first
 
 
+class TestFailurePathLeavesRepoFailed:
+    """
+    When a stage raises after a flush has hit the database, the session is in
+    a pending-rollback state. The task must ``rollback()`` before reloading the
+    repository; otherwise ``status = "failed"`` never persists and the row
+    stays at ``parsing``/``embedding`` forever, while the user sees a
+    ``failed`` terminal frame over the WebSocket.
+
+    Defect 1 in `improve_plan.md`.
+    """
+
+    def test_a_mid_pipeline_failure_marks_the_repository_failed(
+        self, pipeline_repo, monkeypatch, stubbed
+    ):
+        """
+        Patch ``process_repository_files`` to dirty the session with an
+        uncommitted insert, then raise. The task's except path is reached
+        with a poisoned transaction: pre-fix the reload query raises
+        ``PendingRollbackError``, which the bare ``except Exception: pass``
+        swallows, and the row stays in its last stage forever. Post-fix the
+        explicit ``db.rollback()`` clears the session and ``status =
+        "failed"`` persists.
+        """
+        from sqlalchemy.exc import DBAPIError
+
+        import app.tasks.ingest as ingest_module
+
+        def explode_after_flush(db, redis_client, repo, repo_root):
+            # Stage a row in the same session without committing, then raise
+            # -- reproducing the exact "pending-rollback" state a real flush
+            # failure would leave behind.
+            from app.models.file import File
+
+            db.add(
+                File(
+                    repository_id=repo.id,
+                    path="src/__defect1__.py",
+                    language="python",
+                    loc=1,
+                )
+            )
+            db.flush()  # forces a round trip; any later query needs a rollback
+            raise DBAPIError("simulated flush failure", None, Exception())
+
+        monkeypatch.setattr(ingest_module, "process_repository_files", explode_after_flush)
+
+        run_task(pipeline_repo)
+
+        assert status_of(pipeline_repo) == "failed"
+
+    def test_a_failed_run_does_not_poison_the_session(self, pipeline_repo, monkeypatch, stubbed):
+        """
+        After a failed ingestion a subsequent run of the same repository must
+        still succeed. This proves the session is reusable, not just that the
+        status row got its label flipped.
+        """
+        from sqlalchemy.exc import DBAPIError
+
+        import app.services.scanner as scanner_module
+        import app.tasks.ingest as ingest_module
+
+        # First invocation: simulate the failure.
+        def explode(db, redis_client, repo, repo_root):
+            from app.models.file import File
+
+            db.add(
+                File(
+                    repository_id=repo.id,
+                    path="src/__defect1_b__.py",
+                    language="python",
+                    loc=1,
+                )
+            )
+            db.flush()
+            raise DBAPIError("simulated flush failure", None, Exception())
+
+        monkeypatch.setattr(ingest_module, "process_repository_files", explode)
+
+        run_task(pipeline_repo)
+        assert status_of(pipeline_repo) == "failed"
+
+        # Second invocation: restore the real ``process_repository_files`` but
+        # leave the ``stubbed`` fixture (fake clone, OpenAI stub) in place so
+        # the recovery run does not reach out to GitHub.
+        monkeypatch.setattr(
+            ingest_module,
+            "process_repository_files",
+            scanner_module.process_repository_files,
+        )
+        run_task(pipeline_repo)
+
+        assert status_of(pipeline_repo) == "ready"
+
+
+class TestCriticalitySeesRealData:
+    """
+    Criticality scoring reads ``File.git_last_modified`` and ``File.has_tests``,
+    both populated by ``analyze_git_history``. Running it before that stage hit
+    NULL/False values and effectively never fired the volatility or coverage
+    rules.
+
+    Defect 2 in `improve_plan.md`.
+    """
+
+    def test_criticality_runs_after_git_history_so_modified_is_set(self, pipeline_repo, stubbed):
+        """
+        Run the happy path, then read back ``File.git_last_modified`` to
+        confirm git analysis populated it before criticality ran. The fixture's
+        first commit is intentionally stale enough to cross the 180-day
+        threshold, which means the staleness rule *should* be capable of
+        firing once the column is non-NULL.
+        """
+        from datetime import UTC, datetime
+
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from app.models.file import File
+        from tests.conftest import TEST_SYNC_DB_URL
+
+        run_task(pipeline_repo)
+
+        engine = create_engine(TEST_SYNC_DB_URL)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        try:
+            files = session.query(File).filter(File.repository_id == pipeline_repo).all()
+            assert files, "no files indexed"
+
+            timestamps = [f.git_last_modified for f in files if f.git_last_modified is not None]
+            assert timestamps, (
+                "git_last_modified is NULL on every file -- criticality ran "
+                "before git analysis populated the column"
+            )
+
+            stale_count = sum(1 for ts in timestamps if (datetime.now(UTC) - ts).days > 180)
+            assert stale_count > 0, (
+                "no file is older than 180 days -- the fixture should be old "
+                "enough for at least one staleness flag"
+            )
+        finally:
+            session.close()
+            engine.dispose()
+
+    def test_calibration_does_not_penalise_repos_without_tests(self, pipeline_repo, stubbed):
+        """
+        The fixture has no test files. With the calibration in place the
+        no-coverage penalty must NOT fire, so scores should reflect only
+        fan-in, path patterns, and staleness.
+        """
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import sessionmaker
+
+        from app.models.file import File
+        from tests.conftest import TEST_SYNC_DB_URL
+
+        run_task(pipeline_repo)
+
+        engine = create_engine(TEST_SYNC_DB_URL)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        try:
+            files = session.query(File).filter(File.repository_id == pipeline_repo).all()
+            for f in files:
+                reasons = f.criticality_reasons or []
+                # The fixture has no test files: every no-test-coverage
+                # reason we see is a regression of the calibration.
+                assert "no test coverage" not in reasons, (
+                    f"{f.path} was scored as untested in a repo with no tests -- "
+                    "the no-coverage penalty should be silent when the repo "
+                    "as a whole has none."
+                )
+        finally:
+            session.close()
+            engine.dispose()
+
+
+class TestFileInsertIdempotence:
+    """
+    Two parallel parse stages must not leave duplicate File rows. The
+    ``files`` table now has ``UNIQUE (repository_id, path)`` and the parse
+    stage's insert uses ``ON CONFLICT DO NOTHING`` on that key.
+
+    Both Defect 3 (idempotence) and the supporting schema change live here.
+    """
+
+    def test_two_overlapping_inserts_leave_one_row_per_path(self, migrated_db):
+        """
+        Insert the same ``(repository_id, path)`` pair twice with
+        ``on_conflict_do_nothing``. Without the unique constraint the second
+        insert would create a duplicate row.
+        """
+        import uuid as _uuid
+
+        from sqlalchemy import create_engine
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy.orm import sessionmaker
+
+        from app.core.security import hash_password
+        from app.models.file import File
+        from app.models.repository import Repository
+        from app.models.user import User
+        from tests.conftest import TEST_SYNC_DB_URL
+
+        engine = create_engine(TEST_SYNC_DB_URL)
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        try:
+            # The pipeline_repo fixture's commit happens on a different
+            # session; we open our own to insert here.
+            user = User(
+                id=_uuid.uuid4(),
+                email=f"phaseA-{_uuid.uuid4().hex[:8]}@example.com",
+                name="Phase A User",
+                password=hash_password("correct horse battery staple"),
+            )
+            session.add(user)
+            session.flush()
+
+            repo = Repository(
+                user_id=user.id,
+                github_url="https://github.com/example/idempotent",
+                name="idempotent",
+                status="pending",
+                primary_language="python",
+                default_branch="main",
+                ingested_branch="main",
+                ingested_commit_sha="0" * 40,
+                repo_number=_uuid.uuid4().int % 10_000_000,
+            )
+            session.add(repo)
+            session.flush()
+
+            stmt = (
+                pg_insert(File)
+                .values(
+                    repository_id=repo.id,
+                    path="src/app.py",
+                    language="python",
+                    loc=10,
+                )
+                .on_conflict_do_nothing(index_elements=["repository_id", "path"])
+            )
+            session.execute(stmt)
+            session.execute(stmt)
+            session.commit()
+
+            rows = (
+                session.query(File)
+                .filter(
+                    File.repository_id == repo.id,
+                    File.path == "src/app.py",
+                )
+                .count()
+            )
+            assert rows == 1, f"expected one row, got {rows}"
+        finally:
+            session.rollback()
+            session.close()
+            engine.dispose()
+
+
 # --- helpers -----------------------------------------------------------------------
 
 

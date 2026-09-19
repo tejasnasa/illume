@@ -1,18 +1,21 @@
 """Repository file processing pipeline.
 
 Walks a cloned repository's source files, parses them into AST symbols,
-persists files/symbols/dependencies to the database, computes fan metrics and
-criticality scores, detects the tech stack, and generates embeddings.
+persists files/symbols/dependencies to the database, computes fan metrics,
+detects the tech stack, and generates embeddings. Criticality scoring is no
+longer invoked here -- ``ingest_repository`` calls ``run_criticality_scoring``
+once git history has populated the columns it depends on
+(``git_last_modified``, ``has_tests``).
 """
 
 import logging
 from pathlib import Path
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models import AstSymbol, File, Repository
 from app.services._publish import publish_log
-from app.services.criticality import run_criticality_scoring
 from app.services.dependency_resolver import compute_fan_metrics, resolve_dependencies
 from app.services.embedder import generate_embeddings
 from app.services.parser import parse_file
@@ -75,10 +78,14 @@ def process_repository_files(
 ) -> int:
     """Parse all source files in a repository and persist the analysis results.
 
-    Runs the full indexing pipeline: parses each file into AST symbols, stores
-    files and symbols in the database, resolves inter-file dependencies,
-    computes fan-in/fan-out metrics and criticality scores, and detects the
-    repository's stack and entry points. Progress is published via Redis logs.
+    Runs the indexing pipeline: parses each file into AST symbols, stores files
+    and symbols in the database, resolves inter-file dependencies, computes
+    fan-in/fan-out metrics, and detects the repository's stack and entry points.
+
+    Note: criticality scoring is intentionally *not* performed here -- it
+    depends on ``File.git_last_modified`` and ``File.has_tests``, which are
+    populated by ``analyze_git_history`` after parsing. ``ingest_repository``
+    calls :func:`run_criticality_scoring` separately once that data exists.
 
     Args:
         db: Database session used for all persistence.
@@ -90,17 +97,13 @@ def process_repository_files(
         Number of source files successfully parsed and stored.
     """
     _update_status(db, redis_client, repo, "parsing")
-    publish_log(
-        redis_client, str(repo.id), "parsing_started", "Starting file analysis..."
-    )
+    publish_log(redis_client, str(repo.id), "parsing_started", "Starting file analysis...")
     db.query(File).filter(File.repository_id == repo.id).delete()
     db.commit()
 
     source_files = walk_source_files(repo_root)
     total = len(source_files)
-    publish_log(
-        redis_client, str(repo.id), "file_discovery", f"Found {total} source files."
-    )
+    publish_log(redis_client, str(repo.id), "file_discovery", f"Found {total} source files.")
 
     processed = 0
 
@@ -112,27 +115,45 @@ def process_repository_files(
 
         relative_path = file_path.relative_to(repo_root).as_posix()
 
-        db_file = File(
-            repository_id=repo.id,
-            path=relative_path,
-            language=parsed.language,
-            loc=parsed.loc,
+        # Idempotent insert keyed on (repository_id, path): a retry of an
+        # already-completed parse is a no-op rather than a duplicate row, and
+        # two parallel runs cannot leave the table full of twins.
+        stmt = (
+            pg_insert(File)
+            .values(
+                repository_id=repo.id,
+                path=relative_path,
+                language=parsed.language,
+                loc=parsed.loc,
+            )
+            .on_conflict_do_nothing(index_elements=["repository_id", "path"])
+            .returning(File.id)
         )
-        db.add(db_file)
-        # Flush now so db_file.id exists for the symbol rows below.
-        db.flush()
+        result = db.execute(stmt).first()
+        if result is None:
+            # Row already existed -- reload it so subsequent symbol inserts
+            # in the same pass can still attach to its id.
+            existing = (
+                db.query(File.id)
+                .filter(File.repository_id == repo.id, File.path == relative_path)
+                .first()
+            )
+            db_file_id = existing[0]
+        else:
+            db_file_id = result[0]
 
         for symbol in parsed.symbols:
-            db_symbol = AstSymbol(
-                file_id=db_file.id,
-                kind=symbol.kind,
-                name=symbol.name,
-                start_line=symbol.start_line,
-                end_line=symbol.end_line,
-                source_code=symbol.source_code,
-                cyclomatic_complexity=symbol.cyclomatic_complexity,
+            db.add(
+                AstSymbol(
+                    file_id=db_file_id,
+                    kind=symbol.kind,
+                    name=symbol.name,
+                    start_line=symbol.start_line,
+                    end_line=symbol.end_line,
+                    source_code=symbol.source_code,
+                    cyclomatic_complexity=symbol.cyclomatic_complexity,
+                )
             )
-            db.add(db_symbol)
 
         processed += 1
         publish_log(
@@ -165,11 +186,6 @@ def process_repository_files(
         "Computing fan-in/fan-out metrics...",
     )
     compute_fan_metrics(db, repo.id)
-
-    publish_log(
-        redis_client, str(repo.id), "criticality_started", "Scoring file criticality..."
-    )
-    run_criticality_scoring(db, repo.id)
 
     repo.detected_stack = detect_stack(repo_root)
     repo.entry_points = detect_entry_points(repo_root)

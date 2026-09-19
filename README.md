@@ -66,7 +66,7 @@ Renders module imports dynamically inside the browser utilizing WebGL and `react
 
 ### 🔍 Unified Semantic RAG Chat & Glossary
 * **Domain Glossary**: Tree-sitter extracts all classes, functions, and interfaces. The LLM translates these technical symbols into business-domain definitions, compiling a searchable, living glossary.
-* **Multi-Source RAG**: Vector search combines code syntax blocks, commit messages, and PR summaries. Embedding vectors are generated using `text-embedding-3d` (1536 dimensions) and indexed in `pgvector` for fast cosine-similarity search.
+* **Multi-Source RAG**: Vector search combines code syntax blocks, commit messages, and PR summaries. Embedding vectors are generated using `text-embedding-3-small` (1536 dimensions) and indexed in `pgvector` for fast cosine-similarity search.
 
 ---
 
