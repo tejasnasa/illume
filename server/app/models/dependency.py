@@ -3,9 +3,10 @@ Dependency model definition.
 
 Represents an edge in the dependency graph between two AST symbols.
 """
+
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, text
+from sqlalchemy import Enum, ForeignKey, Index, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -14,10 +15,19 @@ from app.core.database import Base
 class Dependency(Base):
     """
     SQLAlchemy model representing a code dependency edge.
-    
+
     Links a source symbol to a target symbol, forming the basis of the dependency graph.
     """
+
     __tablename__ = "dependencies"
+    __table_args__ = (
+        # Phase B indexes: both FK columns carry a CASCADE delete triggered by
+        # every ast_symbols row removal, and ``compute_fan_metrics`` joins on
+        # both. Without these the cascade chain becomes O(files * symbols *
+        # dependencies) sequential scans.
+        Index("ix_dependencies_source_symbol_id", "source_symbol_id"),
+        Index("ix_dependencies_target_symbol_id", "target_symbol_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, server_default=text("gen_random_uuid()")

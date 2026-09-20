@@ -62,6 +62,64 @@ EXTERNAL_INTEGRATION_PREFIXES = (
 )
 
 
+class _FileProxy:
+    """Read-only stand-in for a ``File`` carrying only the brief's columns."""
+
+    __slots__ = (
+        "id",
+        "path",
+        "language",
+        "fan_in",
+        "fan_out",
+        "criticality",
+        "criticality_reasons",
+    )
+
+    def __init__(self, row) -> None:
+        self.id = row.id
+        self.path = row.path
+        self.language = row.language
+        self.fan_in = row.fan_in
+        self.fan_out = row.fan_out
+        self.criticality = row.criticality
+        self.criticality_reasons = row.criticality_reasons
+
+
+class _SymbolProxy:
+    """Read-only stand-in for an ``AstSymbol`` carrying only the brief's columns."""
+
+    __slots__ = ("id", "file_id", "kind", "name", "start_line")
+
+    def __init__(self, row) -> None:
+        self.id = row.id
+        self.file_id = row.file_id
+        self.kind = row.kind
+        self.name = row.name
+        self.start_line = row.start_line
+
+
+class _DepProxy:
+    """Read-only stand-in for a ``Dependency`` carrying only source/target ids."""
+
+    __slots__ = ("source_symbol_id", "target_symbol_id")
+
+    def __init__(self, row) -> None:
+        self.source_symbol_id = row.source_symbol_id
+        self.target_symbol_id = row.target_symbol_id
+
+
+def _file_proxy(row) -> _FileProxy:
+    return _FileProxy(row)
+
+
+def _symbol_proxy(row) -> _SymbolProxy:
+    return _SymbolProxy(row)
+
+
+def _dep_proxy(row) -> _DepProxy:
+    return _DepProxy(row)
+
+
 def _get_key_modules(files: Sequence[File]) -> Sequence[dict]:
     """Return the top fan-in files as compact dicts."""
     sorted_files = sorted(files, key=lambda f: f.fan_in or 0, reverse=True)
@@ -80,9 +138,7 @@ def _get_key_modules(files: Sequence[File]) -> Sequence[dict]:
 def _get_critical_files(files: Sequence[File]) -> list[dict]:
     """Return files flagged critical/caution, critical first then by fan-in."""
     critical = [f for f in files if f.criticality in ("critical", "caution")]
-    critical.sort(
-        key=lambda f: (0 if f.criticality == "critical" else 1, -(f.fan_in or 0))
-    )
+    critical.sort(key=lambda f: (0 if f.criticality == "critical" else 1, -(f.fan_in or 0)))
     return [
         {
             "path": f.path,
@@ -148,11 +204,7 @@ def _detect_external_integrations(symbols: Sequence[AstSymbol]) -> Sequence[str]
 
 def _get_ownership_summary(db: Session, file_ids: list[UUID]) -> list[dict]:
     """Summarize code ownership records for the given files."""
-    owners = (
-        db.execute(select(CodeOwner).where(CodeOwner.file_id.in_(file_ids)))
-        .scalars()
-        .all()
-    )
+    owners = db.execute(select(CodeOwner).where(CodeOwner.file_id.in_(file_ids))).scalars().all()
     return [
         {
             "file_id": str(o.file_id),
@@ -167,18 +219,11 @@ def _get_ownership_summary(db: Session, file_ids: list[UUID]) -> list[dict]:
 def _get_glossary_preview(db: Session, repo_id: UUID, limit: int = 10) -> list[dict]:
     """Fetch a small preview of the repo's glossary entries."""
     entries = (
-        db.execute(
-            select(GlossaryEntry)
-            .where(GlossaryEntry.repository_id == repo_id)
-            .limit(limit)
-        )
+        db.execute(select(GlossaryEntry).where(GlossaryEntry.repository_id == repo_id).limit(limit))
         .scalars()
         .all()
     )
-    return [
-        {"term": e.name, "definition": e.definition, "file_path": e.file_path}
-        for e in entries
-    ]
+    return [{"term": e.name, "definition": e.definition, "file_path": e.file_path} for e in entries]
 
 
 def _build_file_dep_map(
@@ -227,9 +272,7 @@ def _group_symbols_by_module(
         # A module is just the first path segment; single-segment paths are top-level.
         parts = file.path.replace("\\", "/").split("/")
         module = parts[0] if len(parts) > 1 else "root"
-        modules[module].append(
-            f"{sym.kind} `{sym.name}` ({file.path}:{sym.start_line})"
-        )
+        modules[module].append(f"{sym.kind} `{sym.name}` ({file.path}:{sym.start_line})")
     return modules
 
 
@@ -379,49 +422,67 @@ def generate_brief(
     if not repo:
         raise ValueError(f"Repository {repo.id} not found")
 
-    files: Sequence[File] = (
-        db.execute(select(File).where(File.repository_id == repo.id)).scalars().all()
-    )
-    files_by_id: dict[UUID, File] = {f.id: f for f in files}
-    files_by_path: dict[str, File] = {f.path: f for f in files}
-    file_ids = list(files_by_id.keys())
+    # Project (id, path, language, fan_in, fan_out, criticality, criticality_reasons)
+    # -- the columns the brief actually reads. ``select(File)`` would
+    # materialise ORM instances carrying every other column too.
+    file_rows = db.execute(
+        select(
+            File.id,
+            File.path,
+            File.language,
+            File.fan_in,
+            File.fan_out,
+            File.criticality,
+            File.criticality_reasons,
+        ).where(File.repository_id == repo.id)
+    ).all()
+    files_by_id: dict[UUID, File] = {row.id: _file_proxy(row) for row in file_rows}
+    files_by_path: dict[str, File] = {row.path: _file_proxy(row) for row in file_rows}
+    file_ids = [row.id for row in file_rows]
 
-    if not files:
+    if not file_rows:
         logger.warning("architecture_brief: no files found for repo %s", repo.id)
         return _upsert_guide(db, repo.id)
 
-    symbols: Sequence[AstSymbol] = (
-        db.execute(select(AstSymbol).where(AstSymbol.file_id.in_(file_ids)))
-        .scalars()
-        .all()
-    )
-    symbol_ids = [s.id for s in symbols]
+    # Symbols: only id, file_id, kind, name. ``select(AstSymbol)`` would
+    # also load source_code and docstring, neither of which the brief uses.
+    symbol_rows = db.execute(
+        select(
+            AstSymbol.id,
+            AstSymbol.file_id,
+            AstSymbol.kind,
+            AstSymbol.name,
+            AstSymbol.start_line,
+        ).where(AstSymbol.file_id.in_(file_ids))
+    ).all()
+    symbols: Sequence[AstSymbol] = [_symbol_proxy(row) for row in symbol_rows]
 
-    dependencies: Sequence[Dependency] = []
-    if symbol_ids:
-        dependencies = (
-            db.execute(
-                select(Dependency).where(Dependency.source_symbol_id.in_(symbol_ids))
+    dependencies: list[tuple[UUID, UUID]] = []
+    if symbols:
+        # Only source/target ids are read; ``dep_type`` is unused by the brief.
+        symbol_ids = [s.id for s in symbols]
+        for row in db.execute(
+            select(Dependency.source_symbol_id, Dependency.target_symbol_id).where(
+                Dependency.source_symbol_id.in_(symbol_ids)
             )
-            .scalars()
-            .all()
-        )
+        ):
+            dependencies.append(_dep_proxy(row))
 
     detected_stack: dict = repo.detected_stack or {}
     entry_points: list[str] = list(repo.entry_points or [])
 
-    key_modules = _get_key_modules(files)
-    critical_files = _get_critical_files(files)
+    key_modules = _get_key_modules(list(files_by_id.values()))
+    critical_files = _get_critical_files(list(files_by_id.values()))
 
     sym_to_file: dict[UUID, UUID] = {s.id: s.file_id for s in symbols}
     # Module identity = first path segment; files without a directory go to "root".
     file_to_module: dict[UUID, str] = {
-        f.id: (
-            f.path.replace("\\", "/").split("/")[0]
-            if "/" in f.path.replace("\\", "/")
+        row.id: (
+            row.path.replace("\\", "/").split("/")[0]
+            if "/" in row.path.replace("\\", "/")
             else "root"
         )
-        for f in files
+        for row in file_rows
     }
 
     module_symbols = _group_symbols_by_module(symbols, files_by_id)
@@ -431,17 +492,13 @@ def generate_brief(
     external_integrations = _detect_external_integrations(symbols)
 
     key_module_ids = [
-        files_by_path[km["path"]].id
-        for km in key_modules
-        if km["path"] in files_by_path
+        files_by_path[km["path"]].id for km in key_modules if km["path"] in files_by_path
     ]
     ownership_summary = _get_ownership_summary(db, key_module_ids)
     glossary_preview = _get_glossary_preview(db, repo.id)
 
     guide = (
-        db.execute(
-            select(OnboardingGuide).where(OnboardingGuide.repository_id == repo.id)
-        )
+        db.execute(select(OnboardingGuide).where(OnboardingGuide.repository_id == repo.id))
         .scalars()
         .first()
     )
@@ -456,7 +513,7 @@ def generate_brief(
         module_symbols=module_symbols,
         external_integrations=list(external_integrations),
         data_flow=list(data_flow),
-        total_files=len(files),
+        total_files=len(file_rows),
         readme_content=readme_content,
     )
 
@@ -479,7 +536,7 @@ def generate_brief(
         "ownership_summary": ownership_summary,
         "glossary_preview": glossary_preview,
         "reading_order_preview": reading_order_preview,
-        "total_files": len(files),
+        "total_files": len(file_rows),
         "total_symbols": len(symbols),
     }
 

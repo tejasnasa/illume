@@ -7,7 +7,17 @@ Represents a single source code file tracked within a repository.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,9 +31,15 @@ class File(Base):
     Stores file-level metadata such as LOC, fan-in/fan-out metrics, criticality,
     and Git modification history.
     """
+
     __tablename__ = "files"
     __table_args__ = (
         UniqueConstraint("repository_id", "path", name="uq_file_repo_path"),
+        # Phase B ingestion indexes. Without these the per-repository delete in
+        # ``scanner.process_repository_files`` and the path-ordered scan in
+        # ``ownership.py`` become sequential.
+        Index("ix_files_repository_id", "repository_id"),
+        Index("ix_files_path", "path"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

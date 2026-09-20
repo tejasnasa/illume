@@ -1,10 +1,23 @@
 from logging.config import fileConfig
 
+from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 from app.core.config import settings
 from app.core.database import Base
-from sqlalchemy import engine_from_config, pool
-from app.models import ast_symbol, dependency, embedding, file, repository, user, commit, code_owner, glossary_entry, onboarding_guide, pull_request
+from app.models import (
+    ast_symbol,
+    code_owner,
+    commit,
+    dependency,
+    embedding,
+    file,
+    glossary_entry,
+    onboarding_guide,
+    pull_request,
+    repository,
+    user,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -66,10 +79,19 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # ``transaction_per_migration=True`` (Alembic's default) is what lets
+        # individual migrations opt out of the wrapping transaction. The 4b8d
+        # ingestion-indexes migration needs that: ``CREATE INDEX CONCURRENTLY``
+        # cannot run inside a transaction block, and the only way to drop the
+        # wrapping transaction is to remove it here. Without this, autocommit
+        # blocks silently no-op and the indexes never land in the database.
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            transaction_per_migration=True,
+        )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        context.run_migrations()
 
 
 if context.is_offline_mode():

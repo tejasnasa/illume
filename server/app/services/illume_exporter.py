@@ -1,7 +1,15 @@
-"""Compact text export of repository analysis.
+"""Compact text export of repository analysis data.
 
 Renders a single text document with @@META, @@ARCH, @@GRAPH, @@SYMBOLS and
 @@HOTSPOTS sections, suitable for feeding to an LLM or for quick inspection.
+
+Memory shape (Phase B): the previous version loaded every ``AstSymbol`` row
+for the repository -- including ``source_code``, ``docstring``, and the rest --
+just to pick out ``kind``, ``name``, and ``cyclomatic_complexity``. On a
+10k-file repo that single ``select(AstSymbol)`` was the largest object in the
+API process. The same row projections the worker uses (id, file_id, kind,
+name, cyclomatic_complexity) are enough for the export and keep the request
+path within the same memory envelope the worker survived.
 """
 
 import uuid
@@ -46,32 +54,48 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
     if not repo:
         return None
 
-    files = (
-        (await db.execute(select(File).where(File.repository_id == repo_id)))
-        .scalars()
-        .all()
-    )
-    if not files:
+    # Project the columns actually consumed. ``path`` for @@META and @@SYMBOLS,
+    # ``fan_in``/``fan_out`` for sorting, ``criticality`` for the @@HOTSPOTS
+    # filter. Every other column on File would just bloat the row.
+    file_rows = (
+        await db.execute(
+            select(
+                File.id,
+                File.path,
+                File.fan_in,
+                File.fan_out,
+                File.criticality,
+            ).where(File.repository_id == repo_id)
+        )
+    ).all()
+    if not file_rows:
         return None
 
-    file_ids = [f.id for f in files]
-    file_id_to_path = {f.id: f.path for f in files}
+    file_id_to_path = {row.id: row.path for row in file_rows}
 
-    symbols = (
-        (await db.execute(select(AstSymbol).where(AstSymbol.file_id.in_(file_ids))))
-        .scalars()
-        .all()
-    )
+    # Symbols: only kind, name, cyclomatic_complexity. Skips ``source_code``
+    # and ``docstring`` -- both of which are the bulk of an AstSymbol row's
+    # bytes and neither of which the exporter reads.
+    symbol_rows = (
+        await db.execute(
+            select(
+                AstSymbol.file_id,
+                AstSymbol.kind,
+                AstSymbol.name,
+                AstSymbol.cyclomatic_complexity,
+            ).where(AstSymbol.file_id.in_([row.id for row in file_rows]))
+        )
+    ).all()
 
-    file_id_to_symbols = defaultdict(list)
-    file_id_to_max_cc = {}
-    for s in symbols:
-        if s.cyclomatic_complexity is not None:
-            file_id_to_max_cc[s.file_id] = max(
-                file_id_to_max_cc.get(s.file_id, 0), s.cyclomatic_complexity
+    file_id_to_symbols: dict[uuid.UUID, list] = defaultdict(list)
+    file_id_to_max_cc: dict[uuid.UUID, int] = {}
+    for row in symbol_rows:
+        if row.cyclomatic_complexity is not None:
+            file_id_to_max_cc[row.file_id] = max(
+                file_id_to_max_cc.get(row.file_id, 0), row.cyclomatic_complexity
             )
-        if s.kind in ("function", "class", "method"):
-            file_id_to_symbols[s.file_id].append(s)
+        if row.kind in ("function", "class", "method"):
+            file_id_to_symbols[row.file_id].append(row)
 
     # Shared symbol->file edge query (with target names for annotations).
     rows = await query_file_edges_async(db, repo_id, include_target_symbol=True)
@@ -96,7 +120,7 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
     lines.append(f"branch={repo.default_branch or 'main'}")
     lines.append(f"lang={repo.primary_language or 'unknown'}")
     lines.append(f"generated={datetime.now(UTC).strftime('%Y-%m-%d')}")
-    lines.append(f"files={len(files)} symbols={len(symbols)} edges={total_edges}")
+    lines.append(f"files={len(file_rows)} symbols={len(symbol_rows)} edges={total_edges}")
 
     stack_parts = []
     if repo.detected_stack:
@@ -146,9 +170,7 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
         annotations = []
         for dep_type, syms in sorted(dep_dict.items()):
             # Anonymous imports carry no useful name; drop them unless they're all we have.
-            filtered_syms = {
-                s for s in syms if not (dep_type == "imports" and s == "<anonymous>")
-            }
+            filtered_syms = {s for s in syms if not (dep_type == "imports" and s == "<anonymous>")}
             if not filtered_syms:
                 continue
             sorted_syms = sorted(filtered_syms)
@@ -168,7 +190,7 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
 
     lines.append("@@SYMBOLS")
     # Prioritize widely-imported files so the cap of 200 covers the load-bearing code.
-    sorted_files_by_fan_in = sorted(files, key=lambda f: f.fan_in or 0, reverse=True)
+    sorted_files_by_fan_in = sorted(file_rows, key=lambda r: r.fan_in or 0, reverse=True)
     top_symbol_files = sorted_files_by_fan_in[:200]
     for f in top_symbol_files:
         sym_list = file_id_to_symbols.get(f.id, [])
@@ -176,11 +198,7 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
             continue
         formatted_syms = []
         for s in sorted(sym_list, key=lambda x: (x.kind, x.name)):
-            kind_prefix = (
-                "fn"
-                if s.kind == "function"
-                else ("cls" if s.kind == "class" else "meth")
-            )
+            kind_prefix = "fn" if s.kind == "function" else ("cls" if s.kind == "class" else "meth")
             formatted_syms.append(f"{kind_prefix}:{s.name}")
         capped_formatted = formatted_syms[:30]
         syms_str = " ".join(capped_formatted)
@@ -190,19 +208,13 @@ async def generate_illume_file(db: AsyncSession, repo_id: uuid.UUID) -> str | No
     lines.append("")
 
     lines.append("@@HOTSPOTS")
-    hotspot_files = [
-        f for f in files if f.criticality and f.criticality.lower() != "safe"
-    ]
+    hotspot_files = [r for r in file_rows if r.criticality and r.criticality.lower() != "safe"]
     # Fan-in ordering surfaces risky-but-central files first within the cap of 50.
-    sorted_hotspots = sorted(hotspot_files, key=lambda f: f.fan_in or 0, reverse=True)[
-        :50
-    ]
+    sorted_hotspots = sorted(hotspot_files, key=lambda r: r.fan_in or 0, reverse=True)[:50]
     for h in sorted_hotspots:
         max_cc = file_id_to_max_cc.get(h.id)
         cc_str = f",cc={max_cc}" if max_cc is not None else ""
-        lines.append(
-            f"{h.path} [{h.criticality.lower()},fan_in={h.fan_in or 0}{cc_str}]"
-        )
+        lines.append(f"{h.path} [{h.criticality.lower()},fan_in={h.fan_in or 0}{cc_str}]")
     lines.append("")
 
     return "\n".join(lines)

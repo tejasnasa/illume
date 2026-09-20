@@ -4,6 +4,17 @@ Collects embeddable text chunks from AST symbols (functions, classes,
 methods), git commits, pull requests, README sections, and annotated
 onboarding files, then generates embeddings via the OpenAI embeddings API
 and persists them as `Embedding` rows for later pgvector retrieval.
+
+Memory shape (Phase B): the embedder previously loaded every embeddable
+symbol -- including the ``source_code`` column -- into a single Python list,
+then iterated it twice (once to build the chunk text, once to push it through
+the API). At ~2x the source text size, that list is the largest single
+object the pipeline holds at one time. The flow below splits symbol loading
+into ``EMBED_BUILD_BATCH_SIZE``-sized chunks so each batch's source text is
+garbage-collected before the next batch begins. The enrichment map
+(``callers_map``/``callees_map``/``glossary_map``) is still loaded eagerly --
+it is column-projected (names + ids, no source) and the trade-off is
+acceptable.
 """
 
 import logging
@@ -13,6 +24,8 @@ from typing import Generator
 from uuid import UUID
 
 from openai import OpenAI
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -35,7 +48,20 @@ EMBEDDABLE_KINDS = {"function", "class", "method"}
 # Chunks above this estimated size are skipped to stay within model limits.
 MAX_CHUNK_TOKENS = 2048
 
+# Number of chunks per OpenAI embeddings API call. Hardcoded by the model
+# vendor at 100 for text-embedding-3-small; raising this does not help.
 BATCH_SIZE = 100
+
+# Symbols are projected (id, file_id, kind, name, source_code, docstring) one
+# batch at a time and the chunk built from them, so the chunk text never
+# coexists in memory with the rest of the source code. A small enough number
+# that tracemalloc shows a flat profile through the loop; a large enough
+# number that the per-batch query overhead is negligible.
+EMBED_BUILD_BATCH_SIZE = 500
+
+# OpenAI's per-request timeouts. The default read timeout is 600s, which would
+# pin the only Celery worker for ten minutes on a stalled call.
+_OPENAI_TIMEOUT_S = 60.0
 
 
 def _build_chunk_text(
@@ -75,15 +101,10 @@ def _build_commit_chunk(commit: Commit) -> str:
     return "\n".join(parts)
 
 
-def _build_file_chunk(file_path: str, symbols: list[AstSymbol], annotation: str) -> str:
+def _build_file_chunk(file_path: str, symbol_names: list[str], annotation: str) -> str:
     """Builds a chunk pairing an onboarding annotation with the file's symbols."""
     parts = [f"# File: {file_path}"]
     parts.append(f"Note: {annotation}")
-    symbol_names = [
-        f"{s.kind} {s.name}"
-        for s in symbols
-        if s.kind in ("function", "class", "method")
-    ]
     if symbol_names:
         parts.append(f"Contains: {', '.join(symbol_names[:15])}")
     return "\n".join(parts)
@@ -120,17 +141,94 @@ def _iter_batches(items: list, batch_size: int) -> Generator[list, None, None]:
         yield items[i : i + batch_size]
 
 
+class _CommitProxy:
+    """Read-only stand-in for a ``Commit`` carrying only the chunk-builder fields."""
+
+    __slots__ = ("hash", "author_name", "message", "changed_files_list")
+
+    def __init__(self, hash_, author_name, message, changed_files_list) -> None:
+        self.hash = hash_
+        self.author_name = author_name
+        self.message = message
+        self.changed_files_list = changed_files_list
+
+
+class _PRProxy:
+    """Read-only stand-in for a ``PullRequest`` carrying only the chunk-builder fields."""
+
+    __slots__ = ("number", "title", "description")
+
+    def __init__(self, number, title, description) -> None:
+        self.number = number
+        self.title = title
+        self.description = description
+
+
+def _commit_proxy(row) -> _CommitProxy:
+    return _CommitProxy(row.hash, row.author_name, row.message, row.changed_files_list)
+
+
+def _pr_proxy(row) -> _PRProxy:
+    return _PRProxy(row.number, row.title, row.description)
+
+
+def _iter_query_batches(
+    db: Session,
+    repository_id: UUID,
+    batch_size: int,
+) -> Generator[list, None, None]:
+    """
+    Yield embeddable symbols for a repo in ``batch_size`` slices.
+
+    Joins on ``File.repository_id`` rather than passing ``symbol_ids`` to an
+    ``IN (...)``. The previous shape built ``symbol_ids`` in memory from
+    every embeddable symbol and then ran four queries against it; past
+    ~32k symbols the bind-parameter list exceeded the driver's limit and
+    SQLAlchemy does not paginate ``IN`` lists, so the call failed outright.
+    Server-side chunking also matches what the file_graph helper already
+    does (``file_graph.py:41``).
+
+    ``stream_results=True`` opts in to a server-side cursor (psycopg2
+    feature), which is what makes ``fetchmany`` actually page rather than
+    slice an already-materialised list.
+    """
+    stmt = (
+        select(
+            AstSymbol.id,
+            AstSymbol.file_id,
+            AstSymbol.kind,
+            AstSymbol.name,
+            AstSymbol.source_code,
+            AstSymbol.docstring,
+        )
+        .join(File, AstSymbol.file_id == File.id)
+        .where(
+            File.repository_id == repository_id,
+            AstSymbol.kind.in_(EMBEDDABLE_KINDS),
+            AstSymbol.source_code.isnot(None),
+            AstSymbol.source_code != "",
+        )
+        .execution_options(stream_results=True, max_row_buffer=batch_size)
+    )
+    result = db.execute(stmt)
+    while True:
+        rows = result.fetchmany(batch_size)
+        if not rows:
+            break
+        yield rows
+
+
 def _embed_and_store(
     client: OpenAI,
     db: Session,
     repository_id: UUID,
-    items: list,
+    items: list[tuple[UUID, str]],
     source_type: str,
     file_id_of=None,
     publish_log=None,
     label: str = "chunks",
 ) -> int:
-    """Embed a list of ``(item, chunk_text)`` pairs and persist the vectors.
+    """Embed a list of ``(source_id, chunk_text)`` pairs and persist the vectors.
 
     Single implementation of the embed-batch loop shared by all source types:
     batches the chunks, calls OpenAI (response order matches input order), and
@@ -141,9 +239,12 @@ def _embed_and_store(
         client: OpenAI client used for the embeddings API.
         db: SQLAlchemy session for persistence.
         repository_id: Repository the embeddings belong to.
-        items: List of ``(origin_row, chunk_text)`` tuples.
+        items: List of ``(source_id, chunk_text)`` tuples. ``source_id`` is the
+            value written to ``Embedding.source_id`` -- for symbol chunks it
+            is the AstSymbol id, for file chunks it is the File id, and so
+            on.
         source_type: Value for ``Embedding.source_type`` (e.g. "commit").
-        file_id_of: Optional callable mapping an origin row to its
+        file_id_of: Optional callable mapping a source_id to its
             ``file_id``; when omitted, ``file_id`` is stored as None.
         publish_log: Optional progress callback receiving status messages.
         label: Human-readable noun for progress messages.
@@ -166,23 +267,23 @@ def _embed_and_store(
                 input=batch_texts,
             )
         except Exception as e:
-            logger.error(
-                f"OpenAI embedding call failed on {label} batch {batch_idx + 1}: {e}"
-            )
+            logger.error(f"OpenAI embedding call failed on {label} batch {batch_idx + 1}: {e}")
             raise
 
-        for i, embedding_data in enumerate(response.data):
-            item, chunk_text = batch[i]
-            db.add(
-                Embedding(
-                    source_type=source_type,
-                    source_id=item.id,
-                    file_id=file_id_of(item) if file_id_of else None,
-                    repository_id=repository_id,
-                    chunk_text=chunk_text,
-                    embedding=embedding_data.embedding,
-                )
-            )
+        rows = [
+            {
+                "source_type": source_type,
+                "source_id": source_id,
+                "file_id": file_id_of(source_id) if file_id_of else None,
+                "repository_id": repository_id,
+                "chunk_text": chunk_text,
+                "embedding": embedding_data.embedding,
+            }
+            for (source_id, chunk_text), embedding_data in zip(batch, response.data)
+        ]
+        # Bulk insert bypasses the identity map entirely; the previous
+        # per-row ``db.add`` was the same shape for a long batch.
+        db.execute(pg_insert(Embedding).values(rows))
 
         db.commit()
         inserted += len(batch)
@@ -234,128 +335,184 @@ def generate_embeddings(
         Exception: If an OpenAI embeddings API call fails; the error is
             logged and re-raised after earlier batches have been committed.
     """
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-
-    # Only functions/classes/methods with actual source are embeddable;
-    # imports and empty symbols would produce low-value chunks.
-    symbols = (
-        db.query(AstSymbol)
-        .join(File, AstSymbol.file_id == File.id)
-        .filter(
-            File.repository_id == repository_id,
-            AstSymbol.kind.in_(EMBEDDABLE_KINDS),
-            AstSymbol.source_code.isnot(None),
-            AstSymbol.source_code != "",
-        )
-        .all()
+    client = OpenAI(
+        api_key=settings.OPENAI_API_KEY,
+        timeout=_OPENAI_TIMEOUT_S,
+        max_retries=2,
     )
 
-    if not symbols:
-        logger.warning(f"No embeddable symbols found for repo {repository_id}")
+    # Load file metadata once -- ``path`` for every file is needed for the
+    # chunk text. This is small (path + id + language per file).
+    file_rows = db.execute(
+        select(File.id, File.path, File.language).where(File.repository_id == repository_id)
+    ).all()
+    file_path_map: dict[UUID, str] = {row.id: row.path for row in file_rows}
+    all_file_ids = {row.id for row in file_rows}
+
+    if not file_rows:
+        logger.warning(f"No files found for repo {repository_id}")
         return 0
 
-    # Each chunk keeps a reference to its origin row so the batch loop later
-    # can build Embedding rows with the right source_id/file_id.
-    chunks = []
+    # Eagerly load the enrichment data the chunk builder needs. None of this
+    # carries source text, so loading it as one map is cheaper than the
+    # per-symbol query it replaced.
+    symbol_id_to_name: dict[UUID, str] = {}
+
+    def _load_symbol_names() -> None:
+        # Run once per repository: column-projected (id, name) on every
+        # embeddable symbol. A separate pass from the per-batch loop above.
+        for row in db.execute(
+            select(AstSymbol.id, AstSymbol.name)
+            .join(File, AstSymbol.file_id == File.id)
+            .where(File.repository_id == repository_id)
+            .where(AstSymbol.kind.in_(EMBEDDABLE_KINDS))
+        ):
+            symbol_id_to_name[row.id] = row.name or ""
+
+    _load_symbol_names()
+
+    if not symbol_id_to_name:
+        logger.warning(f"No embeddable symbols found for repo {repository_id}")
+
+    # Glossary definitions are keyed by symbol_id and weight the chunk heavily
+    # in retrieval; loading them upfront keeps the build loop free of queries.
+    glossary_map: dict[UUID, str] = {}
+    if symbol_id_to_name:
+        for row in db.execute(
+            select(GlossaryEntry.symbol_id, GlossaryEntry.definition).where(
+                GlossaryEntry.symbol_id.in_(symbol_id_to_name.keys())
+            )
+        ):
+            glossary_map[row.symbol_id] = row.definition
+
+    # Caller/callee maps: ``Dependency.dep_type == 'calls'`` is never
+    # actually written by the resolver (only ``'imports'`` is), so these
+    # maps are empty in practice. Keep the lookup so the schema can be
+    # filled in later without touching this code path.
+    callers_map: dict[UUID, list[str]] = defaultdict(list)
+    callees_map: dict[UUID, list[str]] = defaultdict(list)
+    if symbol_id_to_name:
+        for dep in db.execute(
+            select(Dependency.target_symbol_id, Dependency.source_symbol_id).where(
+                Dependency.target_symbol_id.in_(symbol_id_to_name.keys()),
+                Dependency.dep_type == "calls",
+            )
+        ).all():
+            name = symbol_id_to_name.get(dep.source_symbol_id)
+            if name:
+                callers_map[dep.target_symbol_id].append(name)
+        for dep in db.execute(
+            select(Dependency.source_symbol_id, Dependency.target_symbol_id).where(
+                Dependency.source_symbol_id.in_(symbol_id_to_name.keys()),
+                Dependency.dep_type == "calls",
+            )
+        ).all():
+            name = symbol_id_to_name.get(dep.target_symbol_id)
+            if name:
+                callees_map[dep.source_symbol_id].append(name)
+
+    # Build symbol chunks in bounded batches and embed each batch before the
+    # next is read. The previous shape loaded every ``source_code`` column
+    # in one ORM list and then iterated it twice -- once to build chunk
+    # text, once to embed -- so the chunk text and the source text lived
+    # side by side for the duration. Doing both steps inside the same loop
+    # bounds the live set to a single batch's worth of source text.
+    embedded_file_ids: set[UUID] = set()
     skipped = 0
-
-    file_ids = {s.file_id for s in symbols}
-    files = db.query(File).filter(File.id.in_(file_ids)).all()
-    file_path_map: dict[UUID, str] = {f.id: f.path for f in files}
-
-    symbol_ids = [s.id for s in symbols]
-    symbol_name_map = {s.id: s.name for s in symbols}
-
-    # Bulk-load enrichment data up front so chunk building stays in memory
-    # instead of issuing a query per symbol.
-    glossary_map = {
-        row.symbol_id: row.definition
-        for row in db.query(GlossaryEntry.symbol_id, GlossaryEntry.definition)
-        .filter(GlossaryEntry.symbol_id.in_(symbol_ids))
-        .all()
-    }
-
-    # Precompute call-graph context so each symbol chunk can include who
-    # calls it and what it calls — useful signal for retrieval relevance.
-    callers_map = defaultdict(list)
-    for dep in (
-        db.query(Dependency.target_symbol_id, Dependency.source_symbol_id)
-        .filter(Dependency.target_symbol_id.in_(symbol_ids))
-        .filter(Dependency.dep_type == "calls")
-        .all()
-    ):
-        name = symbol_name_map.get(dep.source_symbol_id)
-        if name:
-            callers_map[dep.target_symbol_id].append(name)
-
-    # Mirror of the callers query, keyed by the calling symbol instead.
-    callees_map = defaultdict(list)
-    for dep in (
-        db.query(Dependency.source_symbol_id, Dependency.target_symbol_id)
-        .filter(Dependency.source_symbol_id.in_(symbol_ids))
-        .filter(Dependency.dep_type == "calls")
-        .all()
-    ):
-        name = symbol_name_map.get(dep.target_symbol_id)
-        if name:
-            callees_map[dep.source_symbol_id].append(name)
-
-    for symbol in symbols:
-        file_path = file_path_map.get(symbol.file_id, "unknown")
-        # Glossary definition wins over docstring — it's written for humans,
-        # not extracted from code, so it embeds better retrieval context.
-        chunk_text = _build_chunk_text(
-            file_path=file_path,
-            kind=symbol.kind,
-            name=symbol.name,
-            source_code=symbol.source_code,
-            docstring=symbol.docstring,
-            glossary_def=glossary_map.get(symbol.id),
-            callers=callers_map.get(symbol.id),
-            callees=callees_map.get(symbol.id),
-        )
-
-        # Drop rather than truncate: a cut-off chunk would embed misleading
-        # partial code and exceed model input limits anyway.
-        if _token_estimate(chunk_text) > MAX_CHUNK_TOKENS:
-            logger.debug(f"Skipping oversized chunk: {symbol.name} in {file_path}")
-            skipped += 1
-            continue
-
-        chunks.append((symbol, chunk_text))
-
-    logger.info(
-        f"Repo {repository_id}: {len(chunks)} chunks to embed, {skipped} skipped (oversized)"
-    )
-
-    # Fallback: files with no surviving symbol chunks still get one whole-file
-    # chunk so they aren't invisible to code search.
-    embedded_file_ids = {s.file_id for s, _ in chunks}
-    all_files = db.query(File).filter(File.repository_id == repository_id).all()
-    for file in all_files:
-        if file.id in embedded_file_ids:
-            continue
-        # Include non-embeddable symbols too (e.g. variables) — this is a
-        # coarse-grained catch-all, not a re-embed of the surviving chunks.
-        file_symbols = db.query(AstSymbol).filter(AstSymbol.file_id == file.id).all()
-        symbol_lines = "\n".join(s.source_code for s in file_symbols if s.source_code)
-        if not symbol_lines.strip():
-            continue
-        chunk_text = f"# {file.path}\n{symbol_lines}"
-        if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
-            chunks.append((file, chunk_text))
-
     total_inserted = 0
+    # source_id_to_file_id has to outlive the build loop because the
+    # embeddings row needs ``file_id`` at insert time, but it is just a
+    # UUID-to-UUID map -- bounded by the number of surviving symbol
+    # chunks, not their text.
+    source_id_to_file_id: dict[UUID, UUID] = {}
+
+    def _embed_symbol_chunks() -> int:
+        """Stream symbols, build chunks, embed each batch in place.
+
+        Returns:
+            Number of embeddings inserted.
+        """
+        nonlocal skipped
+        inserted = 0
+        # Each entry carries ``(symbol_id, file_id, chunk_text)``. Holding
+        # the ``file_id`` alongside the ``source_id`` lets ``_embed_and_store``
+        # populate ``Embedding.file_id`` without a per-row lookup.
+        pending: list[tuple[UUID, UUID, str]] = []
+
+        def _flush() -> None:
+            nonlocal inserted
+            if not pending:
+                return
+            # Build the (source_id, chunk_text) view for the embed helper
+            # while we still have the file_ids in scope; afterwards the
+            # local ``pending`` list is the only reference to those chunk
+            # strings, so clearing it lets them be collected.
+            items = [(sym_id, chunk_text) for sym_id, _fid, chunk_text in pending]
+            file_ids = {sym_id: fid for sym_id, fid, _t in pending}
+            inserted += _embed_and_store(
+                client,
+                db,
+                repository_id,
+                items,
+                source_type="symbol",
+                file_id_of=file_ids.get,
+                publish_log=publish_log,
+                label="symbol chunks",
+            )
+            pending.clear()
+
+        for batch_rows in _iter_query_batches(db, repository_id, EMBED_BUILD_BATCH_SIZE):
+            for row in batch_rows:
+                sym_id, file_id, kind, name, source_code, docstring = row
+                file_path = file_path_map.get(file_id, "unknown")
+                chunk_text = _build_chunk_text(
+                    file_path=file_path,
+                    kind=kind,
+                    name=name or "",
+                    source_code=source_code,
+                    docstring=docstring,
+                    glossary_def=glossary_map.get(sym_id),
+                    callers=callers_map.get(sym_id),
+                    callees=callees_map.get(sym_id),
+                )
+
+                if _token_estimate(chunk_text) > MAX_CHUNK_TOKENS:
+                    logger.debug(f"Skipping oversized chunk: {name} in {file_path}")
+                    skipped += 1
+                    continue
+
+                pending.append((sym_id, file_id, chunk_text))
+                embedded_file_ids.add(file_id)
+                source_id_to_file_id[sym_id] = file_id
+
+                if len(pending) >= BATCH_SIZE:
+                    _flush()
+
+            if publish_log:
+                publish_log(f"Built and embedded {inserted} symbol chunks ({skipped} skipped)")
+
+        _flush()
+        return inserted
+
+    total_inserted += _embed_symbol_chunks()
 
     # --- Commits ---
     # Embedded first because they're small and fast; their completion gives
     # early searchable signal while bigger sets process.
-    commits = db.query(Commit).filter(Commit.repository_id == repository_id).all()
-    commit_chunks = [
-        (c, chunk)
-        for c in commits
-        if _token_estimate(chunk := _build_commit_chunk(c)) <= MAX_CHUNK_TOKENS
-    ]
+    commit_rows = db.execute(
+        select(
+            Commit.id,
+            Commit.hash,
+            Commit.author_name,
+            Commit.message,
+            Commit.changed_files_list,
+        ).where(Commit.repository_id == repository_id)
+    ).all()
+    commit_chunks: list[tuple[UUID, str]] = []
+    for row in commit_rows:
+        chunk = _build_commit_chunk(_commit_proxy(row))
+        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
+            commit_chunks.append((row.id, chunk))
     total_inserted += _embed_and_store(
         client,
         db,
@@ -367,12 +524,16 @@ def generate_embeddings(
     )
 
     # --- Pull requests ---
-    prs = db.query(PullRequest).filter(PullRequest.repository_id == repository_id).all()
-    pr_chunks = [
-        (p, chunk)
-        for p in prs
-        if _token_estimate(chunk := _build_pr_chunk(p)) <= MAX_CHUNK_TOKENS
-    ]
+    pr_rows = db.execute(
+        select(
+            PullRequest.id, PullRequest.number, PullRequest.title, PullRequest.description
+        ).where(PullRequest.repository_id == repository_id)
+    ).all()
+    pr_chunks: list[tuple[UUID, str]] = []
+    for row in pr_rows:
+        chunk = _build_pr_chunk(_pr_proxy(row))
+        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
+            pr_chunks.append((row.id, chunk))
     total_inserted += _embed_and_store(
         client,
         db,
@@ -393,27 +554,24 @@ def generate_embeddings(
                 model="text-embedding-3-small",
                 input=readme_chunks,
             )
-            for i, embedding_data in enumerate(response.data):
-                db.add(
-                    Embedding(
-                        source_type="document",
-                        source_id=repository_id,
-                        file_id=None,
-                        repository_id=repository_id,
-                        chunk_text=readme_chunks[i],
-                        embedding=embedding_data.embedding,
-                    )
-                )
+            rows = [
+                {
+                    "source_type": "document",
+                    "source_id": repository_id,
+                    "file_id": None,
+                    "repository_id": repository_id,
+                    "chunk_text": readme_chunks[i],
+                    "embedding": embedding_data.embedding,
+                }
+                for i, embedding_data in enumerate(response.data)
+            ]
+            db.execute(pg_insert(Embedding).values(rows))
             db.commit()
             total_inserted += len(readme_chunks)
             if publish_log:
                 publish_log(f"README embedded ({len(readme_chunks)} sections).")
 
-    guide = (
-        db.query(OnboardingGuide)
-        .filter(OnboardingGuide.repository_id == repository_id)
-        .first()
-    )
+    guide = db.query(OnboardingGuide).filter(OnboardingGuide.repository_id == repository_id).first()
     annotation_map: dict[str, str] = {}
     if guide and guide.reading_order:
         # Path -> why-read-this annotation, written during onboarding-guide
@@ -425,21 +583,28 @@ def generate_embeddings(
         }
 
     # --- Annotated files ---
-    file_chunks = []
-    for file in all_files:
-        annotation = annotation_map.get(file.path, "")
-        if not annotation:
-            continue
-        # Reuse the already-loaded symbol list rather than re-querying.
-        file_symbols = [s for s in symbols if s.file_id == file.id]
-        chunk_text = _build_file_chunk(file.path, file_symbols, annotation)
-        if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
-            file_chunks.append((file, chunk_text))
+    annotated_file_ids = [row.id for row in file_rows if annotation_map.get(row.path)]
+    annotated_symbols_rows: dict[UUID, list[tuple[str, str]]] = defaultdict(list)
+    if annotated_file_ids:
+        for row in db.execute(
+            select(AstSymbol.file_id, AstSymbol.kind, AstSymbol.name).where(
+                AstSymbol.file_id.in_(annotated_file_ids),
+                AstSymbol.kind.in_(["function", "class", "method"]),
+            )
+        ).all():
+            annotated_symbols_rows[row.file_id].append((row.kind, row.name or ""))
 
-    def _file_self_id(file: File) -> UUID:
-        # File-level embeddings point source_id at the file itself so
-        # lookups can resolve back to the path directly.
-        return file.id
+    file_chunks: list[tuple[UUID, str]] = []
+    for file_id in annotated_file_ids:
+        file_path = file_path_map[file_id]
+        syms = annotated_symbols_rows.get(file_id, [])
+        syms_label = ", ".join(f"{k} {n}" for k, n in syms[:15])
+        text = f"# File: {file_path}\nNote: {annotation_map[file_path]}"
+        if syms_label:
+            text += f"\nContains: {syms_label}"
+        if _token_estimate(text) <= MAX_CHUNK_TOKENS:
+            file_chunks.append((file_id, text))
+            source_id_to_file_id[file_id] = file_id
 
     total_inserted += _embed_and_store(
         client,
@@ -447,28 +612,44 @@ def generate_embeddings(
         repository_id,
         file_chunks,
         source_type="file",
-        file_id_of=_file_self_id,
+        file_id_of=source_id_to_file_id.get,
         publish_log=publish_log,
         label="files",
     )
 
-    # Symbol/file chunks go last: they're the largest batch set, and each
+    # Symbol chunks go last: they're the largest batch set, and each
     # committed batch represents durable progress if a later API call fails.
-    def _symbol_file_id(item) -> UUID | None:
-        # Batch mixes AstSymbols with whole-file fallback chunks (File rows):
-        # symbols point at their parent file, files are their own source.
-        return item.file_id if isinstance(item, AstSymbol) else item.id
+    # Whole-file fallback chunks share the same ``symbol`` source_type;
+    # their ``source_id`` is the file id (already mapped to itself above).
+    fallback_chunks: list[tuple[UUID, str]] = []
+    files_needing_fallback = all_file_ids - embedded_file_ids
+    if files_needing_fallback:
+        file_symbols_rows = db.execute(
+            select(AstSymbol.file_id, AstSymbol.source_code).where(
+                AstSymbol.file_id.in_(files_needing_fallback)
+            )
+        ).all()
+        per_file_sources: dict[UUID, list[str]] = defaultdict(list)
+        for row in file_symbols_rows:
+            if row.source_code:
+                per_file_sources[row.file_id].append(row.source_code)
+        for file_id, sources in per_file_sources.items():
+            chunk_text = f"# {file_path_map.get(file_id, '')}\n" + "\n".join(sources)
+            if _token_estimate(chunk_text) <= MAX_CHUNK_TOKENS:
+                fallback_chunks.append((file_id, chunk_text))
+                source_id_to_file_id[file_id] = file_id
 
-    total_inserted += _embed_and_store(
-        client,
-        db,
-        repository_id,
-        chunks,
-        source_type="symbol",
-        file_id_of=_symbol_file_id,
-        publish_log=publish_log,
-        label="symbol chunks",
-    )
+    if fallback_chunks:
+        total_inserted += _embed_and_store(
+            client,
+            db,
+            repository_id,
+            fallback_chunks,
+            source_type="symbol",
+            file_id_of=source_id_to_file_id.get,
+            publish_log=publish_log,
+            label="file-fallback chunks",
+        )
 
     if publish_log:
         publish_log(f"Embedding complete — {total_inserted} vectors stored.")

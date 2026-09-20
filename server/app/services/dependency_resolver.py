@@ -2,12 +2,24 @@
 
 Resolves parsed import symbols to concrete target files and inserts Dependency
 edges, then computes file-level fan-in/fan-out metrics from those edges.
+
+Memory shape (Phase B): the resolver used to load every import symbol and every
+embeddable symbol into ORM instances and hold them simultaneously. Two stages
+both held full tables -- the import symbols driving edge construction, and the
+definitions that the edges target -- so peak memory was at least
+``len(imports) + len(definitions)`` ORM rows. The functions below now read only
+the columns they need (a UUID plus a name plus a kind plus a path) and never
+materialise ORM rows. Edges are batched into the database rather than buffered
+as a Python list until the end.
 """
 
 import logging
 import uuid
 from collections import defaultdict
+from typing import Iterable
 
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from app.models import AstSymbol, Dependency, File
@@ -19,54 +31,66 @@ from app.services.import_resolver import (
 
 logger = logging.getLogger(__name__)
 
+# Batch size for the dependency edge inserts. SQLAlchemy paginates the
+# ``insertmanyvalues`` for us at this size (see ``insertmanyvalues_page_size``);
+# the number here is just a memory-hint, not a bind-parameter workaround.
+DEPENDENCY_BATCH_SIZE = 1000
+
 
 def _build_stem_indexes(
-    files: list[File],
-) -> tuple[dict[str, File], dict[str, list[File]], dict[str, File]]:
+    files: Iterable[tuple[uuid.UUID, str, str]],
+) -> tuple[dict[str, uuid.UUID], dict[str, list[uuid.UUID]], dict[str, uuid.UUID]]:
     """Build path-stem lookup indexes for fast import-to-file matching.
 
+    Accepts plain ``(file_id, path, language)`` tuples rather than ``File``
+    ORM rows so callers that have already projected the relevant columns do
+    not have to round-trip back through the ORM to populate the maps. Each
+    tuple is sufficient because nothing in the matcher reads anything else
+    off the ``File``.
+
     Args:
-        files: All files belonging to the repository.
+        files: Iterable of ``(file_id, path, language)`` triples for every
+            file in the repository.
 
     Returns:
         A tuple of ``(full_stem_map, short_stem_map, index_map)``:
 
-        - ``full_stem_map``: path stem (extension stripped) -> File, including
-          a variant with the top-level directory stripped to tolerate unknown
-          src-root prefixes (``src/``, ``lib/``, ``app/``).
-        - ``short_stem_map``: bare filename stem -> all Files with that name.
+        - ``full_stem_map``: path stem (extension stripped) -> file_id,
+          including a variant with the top-level directory stripped to
+          tolerate unknown src-root prefixes (``src/``, ``lib/``, ``app/``).
+        - ``short_stem_map``: bare filename stem -> all file_ids with that name.
         - ``index_map``: package directory -> its ``index``/``__init__``
-          entry-point file.
+          entry-point file_id.
     """
-    full_stem_map: dict[str, File] = {}
-    short_stem_map: dict[str, list[File]] = {}
-    index_map: dict[str, File] = {}
+    full_stem_map: dict[str, uuid.UUID] = {}
+    short_stem_map: dict[str, list[uuid.UUID]] = {}
+    index_map: dict[str, uuid.UUID] = {}
 
-    for f in files:
-        normalized = f.path.replace("\\", "/")
+    for file_id, path, _language in files:
+        normalized = path.replace("\\", "/")
         stem = normalized.rsplit(".", 1)[0]
-        full_stem_map[stem] = f
+        full_stem_map[stem] = file_id
 
         # Also index without the top-level dir so imports written relative to
         # an unknown source root still match.
         parts = stem.split("/")
         if len(parts) > 1:
             alt_stem = "/".join(parts[1:])
-            full_stem_map.setdefault(alt_stem, f)
+            full_stem_map.setdefault(alt_stem, file_id)
 
         filename_stem = stem.split("/")[-1]
-        short_stem_map.setdefault(filename_stem, []).append(f)
+        short_stem_map.setdefault(filename_stem, []).append(file_id)
 
-        if stem.split("/")[-1] in ("index", "__init__"):
+        if filename_stem in ("index", "__init__"):
             # `import pkg` resolves to pkg/index.* or pkg/__init__.*, so map
             # each package directory to its entry-point file.
             dir_path = "/".join(stem.split("/")[:-1])
-            index_map[dir_path] = f
+            index_map[dir_path] = file_id
 
             dir_parts = dir_path.split("/")
             if len(dir_parts) > 1:
                 alt_dir = "/".join(dir_parts[1:])
-                index_map.setdefault(alt_dir, f)
+                index_map.setdefault(alt_dir, file_id)
 
     return full_stem_map, short_stem_map, index_map
 
@@ -74,11 +98,14 @@ def _build_stem_indexes(
 def _match_file(
     resolved: str,
     language: str,
-    full_stem_map: dict[str, File],
-    short_stem_map: dict[str, list[File]],
-    index_map: dict[str, File],
-) -> File | None:
-    """Match a resolved import specifier to a known file.
+    full_stem_map: dict[str, uuid.UUID],
+    short_stem_map: dict[str, list[uuid.UUID]],
+    index_map: dict[str, uuid.UUID],
+    *,
+    path_by_id: dict[uuid.UUID, str],
+    language_by_id: dict[uuid.UUID, str],
+) -> uuid.UUID | None:
+    """Match a resolved import specifier to a known file id.
 
     Applies the multi-strategy fallback chain documented on
     :func:`resolve_dependencies`: exact stem, package index, unique short
@@ -90,29 +117,37 @@ def _match_file(
         full_stem_map: Exact-stem index from :func:`_build_stem_indexes`.
         short_stem_map: Filename-only index from :func:`_build_stem_indexes`.
         index_map: Package-entry index from :func:`_build_stem_indexes`.
+        path_by_id: Lookup of file path by id, used only by disambiguation.
+        language_by_id: Lookup of file language by id, used only by disambiguation.
 
     Returns:
-        The matched File, or None if no strategy succeeds.
+        The matched file id, or None if no strategy succeeds.
     """
-    matched_file: File | None = full_stem_map.get(resolved)
+    matched_id: uuid.UUID | None = full_stem_map.get(resolved)
 
-    if not matched_file:
-        matched_file = index_map.get(resolved)
+    if not matched_id:
+        matched_id = index_map.get(resolved)
 
-    if not matched_file:
+    if not matched_id:
         short_stem = resolved.split("/")[-1]
         candidates = short_stem_map.get(short_stem, [])
         if len(candidates) == 1:
-            matched_file = candidates[0]
+            matched_id = candidates[0]
         elif len(candidates) > 1:
-            matched_file = _disambiguate_candidates(candidates, language, resolved)
+            matched_id = _disambiguate_candidates(
+                candidates, language, resolved, path_by_id, language_by_id
+            )
 
-    return matched_file
+    return matched_id
 
 
 def _disambiguate_candidates(
-    candidates: list[File], language: str, resolved: str
-) -> File | None:
+    candidates: list[uuid.UUID],
+    language: str,
+    resolved: str,
+    path_by_id: dict[uuid.UUID, str],
+    language_by_id: dict[uuid.UUID, str],
+) -> uuid.UUID | None:
     """Pick the best file among several sharing the same filename.
 
     Narrows candidates to the importer's language family first; if several
@@ -120,23 +155,25 @@ def _disambiguate_candidates(
     candidate with the longest reversed path-segment overlap.
 
     Args:
-        candidates: Files whose filename stem equals the resolved basename.
+        candidates: File ids whose filename stem equals the resolved basename.
         language: Language of the importing file.
         resolved: The resolved import specifier being matched.
+        path_by_id: Lookup of file path by id, used to score candidates.
+        language_by_id: Lookup of file language by id, used to filter candidates.
 
     Returns:
-        The best-matching File, or None if no candidate stands out.
+        The best-matching file id, or None if no candidate stands out.
     """
     lang = language.lower()
     # Narrow ambiguous same-named candidates to the importer's language
     # family (a.py vs a.ts) before scoring.
     if lang == "python":
-        filtered = [c for c in candidates if (c.language or "") == "python"]
+        filtered = [cid for cid in candidates if language_by_id.get(cid, "") == "python"]
     elif lang in ("javascript", "typescript", "tsx", "jsx"):
         filtered = [
-            c
-            for c in candidates
-            if (c.language or "") in ("javascript", "typescript", "tsx", "jsx")
+            cid
+            for cid in candidates
+            if language_by_id.get(cid, "") in ("javascript", "typescript", "tsx", "jsx")
         ]
     else:
         filtered = candidates
@@ -149,12 +186,13 @@ def _disambiguate_candidates(
 
     # Prefer exact suffix match; otherwise score candidates by how many
     # trailing path segments overlap the specifier.
-    best: File | None = None
+    best: uuid.UUID | None = None
     best_score = 0
-    for c in filtered:
-        c_stem = c.path.replace("\\", "/").rsplit(".", 1)[0]
+    for cid in filtered:
+        c_path = path_by_id.get(cid, "")
+        c_stem = c_path.replace("\\", "/").rsplit(".", 1)[0]
         if c_stem.endswith(resolved):
-            return c
+            return cid
         # Compare path segments from the end: more shared trailing segments
         # = deeper structural similarity.
         r_parts = resolved.split("/")
@@ -167,7 +205,7 @@ def _disambiguate_candidates(
                 break
         if score > best_score:
             best_score = score
-            best = c
+            best = cid
 
     return best if best_score > 0 else None
 
@@ -177,7 +215,7 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
 
     For each stored ``import`` symbol, the import specifier is resolved to a
     candidate path (language-aware, via ``resolve_import``), then matched to a
-    known File using a multi-strategy fallback chain:
+    known file using a multi-strategy fallback chain:
 
     1. **Full stem map** — exact match on the resolved path's stem (extension
        stripped), including a variant with the top-level directory stripped to
@@ -207,60 +245,87 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
     Returns:
         Number of dependency edges inserted.
     """
-    files = db.query(File).filter(File.repository_id == repo_id).all()
+    # Project (id, path, language) -- the columns the matcher actually reads.
+    # Avoiding `select(File)` keeps ORM instances out of the session entirely,
+    # which is what bounds the resolver's peak memory.
+    file_rows = db.execute(
+        select(File.id, File.path, File.language).where(File.repository_id == repo_id)
+    ).all()
+    file_triples = [(row.id, row.path, row.language or "") for row in file_rows]
+    file_id_to_path = {row.id: row.path for row in file_rows}
+    language_by_id = {row.id: row.language or "" for row in file_rows}
 
-    full_stem_map, short_stem_map, index_map = _build_stem_indexes(files)
+    full_stem_map, short_stem_map, index_map = _build_stem_indexes(file_triples)
 
     ts_paths = load_ts_paths(repo_root)
     workspace_map = load_workspace_map(repo_root)
 
-    file_language: dict[uuid.UUID, str] = {f.id: (f.language or "") for f in files}
-
-    file_id_to_path: dict[uuid.UUID, str] = {f.id: f.path for f in files}
-
-    imports = (
-        db.query(AstSymbol)
+    # Imports: kind + name + file_id are all the resolver reads.
+    imports = db.execute(
+        select(AstSymbol.id, AstSymbol.file_id, AstSymbol.name)
         .join(File, AstSymbol.file_id == File.id)
         .filter(File.repository_id == repo_id)
         .filter(AstSymbol.kind == "import")
-        .all()
-    )
+    ).all()
 
-    symbols = (
-        db.query(AstSymbol)
+    # Embeddable definitions: name is matched against the imported symbol's
+    # basename, and file_id groups them per parent file for the "first
+    # symbol" fallback. Source_code is intentionally not loaded.
+    definitions = db.execute(
+        select(AstSymbol.id, AstSymbol.file_id, AstSymbol.name)
         .join(File, AstSymbol.file_id == File.id)
         .filter(File.repository_id == repo_id)
         .filter(AstSymbol.kind.in_(["function", "class", "method"]))
-        .all()
-    )
+    ).all()
 
-    file_id_to_symbols: dict[uuid.UUID, list[AstSymbol]] = {}
-    symbol_name_map: dict[tuple[uuid.UUID, str], AstSymbol] = {}
-    for s in symbols:
-        file_id_to_symbols.setdefault(s.file_id, []).append(s)
-        if s.name:
-            symbol_name_map[(s.file_id, s.name)] = s
+    # Group definitions per file so the barrel fallback can take the first.
+    file_id_to_defs: dict[uuid.UUID, list[tuple[uuid.UUID, str]]] = {}
+    for d_id, d_file_id, d_name in definitions:
+        file_id_to_defs.setdefault(d_file_id, []).append((d_id, d_name or ""))
 
-    file_id_to_import_symbols: dict[uuid.UUID, list[AstSymbol]] = {}
-    for imp_sym in imports:
-        file_id_to_import_symbols.setdefault(imp_sym.file_id, []).append(imp_sym)
+    # Names index: (file_id, name) -> definition id.
+    symbol_name_map: dict[tuple[uuid.UUID, str], uuid.UUID] = {
+        (d_file_id, d_name): d_id
+        for d_file_id, defs in file_id_to_defs.items()
+        for d_id, d_name in defs
+        if d_name
+    }
 
-    deps_to_insert = []
+    # Barrel fallback needs the first import per file. Built only for files
+    # that have no definitions (those are the only files that fall through).
+    barrel_first_import: dict[uuid.UUID, uuid.UUID] = {}
+    for imp_id, imp_file_id, _imp_name in imports:
+        if imp_file_id in file_id_to_defs:
+            continue
+        barrel_first_import.setdefault(imp_file_id, imp_id)
+
+    # Build the edge list as plain dicts and flush in batches. Holding every
+    # edge as a Dependency ORM instance is what the previous code did, and it
+    # is what this function is measured against.
+    pending: list[dict] = []
     seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
     count = 0
 
-    for imp in imports:
-        if not imp.name or imp.name in ("<anonymous>", ""):
+    def _flush() -> None:
+        nonlocal pending
+        if not pending:
+            return
+        db.execute(pg_insert(Dependency).values(pending))
+        db.commit()
+        pending = []
+
+    for imp_id, imp_file_id, imp_name in imports:
+        if not imp_name or imp_name in ("<anonymous>", ""):
             continue
 
-        language = file_language.get(imp.file_id, "")
-        importing_file = file_id_to_path.get(imp.file_id)
+        language = language_by_id.get(imp_file_id, "")
+        importing_file = file_id_to_path.get(imp_file_id)
         if not importing_file:
             continue
 
         resolved = resolve_import(
             language=language,
-            import_name=imp.name,
+            import_name=imp_name,
             importing_file=importing_file,
             repo_root=repo_root,
             ts_paths=ts_paths,
@@ -270,69 +335,78 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
         if not resolved:
             continue
 
-        matched_file = _match_file(
-            resolved, language, full_stem_map, short_stem_map, index_map
+        matched_id = _match_file(
+            resolved,
+            language,
+            full_stem_map,
+            short_stem_map,
+            index_map,
+            path_by_id=file_id_to_path,
+            language_by_id=language_by_id,
         )
 
-        if not matched_file or matched_file.id == imp.file_id:
+        if not matched_id or matched_id == imp_file_id:
             continue
 
-        targets = file_id_to_symbols.get(matched_file.id, [])
+        targets = file_id_to_defs.get(matched_id, [])
         if not targets:
             # No definitions but existing imports => barrel/re-export file;
             # link to its first import symbol so the edge isn't lost.
-            barrel_imports = file_id_to_import_symbols.get(matched_file.id, [])
-            if not barrel_imports:
+            barrel_target = barrel_first_import.get(matched_id)
+            if not barrel_target:
                 logger.debug(
-                    "Dropping dependency edge to %s — no symbols at all",
-                    matched_file.path,
+                    "Dropping dependency edge to %s -- no symbols at all",
+                    file_id_to_path.get(matched_id),
                 )
                 continue
 
-            edge = (imp.file_id, matched_file.id)
+            edge = (imp_file_id, matched_id)
             if edge in seen:
                 continue
             seen.add(edge)
 
-            deps_to_insert.append(
-                Dependency(
-                    source_symbol_id=imp.id,
-                    target_symbol_id=barrel_imports[0].id,
-                    dep_type="imports",
-                )
+            pending.append(
+                {
+                    "source_symbol_id": imp_id,
+                    "target_symbol_id": barrel_target,
+                    "dep_type": "imports",
+                }
             )
             count += 1
+            if len(pending) >= DEPENDENCY_BATCH_SIZE:
+                _flush()
             continue
 
-        last_segment = imp.name.split("/")[-1]
+        last_segment = imp_name.split("/")[-1]
         # Strip module-path prefix and leading/trailing underscores so e.g.
         # "pkg/_helper.py" matches an import of "helper".
         imported_name = last_segment.split(".")[-1].strip("_")
-        target_symbol = symbol_name_map.get((matched_file.id, imported_name))
-        if not target_symbol:
+        target_id = symbol_name_map.get((matched_id, imported_name))
+        if not target_id:
             logger.debug(
                 "No symbol match for '%s' in %s, falling back to first symbol",
                 imported_name,
-                matched_file.path,
+                file_id_to_path.get(matched_id),
             )
-            target_symbol = targets[0]
+            target_id = targets[0][0]
 
-        edge = (imp.file_id, matched_file.id)
+        edge = (imp_file_id, matched_id)
         if edge in seen:
             continue
         seen.add(edge)
 
-        deps_to_insert.append(
-            Dependency(
-                source_symbol_id=imp.id,
-                target_symbol_id=target_symbol.id,
-                dep_type="imports",
-            )
+        pending.append(
+            {
+                "source_symbol_id": imp_id,
+                "target_symbol_id": target_id,
+                "dep_type": "imports",
+            }
         )
         count += 1
+        if len(pending) >= DEPENDENCY_BATCH_SIZE:
+            _flush()
 
-    db.bulk_save_objects(deps_to_insert)
-    db.commit()
+    _flush()
     logger.info("Resolved %d internal dependencies for repo %s", count, repo_id)
     return count
 
@@ -347,46 +421,57 @@ def compute_fan_metrics(db: Session, repo_id: uuid.UUID) -> None:
     fan_in: dict[uuid.UUID, int] = defaultdict(int)
     fan_out: dict[uuid.UUID, int] = defaultdict(int)
 
-    deps = (
-        db.query(Dependency)
+    # Two joins are unavoidable (Dependency -> AstSymbol -> File on each
+    # side), but neither needs the AstSymbol columns other than its file_id.
+    # Projecting only those keeps the result set to ``UUID, UUID`` rows
+    # rather than full ORM symbols.
+    src_file_id_col = AstSymbol.__table__.c.file_id
+    target_symbol = AstSymbol.__table__.alias("tgt")
+    target_file_id_col = target_symbol.c.file_id
+
+    repo_file_ids = select(File.id).where(File.repository_id == repo_id)
+
+    edges = db.execute(
+        select(src_file_id_col.label("src_file"), target_file_id_col.label("tgt_file"))
+        .select_from(Dependency)
         .join(AstSymbol, Dependency.source_symbol_id == AstSymbol.id)
-        .join(File, AstSymbol.file_id == File.id)
-        .filter(File.repository_id == repo_id)
-        .all()
-    )
+        .join(target_symbol, Dependency.target_symbol_id == target_symbol.c.id)
+        .where(src_file_id_col.in_(repo_file_ids))
+        .where(target_file_id_col.in_(repo_file_ids))
+    ).all()
 
-    symbol_to_file: dict[uuid.UUID, uuid.UUID] = {}
-    files = db.query(File).filter(File.repository_id == repo_id).all()
-    file_ids = {f.id for f in files}
+    for edge in edges:
+        src_file = edge.src_file
+        tgt_file = edge.tgt_file
+        if not src_file or not tgt_file or src_file == tgt_file:
+            continue
+        fan_out[src_file] += 1
+        fan_in[tgt_file] += 1
 
-    symbols = (
-        db.query(AstSymbol)
-        .join(File, AstSymbol.file_id == File.id)
-        .filter(File.repository_id == repo_id)
-        .all()
-    )
-    for s in symbols:
-        symbol_to_file[s.id] = s.file_id
+    # Persist the counts in a single UPDATE per side. The previous code
+    # mutated every File ORM row individually; doing so forces the session
+    # to materialise each row, which is what we just avoided loading.
+    from sqlalchemy import update
 
-    for dep in deps:
-        src_file = (
-            symbol_to_file.get(dep.source_symbol_id) if dep.source_symbol_id else None
+    if fan_in:
+        db.execute(
+            update(File),
+            [
+                {"id": file_id, "fan_in": count, "fan_out": fan_out.get(file_id, 0)}
+                for file_id, count in fan_in.items()
+            ],
         )
-        tgt_file = (
-            symbol_to_file.get(dep.target_symbol_id) if dep.target_symbol_id else None
-        )
-        if (
-            src_file
-            and tgt_file
-            and src_file in file_ids
-            and tgt_file in file_ids
-            and src_file != tgt_file
-        ):
-            fan_out[src_file] += 1
-            fan_in[tgt_file] += 1
-
-    for f in files:
-        f.fan_in = fan_in[f.id]
-        f.fan_out = fan_out[f.id]
+    # Files that only fan out (no inbound edges) were never written above;
+    # update them now so fan_out is correct even when fan_in is empty.
+    if fan_out:
+        only_fan_out_ids = [fid for fid in fan_out if fid not in fan_in]
+        if only_fan_out_ids:
+            db.execute(
+                update(File),
+                [
+                    {"id": file_id, "fan_in": 0, "fan_out": fan_out[file_id]}
+                    for file_id in only_fan_out_ids
+                ],
+            )
 
     db.commit()
