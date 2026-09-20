@@ -794,9 +794,7 @@ class TestFailurePathLeavesRepoFailed:
 
         assert status_of(pipeline_repo) == "failed"
 
-    def test_a_brief_failure_marks_the_repository_failed(
-        self, pipeline_repo, monkeypatch, stubbed
-    ):
+    def test_a_brief_failure_marks_the_repository_failed(self, pipeline_repo, monkeypatch, stubbed):
         """
         The architecture brief runs in its own thread, overlapped with the
         embedder, so its exception surfaces through ``future.result()``
