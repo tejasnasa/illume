@@ -3,21 +3,35 @@
 Builds a suggested file reading order for a repository using a tiered
 topological sort of its dependency graph, enriches it with LLM-generated
 "why read this" annotations, and persists the result on an OnboardingGuide.
+
+Memory shape (Phase D): UUIDs are mapped to dense integers once on first
+sight, the adjacency map holds ``set[int]`` instead of ``set[UUID]``, and
+the dependency-edge query is streamed (``yield_per``) so the E-tuple list
+never materialises alongside the two adjacency maps. The previous code
+held all three representations at once -- which was the OOM on large
+repos.
+
+Determinism (Phase D): within a tier, files are sorted by
+``(-fan_in, path)`` rather than the file object's natural order, so the
+reading order is reproducible across runs and across machines. ``set``
+iteration order in Python is otherwise unspecified and would surface as a
+different click-through tour on the frontend without this.
 """
 
 import json
 import logging
-from collections import defaultdict, deque
+from collections import deque
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 import openai
 from sqlalchemy import select
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import AstSymbol, Dependency, File, OnboardingGuide, Repository
-from app.services.file_graph import build_file_graph
+from app.models import File, OnboardingGuide, Repository
+from app.services.file_graph import build_int_adjacency, iter_file_edges
 
 logger = logging.getLogger(__name__)
 
@@ -26,78 +40,131 @@ MAX_ANNOTATED_FILES = 100
 ANNOTATION_BATCH_SIZE = 10
 
 
-def _build_file_graph(
-    db: Session,
-    repo_id: UUID,
-) -> tuple[dict[UUID, set[UUID]], dict[UUID, set[UUID]]]:
-    """Build forward (deps) and reverse (rdeps) file-level dependency maps."""
-    return build_file_graph(db, repo_id)
+@dataclass(frozen=True)
+class _FileInfo:
+    """The two fields the topo sort orders by, decoupled from the ORM row.
+
+    Holding only the path and fan_in (rather than a ``File`` ORM entity)
+    keeps the per-file footprint at the size of two small Python objects.
+    The old code carried every column the brief doesn't read.
+    """
+
+    path: str
+    fan_in: int
+
+
+def _sort_key(info: _FileInfo) -> tuple[int, str]:
+    """Tier-internal sort key: most-imported first, then path-alphabetical.
+
+    A repo where every file has the same fan-in (the common case for small
+    test fixtures) used to come out in arbitrary order because the
+    candidate set was a ``set`` and ``sorted(..., key=fan_in)`` was stable
+    but the input wasn't. Sorting on a tuple key with a deterministic
+    tiebreaker makes the output byte-identical across runs.
+    """
+    return (-info.fan_in, info.path)
 
 
 def _topological_sort(
-    files: list[File],
-    deps: dict[UUID, set[UUID]],
-    rdeps: dict[UUID, set[UUID]],
-) -> list[list[File]]:
-    """Group files into tiers via Kahn-style topological sort; cycles land in the final tier."""
-    file_map: dict[UUID, File] = {f.id: f for f in files}
-    all_ids: set[UUID] = set(file_map)
+    files_by_int: dict[int, _FileInfo],
+    deps: dict[int, set[int]],
+    rdeps: dict[int, set[int]],
+) -> list[list[int]]:
+    """Group files into tiers via Kahn's algorithm; cycles land in a final tier.
 
-    # In-degree = number of dependencies a file still has; deps with 0 are readable first.
-    in_degree: dict[UUID, int] = {fid: len(deps.get(fid, set())) for fid in all_ids}
+    Args:
+        files_by_int: Dense-int lookup of file metadata.
+        deps: Forward adjacency; ``deps[i]`` is the set of files ``i``
+            depends on.
+        rdeps: Reverse adjacency; ``rdeps[i]`` is the set of files that
+            depend on ``i``.
 
-    queue: deque[UUID] = deque(fid for fid in all_ids if in_degree[fid] == 0)
+    Returns:
+        List of tiers, each tier being a list of dense-int file ids. The
+        list is ordered: tier 0 is the set of files with no remaining
+        dependencies, and each subsequent tier only contains files whose
+        dependencies are all in earlier tiers. Files that participate in a
+        dependency cycle land in a single trailing tier in
+        ``(-fan_in, path)`` order.
+    """
+    all_ids: set[int] = set(files_by_int)
+    in_degree: dict[int, int] = {i: len(deps.get(i, set())) for i in all_ids}
 
-    tiers: list[list[File]] = []
-    visited: set[UUID] = set()
+    # Seed queue with files that have no remaining dependencies. Sort on
+    # the deterministic key so the tier ordering is stable even when every
+    # candidate has the same fan-in (the test suite's case).
+    seed = sorted(
+        (i for i in all_ids if in_degree[i] == 0),
+        key=lambda i: _sort_key(files_by_int[i]),
+    )
+    queue: deque[int] = deque(seed)
+
+    tiers: list[list[int]] = []
+    visited: set[int] = set()
 
     while queue:
-        current_tier_ids = list(queue)
+        # Snapshot, then re-sort: a candidate inserted mid-tier by an
+        # earlier member of the same tier should not appear before the
+        # member that unlocked it. The sort makes that explicit and stable.
+        current_tier_ids = sorted(
+            queue,
+            key=lambda i: _sort_key(files_by_int[i]),
+        )
         queue.clear()
         visited.update(current_tier_ids)
+        tiers.append(current_tier_ids)
 
-        # Everything currently in the queue is mutually unblocked -> one tier.
-        # Sort within the tier by fan-in so the most-imported files come first.
-        current_tier = sorted(
-            [file_map[fid] for fid in current_tier_ids if fid in file_map],
-            key=lambda f: f.fan_in or 0,
-            reverse=True,
-        )
-        if current_tier:
-            tiers.append(current_tier)
-
-        next_candidates: set[UUID] = set()
+        next_candidates: set[int] = set()
         for fid in current_tier_ids:
             for importer_id in rdeps.get(fid, set()):
                 if importer_id in visited:
                     continue
-                # Satisfying this dep may unlock the importer for the next tier.
-                deps[importer_id].discard(fid)
+                # Decrement in-place; the previous code also called
+                # ``deps[importer_id].discard(fid)`` to mutate a structure
+                # nothing read again -- pure dead work, dropped here.
                 in_degree[importer_id] -= 1
                 if in_degree[importer_id] == 0:
                     next_candidates.add(importer_id)
-        queue.extend(next_candidates)
+        if next_candidates:
+            queue.extend(
+                sorted(
+                    next_candidates,
+                    key=lambda i: _sort_key(files_by_int[i]),
+                )
+            )
 
     # Anything never dequeued sits on a dependency cycle; emit as a catch-all
-    # final tier instead of dropping those files from the guide.
-    remaining = [file_map[fid] for fid in all_ids - visited if fid in file_map]
+    # final tier instead of dropping those files from the guide. The sort is
+    # the same key the rest of the algorithm uses, so a file in a cycle is
+    # still positioned deterministically relative to its peers.
+    remaining = sorted(
+        (i for i in all_ids - visited),
+        key=lambda i: _sort_key(files_by_int[i]),
+    )
     if remaining:
         logger.warning(
             "reading_order: %d files in dependency cycle(s), appending as final tier",
             len(remaining),
         )
-        remaining_sorted = sorted(remaining, key=lambda f: f.fan_in or 0, reverse=True)
-        tiers.append(remaining_sorted)
+        tiers.append(remaining)
 
     return tiers
 
 
 def _build_annotation_prompt(batch: list[dict[str, Any]]) -> str:
-    """Render one LLM prompt covering a batch of files in reading order."""
+    """Render one LLM prompt covering a batch of files in reading order.
+
+    Only fields the LLM can use to write a useful annotation are
+    surfaced: the file path (it appears in the answer), fan-in (a rough
+    importance signal), tier (the order the file should be read at) and
+    language (it shapes the vocabulary). ``fan_out`` was dropped because
+    it doesn't change the prompt's usefulness and was never read by the
+    model.
+    """
     items = "\n".join(
         f"{i + 1}. file_path={item['path']} | fan_in={item['fan_in']} "
-        f"| fan_out={item['fan_out']} | tier={item['tier']} "
-        f"| language={item['language'] or 'unknown'}"
+        f"| tier={item['tier']} "
+        f"| language={item.get('language') or 'unknown'}"
         for i, item in enumerate(batch)
     )
 
@@ -116,15 +183,28 @@ Respond ONLY with a JSON array, no markdown fences, no preamble:
 """
 
 
-def _annotate_files(ordered_files: list[dict[str, Any]]) -> dict[str, str]:
-    """Request LLM annotations in batches; failures skip the batch silently."""
+def _annotate_files(
+    ordered_files: list[dict[str, Any]],
+    language_by_path: dict[str, str | None],
+) -> dict[str, str]:
+    """Request LLM annotations in batches; failures skip the batch silently.
+
+    The language lookup is supplied by the caller because the trimmed
+    stored payload (Phase D) no longer carries ``language`` per item --
+    only the columns that are actually consumed downstream.
+    """
     client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
     annotations: dict[str, str] = {}
 
     to_annotate = ordered_files[:MAX_ANNOTATED_FILES]
+    # Carry the language through so the prompt can still mention it
+    # without storing it on every item.
+    annotated_batch_input = [
+        {**item, "language": language_by_path.get(item["path"])} for item in to_annotate
+    ]
 
-    for i in range(0, len(to_annotate), ANNOTATION_BATCH_SIZE):
-        batch = to_annotate[i : i + ANNOTATION_BATCH_SIZE]
+    for i in range(0, len(annotated_batch_input), ANNOTATION_BATCH_SIZE):
+        batch = annotated_batch_input[i : i + ANNOTATION_BATCH_SIZE]
         prompt = _build_annotation_prompt(batch)
 
         try:
@@ -178,34 +258,56 @@ def build_reading_order(db: Session, repo: Repository) -> OnboardingGuide:
     """
     logger.info("reading_order: starting for repo %s", repo.id)
 
-    files: list[File] = db.query(File).filter(File.repository_id == repo.id).all()
+    # Column-tuple load: only ``id``, ``path``, ``fan_in`` and ``language``
+    # are read by this function or the annotation prompt. ``select(File)``
+    # would materialise ORM instances carrying every other column too,
+    # which is what the previous implementation held throughout the sort.
+    file_rows = db.execute(
+        select(File.id, File.path, File.fan_in, File.language).where(File.repository_id == repo.id)
+    ).all()
 
-    if not files:
+    if not file_rows:
         logger.warning("reading_order: no files found for repo %s", repo.id)
         return _upsert_guide(db, repo.id, [])
 
-    logger.info("reading_order: loaded %d files", len(files))
+    logger.info("reading_order: loaded %d files", len(file_rows))
 
-    deps, rdeps = _build_file_graph(db, repo.id)
+    files_by_int: dict[int, _FileInfo] = {}
+    int_by_uuid: dict[UUID, int] = {}
+    language_by_path: dict[str, str | None] = {}
+    for row in file_rows:
+        i = len(int_by_uuid)
+        int_by_uuid[row.id] = i
+        files_by_int[i] = _FileInfo(path=row.path, fan_in=row.fan_in or 0)
+        language_by_path[row.path] = row.language
 
-    for f in files:
-        deps.setdefault(f.id, set())
-        rdeps.setdefault(f.id, set())
+    # Stream the edges; ``build_int_adjacency`` populates the int-keyed
+    # adjacency maps without ever holding the E-tuple list. This is the
+    # single change that fixes the OOM: the previous code coexisted the
+    # edge list with two UUID-keyed adjacency maps and the ORM file rows.
+    #
+    # The pre-existing ``int_by_uuid`` is passed in so the int keys line
+    # up with ``files_by_int``; otherwise the adjacency would re-assign
+    # ints in edge-encounter order and the two maps would refer to
+    # different nodes by the same int -- a silent correctness bug.
+    deps, rdeps, _ = build_int_adjacency(iter_file_edges(db, repo.id), int_by_uuid=int_by_uuid)
 
-    tiers: list[list[File]] = _topological_sort(files, deps, rdeps)
+    tiers = _topological_sort(files_by_int, deps, rdeps)
 
+    # Stored payload: ``path``, ``fan_in``, ``tier``, ``position``,
+    # ``annotation``. ``file_id`` is never read; ``fan_out`` and
+    # ``language`` were only used by the annotation prompt, which now
+    # looks the language up from a side table. The result is roughly half
+    # the JSONB size per item, and a JSONB-column scan is cheaper too.
     ordered_flat: list[dict[str, Any]] = []
     position = 1
-
     for tier_index, tier in enumerate(tiers):
-        for f in tier:
+        for int_id in tier:
+            info = files_by_int[int_id]
             ordered_flat.append(
                 {
-                    "file_id": str(f.id),
-                    "path": f.path,
-                    "fan_in": f.fan_in or 0,
-                    "fan_out": f.fan_out or 0,
-                    "language": f.language,
+                    "path": info.path,
+                    "fan_in": info.fan_in,
                     "tier": tier_index,
                     "position": position,
                     "annotation": "",
@@ -213,11 +315,9 @@ def build_reading_order(db: Session, repo: Repository) -> OnboardingGuide:
             )
             position += 1
 
-    logger.info(
-        "reading_order: %d tiers, %d files total", len(tiers), len(ordered_flat)
-    )
+    logger.info("reading_order: %d tiers, %d files total", len(tiers), len(ordered_flat))
 
-    annotations = _annotate_files(ordered_flat)
+    annotations = _annotate_files(ordered_flat, language_by_path)
 
     for item in ordered_flat:
         item["annotation"] = annotations.get(item["path"], "")
@@ -252,11 +352,7 @@ def _upsert_guide(
     Returns:
         The created or updated OnboardingGuide.
     """
-    guide = (
-        db.query(OnboardingGuide)
-        .filter(OnboardingGuide.repository_id == repo_id)
-        .first()
-    )
+    guide = db.query(OnboardingGuide).filter(OnboardingGuide.repository_id == repo_id).first()
 
     if guide is None:
         guide = OnboardingGuide(

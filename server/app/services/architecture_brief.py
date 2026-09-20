@@ -502,7 +502,6 @@ def generate_brief(
         .scalars()
         .first()
     )
-    reading_order_preview = (guide.reading_order or [])[:10] if guide else []
 
     prompt = _build_narrative_prompt(
         repo_name=repo.name,
@@ -535,7 +534,6 @@ def generate_brief(
         "module_edges": [{"from": s, "to": t} for s, t in module_edges[:30]],
         "ownership_summary": ownership_summary,
         "glossary_preview": glossary_preview,
-        "reading_order_preview": reading_order_preview,
         "total_files": len(file_rows),
         "total_symbols": len(symbols),
     }

@@ -444,12 +444,13 @@ class TestHappyPath:
         )
 
         # Non-vacuity. Two files with *no* resolved imports would also share a tier, since
-        # neither would be waiting on the other. A fan-in and fan-out of at least one on
-        # both files is the evidence that the imports became edges in each direction --
-        # which is what makes it a cycle rather than two unrelated files.
+        # neither would be waiting on the other. A fan-in of at least one on both files is
+        # the evidence that the imports became edges in each direction -- which is what
+        # makes it a cycle rather than two unrelated files. (fan_out is no longer in the
+        # stored payload after Phase D; read it from the File table directly.)
         for path in ("src/cycle_a.py", "src/cycle_b.py"):
             assert entries[path]["fan_in"] >= 1, f"{path} has no incoming edge"
-            assert entries[path]["fan_out"] >= 1, f"{path} has no outgoing edge"
+            assert fan_out_of(pipeline_repo, path) >= 1, f"{path} has no outgoing edge"
 
         assert entries["src/cycle_a.py"]["tier"] == entries["src/cycle_b.py"]["tier"]
 
@@ -1258,6 +1259,30 @@ def reading_order_of(repo_id) -> list | None:
 def brief_of(repo_id) -> dict | None:
     guide = guide_of(repo_id)
     return guide.architecture_brief if guide else None
+
+
+def fan_out_of(repo_id, path: str) -> int:
+    """A file's fan-out read from the File table.
+
+    The stored reading-order payload dropped ``fan_out`` in Phase D
+    (only the columns the API actually consumes survive), so any test
+    that needs it has to look it up directly. Returns 0 when no such
+    file exists -- callers compare against 1.
+    """
+    from app.models.file import File
+
+    return (
+        _query(
+            repo_id,
+            lambda s, rid: (
+                s.query(File.fan_out)
+                .filter(File.repository_id == rid)
+                .filter(File.path == path)
+                .scalar()
+            ),
+        )
+        or 0
+    )
 
 
 class RecordingRedis:
