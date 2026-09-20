@@ -4,11 +4,21 @@ Selects the most-referenced symbols (by file fan-in), asks an LLM in small
 batches to write 1-2 sentence definitions from each symbol's docstring and
 source, parses the JSON responses, and replaces the repository's stored
 `GlossaryEntry` rows with the results.
+
+Concurrency shape: the LLM batches are submitted in parallel
+through :func:`app.services._concurrency.gather_in_order`. Worker threads
+do the network call only; the parent thread collects responses in input
+order and does all ``Session`` writes serially. The "failed batch yields
+fewer definitions, not a total loss" contract is unchanged from before --
+:func:`_parse_response` still swallows JSON errors, so a single malformed
+batch is just absent from the glossary rather than fatal.
 """
 
 import json
 import logging
 import uuid
+from collections.abc import Callable
+from typing import Any, cast
 
 from openai import OpenAI
 from sqlalchemy import Row
@@ -16,6 +26,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import AstSymbol, File, GlossaryEntry, Repository
+from app.services._concurrency import gather_in_order
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +90,7 @@ def _parse_response(text: str) -> dict[str, str]:
         parsed = json.loads(clean)
         return {item["name"]: item["definition"] for item in parsed}
     except json.JSONDecodeError as e:
-        logger.error(
-            f"[glossary] Failed to parse LLM response: {e}\nRaw: {clean[:200]}"
-        )
+        logger.error(f"[glossary] Failed to parse LLM response: {e}\nRaw: {clean[:200]}")
         return {}
 
 
@@ -117,24 +126,38 @@ def build_glossary(db: Session, repo: Repository) -> int:
 
     all_definitions: dict[str, str] = {}
 
-    for i in range(0, len(pairs), BATCH_SIZE):
-        batch = pairs[i : i + BATCH_SIZE]
-        prompt = _build_prompt(batch)
+    # Build the prompts up front so the pool's workers carry no per-batch
+    # closure over the ORM rows. The ``client`` is built once above and
+    # shared across threads (``httpx.Client`` is thread-safe).
+    batches: list[list[Row[tuple[AstSymbol, File]]]] = [
+        pairs[i : i + BATCH_SIZE] for i in range(0, len(pairs), BATCH_SIZE)
+    ]
+    prompts: list[str] = [_build_prompt(batch) for batch in batches]
 
+    responses = gather_in_order(
+        [
+            cast(
+                Callable[[], Any],
+                (
+                    lambda p=prompt: client.responses.create(
+                        model=settings.AI_MODEL,
+                        reasoning={"effort": "minimal"},
+                        input=[{"role": "user", "content": p}],
+                        max_output_tokens=2000,
+                    )
+                ),
+            )
+            for prompt in prompts
+        ],
+        label="glossary",
+    )
+
+    for batch_idx, response in enumerate(responses):
         # Small batches keep prompts/responses within token limits; a failed
         # or malformed batch just yields fewer definitions, not a total loss.
-        response = client.responses.create(
-            model=settings.AI_MODEL,
-            reasoning={"effort": "minimal"},
-            input=[{"role": "user", "content": prompt}],
-            max_output_tokens=2000,
-        )
-
         definitions = _parse_response(response.output_text or "")
         all_definitions.update(definitions)
-        logger.info(
-            f"[glossary] Batch {i // BATCH_SIZE + 1} done ({len(definitions)} definitions)"
-        )
+        logger.info(f"[glossary] Batch {batch_idx + 1} done ({len(definitions)} definitions)")
 
     # Rebuild a lowercase lookup per pair rather than once — cheap here, but
     # matching is case-insensitive because the LLM may alter capitalization.

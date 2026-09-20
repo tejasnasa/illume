@@ -5,12 +5,11 @@ declaration; this module is the second pass that attaches the prose a
 declaration is documented by (a Python docstring for ``def``/``class``, a
 preceding JSDoc or ``//`` comment run for JS/TS/Go/etc.).
 
-Why a separate module. The four language-specific traps the Phase C plan
-calls out (``decorated_definition`` has no ``body``, Python's one-line
-docstring makes ``block`` itself a string, line gaps are not validity
-tests, ``export_statement`` is a wrapper) all live on tree-sitter node
-introspection and would otherwise bulk up ``parser.py`` past the point
-where the rest of the pipeline can be read at a glance.
+Why a separate module. The four language-specific traps (``decorated_definition``
+has no ``body``, Python's one-line docstring makes ``block`` itself a string,
+line gaps are not validity tests, ``export_statement`` is a wrapper) all live on
+tree-sitter node introspection and would otherwise bulk up ``parser.py`` past
+the point where the rest of the pipeline can be read at a glance.
 
 Public entry point: :func:`extract_docstring`. Everything else is module
 private -- callers do not need the marker stripper or the Python-vs-comment

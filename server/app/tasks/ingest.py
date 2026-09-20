@@ -1,8 +1,10 @@
 import json
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from uuid import UUID
 
 from app.core.celery import celery
 from app.core.database import get_sync_db
@@ -12,10 +14,12 @@ from app.services.architecture_brief import generate_brief
 from app.services.cloner import cleanup_clone, clone_repository
 from app.services.criticality import run_criticality_scoring
 from app.services.git_analyzer import analyze_git_history
-from app.services.glossary_builder import build_glossary
-from app.services.onboarding import build_reading_order
-from app.services.pr_fetcher import fetch_pull_requests
 from app.services.scanner import embed_repository_symbols, process_repository_files
+from app.tasks._parallel import (
+    run_glossary_in_thread,
+    run_pr_fetch_in_thread,
+    run_reading_order_in_thread,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,16 +79,31 @@ def ingest_repository(
                 db, redis_client, repo, access_token, branch=branch, commit_sha=commit_sha
             )
 
+            # Capture the only two fields the parallel threads need; this
+            # is what stops them from reaching back into the main session's
+            # identity map (a stale-instance hazard if
+            # ``expire_on_commit=False`` were ever flipped on).
+            repo_id_value: UUID = repo.id
+            repo_github_url: str = repo.github_url
+
             repo.ingested_branch = actual_branch
             repo.ingested_commit_sha = actual_sha
             db.commit()
 
+            pr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest-pr")
+            pr_future = pr_executor.submit(
+                run_pr_fetch_in_thread,
+                repo_id_value,
+                repo_github_url,
+                access_token,
+                redis_client,
+            )
+
+            readme_content = None
             try:
                 process_repository_files(db, redis_client, repo, tmp_dir)
                 analyze_git_history(db, redis_client, repo, tmp_dir)
-                fetch_pull_requests(repo, access_token, db, redis_client)
 
-                readme_content = None
                 for name in ("README.md", "readme.md", "Readme.md"):
                     readme_path = os.path.join(tmp_dir, name)
                     if os.path.exists(readme_path):
@@ -94,14 +113,28 @@ def ingest_repository(
             finally:
                 cleanup_clone(tmp_dir)
 
+            try:
+                pr_future.result()
+            finally:
+                pr_executor.shutdown(wait=True)
+
             publish("criticality_started", "Scoring file criticality...")
             run_criticality_scoring(db, repo.id)
-
+            
             publish("glossary_started", "Building project glossary...")
-            build_glossary(db, repo)
-
             publish("reading_order_started", "Generating recommended reading order...")
-            build_reading_order(db, repo)
+            parallel_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ingest-llm")
+            try:
+                glossary_future = parallel_executor.submit(
+                    run_glossary_in_thread, repo_id_value, repo_github_url
+                )
+                reading_order_future = parallel_executor.submit(
+                    run_reading_order_in_thread, repo_id_value, repo_github_url
+                )
+                glossary_future.result()
+                reading_order_future.result()
+            finally:
+                parallel_executor.shutdown(wait=True)
 
             embed_repository_symbols(db, redis_client, repo, readme_content=readme_content)
 

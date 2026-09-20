@@ -133,7 +133,12 @@ def stubbed(monkeypatch, clone_root, tmp_path):
         return destination, "main", "a" * 40
 
     monkeypatch.setattr(ingest_module, "clone_repository", fake_clone)
-    monkeypatch.setattr(ingest_module, "fetch_pull_requests", lambda *a, **k: None)
+    # ``fetch_pull_requests`` is imported by the parallel helper, not by
+    # ``ingest`` itself; patching the helper's namespace is what makes
+    # the ingest thread run a no-op instead of hitting the network.
+    from app.tasks import _parallel as parallel_module
+
+    monkeypatch.setattr(parallel_module, "fetch_pull_requests", lambda *a, **k: None)
 
     fake_openai = openai_stub.install(monkeypatch)
     return fake_openai

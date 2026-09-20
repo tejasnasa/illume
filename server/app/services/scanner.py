@@ -7,7 +7,7 @@ longer invoked here -- ``ingest_repository`` calls ``run_criticality_scoring``
 once git history has populated the columns it depends on
 (``git_last_modified``, ``has_tests``).
 
-Memory shape (Phase B): rather than committing every file individually -- which
+Memory shape: rather than committing every file individually -- which
 keeps one ORM instance per pending row in the session's identity map -- the loop
 collects *plain dict rows* and emits them in batches via
 ``db.execute(insert(...))``. Each batch is committed before the next is built,

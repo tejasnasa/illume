@@ -4,25 +4,33 @@ Builds a suggested file reading order for a repository using a tiered
 topological sort of its dependency graph, enriches it with LLM-generated
 "why read this" annotations, and persists the result on an OnboardingGuide.
 
-Memory shape (Phase D): UUIDs are mapped to dense integers once on first
+Memory shape: UUIDs are mapped to dense integers once on first
 sight, the adjacency map holds ``set[int]`` instead of ``set[UUID]``, and
 the dependency-edge query is streamed (``yield_per``) so the E-tuple list
 never materialises alongside the two adjacency maps. The previous code
 held all three representations at once -- which was the OOM on large
 repos.
 
-Determinism (Phase D): within a tier, files are sorted by
+Determinism: within a tier, files are sorted by
 ``(-fan_in, path)`` rather than the file object's natural order, so the
 reading order is reproducible across runs and across machines. ``set``
 iteration order in Python is otherwise unspecified and would surface as a
 different click-through tour on the frontend without this.
+
+Concurrency: the per-file LLM annotation batches run on a
+bounded thread pool (see :mod:`app.services._concurrency`). The
+"failures skip the batch silently" contract is unchanged -- a worker
+exception is logged and dropped, and the file is left with an empty
+annotation string. Other batches' responses are still collected and
+merged into the final guide on the parent thread.
 """
 
 import json
 import logging
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import openai
@@ -31,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models import File, OnboardingGuide, Repository
+from app.services._concurrency import gather_in_order
 from app.services.file_graph import build_int_adjacency, iter_file_edges
 
 logger = logging.getLogger(__name__)
@@ -190,11 +199,17 @@ def _annotate_files(
     """Request LLM annotations in batches; failures skip the batch silently.
 
     The language lookup is supplied by the caller because the trimmed
-    stored payload (Phase D) no longer carries ``language`` per item --
+    stored payload no longer carries ``language`` per item --
     only the columns that are actually consumed downstream.
+
+    Batches run in parallel through
+    :func:`app.services._concurrency.gather_in_order`. Each worker
+    returns the parsed annotation dict for its batch (or ``None`` on a
+    failure), and the parent thread merges them. A worker exception is
+    captured and converted into ``None`` so the "failures skip the
+    batch silently" contract survives the threading layer.
     """
     client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
-    annotations: dict[str, str] = {}
 
     to_annotate = ordered_files[:MAX_ANNOTATED_FILES]
     # Carry the language through so the prompt can still mention it
@@ -203,10 +218,16 @@ def _annotate_files(
         {**item, "language": language_by_path.get(item["path"])} for item in to_annotate
     ]
 
-    for i in range(0, len(annotated_batch_input), ANNOTATION_BATCH_SIZE):
-        batch = annotated_batch_input[i : i + ANNOTATION_BATCH_SIZE]
-        prompt = _build_annotation_prompt(batch)
+    if not annotated_batch_input:
+        return {}
 
+    batches = [
+        annotated_batch_input[i : i + ANNOTATION_BATCH_SIZE]
+        for i in range(0, len(annotated_batch_input), ANNOTATION_BATCH_SIZE)
+    ]
+
+    def _request(batch: list[dict[str, Any]]) -> dict[str, str] | None:
+        prompt = _build_annotation_prompt(batch)
         try:
             response = client.responses.create(
                 model=settings.AI_MODEL,
@@ -214,27 +235,45 @@ def _annotate_files(
                 input=[{"role": "user", "content": prompt}],
                 max_output_tokens=1000,
             )
-            raw = response.output_text or "[]"
-            raw = raw.strip()
-            # Strip markdown fences even though the prompt forbids them;
-            # models add them often enough that parsing would otherwise fail.
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-            parsed: list[dict] = json.loads(raw)
-            for entry in parsed:
-                path = entry.get("file_path", "")
-                annotation = entry.get("annotation", "")
-                if path and annotation:
-                    annotations[path] = annotation
         except Exception as exc:
-            logger.error(
-                "reading_order: LLM annotation failed for batch %d-%d: %s",
-                i,
-                i + ANNOTATION_BATCH_SIZE,
-                exc,
+            logger.error("reading_order: LLM annotation call failed: %s", exc)
+            return None
+
+        raw = (response.output_text or "[]").strip()
+        # Strip markdown fences even though the prompt forbids them;
+        # models add them often enough that parsing would otherwise fail.
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        try:
+            parsed: list[dict] = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            logger.error("reading_order: LLM annotation JSON parse failed: %s", exc)
+            return None
+        return {
+            entry["file_path"]: entry["annotation"]
+            for entry in parsed
+            if entry.get("file_path") and entry.get("annotation")
+        }
+
+    results = gather_in_order(
+        [cast(Callable[[], Any], (lambda b=batch: _request(b))) for batch in batches],
+        label="annotate",
+    )
+
+    annotations: dict[str, str] = {}
+    for batch_idx, batch_annotations in enumerate(results):
+        if batch_annotations is None:
+            # The worker logged the underlying exception; mark the batch
+            # so the operator can correlate.
+            logger.warning(
+                "reading_order: skipped annotation batch %d-%d",
+                batch_idx * ANNOTATION_BATCH_SIZE,
+                (batch_idx + 1) * ANNOTATION_BATCH_SIZE,
             )
+            continue
+        annotations.update(batch_annotations)
 
     return annotations
 

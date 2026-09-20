@@ -20,6 +20,8 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import threading
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -79,27 +81,39 @@ class _EmbeddingResponse:
 class _Responses:
     def __init__(self, owner: FakeOpenAI):
         self._owner = owner
+        self._inflight = 0
+        self._lock = threading.Lock()
 
     def create(self, *, model=None, input=None, **kwargs) -> _TextResponse:
         self._owner.calls.append({"kind": "responses", "model": model, "input": input})
-        prompt = _flatten_prompt(input)
-        return _TextResponse(output_text=self._owner.answer_for(prompt))
+        with self._lock:
+            self._inflight += 1
+            self._owner._record_in_flight(self._inflight)
+        try:
+            return self._owner._busy_section("responses", model, input)
+        finally:
+            with self._lock:
+                self._inflight -= 1
 
 
 class _Embeddings:
     def __init__(self, owner: FakeOpenAI):
         self._owner = owner
+        self._inflight = 0
+        self._lock = threading.Lock()
 
     def create(self, *, model=None, input=None, **kwargs) -> _EmbeddingResponse:
         texts = input if isinstance(input, list) else [input]
         self._owner.calls.append({"kind": "embeddings", "model": model, "count": len(texts)})
         self._owner.embedded_texts.extend(texts)
-        return _EmbeddingResponse(
-            data=[
-                _EmbeddingItem(embedding=deterministic_vector(text), index=index)
-                for index, text in enumerate(texts)
-            ]
-        )
+        with self._lock:
+            self._inflight += 1
+            self._owner._record_in_flight(self._inflight)
+        try:
+            return self._owner._busy_section("embeddings", model, input)
+        finally:
+            with self._lock:
+                self._inflight -= 1
 
 
 class FakeOpenAI:
@@ -110,6 +124,46 @@ class FakeOpenAI:
         self.embedded_texts: list[str] = []
         self.responses = _Responses(self)
         self.embeddings = _Embeddings(self)
+        # Optional per-call sleep before returning the canned answer.
+        # Parallelism tests set this to a non-trivial value so the
+        # bounded thread pool has observable overlap.
+        self.delay_s: float = 0.0
+        # ``in_flight_log`` records the count of responses-create and
+        # embeddings-create calls that have started but not finished -- a
+        # snapshot taken right after entering the call and again right
+        # before returning. Tests assert the maximum in-flight never
+        # exceeds ``LLM_MAX_WORKERS`` and was > 1 at least once.
+        self.in_flight_log: list[int] = []
+        self._call_lock = threading.Lock()
+
+    def _record_in_flight(self, value: int) -> None:
+        self._call_lock.acquire()
+        try:
+            self.in_flight_log.append(value)
+        finally:
+            self._call_lock.release()
+
+    def _busy_section(self, kind: str, model, input_payload):
+        """Run the canned response inside a busy-wait tracked region.
+
+        The ``delay_s`` sleep lives inside the in-flight region so the
+        concurrency bound is observable: without a delay, single-threaded
+        callers would race through the pool so fast that any pool size
+        passes the bound test trivially.
+        """
+        if self.delay_s > 0:
+            time.sleep(self.delay_s)
+        if kind == "responses":
+            prompt = _flatten_prompt(input_payload)
+            return _TextResponse(output_text=self.answer_for(prompt))
+        # embeddings
+        texts = input_payload if isinstance(input_payload, list) else [input_payload]
+        return _EmbeddingResponse(
+            data=[
+                _EmbeddingItem(embedding=deterministic_vector(text), index=index)
+                for index, text in enumerate(texts)
+            ]
+        )
 
     def answer_for(self, prompt: str) -> str:
         """Route a prompt to the shape of answer it is asking for."""
