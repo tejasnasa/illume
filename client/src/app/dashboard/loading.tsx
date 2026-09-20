@@ -1,8 +1,12 @@
 /**
  * Skeleton fallback for the dashboard route.
+ *
+ * The real page renders its own <Navbar />; rendering one here as well leaves
+ * two identical <img alt="User Avatar"> in the DOM while the async server
+ * component resolves, which Playwright's getByAltText strict mode rejects.
+ * Skeleton-only -- no Navbar, no user actions.
  * @module DashboardLoading
  */
-import Navbar from "@/components/Navbar";
 import Skeleton from "@/components/ui/Skeleton";
 import {
   ArrowRightIcon,
@@ -18,8 +22,6 @@ import {
 export default function LoadingDashboard() {
   return (
     <div className="min-h-screen text-(--muted-foreground)">
-      <Navbar />
-
       <main className="max-w-7xl mx-auto px-6 py-24">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
           <div>

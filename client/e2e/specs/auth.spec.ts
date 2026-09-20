@@ -109,6 +109,11 @@ test.describe("a signed-in user", () => {
     // what this asserts.
     await page.goto("/dashboard");
 
+    // The dashboard renders a Suspense fallback while its async server component
+    // resolves. The fallback itself must not render <Navbar /> (it does not), but
+    // the swap is not synchronised with goto returning, so wait for exactly one
+    // avatar before clicking -- Playwright's getByAltText runs in strict mode.
+    await expect(page.getByAltText("User Avatar")).toHaveCount(1);
     await page.getByAltText("User Avatar").click();
     await page.getByRole("button", { name: "Logout" }).click();
 
