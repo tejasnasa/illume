@@ -294,6 +294,7 @@ def embed_repository_symbols(
     redis_client,
     repo: Repository,
     readme_content: str | None = None,
+    measure_memory: bool = True,
 ) -> int:
     """Generate vector embeddings for a repository's indexed symbols.
 
@@ -303,6 +304,12 @@ def embed_repository_symbols(
         repo: Repository record whose symbols should be embedded.
         readme_content: Optional README text included as extra context for
             embedding generation.
+        measure_memory: Passed through to the ``generate_embeddings`` stage
+            timer. Set False when the caller runs this concurrently with
+            another stage -- ``tracemalloc`` and ``VmHWM`` are process-global,
+            so the peak delta would cover the other thread's allocations too.
+            Callers that need a clean per-stage memory number for the embedder
+            must run it unoverlapped.
 
     Returns:
         Number of embedding vectors stored.
@@ -319,7 +326,7 @@ def embed_repository_symbols(
         """Forward embedder messages to the repo's log stream."""
         publish_log(redis_client, str(repo.id), "embedding_progress", msg)
 
-    with stage("generate_embeddings"):
+    with stage("generate_embeddings", measure_memory=measure_memory):
         count = generate_embeddings(
             repository_id=repo.id,
             db=db,

@@ -10,12 +10,13 @@ from app.core.celery import celery
 from app.core.database import get_sync_db
 from app.core.redis import get_sync_redis
 from app.models.repository import Repository
-from app.services.architecture_brief import generate_brief
+from app.services._stage_timer import stage
 from app.services.cloner import cleanup_clone, clone_repository
 from app.services.criticality import run_criticality_scoring
 from app.services.git_analyzer import analyze_git_history
 from app.services.scanner import embed_repository_symbols, process_repository_files
 from app.tasks._parallel import (
+    run_brief_in_thread,
     run_glossary_in_thread,
     run_pr_fetch_in_thread,
     run_reading_order_in_thread,
@@ -75,9 +76,15 @@ def ingest_repository(
             if not repo:
                 raise ValueError(f"Repository {repo_id} not found")
 
-            tmp_dir, actual_branch, actual_sha = clone_repository(
-                db, redis_client, repo, access_token, branch=branch, commit_sha=commit_sha
-            )
+            with stage("clone"):
+                tmp_dir, actual_branch, actual_sha = clone_repository(
+                    db,
+                    redis_client,
+                    repo,
+                    access_token,
+                    branch=branch,
+                    commit_sha=commit_sha,
+                )
 
             # Capture the only two fields the parallel threads need; this
             # is what stops them from reaching back into the main session's
@@ -101,8 +108,13 @@ def ingest_repository(
 
             readme_content = None
             try:
+                # ``process_repository_files`` carries its own per-stage timers
+                # (parse / resolve_dependencies / compute_fan_metrics /
+                # detect_stack), so it is deliberately not wrapped again here --
+                # a nesting timer would double-count their memory deltas.
                 process_repository_files(db, redis_client, repo, tmp_dir)
-                analyze_git_history(db, redis_client, repo, tmp_dir)
+                with stage("git_history"):
+                    analyze_git_history(db, redis_client, repo, tmp_dir)
 
                 for name in ("README.md", "readme.md", "Readme.md"):
                     readme_path = os.path.join(tmp_dir, name)
@@ -119,8 +131,9 @@ def ingest_repository(
                 pr_executor.shutdown(wait=True)
 
             publish("criticality_started", "Scoring file criticality...")
-            run_criticality_scoring(db, repo.id)
-            
+            with stage("criticality"):
+                run_criticality_scoring(db, repo.id)
+
             publish("glossary_started", "Building project glossary...")
             publish("reading_order_started", "Generating recommended reading order...")
             parallel_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ingest-llm")
@@ -131,15 +144,37 @@ def ingest_repository(
                 reading_order_future = parallel_executor.submit(
                     run_reading_order_in_thread, repo_id_value, repo_github_url
                 )
-                glossary_future.result()
-                reading_order_future.result()
+                # Wall-clock for the overlapped pair. Comparing it against the
+                # two helpers' individual walls shows whether the overlap paid
+                # off: the pair should land near max(glossary, reading_order),
+                # not their sum.
+                with stage("glossary_and_reading_order_join", measure_memory=False):
+                    glossary_future.result()
+                    reading_order_future.result()
             finally:
                 parallel_executor.shutdown(wait=True)
 
-            embed_repository_symbols(db, redis_client, repo, readme_content=readme_content)
-
+            publish("embedding_started", "Generating embeddings...")
             publish("brief_started", "Synthesizing AI architecture brief...")
-            generate_brief(db, repo, readme_content=readme_content)
+            brief_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest-brief")
+            try:
+                brief_future = brief_executor.submit(
+                    run_brief_in_thread, repo_id_value, readme_content
+                )
+                with stage("embed_and_brief_join", measure_memory=False):
+                    embed_repository_symbols(
+                        db,
+                        redis_client,
+                        repo,
+                        readme_content=readme_content,
+                        measure_memory=False,
+                    )
+                    # Joined before ``status = "ready"`` so a brief failure
+                    # still fails the ingest, exactly as it did when the call
+                    # was sequential.
+                    brief_future.result()
+            finally:
+                brief_executor.shutdown(wait=True)
 
             repo.status = "ready"
             db.commit()

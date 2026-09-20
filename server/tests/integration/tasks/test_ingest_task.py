@@ -794,6 +794,35 @@ class TestFailurePathLeavesRepoFailed:
 
         assert status_of(pipeline_repo) == "failed"
 
+    def test_a_brief_failure_marks_the_repository_failed(
+        self, pipeline_repo, monkeypatch, stubbed
+    ):
+        """
+        The architecture brief runs in its own thread, overlapped with the
+        embedder, so its exception surfaces through ``future.result()``
+        rather than a direct call. The task must still fail.
+
+        The failure mode this pins is a swallowed future: if the join were
+        dropped, or its exception logged and discarded, the ingest would
+        reach ``status = "ready"`` with no architecture brief and no error --
+        a repository that looks complete and silently is not. Asserting on
+        the status rather than the row is deliberate, because the brief's own
+        writes land on its own session and would be absent in either case.
+        """
+        from app.tasks import _parallel as parallel_module
+
+        def _explode_brief(*args, **kwargs):
+            raise RuntimeError("simulated brief failure")
+
+        # Patched where ``_parallel`` imported it, not on the service module:
+        # the helper holds its own bound reference.
+        monkeypatch.setattr(parallel_module, "generate_brief", _explode_brief)
+
+        result = run_task(pipeline_repo)
+
+        assert status_of(pipeline_repo) == "failed"
+        assert result.failed(), "a swallowed brief exception would leave the task successful"
+
     def test_a_failed_run_does_not_poison_the_session(self, pipeline_repo, monkeypatch, stubbed):
         """
         After a failed ingestion a subsequent run of the same repository must
