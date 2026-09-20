@@ -196,6 +196,65 @@ def enormous() -> int:
 {_OVERSIZED_BODY}
     return 0
 ''',
+    # Phase C fixtures. Every declaration here has a docstring, except for
+    # the two negatives (`with_license.py`, `far_comment.py`) where the
+    # preceding comment must *not* be attached to the function.
+    "src/docstrings.py": '''"""Module doc for the docstrings fixture."""
+
+
+@staticmethod
+def static_helper() -> int:
+    """A decorated helper. Tests that the decorator wrapper is unwrapped before the body is read."""
+    return 1
+
+
+def one_liner() -> str:
+    "A one-line docstring."
+    return "ok"
+
+
+class Greeter:
+    """A class that says hello. Tests that the class body's first string is captured."""
+
+    def greet(self, name: str) -> str:
+        """Build a greeting. Tests that a method inside a class is captured."""
+        return f"hello {name}"
+''',
+    "web/jsdoc.ts": """/** Render a title in title case. */
+export function titleCaseDoc(value: string): string {
+  return value.replace(/\\b\\w/g, (c) => c.toUpperCase());
+}
+
+// Build a URL from the endpoint.
+// Validates the path first.
+export const buildEndpoint = (path: string): string => `/api${path}`;
+
+/** The documented client. */
+export class DocumentedClient {
+  ping(): string {
+    return "pong";
+  }
+}
+""",
+    # Negative: a license header at the top of the file. The function below
+    # has its own docstring so the suite can confirm the header was dropped
+    # rather than attached to the function.
+    "src/with_license.py": '''# @license MIT
+# Copyright 2024 Example Corp
+
+
+def real_one() -> int:
+    """This is the function's actual docstring, not the license."""
+    return 1
+''',
+    # Negative: a TODO separated by two blank lines from the function.
+    # Tests the line-gap rule from the Phase C plan.
+    "src/far_comment.py": """# TODO: rewrite later.
+
+
+def without_docstring() -> int:
+    return 1
+""",
 }
 
 # Committed second, to create a one-sided rename: `src/nested.py` becomes

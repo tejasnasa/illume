@@ -13,6 +13,8 @@ from typing import cast
 
 from tree_sitter_language_pack import SupportedLanguage, get_parser
 
+from app.services.docstrings import extract_docstring as _extract_docstring
+
 logger = logging.getLogger(__name__)
 
 # Maps file extensions to tree-sitter language identifiers.
@@ -146,7 +148,14 @@ def _class_body(node):
 
 @dataclass
 class ParsedSymbol:
-    """A single extracted symbol (function, class, method, or import)."""
+    """A single extracted symbol (function, class, method, or import).
+
+    ``docstring`` is the comment or string literal immediately preceding (or, in
+    Python, immediately inside) the declaration, normalised to its plain text.
+    It is ``None`` for imports and for declarations with no docstring; an empty
+    string means an adjacent comment run was present but stripped to nothing
+    (e.g. only marker lines).
+    """
 
     name: str
     kind: str
@@ -154,6 +163,7 @@ class ParsedSymbol:
     end_line: int
     source_code: str
     cyclomatic_complexity: int = 0
+    docstring: str | None = None
 
 
 @dataclass
@@ -190,9 +200,9 @@ def _extract_name(node, source_bytes: bytes) -> str:
             if child.type == "variable_declarator":
                 for subchild in child.children:
                     if subchild.type == "identifier":
-                        return source_bytes[
-                            subchild.start_byte : subchild.end_byte
-                        ].decode("utf-8", errors="replace")
+                        return source_bytes[subchild.start_byte : subchild.end_byte].decode(
+                            "utf-8", errors="replace"
+                        )
 
     if node.type == "decorated_definition":
         # The decorator wrapper isn't a symbol itself; descend to the
@@ -224,9 +234,9 @@ def _extract_name(node, source_bytes: bytes) -> str:
             if child.type == "from_clause":
                 for subchild in child.children:
                     if subchild.type == "string":
-                        raw = source_bytes[
-                            subchild.start_byte : subchild.end_byte
-                        ].decode("utf-8", errors="replace")
+                        raw = source_bytes[subchild.start_byte : subchild.end_byte].decode(
+                            "utf-8", errors="replace"
+                        )
                         name = raw.strip("\"'`")
                         return name if name else "<anonymous>"
 
@@ -247,9 +257,7 @@ def _extract_name(node, source_bytes: bytes) -> str:
     # name isn't in a named field).
     for child in node.children:
         if child.type in ("identifier", "name"):
-            return source_bytes[child.start_byte : child.end_byte].decode(
-                "utf-8", errors="replace"
-            )
+            return source_bytes[child.start_byte : child.end_byte].decode("utf-8", errors="replace")
 
     return "<anonymous>"
 
@@ -288,9 +296,7 @@ def _count_complexity(node) -> int:
     return count
 
 
-def _parse_source(
-    source_bytes: bytes, file_path: Path, language: str
-) -> ParsedFile | None:
+def _parse_source(source_bytes: bytes, file_path: Path, language: str) -> ParsedFile | None:
     """Parse raw source bytes with tree-sitter and extract symbols.
 
     Args:
@@ -373,12 +379,11 @@ def _parse_source(
         elif actual_node.type in symbol_types:
             kind = symbol_types[actual_node.type]
             name = _extract_name(actual_node, source_bytes)
-            source_code = source_bytes[
-                actual_node.start_byte : actual_node.end_byte
-            ].decode("utf-8", errors="replace")
-            complexity = (
-                _count_complexity(actual_node) if kind in ("function", "method") else 0
+            source_code = source_bytes[actual_node.start_byte : actual_node.end_byte].decode(
+                "utf-8", errors="replace"
             )
+            complexity = _count_complexity(actual_node) if kind in ("function", "method") else 0
+            docstring = _extract_docstring(node, actual_node, source_bytes, language)
 
             symbols.append(
                 ParsedSymbol(
@@ -388,6 +393,7 @@ def _parse_source(
                     end_line=actual_node.end_point[0] + 1,
                     source_code=source_code,
                     cyclomatic_complexity=complexity,
+                    docstring=docstring,
                 )
             )
 
@@ -398,9 +404,7 @@ def _parse_source(
                 # are still not descended, so a nested def inside a method is not
                 # reported as a top-level symbol.
                 body = _class_body(actual_node)
-                nodes_to_visit.extend(
-                    body.children if body is not None else actual_node.children
-                )
+                nodes_to_visit.extend(body.children if body is not None else actual_node.children)
 
     return ParsedFile(
         path=file_path.as_posix(),

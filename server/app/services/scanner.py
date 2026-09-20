@@ -211,6 +211,7 @@ def process_repository_files(
                         "end_line": symbol.end_line,
                         "source_code": symbol.source_code,
                         "cyclomatic_complexity": symbol.cyclomatic_complexity,
+                        "docstring": symbol.docstring,
                     }
                 )
 

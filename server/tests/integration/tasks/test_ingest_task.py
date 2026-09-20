@@ -270,6 +270,73 @@ class TestHappyPath:
         # And the file is still reachable, through its annotated-file chunk.
         assert "src/oversized.py" in embedded_file_paths(pipeline_repo)
 
+    def test_docstrings_are_extracted_end_to_end(self, pipeline_repo, stubbed):
+        """
+        End-to-end confirmation that ``ParsedSymbol.docstring`` survives the
+        scanner's batched insert and lands in the database. The fixture has
+        five positive declarations (decorated function, one-liner,
+        method-in-class, class, ``/** JSDoc */ export function``, JSDoc
+        class, multi-line ``//``-arrow) and two negatives (license header,
+        far-apart ``# TODO``) which the run must surface with ``None``.
+
+        The second half of the test pins the dead read: ``glossary_builder``
+        consumes ``symbol.docstring`` to build its prompt, so a missing
+        column would render the prompt without the ``Docstring:`` line.
+        That is a silent regression the suite would otherwise not catch.
+        """
+        run_task(pipeline_repo)
+
+        docs = docstrings_by_name(pipeline_repo)
+
+        # Positives: every named declaration in the fixture's two docstring
+        # files carries a docstring.
+        assert docs.get("static_helper") == (
+            "A decorated helper. Tests that the decorator wrapper is "
+            "unwrapped before the body is read."
+        )
+        assert docs.get("one_liner") == "A one-line docstring."
+        assert docs.get("Greeter") == (
+            "A class that says hello. Tests that the class body's first string is captured."
+        )
+        assert (
+            docs.get("greet") == "Build a greeting. Tests that a method inside a class is captured."
+        )
+        assert docs.get("titleCaseDoc") == "Render a title in title case."
+        assert (
+            docs.get("buildEndpoint") == "Build a URL from the endpoint.\nValidates the path first."
+        )
+        assert docs.get("DocumentedClient") == "The documented client."
+
+        # Negatives: license header and far-apart TODO are not attached.
+        # The fixture's positive cases in the same files (``real_one`` has
+        # its own real docstring below the license) must still come through.
+        assert docs.get("real_one") == ("This is the function's actual docstring, not the license.")
+        assert docs.get("without_docstring") is None
+
+        # And the dead read: glossary_builder consumes symbol.docstring, so
+        # the prompt it builds must contain the rendered docstring text.
+        from app.models.ast_symbol import AstSymbol
+        from app.models.file import File
+        from app.services.glossary_builder import _build_prompt
+
+        engine, Session = sync_session()
+        session = Session()
+        try:
+            row = (
+                session.query(AstSymbol, File)
+                .join(File, File.id == AstSymbol.file_id)
+                .filter(File.repository_id == pipeline_repo)
+                .filter(AstSymbol.name == "static_helper")
+                .one()
+            )
+            prompt = _build_prompt([row])
+        finally:
+            session.close()
+            engine.dispose()
+
+        assert "A decorated helper." in prompt
+        assert "Docstring:" in prompt
+
     def test_the_commit_history_is_stored(self, pipeline_repo, stubbed):
         run_task(pipeline_repo)
 
@@ -1046,6 +1113,32 @@ def symbol_names(repo_id) -> set[str]:
             for row in s.query(AstSymbol)
             .join(File, File.id == AstSymbol.file_id)
             .filter(File.repository_id == rid)
+        },
+    )
+
+
+def docstrings_by_name(repo_id) -> dict[str, str | None]:
+    """
+    ``(symbol_name, docstring)`` for every function/class/method in the repo.
+
+    Imports are excluded because they have no docstring by design (the
+    parser writes ``None`` for them). The fixture's two negatives
+    (``with_license.py``, ``far_comment.py``) carry a function whose
+    docstring must surface as ``None``.
+    """
+    from app.models.ast_symbol import AstSymbol
+    from app.models.file import File
+
+    return _query(
+        repo_id,
+        lambda s, rid: {
+            row.name: row.docstring
+            for row in (
+                s.query(AstSymbol.name, AstSymbol.docstring)
+                .join(File, File.id == AstSymbol.file_id)
+                .filter(File.repository_id == rid)
+                .filter(AstSymbol.kind.in_(("function", "class", "method")))
+            )
         },
     )
 

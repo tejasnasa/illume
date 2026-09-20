@@ -74,12 +74,22 @@ def _build_chunk_text(
     callers: list[str] | None = None,
     callees: list[str] | None = None,
 ) -> str:
-    """Builds a labeled chunk for a symbol with context metadata."""
+    """Builds a labeled chunk for a symbol with context metadata.
+
+    When both a glossary definition and a docstring are available the
+    glossary definition wins (it is what the LLM wrote to summarise the
+    code, which is the more useful signal for retrieval). When only a
+    docstring is available, it is appended *unless* the docstring text is
+    already in the source -- a naive substring check fails on multi-line
+    docstrings because the raw source carries indentation on continuation
+    lines while the normalised docstring does not, so the comparison runs
+    on whitespace-normalised text on both sides.
+    """
     parts = [f"# {file_path}", f"## {kind}: {name}"]
 
     if glossary_def:
         parts.append(f"Description: {glossary_def}")
-    elif docstring:
+    elif docstring and not _source_already_contains_docstring(source_code, docstring):
         parts.append(f"Docstring: {docstring}")
 
     if callers:
@@ -89,6 +99,22 @@ def _build_chunk_text(
 
     parts.append(source_code)
     return "\n".join(parts)
+
+
+def _source_already_contains_docstring(source_code: str, docstring: str) -> bool:
+    """Return True if the docstring text is already embedded in the source.
+
+    Whitespace-normalising both sides is what makes the check robust on
+    multi-line docstrings: the raw source carries the indent, the
+    normalised docstring does not, and a plain substring comparison fails
+    in exactly that case -- which is the long-docstring case where the
+    duplicate-text cost is highest.
+    """
+    normalised_source = re.sub(r"\s+", " ", source_code)
+    normalised_doc = re.sub(r"\s+", " ", docstring).strip()
+    if not normalised_doc:
+        return False
+    return normalised_doc in normalised_source
 
 
 def _build_commit_chunk(commit: Commit) -> str:
