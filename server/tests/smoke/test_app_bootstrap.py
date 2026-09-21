@@ -18,7 +18,9 @@ pytestmark = pytest.mark.smoke
 
 # Endpoints mounted under /api/v1. Deliberate tripwire: update when a route is added
 # or removed so that an accidental drop shows up as a failing test, not a silent gap.
-EXPECTED_API_ROUTE_COUNT = 27
+# 27 -> 29 with the auto-update PATCH and the sync-now POST under
+# ``/api/v1/repository/{repo_id}/...``.
+EXPECTED_API_ROUTE_COUNT = 29
 
 EXPECTED_TAGS = {
     "auth",

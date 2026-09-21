@@ -189,13 +189,13 @@ def _run_pipeline(
                 # Same shape as the real task wrapper -- a JSON payload
                 # carrying event, message and timestamp. Stored as a dict
                 # so the test can introspect the frame without parsing.
-                from datetime import timezone
+                from datetime import UTC
 
                 redis_client.frames.append(
                     {
                         "event": event,
                         "message": message,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         **kwargs,
                     }
                 )
