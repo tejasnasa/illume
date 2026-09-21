@@ -117,7 +117,7 @@ def _read_marker(repo_id: uuid.UUID | str) -> dict | None:
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         return None
 
 
@@ -457,7 +457,7 @@ def _git_active_branch(repo_dir: Path) -> str:
     """The branch name the working tree is on, or ``'detached'``."""
     try:
         return git.Repo(repo_dir).active_branch.name
-    except git.InvalidGitRepositoryError, TypeError:
+    except (git.InvalidGitRepositoryError, TypeError):
         return "detached"
 
 

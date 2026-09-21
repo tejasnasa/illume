@@ -17,8 +17,11 @@ symbols batch can reference its files without a round-trip to read back their
 server-assigned ids.
 """
 
+from __future__ import annotations
+
 import logging
 import uuid
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal
 
@@ -33,9 +36,9 @@ from app.services.embedder import generate_embeddings
 from app.services.parser import parse_file
 from app.services.stack_detector import (
     SKIP_DIRS,
-    SOURCE_EXTENSIONS,
     detect_entry_points,
     detect_stack,
+    is_scannable,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,7 +83,10 @@ def walk_source_files(repo_root: Path) -> list[Path]:
     """Recursively collect source files under ``repo_root``.
 
     Skips vendored/generated directories (see ``SKIP_DIRS``) and keeps only
-    files whose extension is in ``SOURCE_EXTENSIONS``.
+    files whose extension is in ``SOURCE_EXTENSIONS``. The predicate
+    :func:`app.services.stack_detector.is_scannable` is the single source
+    of truth -- both this walk and the incremental delta consult it, so a
+    change to one is automatically picked up by the other.
 
     Args:
         repo_root: Root directory of the cloned repository.
@@ -98,7 +104,13 @@ def walk_source_files(repo_root: Path) -> list[Path]:
 
         for filename in files:
             filepath = Path(root) / filename
-            if filepath.suffix in SOURCE_EXTENSIONS:
+            try:
+                relative = filepath.relative_to(repo_root).as_posix()
+            except ValueError:
+                # ``walk`` only descends into ``repo_root``; this branch is
+                # defensive against a symlink that escapes it.
+                continue
+            if is_scannable(relative):
                 source_files.append(filepath)
 
     return source_files
@@ -304,6 +316,300 @@ def process_repository_files(
     )
 
     return processed
+
+
+def apply_file_delta(
+    db: Session,
+    repository_id: uuid.UUID,
+    repo_root: Path,
+    paths: Iterable[str],
+) -> tuple[int, int, int]:
+    """Apply one git diff's worth of file changes to the database.
+
+    The unit of incremental work: one call per sync. ``paths`` is the set
+    of repo-relative paths ``git diff --name-status -M`` produced (after
+    renames have been normalised to their post-rename target). For each
+    path the caller has already classified as one of ``{"A", "M", "R"}``
+    or ``"D"``, the function either upserts the row or deletes it.
+
+    Insertion (A/M/R): the row is upserted by ``(repository_id, path)``
+    on the ``uq_file_repo_path`` unique constraint. Every derived column
+    is rewritten -- language, loc, path -- so the post-write row is
+    indistinguishable from a fresh insert regardless of what the prior
+    row looked like. Symbols belonging to the file are deleted first
+    (cascade clears their embeddings and dependency edges), then the
+    new ones are inserted.
+
+    Deletion (D): the row goes. Cascade clears every symbol, dependency
+    edge, code-owner row and file-scoped embedding.
+
+    Failure mode: ``parse_file`` returning ``None`` (unparseable /
+    unsupported) and ``(repo_root / path).is_file()`` returning ``False``
+    (submodule pointer rendered as ``M`` on a directory, file moved away)
+    both fall through to the delete branch -- the same transaction
+    deletes the row rather than leaving a symbol-less orphan behind.
+
+    Args:
+        db: Session used for all persistence; the caller controls the
+            transaction. The function does not commit -- the sync task
+            holds Txn 1 across all of Step A.
+        repository_id: ID of the repository whose rows are being mutated.
+        repo_root: Filesystem root of the (already-reset) working tree.
+        paths: Iterable of repo-relative paths to upsert/delete. Empty
+            iterables are valid: nothing to do, both return values are 0.
+
+    Returns:
+        Tuple of ``(upserted, deleted, changed)`` where ``changed`` is
+        the union of the two -- the size of the work performed, used by
+        the delta engine to decide whether to escalate to a full rebuild.
+    """
+    upserted = 0
+    deleted = 0
+
+    for raw_path in paths:
+        path = raw_path.replace("\\", "/")
+        file_on_disk = repo_root / path
+        # ``is_scannable`` filters to extensions we know how to parse; a
+        # ``.png`` in the diff is not a parseable source file, so it is
+        # neither upserted nor deleted -- the absence in the database is
+        # the right state. ``parse_file`` is the more authoritative check
+        # for files that *look* parseable, so a previously-parseable file
+        # that became unparseable still goes through the delete branch.
+        should_have = file_on_disk.is_file() and is_scannable(path)
+
+        if should_have:
+            parsed = parse_file(file_on_disk)
+            if parsed is None:
+                should_have = False
+
+        if not should_have:
+            deleted += _delete_file_row(db, repository_id, path)
+            continue
+
+        # Cascade-clear the file's prior symbols + their edges before
+        # re-inserting. The dependency resolver rebuilds whole-repo
+        # afterwards, so a per-file delete is enough to clear the
+        # outgoing edges the resolver will rebuild anyway. Incoming
+        # edges from unchanged importers are not destroyed by this
+        # delete -- the ``Dependency.source_symbol_id`` cascade reaches
+        # *outgoing* edges only -- which is precisely why the whole-repo
+        # re-resolve is the right follow-up.
+        _delete_file_row(db, repository_id, path)
+
+        new_file_id = uuid.uuid4()
+        db.execute(
+            pg_insert(File)
+            .values(
+                {
+                    "id": new_file_id,
+                    "repository_id": repository_id,
+                    "path": path,
+                    "language": parsed.language,
+                    "loc": parsed.loc,
+                }
+            )
+            .on_conflict_do_update(
+                index_elements=["repository_id", "path"],
+                set_={
+                    "language": parsed.language,
+                    "loc": parsed.loc,
+                    "path": path,
+                },
+            )
+        )
+        if parsed.symbols:
+            db.execute(
+                pg_insert(AstSymbol).values(
+                    [
+                        {
+                            "file_id": new_file_id,
+                            "kind": symbol.kind,
+                            "name": symbol.name,
+                            "start_line": symbol.start_line,
+                            "end_line": symbol.end_line,
+                            "source_code": symbol.source_code,
+                            "cyclomatic_complexity": symbol.cyclomatic_complexity,
+                            "docstring": symbol.docstring,
+                        }
+                        for symbol in parsed.symbols
+                    ]
+                )
+            )
+        upserted += 1
+
+    return upserted, deleted, upserted + deleted
+
+
+def _delete_file_row(db: Session, repository_id: uuid.UUID, path: str) -> int:
+    """Delete the ``File`` row for ``(repository_id, path)``; return 1 if it existed.
+
+    Returns 0 when the row was already absent -- the common case for a
+    branch switch that lands on a tree where the path is new. The CASCADE
+    on ``ast_symbols.file_id`` clears the row's symbols and the symbols'
+    outgoing ``Dependency`` rows in one statement.
+    """
+    result = (
+        db.query(File)
+        .filter(File.repository_id == repository_id, File.path == path)
+        .delete(synchronize_session=False)
+    )
+    return 1 if result else 0
+
+
+def compute_delta(
+    repo_root: Path,
+    old_sha: str,
+    new_sha: str,
+) -> list[tuple[str, str]]:
+    """Return ``[(status, path)]`` for files changed between two SHAs.
+
+    Runs ``git diff --name-status -M <old> <new>`` against the working
+    tree. The ``-M`` flag picks up renames; ``status`` is one of
+    ``{A, M, D, R, ...}`` per git's convention. Returns an empty list
+    when the two SHAs agree, which the caller turns into the
+    short-circuit path (no DB writes, no LLM calls).
+
+    The function does not filter on ``SKIP_DIRS`` -- it returns the full
+    diff. ``is_scannable`` is consulted by :func:`apply_file_delta` and
+    the resolver, so a non-source change (``.png``, ``alembic/``) is a
+    no-op there rather than being elided here. Centralising the filter in
+    one place is what keeps the incremental file set from drifting from
+    the full-walk file set.
+
+    Args:
+        repo_root: Filesystem path to the cloned working tree, already
+            pointing at ``new_sha``.
+        old_sha: Commit SHA the repo's data was last synced against. May
+            be missing or detached -- callers verify reachability.
+        new_sha: Commit SHA the working tree is currently at.
+
+    Returns:
+        List of ``(status, path)`` pairs in git's order, with paths
+        normalised to forward slashes. The pair is what the deltas
+        engine threads through :func:`apply_file_delta`.
+    """
+    import subprocess
+
+    output = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "diff",
+            "--name-status",
+            "-M",
+            old_sha,
+            new_sha,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    ).stdout
+
+    diff: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t", 2)
+        if len(parts) < 2:
+            continue
+        status = parts[0][0]  # ``R100`` -> ``R``
+        # ``R`` rows carry three fields: ``R100``, ``old``, ``new``. We
+        # want the post-rename target -- the resolver keys on it.
+        path = parts[-1]
+        diff.append((status, path.replace("\\", "/")))
+    return diff
+
+
+def is_fast_forward(old_sha: str, new_sha: str, repo_root: Path) -> bool:
+    """Whether ``old_sha`` is an ancestor of ``new_sha`` (or equal to it).
+
+    A fast-forward is the cheap case the delta engine can service
+    surgically. Anything else -- a force-push, a branch switch, a
+    rebase -- is the expensive case that escalates to a full rebuild.
+
+    ``git merge-base --is-ancestor`` exits 0 when the relation holds and
+    1 otherwise. Both SHAs are verified reachable first so a corrupted
+    ``old_sha`` produces a clear error rather than the silent
+    ``bad object`` git would otherwise raise inside the diff.
+    """
+    import subprocess
+
+    for sha in (old_sha, new_sha):
+        subprocess.run(
+            ["git", "-C", str(repo_root), "cat-file", "-e", f"{sha}^{{commit}}"],
+            capture_output=True,
+            timeout=30,
+            check=True,
+        )
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repo_root),
+            "merge-base",
+            "--is-ancestor",
+            old_sha,
+            new_sha,
+        ],
+        capture_output=True,
+        timeout=30,
+    )
+    return result.returncode == 0
+
+
+def should_escalate(
+    diff: list[tuple[str, str]],
+    total_files: int,
+    *,
+    max_files: int,
+    max_ratio: float,
+) -> bool:
+    """Whether a diff is large enough that a full rebuild is cheaper.
+
+    Two thresholds, either of which trips the escalation. The hard cap
+    on changed files is absolute: past ``max_files`` a re-ingest is the
+    only sane option, no matter how small the repository is. The ratio
+    cap is for repositories where a half-the-tree diff has happened; a
+    re-resolution of the whole graph is more work than a clean rebuild.
+
+    The function reads ``total_files`` rather than recomputing it so the
+    caller can decide which count to use (e.g. exclude ``SKIP_DIRS``-only
+    paths the walk would have skipped). Today the caller passes the raw
+    repository file count from the prior ingest.
+    """
+    changed = len(diff)
+    if changed > max_files:
+        return True
+    if total_files > 0 and (changed / total_files) > max_ratio:
+        return True
+    return False
+
+
+def summarise(
+    *,
+    upserted: int,
+    deleted: int,
+    new_sha: str,
+    glossary_added: int = 0,
+    embeddings_added: int = 0,
+) -> dict:
+    """Build the ``last_sync_summary`` JSONB payload the UI surfaces.
+
+    Shape is what the settings panel renders in the status line ("12
+    files changed, 3 commits, updated just now"); the exact keys are
+    pinned by the test that consumes them.
+    """
+    return {
+        "files_upserted": upserted,
+        "files_deleted": deleted,
+        "files_changed": upserted + deleted,
+        "new_commit_sha": new_sha,
+        "glossary_added": glossary_added,
+        "embeddings_added": embeddings_added,
+        "status": "ok",
+    }
 
 
 def embed_repository_symbols(

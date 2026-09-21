@@ -52,6 +52,36 @@ SKIP_DIRS = {
 }
 
 
+def is_scannable(relative_path: str) -> bool:
+    """Whether a repo-relative path is a parseable source file.
+
+    Shared by the full walk in :func:`app.services.scanner.walk_source_files`
+    and the incremental delta in :mod:`app.tasks.sync`. Two copies of this
+    rule is the single most likely way for the incremental file set to
+    drift from the full-walk file set, so there is one definition and both
+    call sites consult it.
+
+    Args:
+        relative_path: Repo-relative path with forward-slash separators
+            (the form ``File.path`` is stored in and the form ``git diff``
+            returns).
+
+    Returns:
+        ``True`` when the path lives outside ``SKIP_DIRS`` *and* its
+        extension is one :mod:`app.services.parser` recognises.
+    """
+    if not relative_path:
+        return False
+    parts = relative_path.split("/")
+    if any(part in SKIP_DIRS for part in parts):
+        return False
+    suffix = parts[-1]
+    dot_index = suffix.rfind(".")
+    if dot_index <= 0:
+        return False
+    return suffix[dot_index:] in SOURCE_EXTENSIONS
+
+
 def detect_stack(repo_root: Path) -> dict:
     """Heuristically detect a repository's stack by scanning manifests and source.
 
@@ -94,11 +124,7 @@ def detect_stack(repo_root: Path) -> dict:
         ".swift": "Swift",
     }
 
-    all_files = [
-        f
-        for f in repo_root.rglob("*")
-        if not any(skip in f.parts for skip in SKIP_DIRS)
-    ]
+    all_files = [f for f in repo_root.rglob("*") if not any(skip in f.parts for skip in SKIP_DIRS)]
 
     for f in all_files:
         if f.suffix in ext_map:
@@ -175,38 +201,26 @@ def detect_stack(repo_root: Path) -> dict:
                 else:
                     text = f.read_text().lower()
 
-                if re.search(
-                    r"^\s*(import fastapi|from fastapi[\. ])", text, re.MULTILINE
-                ):
+                if re.search(r"^\s*(import fastapi|from fastapi[\. ])", text, re.MULTILINE):
                     frameworks.add("FastAPI")
-                if re.search(
-                    r"^\s*(import django|from django[\. ])", text, re.MULTILINE
-                ):
+                if re.search(r"^\s*(import django|from django[\. ])", text, re.MULTILINE):
                     frameworks.add("Django")
                 if re.search(r"^\s*(import flask|from flask[\. ])", text, re.MULTILINE):
                     frameworks.add("Flask")
 
-                if re.search(
-                    r"^\s*(import sqlalchemy|from sqlalchemy[\. ])", text, re.MULTILINE
-                ):
+                if re.search(r"^\s*(import sqlalchemy|from sqlalchemy[\. ])", text, re.MULTILINE):
                     databases.add("SQLAlchemy")
 
-                if re.search(
-                    r"^\s*(import psycopg|from psycopg[\. ])", text, re.MULTILINE
-                ):
+                if re.search(r"^\s*(import psycopg|from psycopg[\. ])", text, re.MULTILINE):
                     databases.add("PostgreSQL")
 
-                if re.search(
-                    r"^\s*(import pymongo|from pymongo[\. ])", text, re.MULTILINE
-                ):
+                if re.search(r"^\s*(import pymongo|from pymongo[\. ])", text, re.MULTILINE):
                     databases.add("MongoDB")
 
                 if re.search(r"^\s*(import redis|from redis[\. ])", text, re.MULTILINE):
                     databases.add("Redis")
 
-                if re.search(
-                    r"^\s*(import celery|from celery[\. ])", text, re.MULTILINE
-                ):
+                if re.search(r"^\s*(import celery|from celery[\. ])", text, re.MULTILINE):
                     infrastructure.add("Celery")
 
             except Exception:
@@ -275,9 +289,7 @@ def detect_stack(repo_root: Path) -> dict:
     if manage_path.exists():
         try:
             manage_text = manage_path.read_text(errors="ignore")
-            if re.search(
-                r"^\s*(import django|from django[\. ])", manage_text, re.MULTILINE
-            ):
+            if re.search(r"^\s*(import django|from django[\. ])", manage_text, re.MULTILINE):
                 frameworks.add("Django")
         except OSError:
             pass
@@ -319,14 +331,11 @@ def detect_stack(repo_root: Path) -> dict:
 
     if (repo_root / "Dockerfile").exists():
         infrastructure.add("Docker")
-    if (repo_root / "docker-compose.yml").exists() or (
-        repo_root / "docker-compose.yaml"
-    ).exists():
+    if (repo_root / "docker-compose.yml").exists() or (repo_root / "docker-compose.yaml").exists():
         infrastructure.add("Docker")
 
     if any(
-        f.suffix in {".yaml", ".yml"} and "kind:" in f.read_text(errors="ignore")
-        for f in all_files
+        f.suffix in {".yaml", ".yml"} and "kind:" in f.read_text(errors="ignore") for f in all_files
     ):
         infrastructure.add("Kubernetes")
 

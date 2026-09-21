@@ -16,7 +16,7 @@ as a Python list until the end.
 import logging
 import uuid
 from collections import defaultdict
-from typing import Iterable
+from collections.abc import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -475,3 +475,44 @@ def compute_fan_metrics(db: Session, repo_id: uuid.UUID) -> None:
             )
 
     db.commit()
+
+
+def delete_repo_edges(db: Session, repo_id: uuid.UUID) -> int:
+    """Delete every ``Dependency`` row whose endpoints live in this repo.
+
+    The incremental delta's first move after :func:`apply_file_delta`:
+    the file delta destroyed every outgoing edge from changed files
+    (via the ``ast_symbols.file_id`` CASCADE) but did not touch the
+    incoming edges owned by *unchanged* importers -- the re-resolve that
+    follows rebuilds both sides, but starting from a non-empty edges
+    table would corrupt the count because :func:`resolve_dependencies`
+    only INSERTs. Whole-table delete followed by whole-table resolve is
+    the only path that produces a count equal to what a fresh ingest
+    would produce.
+
+    ``uq_dependency_edge`` is the safety net: if a future regression
+    skips this call, the re-resolve will raise ``IntegrityError`` on the
+    first duplicate rather than silently corrupting the count.
+
+    Args:
+        db: Session used to issue the DELETE. The caller controls the
+            transaction -- the sync task holds the surrounding Txn 1.
+        repo_id: ID of the repository whose edges are being cleared.
+
+    Returns:
+        Number of rows deleted (best-effort; ``Result.rowcount`` may
+        underreport on some dialects and the function is otherwise
+        relied on by side effect).
+    """
+    from sqlalchemy import delete
+
+    result = db.execute(
+        delete(Dependency).where(
+            Dependency.source_symbol_id.in_(
+                select(AstSymbol.id)
+                .join(File, AstSymbol.file_id == File.id)
+                .where(File.repository_id == repo_id)
+            )
+        )
+    )
+    return int(result.rowcount or 0)
