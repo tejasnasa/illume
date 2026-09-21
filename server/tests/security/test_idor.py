@@ -66,6 +66,13 @@ REPO_ROUTES: list[RepoRoute] = [
     RepoRoute("GET", "/api/v1/repository/{ref}", key="number"),
     RepoRoute("DELETE", "/api/v1/repository/{ref}", success=204),
     RepoRoute("PUT", "/api/v1/repository/{ref}/reingest", success=202),
+    RepoRoute(
+        "PATCH",
+        "/api/v1/repository/{ref}/auto-update",
+        success=200,
+        body={"enabled": True, "interval_hours": 6},
+    ),
+    RepoRoute("POST", "/api/v1/repository/{ref}/sync", success=202),
     RepoRoute("GET", "/api/v1/repository/{ref}/export/illume"),
     RepoRoute("GET", "/api/v1/repository/{ref}/graph"),
     RepoRoute("GET", "/api/v1/repository/{ref}/glossary"),

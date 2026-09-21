@@ -7,7 +7,7 @@ Stores pgvector embeddings for semantic search and Retrieval-Augmented Generatio
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import UUID, Enum, ForeignKey, Index, String, Text, text
+from sqlalchemy import UUID, Enum, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -22,8 +22,13 @@ class Embedding(Base):
 
     __tablename__ = "embeddings"
     __table_args__ = (
-        # Phase B index: every RAG retrieval filters by repository_id first.
         Index("ix_embeddings_repository_id", "repository_id"),
+        UniqueConstraint(
+            "repository_id",
+            "source_type",
+            "source_id",
+            name="uq_embedding_source",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

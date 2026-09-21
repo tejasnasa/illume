@@ -6,7 +6,7 @@ Represents an edge in the dependency graph between two AST symbols.
 
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, Index, text
+from sqlalchemy import Enum, ForeignKey, Index, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -21,12 +21,9 @@ class Dependency(Base):
 
     __tablename__ = "dependencies"
     __table_args__ = (
-        # Phase B indexes: both FK columns carry a CASCADE delete triggered by
-        # every ast_symbols row removal, and ``compute_fan_metrics`` joins on
-        # both. Without these the cascade chain becomes O(files * symbols *
-        # dependencies) sequential scans.
         Index("ix_dependencies_source_symbol_id", "source_symbol_id"),
         Index("ix_dependencies_target_symbol_id", "target_symbol_id"),
+        UniqueConstraint("source_symbol_id", "target_symbol_id", name="uq_dependency_edge"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

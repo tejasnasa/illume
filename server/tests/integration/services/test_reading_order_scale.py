@@ -15,9 +15,10 @@ unit test would build. Two assertions matter here:
 * **Dedup at scale.** Duplicate ``(src, tgt)`` symbol-level edges (which the
   ``IN`` subquery join can produce) do not inflate ``in_degree`` on the
   file level and do not bump a DAG file into the cycle tier. The unit
-  ``TestBuildIntAdjacency`` covers this for one duplicate; this file
-  exercises it with many duplicates against real Postgres so the join
-  strategy is the one under test, not an in-memory list.
+  ``TestBuildIntAdjacency`` covers this for one duplicate. The ``uq_dependency_edge``
+  unique constraint on the database now prevents the duplicate-row case
+  this test used to exercise; dedup at the streaming boundary is what
+  remains in scope.
 
 A **determinism** check runs alongside the memory check: running the same
 data through ``build_reading_order`` twice produces a byte-identical
@@ -297,74 +298,6 @@ class TestBoundedMemory:
         finally:
             _cleanup(session_factory_small, small_user, small_repo)
             _cleanup(session_factory_large, large_user, large_repo)
-
-
-class TestDedupPreservedAtScale:
-    """Duplicates in the underlying ``dependencies`` table do not produce cycle-tier files."""
-
-    def test_duplicate_edges_do_not_change_tier_assignment(self, monkeypatch):
-        """
-        Insert a DAG, then build its reading order twice: once with
-        duplicate ``(src, tgt)`` pairs in the underlying ``dependencies``
-        table, once without. The plan calls this out specifically:
-        ``IN`` subqueries routinely produce duplicates, and a
-        non-deduped adjacency would over-count ``in_degree`` and dump
-        DAG files into the cycle catch-all tier.
-
-        The assertion: identical ``(path, tier)`` pairs across the two
-        builds. If dedup were broken, files in the duplicated build
-        would end up with higher tier indices (the cycle catch-all),
-        and the two ``(path, tier)`` maps would diverge. The benign
-        consequence of duplicates is just extra rows in Postgres; the
-        pathological consequence is a file appearing in the cycle tier
-        on a DAG that has no cycle, which is exactly what this test
-        would catch.
-        """
-        session_factory_dups = _sync_session_factory()
-        session_factory_clean = _sync_session_factory()
-        user_dups, repo_dups = _make_user_repo(session_factory_dups)
-        user_clean, repo_clean = _make_user_repo(session_factory_clean)
-        try:
-            # 50 files, 100 logical edges, with ~30% duplicated. The
-            # dedup invariant is scale-independent; a small DAG is
-            # enough to exercise the join path.
-            _build_dag(
-                session_factory_dups,
-                repo_dups,
-                file_count=50,
-                edge_count=100,
-                duplicate_ratio=0.3,
-            )
-            _build_dag(
-                session_factory_clean,
-                repo_clean,
-                file_count=50,
-                edge_count=100,
-                duplicate_ratio=0.0,
-            )
-
-            with_dups = _run_reading_order(session_factory_dups, repo_dups, monkeypatch=monkeypatch)
-            without_dups = _run_reading_order(
-                session_factory_clean, repo_clean, monkeypatch=monkeypatch
-            )
-
-            assert with_dups and without_dups, "the build produced an empty reading order"
-
-            # Map ``path -> tier`` for each. If dedup were broken the
-            # duplicated build would have stranded some files in the
-            # cycle catch-all (the highest tier index), and the maps
-            # would diverge at exactly those paths.
-            tiers_with_dups = {item["path"]: item["tier"] for item in with_dups}
-            tiers_without_dups = {item["path"]: item["tier"] for item in without_dups}
-
-            assert tiers_with_dups == tiers_without_dups, (
-                "duplicate edges changed tier assignment: "
-                f"differing files="
-                f"{sorted(set(tiers_with_dups) ^ set(tiers_without_dups))}"
-            )
-        finally:
-            _cleanup(session_factory_dups, user_dups, repo_dups)
-            _cleanup(session_factory_clean, user_clean, repo_clean)
 
 
 class TestDeterminismAtScale:

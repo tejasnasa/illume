@@ -252,7 +252,7 @@ class TestCommitHashUniqueness:
         """
         from sqlalchemy import select
 
-        from app.models import Commit
+        from app.models.commit import Commit
         from tests.factories import make_repo, make_user
 
         user = await make_user(db_session)
@@ -263,6 +263,111 @@ class TestCommitHashUniqueness:
 
         stored = await db_session.execute(select(Commit).where(Commit.repository_id == repo.id))
         assert len(stored.scalars().all()) == 1
+
+
+class TestAutoUpdateDefaults:
+    """
+    ``server_default`` populates a column only on rows inserted *after* the
+    column lands; existing rows are backfilled by the migration. A column that
+    is NULL on a freshly-inserted row -- because nothing in the migration
+    asserted ``NOT NULL`` -- breaks the sync task the next time it claims the
+    repo: ``next_sync_at IS NULL AND auto_update_enabled`` is a valid filter
+    shape, but ``consecutive_sync_failures`` getting NULL breaks every
+    arithmetic on it.
+
+    Each row inserted through ``make_repo`` lists every column explicitly (the
+    factory was written for a smaller schema), so this is the regression test
+    that catches a future migration that adds a NOT NULL column without a
+    matching ``server_default`` or backfill.
+    """
+
+    async def test_make_repo_yields_a_row_with_non_null_defaults(self, db_session):
+        """
+        ``make_repo`` builds the row from the factory -- no field-list
+        gymnastics, just the model. If the column is NOT NULL on the database
+        side and ``server_default`` is set, this passes. If either is missing,
+        the INSERT fails or returns a row with NULLs.
+        """
+        from sqlalchemy import select
+
+        from app.models.repository import Repository
+        from tests.factories import make_repo, make_user
+
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+
+        result = await db_session.execute(select(Repository).where(Repository.id == repo.id))
+        stored = result.scalar_one()
+
+        assert stored.auto_update_enabled is False
+        assert stored.auto_update_interval_hours == 6
+        assert stored.next_sync_at is None
+        assert stored.last_synced_at is None
+        assert stored.sync_status == "idle"
+        assert stored.sync_lease_expires_at is None
+        assert stored.sync_generation is None
+        assert stored.last_sync_error is None
+        assert stored.consecutive_sync_failures == 0
+        assert stored.last_sync_summary is None
+        assert stored.analysis_commit_sha is None
+
+    async def test_inserting_a_row_without_the_new_columns_still_works(self, db_session):
+        """
+        The reingest path rebuilds ``Repository`` from an explicit field list
+        -- a list that, until the migration, did not include the new columns.
+        The migration must give every new column a ``server_default`` so this
+        INSERT lands a valid row, not a NOT NULL violation.
+
+        The raw INSERT mirrors the shape the application sends: an explicit
+        column list with no values for the new ones. ``repo_number`` is supplied
+        to dodge the standing repo_number-identity defect -- the column has no
+        generator, so any INSERT that omits it raises.
+        """
+        from sqlalchemy import text
+
+        from tests.factories import make_user
+
+        user = await make_user(db_session)
+
+        # Pick a repo_number this test owns. The factory's counter is local to
+        # the module and not exposed, so read it indirectly by inserting a
+        # throwaway factory repo first -- which also produces a row we can
+        # ignore.
+        from tests.factories import make_repo
+
+        throwaway = await make_repo(db_session, user, name="legacy-rebuild-throwaway")
+        repo_number = throwaway.repo_number + 1
+
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO repositories
+                    (user_id, github_url, name, status, repo_number)
+                VALUES
+                    (:uid, 'https://github.com/example/legacy-rebuild',
+                     'legacy-rebuild', 'pending', :repo_number)
+                """
+            ),
+            {"uid": user.id, "repo_number": repo_number},
+        )
+        await db_session.flush()
+
+        row = (
+            await db_session.execute(
+                text(
+                    "SELECT auto_update_enabled, auto_update_interval_hours, sync_status, "
+                    "consecutive_sync_failures, next_sync_at, sync_lease_expires_at "
+                    "FROM repositories WHERE name = 'legacy-rebuild'"
+                )
+            )
+        ).one()
+        assert row.auto_update_enabled is False
+        assert row.auto_update_interval_hours == 6
+        assert row.sync_status == "idle"
+        assert row.consecutive_sync_failures == 0
+        # Nullable columns stay NULL.
+        assert row.next_sync_at is None
+        assert row.sync_lease_expires_at is None
 
 
 def model_schema_diff(metadata=None) -> list:

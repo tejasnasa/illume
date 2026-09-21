@@ -301,6 +301,254 @@ class TestReingest:
         assert response.status_code == 404
         assert dispatched == []
 
+    async def test_preserves_auto_update_enabled_across_reingest(
+        self, client, db_session, dispatched
+    ):
+        """
+        The reingest path rebuilds the row from an explicit field list, so a
+        user who enabled auto-update must not have it silently switched off by
+        a routine refresh. A row that came in with ``auto_update_enabled=True``
+        comes back with the same.
+        """
+        from sqlalchemy import select
+
+        from app.models.repository import Repository
+
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user, status="ready")
+        repo.auto_update_enabled = True
+        repo.auto_update_interval_hours = 3
+        repo.next_sync_at = repo.updated_at  # any non-NULL sentinel
+        await db_session.commit()
+        await authenticate(client, user)
+
+        await client.put(f"{COLLECTION}/{repo.id}/reingest")
+
+        result = await db_session.execute(select(Repository).where(Repository.id == repo.id))
+        replacement = result.scalar_one()
+        assert replacement.auto_update_enabled is True
+        assert replacement.auto_update_interval_hours == 3
+        assert replacement.next_sync_at is not None
+
+
+class TestAutoUpdatePatch:
+    """
+    ``PATCH /{repo_id}/auto-update`` toggles the per-repo switch and the sync
+    cadence. Enabling schedules it; the disable path NULLs ``next_sync_at`` so
+    the sweep predicate never claims the row again.
+    """
+
+    async def test_enabling_sets_next_sync_at_immediately(self, client, db_session):
+        """
+        A user who flips the switch should not have to wait an entire period
+        before the first sync lands. The PATCH sets ``next_sync_at`` to ``now()``;
+        the next sweep tick (within ``SWEEP_INTERVAL_MINUTES``) will see it.
+        """
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        repo.auto_update_enabled = False
+        repo.next_sync_at = None
+        await db_session.commit()
+        await authenticate(client, user)
+
+        response = await client.patch(
+            f"{COLLECTION}/{repo.id}/auto-update",
+            json={"enabled": True, "interval_hours": 6},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["auto_update_enabled"] is True
+        assert body["next_sync_at"] is not None
+        assert body["auto_update_interval_hours"] == 6
+
+    async def test_enabling_without_interval_keeps_the_existing_one(self, client, db_session):
+        """An omitted ``interval_hours`` leaves the cadence alone."""
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        repo.auto_update_interval_hours = 12
+        await db_session.commit()
+        await authenticate(client, user)
+
+        response = await client.patch(
+            f"{COLLECTION}/{repo.id}/auto-update",
+            json={"enabled": True},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["auto_update_interval_hours"] == 12
+
+    async def test_disabling_nulls_next_sync_at(self, client, db_session):
+        """
+        The sweep predicate filters on ``next_sync_at <= now()``; a NULL row is
+        never claimed. ``consecutive_sync_failures`` and ``last_sync_error``
+        reset so a fresh enable starts from a clean slate.
+        """
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        repo.auto_update_enabled = True
+        repo.next_sync_at = repo.updated_at  # any non-NULL sentinel
+        repo.consecutive_sync_failures = 2
+        repo.last_sync_error = "boom"
+        await db_session.commit()
+        await authenticate(client, user)
+
+        response = await client.patch(
+            f"{COLLECTION}/{repo.id}/auto-update",
+            json={"enabled": False},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["auto_update_enabled"] is False
+        assert body["next_sync_at"] is None
+        assert body["consecutive_sync_failures"] == 0
+        assert body["last_sync_error"] is None
+
+    async def test_an_invalid_interval_returns_422(self, client, db_session):
+        """Reject anything outside the allowed set; the picker renders only these options."""
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        await authenticate(client, user)
+
+        response = await client.patch(
+            f"{COLLECTION}/{repo.id}/auto-update",
+            json={"enabled": True, "interval_hours": 5},
+        )
+
+        assert response.status_code == 422
+
+    async def test_an_empty_patch_leaves_everything_alone(self, client, db_session):
+        """Both fields optional; omitting both is a no-op rather than a 422."""
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        repo.auto_update_enabled = False
+        repo.auto_update_interval_hours = 24
+        await db_session.commit()
+        await authenticate(client, user)
+
+        response = await client.patch(f"{COLLECTION}/{repo.id}/auto-update", json={})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["auto_update_enabled"] is False
+        assert body["auto_update_interval_hours"] == 24
+
+    async def test_cannot_patch_another_users_repository(self, client, db_session):
+        """404, never 403 -- a 403 would confirm the repository exists."""
+        mine = await make_user(db_session)
+        theirs = await make_user(db_session)
+        their_repo = await make_repo(db_session, theirs)
+        await authenticate(client, mine)
+
+        response = await client.patch(
+            f"{COLLECTION}/{their_repo.id}/auto-update",
+            json={"enabled": True},
+        )
+
+        assert response.status_code == 404
+
+    async def test_requires_authentication(self, client, db_session):
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+
+        response = await client.patch(
+            f"{COLLECTION}/{repo.id}/auto-update",
+            json={"enabled": True},
+        )
+
+        assert response.status_code == 401
+
+
+class TestSyncNow:
+    """
+    ``POST /{repo_id}/sync`` forces a sync to run right now by setting
+    ``sync_status='queued'`` and ``next_sync_at=now()``. The sweep picks the
+    row up on its next tick.
+    """
+
+    async def test_returns_202_with_queued_status(self, client, db_session):
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        await authenticate(client, user)
+
+        response = await client.post(f"{COLLECTION}/{repo.id}/sync")
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["sync_status"] == "queued"
+        assert body["next_sync_at"] is not None
+
+    async def test_refuses_with_a_live_lease(self, client, db_session):
+        """
+        A repo whose ``sync_lease_expires_at`` is in the future is already
+        being synced. The endpoint answers 409 rather than queueing a second
+        sync, which would corrupt the first one's read-modify-write window.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        repo.sync_status = "updating"
+        repo.sync_lease_expires_at = datetime.now(UTC) + timedelta(minutes=30)
+        await db_session.commit()
+        await authenticate(client, user)
+
+        response = await client.post(f"{COLLECTION}/{repo.id}/sync")
+
+        assert response.status_code == 409
+
+    async def test_an_expired_lease_does_not_block(self, client, db_session):
+        """
+        A stale lease from a SIGKILL'd worker is reclaimable. The endpoint
+        treats any lease in the past as free and queues the new sync normally.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        repo.sync_status = "updating"
+        repo.sync_lease_expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        await db_session.commit()
+        await authenticate(client, user)
+
+        response = await client.post(f"{COLLECTION}/{repo.id}/sync")
+
+        assert response.status_code == 202
+
+    async def test_refuses_when_global_kill_switch_is_off(self, client, db_session, monkeypatch):
+        """
+        ``AUTO_UPDATE_ENABLED`` is the deployment-wide kill switch. When False,
+        every sync-now call answers 409 -- a fresh endpoint that respects the
+        existing off-switch without re-implementing it.
+        """
+        import app.api.v1.repository as repository_module
+
+        monkeypatch.setattr(repository_module, "AUTO_UPDATE_ENABLED", False)
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        await authenticate(client, user)
+
+        response = await client.post(f"{COLLECTION}/{repo.id}/sync")
+
+        assert response.status_code == 409
+
+    async def test_cannot_sync_another_users_repository(self, client, db_session):
+        mine = await make_user(db_session)
+        theirs = await make_user(db_session)
+        their_repo = await make_repo(db_session, theirs)
+        await authenticate(client, mine)
+
+        response = await client.post(f"{COLLECTION}/{their_repo.id}/sync")
+
+        assert response.status_code == 404
+
+    async def test_requires_authentication(self, client, db_session):
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+
+        assert (await client.post(f"{COLLECTION}/{repo.id}/sync")).status_code == 401
+
 
 class TestExport:
     async def test_exports_a_ready_repository_as_text(self, client, db_session):
