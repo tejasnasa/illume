@@ -30,7 +30,7 @@ import logging
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 import openai
@@ -195,12 +195,24 @@ Respond ONLY with a JSON array, no markdown fences, no preamble:
 def _annotate_files(
     ordered_files: list[dict[str, Any]],
     language_by_path: dict[str, str | None],
+    *,
+    reusable: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Request LLM annotations in batches; failures skip the batch silently.
 
     The language lookup is supplied by the caller because the trimmed
     stored payload no longer carries ``language`` per item --
     only the columns that are actually consumed downstream.
+
+    ``reusable`` maps a file ``path`` to its previous annotation; the
+    incremental sync path fills it from the existing ``OnboardingGuide``,
+    so an unchanged file's annotation is reused verbatim and the LLM is
+    only asked to annotate entries that lack one. The annotation *set*
+    in the response is computed as "the first N entries that need a new
+    annotation", not "the first N entries minus a filter" -- the prior
+    shape silently dropped newly-added files from the annotated set
+    whenever the top-N happened to be filled by files whose annotation
+    was reusable.
 
     Batches run in parallel through
     :func:`app.services._concurrency.gather_in_order`. Each worker
@@ -211,7 +223,17 @@ def _annotate_files(
     """
     client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
 
-    to_annotate = ordered_files[:MAX_ANNOTATED_FILES]
+    if reusable:
+        # Compute the set the LLM actually has to fill: the first
+        # ``MAX_ANNOTATED_FILES`` entries that do not already carry a
+        # reusable annotation. A newly-added file whose first position
+        # is in the top-N is included; an unchanged file whose stored
+        # annotation is still valid is skipped entirely.
+        to_annotate = [item for item in ordered_files if not reusable.get(item["path"])][
+            :MAX_ANNOTATED_FILES
+        ]
+    else:
+        to_annotate = ordered_files[:MAX_ANNOTATED_FILES]
     # Carry the language through so the prompt can still mention it
     # without storing it on every item.
     annotated_batch_input = [
@@ -278,24 +300,55 @@ def _annotate_files(
     return annotations
 
 
-def build_reading_order(db: Session, repo: Repository) -> OnboardingGuide:
+def build_reading_order(
+    db: Session,
+    repo: Repository,
+    *,
+    mode: Literal["full", "incremental"] = "full",
+) -> OnboardingGuide:
     """Build and persist a suggested file reading order for a repository.
 
     Constructs the file-level dependency graph from symbol dependencies,
     orders files into tiers with a topological sort (files inside dependency
-    cycles are appended as a final tier), then asks the LLM to annotate up to
-    ``MAX_ANNOTATED_FILES`` files explaining why each should be read at that
-    point in onboarding. The result is stored on the repository's
-    OnboardingGuide (created if absent).
+    cycles are appended as a final tier), then asks the LLM to annotate up
+    to ``MAX_ANNOTATED_FILES`` files explaining why each should be read
+    at that point in onboarding.
+
+    ``mode="full"`` annotates the first ``MAX_ANNOTATED_FILES`` entries.
+
+    ``mode="incremental"`` reuses the annotations stored on the existing
+    ``OnboardingGuide`` (keyed on ``path``) and only asks the LLM to fill
+    the slots that need one. A new file that lands in the top-N gets an
+    annotation; a file that fell out of the top-N keeps its existing
+    annotation in storage but is no longer surfaced in the response. The
+    deterministic topo sort makes the "the same file lands in the same
+    slot" property reproducible across syncs.
 
     Args:
         db: SQLAlchemy database session.
         repo: The repository to build the reading order for.
+        mode: ``"full"`` for initial ingest; ``"incremental"`` for the
+            sync task.
 
     Returns:
         The upserted OnboardingGuide containing the annotated reading order.
     """
-    logger.info("reading_order: starting for repo %s", repo.id)
+    logger.info("reading_order: starting for repo %s (mode=%s)", repo.id, mode)
+
+    reusable_annotations: dict[str, str] = {}
+    if mode == "incremental":
+        existing = (
+            db.query(OnboardingGuide).filter(OnboardingGuide.repository_id == repo.id).first()
+        )
+        if existing and existing.reading_order:
+            # Stored payload is keyed on ``path``; the API response renames
+            # the field to ``file_path`` only on the wire, so reading the
+            # stored JSONB key is the right thing to do here.
+            reusable_annotations = {
+                item["path"]: item["annotation"]
+                for item in existing.reading_order
+                if item.get("annotation") and item.get("path")
+            }
 
     # Column-tuple load: only ``id``, ``path``, ``fan_in`` and ``language``
     # are read by this function or the annotation prompt. ``select(File)``
@@ -356,10 +409,27 @@ def build_reading_order(db: Session, repo: Repository) -> OnboardingGuide:
 
     logger.info("reading_order: %d tiers, %d files total", len(tiers), len(ordered_flat))
 
-    annotations = _annotate_files(ordered_flat, language_by_path)
+    annotations = _annotate_files(
+        ordered_flat,
+        language_by_path,
+        reusable=reusable_annotations if mode == "incremental" else None,
+    )
 
-    for item in ordered_flat:
-        item["annotation"] = annotations.get(item["path"], "")
+    # Apply annotations in two passes: reusable entries win first so a
+    # file the LLM never sees (every batch was filled by other files)
+    # still carries the prior annotation. The LLM result overrides only
+    # the entries the helper actually produced.
+    if mode == "incremental":
+        for item in ordered_flat:
+            item["annotation"] = reusable_annotations.get(item["path"], "")
+        for path, annotation in annotations.items():
+            for item in ordered_flat:
+                if item["path"] == path:
+                    item["annotation"] = annotation
+                    break
+    else:
+        for item in ordered_flat:
+            item["annotation"] = annotations.get(item["path"], "")
 
     guide = _upsert_guide(db, repo.id, ordered_flat)
     logger.info("reading_order: done for repo %s", repo.id)

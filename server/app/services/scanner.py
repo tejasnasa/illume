@@ -323,7 +323,7 @@ def apply_file_delta(
     repository_id: uuid.UUID,
     repo_root: Path,
     paths: Iterable[str],
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, list[uuid.UUID]]:
     """Apply one git diff's worth of file changes to the database.
 
     The unit of incremental work: one call per sync. ``paths`` is the set
@@ -359,12 +359,17 @@ def apply_file_delta(
             iterables are valid: nothing to do, both return values are 0.
 
     Returns:
-        Tuple of ``(upserted, deleted, changed)`` where ``changed`` is
-        the union of the two -- the size of the work performed, used by
-        the delta engine to decide whether to escalate to a full rebuild.
+        Tuple of ``(upserted, deleted, changed, changed_file_ids)``.
+        ``changed`` is the union of upserted and deleted -- the size of the
+        work performed, used by the delta engine to decide whether to
+        escalate to a full rebuild. ``changed_file_ids`` is the set of
+        ``File.id`` rows touched by the delta (upserts use the new id; a
+        delete contributes zero ids). Passed to the embedder so it can
+        drop stale symbol and annotated-file chunks before reconciling.
     """
     upserted = 0
     deleted = 0
+    changed_file_ids: list[uuid.UUID] = []
 
     for raw_path in paths:
         path = raw_path.replace("\\", "/")
@@ -436,8 +441,9 @@ def apply_file_delta(
                 )
             )
         upserted += 1
+        changed_file_ids.append(new_file_id)
 
-    return upserted, deleted, upserted + deleted
+    return upserted, deleted, upserted + deleted, changed_file_ids
 
 
 def _delete_file_row(db: Session, repository_id: uuid.UUID, path: str) -> int:
@@ -620,6 +626,7 @@ def embed_repository_symbols(
     measure_memory: bool = True,
     manage_status: bool = True,
     embedding_mode: Literal["full", "incremental"] = "full",
+    changed_file_ids: list[uuid.UUID] | None = None,
 ) -> int:
     """Generate vector embeddings for a repository's indexed symbols.
 
@@ -639,9 +646,15 @@ def embed_repository_symbols(
             and its log frame.
         embedding_mode: Forwarded to :func:`generate_embeddings`. ``"full"``
             deletes the repo's existing ``Embedding`` rows first (the
-            initial-ingest path); ``"incremental"`` is the sync task's mode
-            and skips that delete. The reconcile logic that makes
-            incremental actually useful is added later.
+            initial-ingest path); ``"incremental"`` reconciles -- rebuilds
+            every desired chunk in pure CPU, compares against the stored
+            ``chunk_hash``, and only calls OpenAI for chunks whose text
+            changed. ``changed_file_ids`` is required for incremental
+            mode and scopes the targeted symbol/file chunk delete.
+        changed_file_ids: Files touched by the current sync. Required in
+            ``incremental`` mode; ignored in ``full`` mode. The list is
+            passed to ``generate_embeddings`` so it can drop symbol and
+            annotated-file chunks for those files before reconciling.
 
     Returns:
         Number of embedding vectors stored.
@@ -665,6 +678,7 @@ def embed_repository_symbols(
             publish_log=publish_progress,
             readme_content=readme_content,
             mode=embedding_mode,
+            changed_file_ids=changed_file_ids,
         )
 
     publish_log(

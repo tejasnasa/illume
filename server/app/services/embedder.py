@@ -37,7 +37,7 @@ from typing import Any, Generator, Literal, cast
 from uuid import UUID, uuid5
 
 from openai import OpenAI
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -243,6 +243,46 @@ def _pr_proxy(row) -> _PRProxy:
     return _PRProxy(row.number, row.title, row.description)
 
 
+def _load_stored_hashes(
+    db: Session,
+    repository_id: UUID,
+    source_type: str,
+) -> dict[UUID, str | None]:
+    """Return ``{source_id: chunk_hash}`` for every stored chunk of one source type.
+
+    Used by the incremental reconcile to skip chunks whose rendered
+    text matches what is already on disk. The lookup is keyed by the
+    unique constraint columns -- ``source_id`` within a
+    ``(repository_id, source_type)`` pair is what uniquely identifies a
+    chunk.
+    """
+    rows = db.execute(
+        select(Embedding.source_id, Embedding.chunk_hash).where(
+            Embedding.repository_id == repository_id,
+            Embedding.source_type == source_type,
+        )
+    ).all()
+    return {row.source_id: row.chunk_hash for row in rows}
+
+
+def _filter_chunks_by_hash(
+    items: list[tuple[UUID, str]],
+    stored_hashes: dict[UUID, str | None],
+) -> list[tuple[UUID, str]]:
+    """Return only chunks whose text differs from the stored hash (or which are missing).
+
+    A ``None`` stored hash (a row written before the column existed) is
+    treated as "no match" so old rows get re-embedded -- a one-time
+    migration cost that keeps the index self-healing.
+    """
+    out: list[tuple[UUID, str]] = []
+    for source_id, chunk_text in items:
+        stored = stored_hashes.get(source_id)
+        if stored is None or stored != _chunk_hash(chunk_text):
+            out.append((source_id, chunk_text))
+    return out
+
+
 def _iter_query_batches(
     db: Session,
     repository_id: UUID,
@@ -329,6 +369,7 @@ def _embed_and_store(
     file_id_of=None,
     publish_log=None,
     label: str = "chunks",
+    upsert: bool = False,
 ) -> int:
     """Embed a list of ``(source_id, chunk_text)`` pairs and persist the vectors.
 
@@ -348,6 +389,11 @@ def _embed_and_store(
     time so the incremental path can compare against the stored value and
     only re-embed chunks whose rendered text actually changed.
 
+    ``upsert=True`` switches the insert into ``ON CONFLICT DO UPDATE`` against
+    the ``uq_embedding_source`` constraint -- the incremental reconcile
+    relies on this so a chunk whose text changed overwrites the previous
+    row instead of failing the unique key.
+
     Args:
         client: OpenAI client used for the embeddings API.
         db: SQLAlchemy session for persistence.
@@ -361,9 +407,11 @@ def _embed_and_store(
             ``file_id``; when omitted, ``file_id`` is stored as None.
         publish_log: Optional progress callback receiving status messages.
         label: Human-readable noun for progress messages.
+        upsert: When True, update an existing row on the
+            ``(repository_id, source_type, source_id)`` unique key.
 
     Returns:
-        Number of embeddings inserted.
+        Number of embeddings inserted or updated.
     """
     inserted = 0
     batches = list(_iter_batches(items, BATCH_SIZE))
@@ -396,9 +444,20 @@ def _embed_and_store(
             }
             for (source_id, chunk_text), embedding_data in zip(batch, response.data)
         ]
+        stmt = pg_insert(Embedding).values(rows)
+        if upsert:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["repository_id", "source_type", "source_id"],
+                set_={
+                    "file_id": stmt.excluded.file_id,
+                    "chunk_text": stmt.excluded.chunk_text,
+                    "chunk_hash": stmt.excluded.chunk_hash,
+                    "embedding": stmt.excluded.embedding,
+                },
+            )
         # Bulk insert bypasses the identity map entirely; the previous
         # per-row ``db.add`` was the same shape for a long batch.
-        db.execute(pg_insert(Embedding).values(rows))
+        db.execute(stmt)
 
         db.commit()
         inserted += len(batch)
@@ -416,6 +475,7 @@ def generate_embeddings(
     publish_log=None,
     readme_content: str | None = None,
     mode: Literal["full", "incremental"] = "full",
+    changed_file_ids: list[UUID] | None = None,
 ) -> int:
     """Generate and persist vector embeddings for a repository.
 
@@ -447,14 +507,20 @@ def generate_embeddings(
         mode: ``"full"`` deletes the repository's existing embeddings first
             (the only correct behaviour for a full re-ingest, since commits
             and PRs have no ``file_id`` and therefore no cascade to clear
-            them). ``"incremental"`` is the sync path's mode; the reconcile
-            logic (recompute desired chunks, only embed what differs by
-            ``chunk_hash``) is added later. Today the incremental mode is
-            just "don't blow away the existing rows" -- the rest of the
-            reconciliation is a follow-up.
+            them). ``"incremental"`` reconciles: it rebuilds every desired
+            chunk in pure CPU, computes ``chunk_hash``, and only calls
+            OpenAI for chunks whose stored hash differs or which are
+            missing. Symbol and file chunks tied to ``changed_file_ids``
+            are deleted up front so a chunk whose source file was removed
+            does not survive; chunks whose hash already matches are left
+            alone.
+        changed_file_ids: Files touched by the current sync. Required for
+            ``incremental`` mode; controls the targeted symbol/file chunk
+            delete that closes the orphan-row gap. Ignored in ``full``
+            mode (the whole-repo delete handles it).
 
     Returns:
-        Total number of embeddings inserted.
+        Total number of embeddings inserted or updated.
 
     Raises:
         Exception: If an OpenAI embeddings API call fails; the error is
@@ -469,6 +535,20 @@ def generate_embeddings(
         # rows get cleared.
         db.query(Embedding).filter(Embedding.repository_id == repository_id).delete()
         db.commit()
+    else:
+        # Incremental: drop chunks for the files touched in this sync.
+        # Symbol chunks and annotated-file chunks both carry ``file_id``;
+        # the targeted delete covers both with one predicate and never
+        # touches commit/PR embeddings (whose ``file_id IS NULL``).
+        if changed_file_ids:
+            db.execute(
+                delete(Embedding).where(
+                    Embedding.repository_id == repository_id,
+                    Embedding.file_id.in_(changed_file_ids),
+                    Embedding.source_type.in_(("symbol", "file")),
+                )
+            )
+            db.commit()
 
     client = OpenAI(
         api_key=settings.OPENAI_API_KEY,
@@ -561,11 +641,24 @@ def generate_embeddings(
     # chunks, not their text.
     source_id_to_file_id: dict[UUID, UUID] = {}
 
+    # In incremental mode, load stored hashes for every source_type that
+    # derives from files -- symbol and annotated-file chunks. Commit and
+    # PR chunks are not reconciled: their content is immutable, the row
+    # count is bounded by git history and PR list size, and a full
+    # rebuild resets them on the next escalation. README chunks are
+    # handled separately below because the desired content comes from
+    # the caller, not the database.
+    stored_symbol_hashes: dict[UUID, str | None] = {}
+    stored_file_hashes: dict[UUID, str | None] = {}
+    if mode == "incremental":
+        stored_symbol_hashes = _load_stored_hashes(db, repository_id, "symbol")
+        stored_file_hashes = _load_stored_hashes(db, repository_id, "file")
+
     def _embed_symbol_chunks() -> int:
         """Stream symbols, build chunks, embed all batches in parallel.
 
         Returns:
-            Number of embeddings inserted.
+            Number of embeddings inserted or updated.
         """
         nonlocal skipped
         # Each entry carries ``(symbol_id, file_id, chunk_text)``. Holding
@@ -605,10 +698,22 @@ def generate_embeddings(
         if not all_pending:
             return 0
 
-        items = [(sym_id, chunk_text) for sym_id, _fid, chunk_text in all_pending]
+        items_full = [(sym_id, chunk_text) for sym_id, _fid, chunk_text in all_pending]
         file_ids = {sym_id: fid for sym_id, fid, _t in all_pending}
+        if mode == "incremental":
+            # Reconcile: drop chunks whose stored hash matches the
+            # freshly-rendered text. An unchanged symbol in an unchanged
+            # file does not pay the OpenAI call.
+            items = _filter_chunks_by_hash(items_full, stored_symbol_hashes)
+        else:
+            items = items_full
+        if not items:
+            return 0
         if publish_log:
-            publish_log(f"Built {len(items)} symbol chunks ({skipped} skipped)")
+            publish_log(
+                f"Built {len(items_full)} symbol chunks ({skipped} skipped, "
+                f"{len(items_full) - len(items)} up to date)"
+            )
         # The ``all_pending`` local is the only reference to the chunk
         # strings; once ``_embed_and_store`` returns they are unreachable
         # and the per-batch lists inside the pool are the live copies.
@@ -621,88 +726,131 @@ def generate_embeddings(
             file_id_of=file_ids.get,
             publish_log=publish_log,
             label="symbol chunks",
+            upsert=(mode == "incremental"),
         )
 
     total_inserted += _embed_symbol_chunks()
 
     # --- Commits ---
     # Embedded first because they're small and fast; their completion gives
-    # early searchable signal while bigger sets process.
-    commit_rows = db.execute(
-        select(
-            Commit.id,
-            Commit.hash,
-            Commit.author_name,
-            Commit.message,
-            Commit.changed_files_list,
-        ).where(Commit.repository_id == repository_id)
-    ).all()
-    commit_chunks: list[tuple[UUID, str]] = []
-    for row in commit_rows:
-        chunk = _build_commit_chunk(_commit_proxy(row))
-        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
-            commit_chunks.append((row.id, chunk))
-    total_inserted += _embed_and_store(
-        client,
-        db,
-        repository_id,
-        commit_chunks,
-        source_type="commit",
-        publish_log=publish_log,
-        label="commits",
-    )
+    # early searchable signal while bigger sets process. In incremental
+    # mode the git history is re-mined by ``analyze_git_history`` -- commit
+    # messages and authorship are immutable so the previously-stored
+    # chunks remain correct and are left alone; the new commits only
+    # land in the index when ``analyze_git_history`` inserts them, which
+    # then flows through this path on the next ingest.
+    if mode == "full":
+        commit_rows = db.execute(
+            select(
+                Commit.id,
+                Commit.hash,
+                Commit.author_name,
+                Commit.message,
+                Commit.changed_files_list,
+            ).where(Commit.repository_id == repository_id)
+        ).all()
+        commit_chunks: list[tuple[UUID, str]] = []
+        for row in commit_rows:
+            chunk = _build_commit_chunk(_commit_proxy(row))
+            if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
+                commit_chunks.append((row.id, chunk))
+        total_inserted += _embed_and_store(
+            client,
+            db,
+            repository_id,
+            commit_chunks,
+            source_type="commit",
+            publish_log=publish_log,
+            label="commits",
+        )
 
     # --- Pull requests ---
-    pr_rows = db.execute(
-        select(
-            PullRequest.id, PullRequest.number, PullRequest.title, PullRequest.description
-        ).where(PullRequest.repository_id == repository_id)
-    ).all()
-    pr_chunks: list[tuple[UUID, str]] = []
-    for row in pr_rows:
-        chunk = _build_pr_chunk(_pr_proxy(row))
-        if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
-            pr_chunks.append((row.id, chunk))
-    total_inserted += _embed_and_store(
-        client,
-        db,
-        repository_id,
-        pr_chunks,
-        source_type="pull_request",
-        publish_log=publish_log,
-        label="PRs",
-    )
+    # PRs are not refreshed on the sync path (``_bulk_insert_pull_requests``
+    # is ``ON CONFLICT DO NOTHING``); skip them in incremental mode.
+    if mode == "full":
+        pr_rows = db.execute(
+            select(
+                PullRequest.id, PullRequest.number, PullRequest.title, PullRequest.description
+            ).where(PullRequest.repository_id == repository_id)
+        ).all()
+        pr_chunks: list[tuple[UUID, str]] = []
+        for row in pr_rows:
+            chunk = _build_pr_chunk(_pr_proxy(row))
+            if _token_estimate(chunk) <= MAX_CHUNK_TOKENS:
+                pr_chunks.append((row.id, chunk))
+        total_inserted += _embed_and_store(
+            client,
+            db,
+            repository_id,
+            pr_chunks,
+            source_type="pull_request",
+            publish_log=publish_log,
+            label="PRs",
+        )
 
     # --- README ---
     # Per-section ``source_id``s (``uuid5`` over a stable namespace plus the
     # section index). Every section needs its own id so the upcoming
     # ``uq_embedding_source`` constraint does not collapse them.
     if readme_content:
-        readme_chunks = _build_readme_chunks(readme_content)
-        if readme_chunks:
-            response = client.embeddings.create(
-                model="text-embedding-3-small",
-                input=readme_chunks,
-            )
-            rows = [
-                {
-                    "source_type": "document",
-                    "source_id": _readme_section_source_id(repository_id, i),
-                    "file_id": None,
-                    "repository_id": repository_id,
-                    "chunk_text": chunk_text,
-                    "chunk_hash": _chunk_hash(chunk_text),
-                    "embedding": embedding_data.embedding,
-                }
-                for i, (chunk_text, embedding_data) in enumerate(
-                    zip(readme_chunks, response.data, strict=True)
+        desired_readme_chunks = _build_readme_chunks(readme_content)
+        if desired_readme_chunks:
+            if mode == "incremental":
+                # Reconcile by chunk_hash: a README edit only re-embeds
+                # the sections that actually changed, and the upsert
+                # overwrites stale rows in place.
+                stored = _load_stored_hashes(db, repository_id, "document")
+                desired_with_ids = [
+                    (
+                        _readme_section_source_id(repository_id, i),
+                        chunk_text,
+                    )
+                    for i, chunk_text in enumerate(desired_readme_chunks)
+                ]
+                to_embed = _filter_chunks_by_hash(desired_with_ids, stored)
+            else:
+                to_embed = [
+                    (
+                        _readme_section_source_id(repository_id, i),
+                        chunk_text,
+                    )
+                    for i, chunk_text in enumerate(desired_readme_chunks)
+                ]
+
+            if to_embed:
+                response = client.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=[chunk_text for _, chunk_text in to_embed],
                 )
-            ]
-            db.execute(pg_insert(Embedding).values(rows))
-            db.commit()
-            total_inserted += len(readme_chunks)
-            if publish_log:
-                publish_log(f"README embedded ({len(readme_chunks)} sections).")
+                rows = [
+                    {
+                        "source_type": "document",
+                        "source_id": source_id,
+                        "file_id": None,
+                        "repository_id": repository_id,
+                        "chunk_text": chunk_text,
+                        "chunk_hash": _chunk_hash(chunk_text),
+                        "embedding": embedding_data.embedding,
+                    }
+                    for (source_id, chunk_text), embedding_data in zip(
+                        to_embed, response.data, strict=True
+                    )
+                ]
+                stmt = pg_insert(Embedding).values(rows)
+                if mode == "incremental":
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["repository_id", "source_type", "source_id"],
+                        set_={
+                            "chunk_text": stmt.excluded.chunk_text,
+                            "chunk_hash": stmt.excluded.chunk_hash,
+                            "embedding": stmt.excluded.embedding,
+                        },
+                    )
+                db.execute(stmt)
+                db.commit()
+                total_inserted += len(to_embed)
+                if publish_log:
+                    publish_log(f"README embedded ({len(to_embed)} sections).")
 
     guide = db.query(OnboardingGuide).filter(OnboardingGuide.repository_id == repository_id).first()
     annotation_map: dict[str, str] = {}
@@ -739,16 +887,23 @@ def generate_embeddings(
             file_chunks.append((file_id, text))
             source_id_to_file_id[file_id] = file_id
 
-    total_inserted += _embed_and_store(
-        client,
-        db,
-        repository_id,
-        file_chunks,
-        source_type="file",
-        file_id_of=source_id_to_file_id.get,
-        publish_log=publish_log,
-        label="files",
-    )
+    if file_chunks:
+        if mode == "incremental":
+            items = _filter_chunks_by_hash(file_chunks, stored_file_hashes)
+        else:
+            items = file_chunks
+        if items:
+            total_inserted += _embed_and_store(
+                client,
+                db,
+                repository_id,
+                items,
+                source_type="file",
+                file_id_of=source_id_to_file_id.get,
+                publish_log=publish_log,
+                label="files",
+                upsert=(mode == "incremental"),
+            )
 
     # Symbol chunks go last: they're the largest batch set, and each
     # committed batch represents durable progress if a later API call fails.
@@ -773,16 +928,22 @@ def generate_embeddings(
                 source_id_to_file_id[file_id] = file_id
 
     if fallback_chunks:
-        total_inserted += _embed_and_store(
-            client,
-            db,
-            repository_id,
-            fallback_chunks,
-            source_type="symbol",
-            file_id_of=source_id_to_file_id.get,
-            publish_log=publish_log,
-            label="file-fallback chunks",
-        )
+        if mode == "incremental":
+            items = _filter_chunks_by_hash(fallback_chunks, stored_symbol_hashes)
+        else:
+            items = fallback_chunks
+        if items:
+            total_inserted += _embed_and_store(
+                client,
+                db,
+                repository_id,
+                items,
+                source_type="symbol",
+                file_id_of=source_id_to_file_id.get,
+                publish_log=publish_log,
+                label="file-fallback chunks",
+                upsert=(mode == "incremental"),
+            )
 
     if publish_log:
         publish_log(f"Embedding complete — {total_inserted} vectors stored.")

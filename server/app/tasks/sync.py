@@ -220,7 +220,7 @@ def _run_step_a(
     repo: Repository,
     repo_root: Path,
     diff: list[tuple[str, str]],
-) -> tuple[int, int]:
+) -> tuple[int, int, list[uuid.UUID]]:
     """Apply the deterministic half of the delta in one transaction.
 
     Sequence is fixed: file delta first, then ``analyze_git_history``
@@ -231,11 +231,14 @@ def _run_step_a(
     The whole thing is one transaction so a reader either sees the old
     graph or the new one, never a half-updated torn graph.
 
-    Returns ``(upserted, deleted)`` from the file delta for the summary
-    payload.
+    Returns ``(upserted, deleted, changed_file_ids)`` from the file
+    delta for the summary payload and the embedder's incremental
+    reconcile. ``changed_file_ids`` is the set of file rows the delta
+    touched (A/M/R/D) -- passed to the embedder so it can drop stale
+    symbol and annotated-file chunks before reconciling by hash.
     """
     paths = [path for _status, path in diff]
-    upserted, deleted, _changed = apply_file_delta(db, repo.id, repo_root, paths)
+    upserted, deleted, _changed, changed_file_ids = apply_file_delta(db, repo.id, repo_root, paths)
 
     analyze_git_history(db, None, repo, repo_root)
     delete_repo_edges(db, repo.id)
@@ -246,7 +249,7 @@ def _run_step_a(
     repo.entry_points = detect_entry_points(repo_root)
 
     repo.ingested_commit_sha = repo.ingested_commit_sha or repo.ingested_commit_sha
-    return upserted, deleted
+    return upserted, deleted, changed_file_ids
 
 
 def _ingest_artifact_frame(
@@ -379,6 +382,9 @@ def _do_sync(
         _record_success(db, repo, summary, datetime.now(UTC))
         return summary
 
+    upserted = deleted = 0
+    changed_file_ids: list[uuid.UUID] = []
+
     # Step A only needs to run if the deterministic watermark lags.
     if repo.ingested_commit_sha != new_sha:
         logger.warning(
@@ -411,7 +417,7 @@ def _do_sync(
             # throughout.
             return _run_full_sync(db, repo, repo_root, new_sha, generation, now)
 
-        _run_step_a(db, repo, repo_root, diff)
+        upserted, deleted, changed_file_ids = _run_step_a(db, repo, repo_root, diff)
 
         # Write the deterministic watermark.
         repo.ingested_commit_sha = new_sha
@@ -422,14 +428,19 @@ def _do_sync(
     # Step B: LLM phase. Outside the transaction, so a slow generation
     # does not hold locks across a network round trip.
     try:
-        upserted = deleted = 0
         glossary_added = 0
         embeddings_added = 0
         _ingest_artifact_frame(db, repo, repo_root, manage_status=False)
-        # ``embedding_mode='incremental'`` is the reconcile-by-chunk-hash
-        # path. The reconciler is filled out in Phase 5; today this
-        # still issues the full embeddings pass, but the flag commits us
-        # to the contract.
+        # ``build_glossary`` in incremental mode skips the delete and
+        # only defines symbols lacking an entry, ranked by the *current*
+        # file fan-in. The return value is the number of new entries
+        # actually persisted -- the work the LLM did, not the size of
+        # the input batch.
+        from app.services.glossary_builder import build_glossary
+        from app.services.onboarding import build_reading_order
+
+        glossary_added = build_glossary(db, repo, mode="incremental")
+        build_reading_order(db, repo, mode="incremental")
         embeddings_added = embed_repository_symbols(
             db,
             None,
@@ -438,6 +449,7 @@ def _do_sync(
             measure_memory=False,
             manage_status=False,
             embedding_mode="incremental",
+            changed_file_ids=changed_file_ids,
         )
         # Re-verify the generation before stamping the analysis
         # watermark: a concurrent reingest would have replaced the row.

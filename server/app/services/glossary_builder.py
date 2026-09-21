@@ -18,10 +18,10 @@ import json
 import logging
 import uuid
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from openai import OpenAI
-from sqlalchemy import Row
+from sqlalchemy import Row, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -33,20 +33,41 @@ logger = logging.getLogger(__name__)
 # Symbols per LLM request; keeps prompts and JSON responses well under limits.
 BATCH_SIZE = 25
 
+# The repository's glossary is bounded to this many entries. ``full`` mode
+# fills the budget; ``incremental`` mode refills any empty slots in the
+# current top-N without ever exceeding the cap.
+MAX_GLOSSARY_ENTRIES = 200
+
 
 def _get_top_symbols(
-    db: Session, repository_id: uuid.UUID, limit: int = 200
+    db: Session,
+    repository_id: uuid.UUID,
+    limit: int = MAX_GLOSSARY_ENTRIES,
+    *,
+    exclude_with_entry: bool = False,
 ) -> list[Row[tuple[AstSymbol, File]]]:
-    """Fetches the top symbols by file fan-in, joined with their files."""
-    return (
-        db.query(AstSymbol, File)
+    """Fetches the top symbols by file fan-in, joined with their files.
+
+    ``exclude_with_entry=True`` returns only symbols without a
+    ``GlossaryEntry`` for the repo -- the incremental mode's working set:
+    symbols that need a definition written for them. The ``NOT EXISTS``
+    subquery is what makes this cheap on the existing
+    ``ix_glossary_entries_symbol_id`` index.
+    """
+    stmt = (
+        select(AstSymbol, File)
         .join(File, AstSymbol.file_id == File.id)
-        .filter(File.repository_id == repository_id)
-        .filter(AstSymbol.kind.in_(["function", "class", "method", "variable"]))
-        .order_by(File.fan_in.desc())
-        .limit(limit)
-        .all()
+        .where(File.repository_id == repository_id)
+        .where(AstSymbol.kind.in_(["function", "class", "method", "variable"]))
     )
+    if exclude_with_entry:
+        stmt = stmt.where(
+            ~select(GlossaryEntry.id)
+            .where(GlossaryEntry.repository_id == repository_id)
+            .where(GlossaryEntry.symbol_id == AstSymbol.id)
+            .exists()
+        )
+    return list(db.execute(stmt.order_by(File.fan_in.desc()).limit(limit)).all())
 
 
 def _build_prompt(pairs: list[Row[tuple[AstSymbol, File]]]) -> str:
@@ -94,35 +115,61 @@ def _parse_response(text: str) -> dict[str, str]:
         return {}
 
 
-def build_glossary(db: Session, repo: Repository) -> int:
+def build_glossary(
+    db: Session,
+    repo: Repository,
+    *,
+    mode: Literal["full", "incremental"] = "full",
+) -> int:
     """Regenerate glossary definitions for a repository.
 
-    Deletes all existing `GlossaryEntry` rows for the repository, selects
-    up to 200 of its most-referenced symbols, requests plain-English
-    definitions from the LLM in batches of ``BATCH_SIZE``, and persists one
-    entry per symbol that received a definition. Name matching is done
-    case-insensitively to tolerate LLM casing drift.
+    ``mode="full"`` deletes all existing ``GlossaryEntry`` rows for the
+    repository, then selects up to ``MAX_GLOSSARY_ENTRIES`` of its
+    most-referenced symbols and asks the LLM to define them in batches.
+
+    ``mode="incremental"`` skips the delete: it selects symbols lacking
+    an entry, ranked by the *current* file fan-in, and refills empty
+    slots in the top-N budget. The glossary never exceeds
+    ``MAX_GLOSSARY_ENTRIES``: a newly-promoted symbol whose definition
+    was already cached stays cached, and entries that fall out of the
+    top-N are not regenerated.
+
+    Name matching is case-insensitive on the LLM side; a missing
+    definition just means the LLM dropped a name, not that the entry
+    was lost.
 
     Args:
         db: SQLAlchemy session used for queries and persistence.
-        repo: Repository whose glossary should be rebuilt.
+        repo: Repository whose glossary should be updated.
+        mode: ``"full"`` for initial ingest; ``"incremental"`` for the
+            sync task.
 
     Returns:
         Number of glossary entries created.
     """
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-    logger.info(f"[glossary] Starting for repo {repo.id}")
+    logger.info("[glossary] Starting for repo %s (mode=%s)", repo.id, mode)
 
-    db.query(GlossaryEntry).filter(GlossaryEntry.repository_id == repo.id).delete()
-    db.commit()
+    if mode == "full":
+        db.query(GlossaryEntry).filter(GlossaryEntry.repository_id == repo.id).delete()
+        db.commit()
 
-    pairs = _get_top_symbols(db, repo.id)
+    # Cap the working set at MAX_GLOSSARY_ENTRIES even in incremental
+    # mode: a repo whose top-N shifted (a previously-orphan symbol now
+    # has many callers) needs the new symbol defined, but the symbol
+    # that just dropped out of the top-N keeps its existing entry.
+    pairs = _get_top_symbols(
+        db,
+        repo.id,
+        limit=MAX_GLOSSARY_ENTRIES,
+        exclude_with_entry=(mode == "incremental"),
+    )
     if not pairs:
-        logger.warning(f"[glossary] No symbols found for repo {repo.id}")
+        logger.warning("[glossary] No symbols need entries for repo %s", repo.id)
         return 0
 
-    logger.info(f"[glossary] Processing {len(pairs)} symbols")
+    logger.info("[glossary] Processing %d symbols", len(pairs))
 
     all_definitions: dict[str, str] = {}
 
