@@ -4,6 +4,8 @@
  */
 import deleteRepoAction from "@/actions/deleteRepo";
 import regenerateRepoAction from "@/actions/regenerateRepo";
+import AutoUpdateSection from "@/components/AutoUpdateSection";
+import Repository from "@/types/repository";
 import {
   GearFineIcon,
   GitBranchIcon,
@@ -18,25 +20,19 @@ import Button from "./ui/Button";
 import Modal from "./ui/Modal";
 
 /**
- * Renders export, delete, regenerate, and version re-ingest controls.
+ * Renders export, delete, regenerate, auto-update, and version re-ingest controls.
  *
- * @param repo_id - ID of the repository under management.
- * @param github_url - Repository URL parsed for version selection.
+ * @param repo - The repository whose settings are being shown. The auto-update
+ *               section reads its full record so it can render status and counts.
  * @returns Settings panel with confirmation modals for destructive actions.
  */
-export default function RepoSettings({
-  repo_id,
-  github_url,
-}: {
-  repo_id: string;
-  github_url: string;
-}) {
+export default function RepoSettings({ repo }: { repo: Repository }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Owner/name feed the version graph; empty strings hide that section.
-  const match = github_url.match(
+  const match = repo.github_url.match(
     /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/,
   );
   const owner = match ? match[1] : "";
@@ -53,7 +49,7 @@ export default function RepoSettings({
     setError(null);
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${repo_id}/reingest`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${repo.id}/reingest`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -87,6 +83,8 @@ export default function RepoSettings({
         </h1>
       </div>
 
+      <AutoUpdateSection repo={repo} />
+
       <div className="mt-8 rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10">
         <div className="px-5 py-3">
           <p className="text-xs font-semibold uppercase tracking-widest text-(--primary)">
@@ -104,7 +102,7 @@ export default function RepoSettings({
               read instantly.
             </p>
           </div>
-          <ExportIllumeButton repo_id={repo_id} />
+          <ExportIllumeButton repo_id={repo.id} />
         </div>
       </div>
 
@@ -143,7 +141,7 @@ export default function RepoSettings({
               Are you sure you want to regenerate this repository?
             </p>
             <Button
-              onClick={() => regenerateRepoAction(repo_id)}
+              onClick={() => regenerateRepoAction(repo.id)}
               size="sm"
               className="font-semibold absolute bottom-4 right-4"
             >
@@ -231,7 +229,7 @@ export default function RepoSettings({
               Are you sure you want to delete this repository?
             </p>
             <Button
-              onClick={() => deleteRepoAction(repo_id)}
+              onClick={() => deleteRepoAction(repo.id)}
               size="sm"
               className="font-semibold absolute bottom-4 right-4 bg-red-500 hover:bg-red-600 text-white border-none"
             >

@@ -4,9 +4,14 @@
  */
 "use client";
 
-import { GearFineIcon, StarFourIcon } from "@phosphor-icons/react/dist/ssr";
+import {
+  CircleDashedIcon,
+  GearFineIcon,
+  StarFourIcon,
+} from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Repository from "@/types/repository";
 import RepoSettings from "./RepoSettings";
 import Modal from "./ui/Modal";
 
@@ -18,22 +23,17 @@ import Modal from "./ui/Modal";
  * @param id - UUID used for settings actions.
  * @param status - Ingestion status; non-ready repos show placeholder links.
  * @param github_url - Repository URL forwarded to settings.
+ * @param sync_status - Background-sync status; an active value shows a small spinner next to the badge.
  * @returns Sticky header with active-link highlighting and settings modal.
  */
-export default function RepoNavbar({
-  name,
-  num_id,
-  id,
-  status,
-  github_url,
-}: {
-  name: string;
-  num_id: number;
-  id: string;
-  status: string;
-  github_url: string;
-}) {
+export default function RepoNavbar({ repo }: { repo: Repository }) {
   const path = usePathname();
+  const { name, status, repo_number, sync_status } = repo;
+  const isSyncing =
+    sync_status === "queued" ||
+    sync_status === "checking" ||
+    sync_status === "updating";
+
   return (
     <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10 print:hidden">
       <section className="flex items-center">
@@ -51,7 +51,14 @@ export default function RepoNavbar({
           />
         </Link>
         <h1 className="text-xl font-medium mx-2">{name}</h1>
-        <div className="bg-green-500 text-(--background) rounded-full px-3 py-1 text-xs font-medium">
+        <div className="bg-green-500 text-(--background) rounded-full px-3 py-1 text-xs font-medium inline-flex items-center gap-1.5">
+          {isSyncing && (
+            <CircleDashedIcon
+              size={11}
+              className="animate-spin"
+              weight="bold"
+            />
+          )}
           {status}
         </div>
       </section>
@@ -59,32 +66,32 @@ export default function RepoNavbar({
       {status === "ready" && (
         <section className="flex items-center">
           <Link
-            href={`/repo/${num_id}`}
-            className={`m-2 mx-4  ${path === `/repo/${num_id}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${repo_number}`}
+            className={`m-2 mx-4  ${path === `/repo/${repo_number}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Home
           </Link>
           {/* <Link
-          href={`/repo/${num_id}/onboarding-guide`}
-          className={`m-2 mx-4  ${path === `/repo/${num_id}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          href={`/repo/${repo_number}/onboarding-guide`}
+          className={`m-2 mx-4  ${path === `/repo/${repo_number}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
         >
           Onboarding Guide
         </Link> */}
           <Link
-            href={`/repo/${num_id}/glossary`}
-            className={`m-2 mx-4  ${path === `/repo/${num_id}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${repo_number}/glossary`}
+            className={`m-2 mx-4  ${path === `/repo/${repo_number}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Glossary
           </Link>
           <Link
-            href={`/repo/${num_id}/explorer`}
-            className={`m-2 mx-4  ${path === `/repo/${num_id}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${repo_number}/explorer`}
+            className={`m-2 mx-4  ${path === `/repo/${repo_number}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Explorer
           </Link>
           <Link
-            href={`/repo/${num_id}/graph`}
-            className={`m-2 mx-4  ${path === `/repo/${num_id}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`/repo/${repo_number}/graph`}
+            className={`m-2 mx-4  ${path === `/repo/${repo_number}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Graph
           </Link>
@@ -97,7 +104,7 @@ export default function RepoNavbar({
               />
             }
           >
-            <RepoSettings repo_id={id} github_url={github_url} />
+            <RepoSettings repo={repo} />
           </Modal>
         </section>
       )}
@@ -123,7 +130,7 @@ export default function RepoNavbar({
               />
             }
           >
-            <RepoSettings repo_id={id} github_url={github_url} />
+            <RepoSettings repo={repo} />
           </Modal>
         </section>
       )}

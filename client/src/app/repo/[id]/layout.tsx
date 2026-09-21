@@ -7,6 +7,7 @@ import { GetRepository } from "@/api/repository";
 import AnimatedLayout from "@/components/AnimatedLayout";
 import BackgroundGraph from "@/components/BackgroundGraph";
 import RepoNavbar from "@/components/RepoNavbar";
+import RepoStatusPoller from "@/components/RepoStatusPoller";
 import RepoNavSkel from "@/components/ui/RepoNavSkel";
 import type { Metadata, ResolvingMetadata } from "next";
 import { notFound } from "next/navigation";
@@ -42,7 +43,13 @@ export async function generateMetadata(
 }
 
 /**
- * Wraps repo pages with navbar, ambient background graph, and transitions.
+ * Wraps repo pages with navbar, ambient background graph, transitions, and a
+ * background-sync poller.
+ *
+ * The poller is the layout's responsibility because it must outlive the
+ * settings modal: when the modal closes the page should still keep repainting
+ * while the sync finishes. `DashboardRefresh` does not cover this case because
+ * the sync keeps `status='ready'`.
  *
  * @param children - Nested repo route content.
  * @param params - Route params promise resolving to the repository id.
@@ -77,14 +84,9 @@ export default async function RootLayout({
     <main className="relative min-h-screen">
       <BackgroundGraph graph={graph} />
       <Suspense fallback={<RepoNavSkel />}>
-        <RepoNavbar
-          name={repo.name}
-          num_id={Number(id)}
-          id={repo.id}
-          status={repo.status}
-          github_url={repo.github_url}
-        />
+        <RepoNavbar repo={repo} />
       </Suspense>
+      <RepoStatusPoller sync_status={repo.sync_status} />
 
       <AnimatedLayout>{children}</AnimatedLayout>
     </main>
