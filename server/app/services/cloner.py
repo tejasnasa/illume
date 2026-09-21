@@ -20,8 +20,24 @@ from app.services._publish import publish_log
 logger = logging.getLogger(__name__)
 
 
-def _update_status(db: Session, redis_client, repo: Repository, status: str) -> None:
-    """Persist a new repo status and broadcast it over the log stream."""
+def _update_status(
+    db: Session,
+    redis_client,
+    repo: Repository,
+    status: str,
+    manage_status: bool = True,
+) -> None:
+    """Persist a new repo status and broadcast it over the log stream.
+
+    ``manage_status=False`` is the sync path's escape hatch: a background
+    sync must leave ``status='ready'`` alone, so this becomes a no-op for
+    the row and the log stream. The frame is suppressed rather than the
+    rest of the work, because ``status_update`` frames are what the
+    client's ``TerminalLogs`` mounts on -- emitting one mid-sync would
+    mount a useless panel against a row that never actually transitioned.
+    """
+    if not manage_status:
+        return
     repo.status = status
     db.commit()
     publish_log(
@@ -49,6 +65,7 @@ def clone_repository(
     github_access_token: str | None = None,
     branch: str | None = None,
     commit_sha: str | None = None,
+    manage_status: bool = True,
 ) -> tuple[Path, str, str]:
     """Clone a repository into a fresh temp directory.
 
@@ -61,6 +78,10 @@ def clone_repository(
         branch: Optional branch to check out instead of the default.
         commit_sha: Optional commit SHA to check out after cloning. When set,
             the full history is fetched so detached checkout is possible.
+        manage_status: When ``False``, suppress the ``status='cloning'``
+            flip and the ``status_update`` log frame. The sync task runs
+            against an already-ready repo and uses this to keep the row,
+            the graph endpoint and the live-log panel from reacting.
 
     Returns:
         Tuple of (clone directory path, actual branch name, actual commit SHA).
@@ -70,7 +91,7 @@ def clone_repository(
         RuntimeError: If the git clone or checkout command fails. The temp
             directory is removed before raising.
     """
-    _update_status(db, redis_client, repo, "cloning")
+    _update_status(db, redis_client, repo, "cloning", manage_status=manage_status)
     publish_log(
         redis_client,
         str(repo.id),

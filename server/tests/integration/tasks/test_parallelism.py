@@ -421,9 +421,9 @@ class TestPullRequestOverlap:
         actually overlaps." Without it the refactor in ``ingest.py``
         could silently regress to the original sequential order.
         """
-        # We mock at the ``app.tasks.ingest`` module level so the
+        # We mock at the pipeline module level (its caller) so the
         # thread-pool dispatch sees our replacements.
-        import app.tasks.ingest as ingest_module
+        import app.services.pipeline as pipeline_module  # noqa: F401  -- imported for the patch target below
 
         timings: dict[str, float] = {}
         events: list[tuple[str, float]] = []
@@ -453,12 +453,15 @@ class TestPullRequestOverlap:
 
         # We don't actually need to run a full ingest here -- only
         # verify the dispatch order in ``ingest_repository``. Patch
-        # the parser on the ingest module and patch the GitHub
-        # fetcher where it is imported by the parallel helper.
+        # the parser on the pipeline module (its caller) and patch the
+        # GitHub fetcher where it is imported by the parallel helper.
         from app.tasks import _parallel as parallel_module
 
         fake_parse, fake_pr = _make_parse_pr(MagicMock())
-        monkeypatch.setattr(ingest_module, "process_repository_files", fake_parse)
+        # ``process_repository_files`` is now called from
+        # ``pipeline.run_full_analysis``, not from ``ingest_repository`` --
+        # the parser binding lives on the pipeline module now.
+        monkeypatch.setattr(pipeline_module, "process_repository_files", fake_parse)
         # ``fetch_pull_requests`` is imported by ``_parallel`` at
         # module load, so the patch has to target that namespace --
         # patching ``ingest_module.fetch_pull_requests`` would leave

@@ -20,6 +20,7 @@ server-assigned ids.
 import logging
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -49,8 +50,21 @@ logger = logging.getLogger(__name__)
 FILE_BATCH_SIZE = 500
 
 
-def _update_status(db: Session, redis_client, repo: Repository, status: str) -> None:
-    """Persist a new repo status and broadcast it over the log stream."""
+def _update_status(
+    db: Session,
+    redis_client,
+    repo: Repository,
+    status: str,
+    manage_status: bool = True,
+) -> None:
+    """Persist a new repo status and broadcast it over the log stream.
+
+    See :func:`app.services.cloner._update_status` for the
+    ``manage_status=False`` contract -- the sync path uses it to leave a
+    ready row's status alone.
+    """
+    if not manage_status:
+        return
     repo.status = status
     db.commit()
     publish_log(
@@ -131,6 +145,7 @@ def process_repository_files(
     redis_client,
     repo: Repository,
     repo_root: Path,
+    manage_status: bool = True,
 ) -> int:
     """Parse all source files in a repository and persist the analysis results.
 
@@ -148,11 +163,13 @@ def process_repository_files(
         redis_client: Redis client for publishing progress logs.
         repo: Repository record being indexed (updated with detected stack).
         repo_root: Root directory of the cloned repository on disk.
+        manage_status: When ``False``, suppress the ``status='parsing'`` flip
+            and its log frame.
 
     Returns:
         Number of source files successfully parsed and stored.
     """
-    _update_status(db, redis_client, repo, "parsing")
+    _update_status(db, redis_client, repo, "parsing", manage_status=manage_status)
     publish_log(redis_client, str(repo.id), "parsing_started", "Starting file analysis...")
     db.query(File).filter(File.repository_id == repo.id).delete()
     db.commit()
@@ -295,6 +312,8 @@ def embed_repository_symbols(
     repo: Repository,
     readme_content: str | None = None,
     measure_memory: bool = True,
+    manage_status: bool = True,
+    embedding_mode: Literal["full", "incremental"] = "full",
 ) -> int:
     """Generate vector embeddings for a repository's indexed symbols.
 
@@ -310,11 +329,18 @@ def embed_repository_symbols(
             so the peak delta would cover the other thread's allocations too.
             Callers that need a clean per-stage memory number for the embedder
             must run it unoverlapped.
+        manage_status: When ``False``, suppress the ``status='embedding'`` flip
+            and its log frame.
+        embedding_mode: Forwarded to :func:`generate_embeddings`. ``"full"``
+            deletes the repo's existing ``Embedding`` rows first (the
+            initial-ingest path); ``"incremental"`` is the sync task's mode
+            and skips that delete. The reconcile logic that makes
+            incremental actually useful is added later.
 
     Returns:
         Number of embedding vectors stored.
     """
-    _update_status(db, redis_client, repo, "embedding")
+    _update_status(db, redis_client, repo, "embedding", manage_status=manage_status)
     publish_log(
         redis_client,
         str(repo.id),
@@ -332,6 +358,7 @@ def embed_repository_symbols(
             db=db,
             publish_log=publish_progress,
             readme_content=readme_content,
+            mode=embedding_mode,
         )
 
     publish_log(

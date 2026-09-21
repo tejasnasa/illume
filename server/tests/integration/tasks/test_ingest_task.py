@@ -769,7 +769,11 @@ class TestFailurePathLeavesRepoFailed:
         """
         from sqlalchemy.exc import DBAPIError
 
-        import app.tasks.ingest as ingest_module
+        # ``process_repository_files`` is now called from
+        # ``app.services.pipeline.run_full_analysis``; patch the binding on
+        # the module that *calls* it, the same way the ``_parallel`` patches
+        # target the importing namespace rather than the service.
+        import app.services.pipeline as pipeline_module
 
         def explode_after_flush(db, redis_client, repo, repo_root):
             # Stage a row in the same session without committing, then raise
@@ -788,7 +792,7 @@ class TestFailurePathLeavesRepoFailed:
             db.flush()  # forces a round trip; any later query needs a rollback
             raise DBAPIError("simulated flush failure", None, Exception())
 
-        monkeypatch.setattr(ingest_module, "process_repository_files", explode_after_flush)
+        monkeypatch.setattr(pipeline_module, "process_repository_files", explode_after_flush)
 
         run_task(pipeline_repo)
 
@@ -829,8 +833,11 @@ class TestFailurePathLeavesRepoFailed:
         """
         from sqlalchemy.exc import DBAPIError
 
+        # ``process_repository_files`` is now called from
+        # ``app.services.pipeline.run_full_analysis``; patch the binding on
+        # the module that *calls* it.
+        import app.services.pipeline as pipeline_module
         import app.services.scanner as scanner_module
-        import app.tasks.ingest as ingest_module
 
         # First invocation: simulate the failure.
         def explode(db, redis_client, repo, repo_root):
@@ -847,7 +854,7 @@ class TestFailurePathLeavesRepoFailed:
             db.flush()
             raise DBAPIError("simulated flush failure", None, Exception())
 
-        monkeypatch.setattr(ingest_module, "process_repository_files", explode)
+        monkeypatch.setattr(pipeline_module, "process_repository_files", explode)
 
         run_task(pipeline_repo)
         assert status_of(pipeline_repo) == "failed"
@@ -856,7 +863,7 @@ class TestFailurePathLeavesRepoFailed:
         # leave the ``stubbed`` fixture (fake clone, OpenAI stub) in place so
         # the recovery run does not reach out to GitHub.
         monkeypatch.setattr(
-            ingest_module,
+            pipeline_module,
             "process_repository_files",
             scanner_module.process_repository_files,
         )

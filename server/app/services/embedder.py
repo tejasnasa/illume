@@ -27,12 +27,14 @@ was tuned for (2 vCPUs), four in-flight requests is the point where adding
 more threads does not overlap more wall-clock.
 """
 
+import hashlib
 import logging
 import re
+import uuid
 from collections import defaultdict
 from collections.abc import Callable
-from typing import Any, Generator, cast
-from uuid import UUID
+from typing import Any, Generator, Literal, cast
+from uuid import UUID, uuid5
 
 from openai import OpenAI
 from sqlalchemy import select
@@ -56,6 +58,37 @@ logger = logging.getLogger(__name__)
 
 # Symbol kinds worth embedding individually.
 EMBEDDABLE_KINDS = {"function", "class", "method"}
+
+# Stable namespace for ``uuid5``-derived ``source_id``s. The constant here
+# is a per-application value -- regenerating rows with a different namespace
+# changes every id, so it is pinned rather than derived from settings.
+# Per-section README ``source_id``s and any other stable synthetic keys flow
+# through this single value so all of them are reproducible from a string.
+_README_SECTION_NS = uuid.UUID("5c4d6e7f-8a01-4c5d-6e7f-8a014c5d6e7f")
+
+
+def _chunk_hash(chunk_text: str) -> str:
+    """Stable hash of a rendered chunk's text.
+
+    The incremental embedder compares this against the stored value to
+    decide whether a re-embed is needed -- a symbol whose callers or
+    definition changed without its own source changing should still get
+    a fresh vector. SHA-256 is overkill but cheap and stable across
+    Python versions; ``String(64)`` in the migration covers it.
+    """
+    return hashlib.sha256(chunk_text.encode("utf-8")).hexdigest()
+
+
+def _readme_section_source_id(repository_id: UUID, section_index: int) -> UUID:
+    """Per-section ``source_id`` for README chunks.
+
+    Every README section needs a distinct ``source_id`` so the upcoming
+    ``uq_embedding_source`` unique constraint does not collapse them
+    into one row. ``uuid5`` over a stable namespace plus the section's
+    index makes each section individually upsertable.
+    """
+    return uuid5(_README_SECTION_NS, f"{repository_id}:{section_index}")
+
 
 # Chunks above this estimated size are skipped to stay within model limits.
 MAX_CHUNK_TOKENS = 2048
@@ -311,6 +344,10 @@ def _embed_and_store(
     pool is not justified by the speedup. See :mod:`app.services._concurrency`
     for the threading contract.
 
+    The ``chunk_hash`` column is set to a SHA-256 of ``chunk_text`` at insert
+    time so the incremental path can compare against the stored value and
+    only re-embed chunks whose rendered text actually changed.
+
     Args:
         client: OpenAI client used for the embeddings API.
         db: SQLAlchemy session for persistence.
@@ -354,6 +391,7 @@ def _embed_and_store(
                 "file_id": file_id_of(source_id) if file_id_of else None,
                 "repository_id": repository_id,
                 "chunk_text": chunk_text,
+                "chunk_hash": _chunk_hash(chunk_text),
                 "embedding": embedding_data.embedding,
             }
             for (source_id, chunk_text), embedding_data in zip(batch, response.data)
@@ -377,6 +415,7 @@ def generate_embeddings(
     db: Session,
     publish_log=None,
     readme_content: str | None = None,
+    mode: Literal["full", "incremental"] = "full",
 ) -> int:
     """Generate and persist vector embeddings for a repository.
 
@@ -405,6 +444,14 @@ def generate_embeddings(
         publish_log: Optional callback receiving progress messages
             (e.g. for streaming status to a client).
         readme_content: Optional raw README markdown to embed as documents.
+        mode: ``"full"`` deletes the repository's existing embeddings first
+            (the only correct behaviour for a full re-ingest, since commits
+            and PRs have no ``file_id`` and therefore no cascade to clear
+            them). ``"incremental"`` is the sync path's mode; the reconcile
+            logic (recompute desired chunks, only embed what differs by
+            ``chunk_hash``) is added later. Today the incremental mode is
+            just "don't blow away the existing rows" -- the rest of the
+            reconciliation is a follow-up.
 
     Returns:
         Total number of embeddings inserted.
@@ -413,6 +460,16 @@ def generate_embeddings(
         Exception: If an OpenAI embeddings API call fails; the error is
             logged and re-raised after earlier batches have been committed.
     """
+    if mode == "full":
+        # Repo-scoped delete: ``File`` cascades only reach ``Embedding.file_id``,
+        # so commit/PR/document rows survive a ``DELETE FROM files``. The full
+        # re-ingest path used to rely on the parse stage's file delete taking
+        # them with it, but the parse stage now runs as ``ON CONFLICT DO
+        # NOTHING`` and never deletes -- so this is the only place the old
+        # rows get cleared.
+        db.query(Embedding).filter(Embedding.repository_id == repository_id).delete()
+        db.commit()
+
     client = OpenAI(
         api_key=settings.OPENAI_API_KEY,
         timeout=_OPENAI_TIMEOUT_S,
@@ -617,8 +674,9 @@ def generate_embeddings(
     )
 
     # --- README ---
-    # README sections are stored as repo-level documents (source_id = repo id),
-    # since they don't belong to any single file or symbol.
+    # Per-section ``source_id``s (``uuid5`` over a stable namespace plus the
+    # section index). Every section needs its own id so the upcoming
+    # ``uq_embedding_source`` constraint does not collapse them.
     if readme_content:
         readme_chunks = _build_readme_chunks(readme_content)
         if readme_chunks:
@@ -629,13 +687,16 @@ def generate_embeddings(
             rows = [
                 {
                     "source_type": "document",
-                    "source_id": repository_id,
+                    "source_id": _readme_section_source_id(repository_id, i),
                     "file_id": None,
                     "repository_id": repository_id,
-                    "chunk_text": readme_chunks[i],
+                    "chunk_text": chunk_text,
+                    "chunk_hash": _chunk_hash(chunk_text),
                     "embedding": embedding_data.embedding,
                 }
-                for i, embedding_data in enumerate(response.data)
+                for i, (chunk_text, embedding_data) in enumerate(
+                    zip(readme_chunks, response.data, strict=True)
+                )
             ]
             db.execute(pg_insert(Embedding).values(rows))
             db.commit()

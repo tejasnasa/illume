@@ -1,10 +1,8 @@
 import json
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from uuid import UUID
 
 from app.core.celery import celery
 from app.core.database import get_sync_db
@@ -12,15 +10,8 @@ from app.core.redis import get_sync_redis
 from app.models.repository import Repository
 from app.services._stage_timer import stage
 from app.services.cloner import cleanup_clone, clone_repository
-from app.services.criticality import run_criticality_scoring
-from app.services.git_analyzer import analyze_git_history
-from app.services.scanner import embed_repository_symbols, process_repository_files
-from app.tasks._parallel import (
-    run_brief_in_thread,
-    run_glossary_in_thread,
-    run_pr_fetch_in_thread,
-    run_reading_order_in_thread,
-)
+from app.services.pipeline import run_full_analysis
+from app.tasks._parallel import run_pr_fetch_in_thread
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +81,8 @@ def ingest_repository(
             # is what stops them from reaching back into the main session's
             # identity map (a stale-instance hazard if
             # ``expire_on_commit=False`` were ever flipped on).
+            from uuid import UUID
+
             repo_id_value: UUID = repo.id
             repo_github_url: str = repo.github_url
 
@@ -97,6 +90,11 @@ def ingest_repository(
             repo.ingested_commit_sha = actual_sha
             db.commit()
 
+            # PR fetch overlaps the parse work: it is purely a network
+            # round-trip plus its own session, and the original
+            # ``ingest_repository`` overlapped it for exactly that reason.
+            # The pipeline itself runs PR fetch after parse, so this
+            # backgrounded fetch is the only place the overlap survives.
             pr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest-pr")
             pr_future = pr_executor.submit(
                 run_pr_fetch_in_thread,
@@ -106,22 +104,19 @@ def ingest_repository(
                 redis_client,
             )
 
-            readme_content = None
             try:
-                # ``process_repository_files`` carries its own per-stage timers
-                # (parse / resolve_dependencies / compute_fan_metrics /
-                # detect_stack), so it is deliberately not wrapped again here --
-                # a nesting timer would double-count their memory deltas.
-                process_repository_files(db, redis_client, repo, tmp_dir)
-                with stage("git_history"):
-                    analyze_git_history(db, redis_client, repo, tmp_dir)
-
-                for name in ("README.md", "readme.md", "Readme.md"):
-                    readme_path = os.path.join(tmp_dir, name)
-                    if os.path.exists(readme_path):
-                        with open(readme_path, "r", errors="ignore") as f:
-                            readme_content = f.read()
-                        break
+                # ``manage_status=True`` preserves today's
+                # ``status='parsing'/'embedding'`` transitions for the
+                # initial-ingest path; the sync task passes ``False``.
+                run_full_analysis(
+                    db,
+                    repo,
+                    tmp_dir,
+                    redis_client,
+                    publish,
+                    manage_status=True,
+                    overlap_llm=True,
+                )
             finally:
                 cleanup_clone(tmp_dir)
 
@@ -129,52 +124,6 @@ def ingest_repository(
                 pr_future.result()
             finally:
                 pr_executor.shutdown(wait=True)
-
-            publish("criticality_started", "Scoring file criticality...")
-            with stage("criticality"):
-                run_criticality_scoring(db, repo.id)
-
-            publish("glossary_started", "Building project glossary...")
-            publish("reading_order_started", "Generating recommended reading order...")
-            parallel_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ingest-llm")
-            try:
-                glossary_future = parallel_executor.submit(
-                    run_glossary_in_thread, repo_id_value, repo_github_url
-                )
-                reading_order_future = parallel_executor.submit(
-                    run_reading_order_in_thread, repo_id_value, repo_github_url
-                )
-                # Wall-clock for the overlapped pair. Comparing it against the
-                # two helpers' individual walls shows whether the overlap paid
-                # off: the pair should land near max(glossary, reading_order),
-                # not their sum.
-                with stage("glossary_and_reading_order_join", measure_memory=False):
-                    glossary_future.result()
-                    reading_order_future.result()
-            finally:
-                parallel_executor.shutdown(wait=True)
-
-            publish("embedding_started", "Generating embeddings...")
-            publish("brief_started", "Synthesizing AI architecture brief...")
-            brief_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest-brief")
-            try:
-                brief_future = brief_executor.submit(
-                    run_brief_in_thread, repo_id_value, readme_content
-                )
-                with stage("embed_and_brief_join", measure_memory=False):
-                    embed_repository_symbols(
-                        db,
-                        redis_client,
-                        repo,
-                        readme_content=readme_content,
-                        measure_memory=False,
-                    )
-                    # Joined before ``status = "ready"`` so a brief failure
-                    # still fails the ingest, exactly as it did when the call
-                    # was sequential.
-                    brief_future.result()
-            finally:
-                brief_executor.shutdown(wait=True)
 
             repo.status = "ready"
             db.commit()

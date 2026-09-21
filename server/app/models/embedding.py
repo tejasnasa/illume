@@ -7,7 +7,7 @@ Stores pgvector embeddings for semantic search and Retrieval-Augmented Generatio
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import UUID, Enum, ForeignKey, Index, Text, text
+from sqlalchemy import UUID, Enum, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -49,3 +49,5 @@ class Embedding(Base):
             native_enum=False,
         )
     )
+    # sha256-style hash of the rendered ``chunk_text`` at insert time.
+    chunk_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
