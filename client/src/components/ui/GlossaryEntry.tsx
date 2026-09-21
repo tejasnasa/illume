@@ -11,6 +11,7 @@ import Link from "next/link";
  * @param start The base offset added to idx for the displayed entry number.
  * @param idx The zero-based index of this entry within the current page.
  * @param github_url The repository base URL for the source-file link.
+ * @param branch Repository's ingested branch, used in place of ``master`` when set.
  * @returns The rendered glossary entry element.
  */
 export default function GlossaryEntry({
@@ -18,11 +19,13 @@ export default function GlossaryEntry({
   start,
   idx,
   github_url,
+  branch,
 }: {
   entry: any;
   start: number;
   idx: number;
   github_url: string;
+  branch?: string | null;
 }) {
   return (
     <div
@@ -40,7 +43,7 @@ export default function GlossaryEntry({
         </div>
         {entry.file_path && (
           <Link
-            href={`${github_url}/blob/master/${entry.file_path}#L${entry.line_number}`}
+            href={`${github_url}/blob/${branch ?? "master"}/${entry.file_path}#L${entry.line_number}`}
             target="_blank"
             className="flex items-center gap-2 font-mono text-sm text-(--chart-2) bg-(--chart-2)/10 hover:bg-(--chart-2)/20 transition-colors px-2 py-1 rounded truncate max-w-50 sm:max-w-xs shrink-0"
             title={entry.file_path}

@@ -273,6 +273,13 @@ list of confusing failures.
   per-user isolation.
 - `integration/tasks/test_ingest_task.py` — the whole ingestion pipeline, run eagerly rather than
   through a worker so a test can assert what the pipeline persisted.
+- `integration/tasks/test_sweep_task.py` — the beat-dispatched `sweep_due_repositories`: due/not-due
+  matrix, lease predicates, claim idempotence, and the global kill switch.
+- `integration/tasks/test_sync_task.py` — `sync_repository` against a real bare origin: state
+  equivalence with a fresh ingest, escalation on rewritten history or large diffs, failure isolation,
+  watermark split, and concurrent reingest guards.
+- `integration/tasks/test_sync_llm.py` — incremental glossary/reading-order/embedder phases against
+  the recorded stub prompts: zero calls on a no-change sync, exact counts when something did change.
 - `integration/ws/test_ingest_ws.py` — the ingest WebSocket: the handshake, what it relays, what it
   refuses, and when it closes.
 

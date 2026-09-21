@@ -17,9 +17,18 @@ import Textarea from "./ui/Textarea";
  *
  * @param repoId - ID of the repository whose chat history to show.
  * @param url - Repository URL forwarded to message bubbles for links.
+ * @param branch - Repository's ingested branch, forwarded to citation links.
  * @returns Chat panel with history, empty state, and input row.
  */
-export default function Chat({ repoId, url }: { repoId: string; url: string }) {
+export default function Chat({
+  repoId,
+  url,
+  branch,
+}: {
+  repoId: string;
+  url: string;
+  branch?: string | null;
+}) {
   const { messages, isLoading, sendMessage, deleteMessage, clearHistory } =
     useChat({
       repoId,
@@ -78,6 +87,7 @@ export default function Chat({ repoId, url }: { repoId: string; url: string }) {
             message={msg.answer}
             error={msg.error}
             url={url}
+            branch={branch}
             onDelete={deleteMessage}
           />
         ))}

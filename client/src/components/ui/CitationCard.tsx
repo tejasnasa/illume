@@ -123,13 +123,18 @@ function resolveSubLabel(type: SourceType, src: Source): string {
  * Builds a GitHub deep link for a citation when one applies.
  * @param src The citation source.
  * @param url The repository base URL.
+ * @param branch The repository's ingested branch, or null to fall back to ``master``.
  * @returns The GitHub URL, or null when the type has no link target.
  */
-function resolveGithubHref(src: Source, url: string): string | null {
+function resolveGithubHref(
+  src: Source,
+  url: string,
+  branch: string | null,
+): string | null {
+  const ref = branch ?? "master";
   if (src.source_type === "symbol")
-    return `${url}/blob/master/${src.file_path}#L${src.start_line}-L${src.end_line}`;
-  if (src.source_type === "file")
-    return `${url}/blob/master/${src.file_path}`;
+    return `${url}/blob/${ref}/${src.file_path}#L${src.start_line}-L${src.end_line}`;
+  if (src.source_type === "file") return `${url}/blob/${ref}/${src.file_path}`;
   if (src.source_type === "commit") return `${url}/commit/${src.commit_hash}`;
   if (src.source_type === "pull_request") return `${url}/pull/${src.pr_number}`;
   return null;
@@ -157,21 +162,24 @@ function GithubLink({ href }: { href: string }) {
  * Renders an expandable card summarizing one cited source.
  * @param src The citation source to display.
  * @param url The repository base URL for GitHub links.
+ * @param branch The repository's ingested branch, used in place of ``master`` when set.
  * @returns The rendered citation card element.
  */
 export default function CitationCard({
   src,
   url,
+  branch,
 }: {
   src: Source;
   url: string;
+  branch?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   const type = resolveType(src);
   const config = TYPE_CONFIG[type];
   const Icon = config.icon;
-  const githubHref = resolveGithubHref(src, url);
+  const githubHref = resolveGithubHref(src, url, branch ?? null);
 
   return (
     <div

@@ -31,7 +31,6 @@ export default async function ExplorerPage({
 
   return (
     <div className="mx-auto max-w-7xl py-12">
-
       {!graphData ? (
         <div className="glass-card rounded-sm overflow-hidden border border-(--border) bg-(--card)/40 p-2">
           <div className="p-6 rounded-sm border border-(--destructive)/30 bg-(--destructive)/10 text-(--destructive) flex items-start gap-4">
@@ -44,7 +43,13 @@ export default async function ExplorerPage({
           </div>
         </div>
       ) : (
-        <ExplorerClient graphData={graphData} github_url={repo.github_url} repoId={repo.id} guide={guide} />
+        <ExplorerClient
+          graphData={graphData}
+          github_url={repo.github_url}
+          repoId={repo.id}
+          guide={guide}
+          branch={repo.ingested_branch}
+        />
       )}
     </div>
   );

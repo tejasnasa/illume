@@ -22,6 +22,7 @@ interface Props {
   ownershipData: any;
   isLoading: boolean;
   githubUrl: string;
+  branch?: string | null;
   annotation: string | null;
   onClose: () => void;
 }
@@ -32,6 +33,7 @@ interface Props {
  * @param ownershipData Ownership payload with primary owner, bus factor, and contributors.
  * @param isLoading When true, shows the ownership loading state.
  * @param githubUrl Repository URL used for the "view on GitHub" link.
+ * @param branch Repository's ingested branch, used in place of ``master`` when set.
  * @param annotation Optional note appended below the ownership section.
  * @param onClose Handler invoked when the close button is clicked.
  * @returns The rendered detail card element.
@@ -41,6 +43,7 @@ export default function FileDetailCard({
   ownershipData,
   isLoading,
   githubUrl,
+  branch,
   onClose,
   annotation,
 }: Props) {
@@ -64,7 +67,7 @@ export default function FileDetailCard({
         </button>
 
         <Link
-          href={`${githubUrl}/blob/master/${file.path}`}
+          href={`${githubUrl}/blob/${branch ?? "master"}/${file.path}`}
           target="_blank"
           className="absolute p-2 top-4 right-14 text-(--muted-foreground) hover:bg-(--secondary) rounded-full transition-colors"
         >

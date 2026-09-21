@@ -18,16 +18,19 @@ import GlossaryEntry from "./ui/GlossaryEntry";
  * @param repoId - ID of the repository whose glossary to search.
  * @param children - Default glossary content shown when idle.
  * @param github_url - Repository URL for source links in entries.
+ * @param branch Repository's ingested branch, forwarded to source-link consumers.
  * @returns Header with search box plus results or fallback content.
  */
 export default function GlossarySearch({
   repoId,
   children,
   github_url,
+  branch,
 }: {
   repoId: string;
   children: React.ReactNode;
   github_url: string;
+  branch?: string | null;
 }) {
   const { form, onSubmit, results, page, loading, error, goToPage, reset } =
     useGlossarySearch(repoId);
@@ -123,6 +126,7 @@ export default function GlossarySearch({
                   entry={entry}
                   start={(page - 1) * results.page_size + 1}
                   github_url={github_url}
+                  branch={branch}
                   idx={idx}
                 />
               ))}

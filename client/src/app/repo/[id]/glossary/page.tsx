@@ -36,7 +36,11 @@ export default async function GlossaryPage({
 
   return (
     <main className="max-w-5xl mx-auto p-6 pt-12">
-      <GlossarySearch github_url={repo.github_url} repoId={repo.id}>
+      <GlossarySearch
+        github_url={repo.github_url}
+        repoId={repo.id}
+        branch={repo.ingested_branch}
+      >
         <div className="flex justify-between items-center mb-6">
           <span className="text-sm font-medium text-(--muted-foreground)">
             {data
@@ -91,6 +95,7 @@ export default async function GlossaryPage({
                 start={start}
                 idx={idx}
                 github_url={repo.github_url}
+                branch={repo.ingested_branch}
               />
             ))}
           </div>

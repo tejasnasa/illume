@@ -9,6 +9,8 @@ import json
 import logging
 from pathlib import Path
 
+from app.services.stack_detector import SKIP_DIRS
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
     """Collect TypeScript/JavaScript path aliases from tsconfig/jsconfig files.
 
     Recursively finds ``tsconfig.json``/``jsconfig.json`` (excluding
-    ``node_modules``) and flattens each ``compilerOptions.paths`` alias to its
+    ``SKIP_DIRS``) and flattens each ``compilerOptions.paths`` alias to its
     first target, resolved to a repo-relative directory prefix. Wildcard
     suffixes are stripped so aliases can be matched by prefix.
 
@@ -31,7 +33,7 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
 
     for config_name in ("tsconfig.json", "jsconfig.json"):
         for config_file in root.rglob(config_name):
-            if "node_modules" in config_file.parts:
+            if any(part in SKIP_DIRS for part in config_file.parts):
                 continue
             try:
                 data = json.loads(config_file.read_text(errors="ignore"))
@@ -78,7 +80,7 @@ def load_workspace_map(repo_root: str) -> dict[str, str]:
     workspace_map: dict[str, str] = {}
 
     for pkg_file in root.rglob("package.json"):
-        if "node_modules" in pkg_file.parts:
+        if any(part in SKIP_DIRS for part in pkg_file.parts):
             continue
         try:
             data = json.loads(pkg_file.read_text(errors="ignore"))

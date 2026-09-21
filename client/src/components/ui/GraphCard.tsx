@@ -15,6 +15,7 @@ import {
  * @param setSelectedNode Setter used to clear the selection on close.
  * @param currentLevel The active graph level ("file" or "symbol"), controlling which metrics show.
  * @param github_url The repository base URL for the GitHub link.
+ * @param branch Repository's ingested branch, used in place of ``master`` when set.
  * @param annotation Optional note shown for file-level nodes.
  * @returns The rendered graph inspector element.
  */
@@ -23,12 +24,14 @@ export default function GraphCard({
   setSelectedNode,
   currentLevel,
   github_url,
+  branch,
   annotation,
 }: {
   selectedNode: any;
   setSelectedNode: (node: any) => void;
   currentLevel: string;
   github_url: string;
+  branch?: string | null;
   annotation: string | null;
 }) {
   return (
@@ -67,8 +70,8 @@ export default function GraphCard({
               selectedNode.criticality === "critical"
                 ? "bg-red-500/10 text-red-500 border-red-500/20"
                 : selectedNode.criticality === "caution"
-                ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20"
-                : "bg-green-500/10 text-green-500 border-green-500/20"
+                  ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20"
+                  : "bg-green-500/10 text-green-500 border-green-500/20"
             }`}
           >
             {selectedNode.criticality}
@@ -153,13 +156,15 @@ export default function GraphCard({
 
         {annotation && currentLevel == "file" && (
           <div className="mt-4 pt-4 border-t border-(--border)">
-            <p className="text-sm text-(--muted-foreground)">Note: {annotation}</p>
+            <p className="text-sm text-(--muted-foreground)">
+              Note: {annotation}
+            </p>
           </div>
         )}
 
         <a
           className="bg-white hover:bg-white/80 transition-colors text-black flex items-center gap-2 p-2 justify-center rounded-sm font-semibold uppercase"
-          href={`${github_url}/blob/master/${selectedNode.path}`}
+          href={`${github_url}/blob/${branch ?? "master"}/${selectedNode.path}`}
           target="_blank"
         >
           <GithubLogoIcon weight="bold" />

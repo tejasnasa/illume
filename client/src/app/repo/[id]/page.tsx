@@ -70,7 +70,9 @@ export default async function Repository({
                     <GitBranchIcon size={12} />
                     {repo.ingested_branch}
                     {repo.ingested_commit_sha && (
-                      <span className="opacity-75">@{repo.ingested_commit_sha.substring(0, 7)}</span>
+                      <span className="opacity-75">
+                        @{repo.ingested_commit_sha.substring(0, 7)}
+                      </span>
                     )}
                   </span>
                 )}
@@ -327,7 +329,11 @@ export default async function Repository({
 
       <section className="w-1/2 h-full flex flex-col glass-card rounded-sm overflow-hidden border border-(--border)">
         {isReady ? (
-          <Chat repoId={repo.id} url={repo.github_url} />
+          <Chat
+            repoId={repo.id}
+            url={repo.github_url}
+            branch={repo.ingested_branch}
+          />
         ) : (
           <TerminalLogs repoId={repo.id} token={token} />
         )}

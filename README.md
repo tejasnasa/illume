@@ -68,6 +68,9 @@ Renders module imports dynamically inside the browser utilizing WebGL and `react
 * **Domain Glossary**: Tree-sitter extracts all classes, functions, and interfaces. The LLM translates these technical symbols into business-domain definitions, compiling a searchable, living glossary.
 * **Multi-Source RAG**: Vector search combines code syntax blocks, commit messages, and PR summaries. Embedding vectors are generated using `text-embedding-3-small` (1536 dimensions) and indexed in `pgvector` for fast cosine-similarity search.
 
+### 🔄 Background Auto-Update
+A per-repository switch keeps an ingested analysis current without a manual `reingest`. A Celery beat process claims repos whose `next_sync_at` is due, probes the head SHA cheaply, and dispatches a worker that updates only the files that actually changed. The deterministic graph rebuild and the LLM/glossary/embed phase are both reused from the ingest path — work scales with the diff, not the repository size, while the graph stays live (`status='ready'`) the whole time.
+
 ---
 
 ## 🛠 Tech Stack

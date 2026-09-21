@@ -31,6 +31,7 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
  * @param currentLevel - Active granularity ("file" or "symbol").
  * @param repoId - Repository ID used for level-change navigation.
  * @param github_url - Repository URL for source links in the detail card.
+ * @param branch - Repository's ingested branch, forwarded to the detail card.
  * @param guide - Guide with reading order and per-file annotations.
  * @returns Full-viewport graph view with legend, search, and tour controls.
  */
@@ -39,6 +40,7 @@ export default function GraphClient({
   currentLevel,
   repoId,
   github_url,
+  branch,
   guide,
 }: {
   graphData: Graph;
@@ -46,6 +48,7 @@ export default function GraphClient({
   currentLevel: string;
   repoId: string;
   github_url: string;
+  branch?: string | null;
 }) {
   const router = useRouter();
   const [selectedNode, setSelectedNode] = useState<any>(null);
@@ -245,13 +248,14 @@ export default function GraphClient({
           </div>
         )}
       </section>
-      
+
       {selectedNode && (
         <GraphCard
           selectedNode={selectedNode}
           setSelectedNode={setSelectedNode}
           currentLevel={currentLevel}
           github_url={github_url}
+          branch={branch}
           annotation={readingOrderMap[selectedNode?.path]?.annotation ?? null}
         />
       )}

@@ -24,15 +24,27 @@ const OWNERSHIP = {
   file_path: "src/core/util.py",
   primary_owner: "Ada Lovelace",
   contributors: [
-    { name: "Ada Lovelace", email: "ada@example.com", percentage: 80, last_commit: "2026-01-01" },
-    { name: "Grace Hopper", email: "grace@example.com", percentage: 20, last_commit: "2025-12-01" },
+    {
+      name: "Ada Lovelace",
+      email: "ada@example.com",
+      percentage: 80,
+      last_commit: "2026-01-01",
+    },
+    {
+      name: "Grace Hopper",
+      email: "grace@example.com",
+      percentage: 20,
+      last_commit: "2025-12-01",
+    },
   ],
   bus_factor: 2,
   is_knowledge_silo: false,
 };
 
 /** Renders the card with defaults, overridable per test. */
-function renderCard(props: Partial<React.ComponentProps<typeof FileDetailCard>> = {}) {
+function renderCard(
+  props: Partial<React.ComponentProps<typeof FileDetailCard>> = {},
+) {
   return render(
     <FileDetailCard
       file={FILE}
@@ -50,7 +62,9 @@ describe("file metadata", () => {
   it("renders the filename and full path", () => {
     renderCard();
 
-    expect(screen.getByRole("heading", { name: "util.py" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "util.py" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("src/core/util.py")).toBeInTheDocument();
   });
 
@@ -76,7 +90,9 @@ describe("file metadata", () => {
   });
 
   it("flags a knowledge silo", () => {
-    renderCard({ ownershipData: { ...OWNERSHIP, is_knowledge_silo: true, bus_factor: 1 } });
+    renderCard({
+      ownershipData: { ...OWNERSHIP, is_knowledge_silo: true, bus_factor: 1 },
+    });
 
     expect(screen.getByText("Knowledge Silo")).toBeInTheDocument();
   });
@@ -93,16 +109,29 @@ describe("github link", () => {
     const { container } = renderCard();
 
     const link = container.querySelector("a");
-    expect(link).toHaveAttribute("href", `${GITHUB_URL}/blob/master/src/core/util.py`);
+    expect(link).toHaveAttribute(
+      "href",
+      `${GITHUB_URL}/blob/master/src/core/util.py`,
+    );
   });
 
   it("hardcodes the master branch", () => {
-    // The repository's ingested branch is available to the client but unused, so a repo
-    // ingested from `main` -- GitHub's default now -- produces a dead link. Four other
-    // components share this; see CLAUDE.md's note on the five deep links.
+    // The card falls back to ``master`` when no ``branch`` prop is supplied; four other
+    // components share the same fallback. The opportunistic fix threads the ingested
+    // branch through so a repo ingested from ``main`` no longer dead-links.
     const { container } = renderCard();
 
-    expect(container.querySelector("a")?.getAttribute("href")).toContain("/blob/master/");
+    expect(container.querySelector("a")?.getAttribute("href")).toContain(
+      "/blob/master/",
+    );
+  });
+
+  it("uses the provided branch in place of the master fallback", () => {
+    const { container } = renderCard({ branch: "develop" });
+
+    expect(container.querySelector("a")?.getAttribute("href")).toContain(
+      "/blob/develop/",
+    );
   });
 
   it("opens in a new tab", () => {
@@ -119,14 +148,18 @@ describe("ownership", () => {
     // card specifically.
     renderCard();
 
-    const ownerCard = screen.getByText("Highest contribution share").parentElement!;
+    const ownerCard = screen.getByText(
+      "Highest contribution share",
+    ).parentElement!;
     expect(within(ownerCard).getByText("Ada Lovelace")).toBeInTheDocument();
   });
 
   it("falls back to Unknown for a missing owner", () => {
     renderCard({ ownershipData: { ...OWNERSHIP, primary_owner: null } });
 
-    const ownerCard = screen.getByText("Highest contribution share").parentElement!;
+    const ownerCard = screen.getByText(
+      "Highest contribution share",
+    ).parentElement!;
     expect(within(ownerCard).getByText("Unknown")).toBeInTheDocument();
   });
 
@@ -171,7 +204,9 @@ describe("ownership", () => {
     renderCard({
       ownershipData: {
         ...OWNERSHIP,
-        contributors: [{ name: "Ada", email: null, percentage: 66.66666, last_commit: null }],
+        contributors: [
+          { name: "Ada", email: null, percentage: 66.66666, last_commit: null },
+        ],
       },
     });
 
@@ -183,7 +218,9 @@ describe("ownership", () => {
     renderCard({
       ownershipData: {
         ...OWNERSHIP,
-        contributors: [{ name: "Ada", email: null, percentage: null, last_commit: null }],
+        contributors: [
+          { name: "Ada", email: null, percentage: null, last_commit: null },
+        ],
       },
     });
 

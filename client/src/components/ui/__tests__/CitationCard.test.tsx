@@ -110,7 +110,12 @@ describe("type labels", () => {
   it("renders an unknown source type rather than crashing", () => {
     // New source types can be added server-side before the client knows about them. The
     // card must still render rather than throwing on an undefined config lookup.
-    render(<CitationCard src={{ ...file, source_type: "sql_view" as never }} url={URL} />);
+    render(
+      <CitationCard
+        src={{ ...file, source_type: "sql_view" as never }}
+        url={URL}
+      />,
+    );
 
     expect(screen.getByText("util.py")).toBeInTheDocument();
   });
@@ -154,7 +159,12 @@ describe("primary label", () => {
   it("renders no symbol name for an anonymous symbol", () => {
     // Before the parser fix, exported TS interfaces became symbols named `<anonymous>`.
     // The guard keeps that placeholder out of the UI even if it recurs.
-    render(<CitationCard src={{ ...symbol, symbol_name: "<anonymous>" }} url={URL} />);
+    render(
+      <CitationCard
+        src={{ ...symbol, symbol_name: "<anonymous>" }}
+        url={URL}
+      />,
+    );
 
     expect(screen.queryByText("<anonymous>")).not.toBeInTheDocument();
   });
@@ -192,14 +202,25 @@ describe("github links", () => {
   });
 
   it("hardcodes the master branch", () => {
-    // A known limitation, recorded rather than fixed: the repository's ingested branch is
-    // available to the client but unused here, so a repo ingested from `main` -- which is
-    // now GitHub's default -- produces a dead link. Four other components share this.
+    // The card falls back to ``master`` when no ``branch`` prop is supplied, which is
+    // what a call site that does not yet know the ingested branch will see.
     render(<CitationCard src={symbol} url={URL} />);
 
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
       expect.stringContaining("/blob/master/"),
+    );
+  });
+
+  it("uses the provided branch in place of the master fallback", () => {
+    // The repository's ingested branch is forwarded by callers (ChatBubble) so a repo
+    // ingested from ``main`` -- GitHub's default -- produces a live link rather than a
+    // dead ``master`` one.
+    render(<CitationCard src={symbol} url={URL} branch="develop" />);
+
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      `${URL}/blob/develop/src/util.py#L4-L6`,
     );
   });
 

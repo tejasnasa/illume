@@ -17,6 +17,7 @@ interface Props {
   message: ChatMessage | null;
   error?: boolean;
   url: string;
+  branch?: string | null;
   onDelete?: (id: string) => void;
 }
 
@@ -27,6 +28,7 @@ interface Props {
  * @param message The answer payload, or null while the response is pending.
  * @param error When true, styles the answer as an error message.
  * @param url Repository URL used to build citation links.
+ * @param branch Repository's ingested branch; passed through to citation cards.
  * @param onDelete Optional handler to delete this message.
  * @returns The rendered chat bubble element.
  */
@@ -36,6 +38,7 @@ export default function ChatBubble({
   message,
   error,
   url,
+  branch,
   onDelete,
 }: Props) {
   return (
@@ -81,7 +84,7 @@ export default function ChatBubble({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {message.sources.map((src, i) => (
-                    <CitationCard url={url} key={i} src={src} />
+                    <CitationCard url={url} branch={branch} key={i} src={src} />
                   ))}
                 </div>
               </div>

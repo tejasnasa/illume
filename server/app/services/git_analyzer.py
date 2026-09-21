@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models import CodeOwner, Commit, File
 from app.services._publish import publish_log
+from app.services.stack_detector import SKIP_DIRS
 
 logger = logging.getLogger(__name__)
 
@@ -323,9 +324,13 @@ def _detect_test_files(clone_path: Path, file_paths: list[str]) -> dict[str, boo
 
     # Snapshot every real file once up front; membership checks against this
     # set are far cheaper than probing the filesystem per candidate path.
+    # ``SKIP_DIRS`` mirrors the exclusion set the file walker and stack
+    # detector apply; without it the rglob descends into ``.git``, ``node_modules``
+    # and the other noise directories every sync, which is the O(``.git`` objects)
+    # walk the persistent clone cache makes unbounded over time.
     all_clone_paths: set[str] = set()
     for p in root.rglob("*"):
-        if p.is_file():
+        if p.is_file() and not any(part in SKIP_DIRS for part in p.parts):
             try:
                 all_clone_paths.add(str(p.relative_to(root)))
             except ValueError:

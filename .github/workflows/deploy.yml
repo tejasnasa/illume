@@ -43,7 +43,6 @@ jobs:
           # no check has seen.
           ref: ${{ github.event.workflow_run.head_sha }}
 
-
       - name: Log in to GHCR
 
         uses: docker/login-action@v3
@@ -71,6 +70,17 @@ jobs:
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
 
+            # The persistent state lives on the host so neither the clone cache nor the
+            # beat schedule is destroyed by the ``docker stop && docker rm && docker run``
+            # cycle that every deploy performs. ``/home/tejas/illume_data/clone_cache``
+            # maps to the path ``repo_cache._cache_root`` resolves inside the Linux
+            # container (``/tmp/illume/clone_cache``); ``/home/tejas/illume_data/state``
+            # holds the beat schedule file at the explicit ``-s`` path the beat
+            # invocation below points at. A new container's empty ``/tmp`` and
+            # ``/var/illume`` are overlaid by these mounts; existing data is preserved.
+            mkdir -p /home/tejas/illume_data/clone_cache
+            mkdir -p /home/tejas/illume_data/state
+
             docker stop illume-server || true
             docker rm illume-server || true
             docker run -d \
@@ -88,5 +98,28 @@ jobs:
               --network illume-net \
               --restart unless-stopped \
               --env-file /home/tejas/illume.env \
+              -v /home/tejas/illume_data/clone_cache:/tmp/illume/clone_cache \
               ghcr.io/${{ env.IMAGE_NAME }}:latest \
-              celery -A app.core.celery worker --loglevel=info --pool=prefork --concurrency=1
+              celery -A app.core.celery worker \
+                --loglevel=info \
+                --pool=prefork \
+                --concurrency=1 \
+                -Q celery,sync \
+                --max-memory-per-child=614400
+
+            # The beat process is a separate container so a worker restart (including the
+            # ``--max-memory-per-child`` recycle) cannot interrupt the sweep cadence.
+            # ``-s`` points at a bind-mounted file so the next beat process picks up the
+            # last-run timestamp instead of re-firing every queued entry on restart.
+            docker stop illume-beat || true
+            docker rm illume-beat || true
+            docker run -d \
+              --name illume-beat \
+              --network illume-net \
+              --restart unless-stopped \
+              --env-file /home/tejas/illume.env \
+              -v /home/tejas/illume_data/state:/var/illume \
+              ghcr.io/${{ env.IMAGE_NAME }}:latest \
+              celery -A app.core.celery beat \
+                --loglevel=info \
+                -s /var/illume/celerybeat-schedule
