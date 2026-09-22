@@ -58,7 +58,10 @@ from tests.helpers import committed_repo_number_base
 pytestmark = pytest.mark.integration
 
 
-_repo_numbers = itertools.count(committed_repo_number_base(960_000))
+# 965_000 rather than 960_000: bases must be pairwise distinct across modules, and
+# ``services/test_pipeline.py`` already starts at 960_000. Two modules sharing a base is a
+# guaranteed collision on any shared worker.
+_repo_numbers = itertools.count(committed_repo_number_base(965_000))
 
 
 def sync_session():

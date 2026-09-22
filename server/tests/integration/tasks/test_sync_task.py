@@ -40,20 +40,16 @@ import itertools
 import shutil
 import subprocess
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, delete, select
+from sqlalchemy import create_engine, delete
 from sqlalchemy.orm import sessionmaker
 
-from app.core.celery import celery
-from app.models.ast_symbol import AstSymbol
 from app.models.file import File as FileModel
 from app.models.repository import Repository
 from app.models.user import User
 from app.services.scanner import (
-    apply_file_delta,
     compute_delta,
     is_fast_forward,
     should_escalate,
@@ -153,7 +149,6 @@ def sync_repo():
     finally:
         session.close()
         engine.dispose()
-
 
 
 # --- The headline: state-equivalence between Route A and Route B -----------
@@ -262,7 +257,6 @@ class TestApplyFileDelta:
 
     def test_delete_path_removes_the_file_row(self, tmp_path):
         """The D case: a row that existed pre-sync is gone post-sync."""
-        from app.models.file import File as FileModel
         from app.services.scanner import apply_file_delta as apply_fn
 
         engine, Session = sync_session()

@@ -62,9 +62,21 @@ def random_uuid() -> uuid.UUID:
     return uuid.uuid4()
 
 
-# How many `repo_number` values each xdist worker reserves. Wide enough that no worker
-# runs out, small enough that the whole span stays far above any real row.
-REPO_NUMBER_BAND = 10_000
+# The stride between two xdist workers' `repo_number` bands.
+#
+# This must be *larger than the whole range the per-module base literals occupy*, and that
+# is the property that makes the scheme collision-free -- see
+# `committed_repo_number_base` for why. It was 10_000, which is roughly the spacing the
+# bases themselves used, so a module running one worker higher landed exactly on the next
+# module's numbers: `test_ingest_task` at 950_000 on gw1 reached 960_000, which is where
+# `test_pipeline` and `test_sweep_task` both start on gw0. The result was an
+# `IntegrityError` on `repositories_repo_number_key` that appeared only when two modules
+# happened to be scheduled onto those two workers at once -- an intermittent red that
+# passes in isolation, which is the worst kind.
+#
+# A stride far above every base keeps each module inside its own 10-million-wide slot on
+# every worker, so no two (module, worker) pairs can ever produce the same number.
+REPO_NUMBER_BAND = 10_000_000
 
 
 def committed_repo_number_base(base: int) -> int:
@@ -85,6 +97,20 @@ def committed_repo_number_base(base: int) -> int:
 
     Reads `PYTEST_XDIST_WORKER` (`gw0`, `gw1`, ...), which xdist sets in each worker. Under
     a plain `pytest` run the variable is absent and the base is returned unchanged.
+
+    **The invariant callers must hold:** pass a base that is *pairwise distinct across
+    modules* and *smaller than* `REPO_NUMBER_BAND`. Given both, two (module, worker) pairs
+    can never produce the same number, for any number of workers:
+
+        base_a + i * BAND == base_b + j * BAND
+      => base_a - base_b == (j - i) * BAND
+
+    and since every base lies in `[0, BAND)` the left side has magnitude below `BAND`, so
+    `j - i` must be 0, which forces `base_a == base_b` and therefore `a == b`.
+
+    The band being *wider than the base range* is the load-bearing half. A band comparable
+    to the spacing between bases lets a module on a higher worker walk into the next
+    module's range, which is a real collision rather than a theoretical one.
     """
     import os
 

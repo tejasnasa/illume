@@ -187,6 +187,33 @@ def upgrade() -> None:
             {"new_id": new_source_id, "id": embedding_id},
         )
 
+    # Collapse any remaining duplicates down to one row per
+    # (repository_id, source_type, source_id). The pre-constraint embedder
+    # inserted unconditionally and had no delete-before-generate, so a second
+    # ingest over the same repository -- a Celery retry, which re-runs the whole
+    # task body, or a re-ingest that did not route through the row-deleting
+    # path -- left a second copy of every commit and PR embedding. Duplicates
+    # share a ``chunk_text`` by construction (the text is derived from the
+    # source row, not from when it was embedded), so keeping the first-inserted
+    # row loses nothing.
+    #
+    # This has to run *after* the document backfill above, not before: a
+    # multi-section README is several rows sharing ``source_id =
+    # repository_id``, so deduplicating first would collapse it to a single
+    # chunk and discard real content rather than a copy of it.
+    bind.execute(
+        sa.text(
+            """
+            DELETE FROM embeddings
+            WHERE ctid NOT IN (
+                SELECT min(ctid)
+                FROM embeddings
+                GROUP BY repository_id, source_type, source_id
+            )
+            """
+        )
+    )
+
     bind.execute(
         sa.text(
             """
