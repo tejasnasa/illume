@@ -137,12 +137,7 @@ def cloner_stubbed_to_local(monkeypatch, two_comm_working):
     working = two_comm_working
 
     def _head_sha() -> str:
-        return subprocess.run(
-            ["git", "-C", str(working), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        return sample_repo.head_sha(working)
 
     def fake_ensure(repo_id, github_url, access_token, branch, commit_sha=None):
         import app.services.repo_cache as repo_cache_module
@@ -327,12 +322,7 @@ class TestIncrementalGlossary:
         # Stamp the watermarks the way a real ingest would, so the sync
         # task treats this row as fully-current and only re-runs the
         # LLM phase for new symbols.
-        head_sha = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        head_sha = sample_repo.head_sha(repo_root)
         session.execute(
             Repository.__table__.update()
             .where(Repository.id == repo.id)
@@ -352,12 +342,7 @@ class TestIncrementalGlossary:
             b'def alpha() -> int:\n    """Return a constant."""\n    return 1\n\n\n'
             b'def gamma() -> int:\n    """Return another constant."""\n    return 2\n'
         )
-        subprocess.run(["git", "-C", str(repo_root), "add", "-A"], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo_root), "commit", "-m", "feat: add new_module"],
-            check=True,
-            capture_output=True,
-        )
+        sample_repo.commit_all(repo_root, "feat: add new_module")
 
         result = sync_repository.apply(args=[str(repo.id), None])
         assert result.successful()
@@ -412,12 +397,7 @@ class TestIncrementalReadingOrder:
         # check that the run produced annotations.
         assert before, "expected the initial pipeline to annotate at least one file"
 
-        head_sha = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        head_sha = sample_repo.head_sha(repo_root)
         session.execute(
             Repository.__table__.update()
             .where(Repository.id == repo.id)
@@ -435,12 +415,7 @@ class TestIncrementalReadingOrder:
         readme = repo_root / "README.md"
         original = readme.read_bytes()
         readme.write_bytes(original + b"\n## Changelog\n\nA new section.\n")
-        subprocess.run(["git", "-C", str(repo_root), "add", "-A"], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo_root), "commit", "-m", "docs: add changelog section"],
-            check=True,
-            capture_output=True,
-        )
+        sample_repo.commit_all(repo_root, "docs: add changelog section")
 
         result = sync_repository.apply(args=[str(repo.id), None])
         assert result.successful()
@@ -475,12 +450,7 @@ class TestIncrementalEmbeddings:
         factory, session = sync_repo
         repo = factory()
 
-        head_sha = subprocess.run(
-            ["git", "-C", str(cloner_stubbed_to_local), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        head_sha = sample_repo.head_sha(cloner_stubbed_to_local)
 
         # Stamp both watermarks so the task short-circuits before the
         # LLM phase. No initial ingest needed -- the property under
@@ -541,12 +511,7 @@ class TestIncrementalEmbeddings:
         )
         session.commit()
 
-        head_sha = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        head_sha = sample_repo.head_sha(repo_root)
         session.execute(
             Repository.__table__.update()
             .where(Repository.id == repo.id)
@@ -571,12 +536,7 @@ class TestIncrementalEmbeddings:
             b'def new_helper(value: str) -> str:\n    """A new helper."""\n'
             b"    return value.strip()\n"
         )
-        subprocess.run(["git", "-C", str(repo_root), "add", "-A"], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo_root), "commit", "-m", "feat: tweak util"],
-            check=True,
-            capture_output=True,
-        )
+        sample_repo.commit_all(repo_root, "feat: tweak util")
 
         result = sync_repository.apply(args=[str(repo.id), None])
         assert result.successful()
@@ -639,12 +599,7 @@ class TestHazard6Reembedding:
         )
         session.commit()
 
-        head_sha = subprocess.run(
-            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        head_sha = sample_repo.head_sha(repo_root)
         session.execute(
             Repository.__table__.update()
             .where(Repository.id == repo.id)
@@ -690,12 +645,7 @@ class TestHazard6Reembedding:
             b'"""Updated orphan module."""\n\n\n'
             b'def nothing() -> int:\n    """Do nothing, return 0."""\n    return 0\n'
         )
-        subprocess.run(["git", "-C", str(repo_root), "add", "-A"], check=True, capture_output=True)
-        subprocess.run(
-            ["git", "-C", str(repo_root), "commit", "-m", "feat: tweak orphan"],
-            check=True,
-            capture_output=True,
-        )
+        sample_repo.commit_all(repo_root, "feat: tweak orphan")
 
         result = sync_repository.apply(args=[str(repo.id), None])
         assert result.successful()

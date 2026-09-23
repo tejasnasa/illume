@@ -303,6 +303,27 @@ def _git(repo: Path, *args: str, env_extra: dict | None = None) -> str:
     return result.stdout
 
 
+def head_sha(repo: Path) -> str:
+    """The commit ``repo`` currently points at."""
+    return _git(repo, "rev-parse", "HEAD").strip()
+
+
+def commit_all(repo: Path, message: str) -> None:
+    """
+    Stage every change in `repo` and commit it under the fixture's identity.
+
+    A caller advancing the fixture's history must stage and commit through here
+    rather than a bare ``git commit``. `_git` supplies the author, the committer
+    and a config path that cannot pick up an ambient ``user.email``; a naked
+    ``git commit`` inherits the process environment instead, so it happens to
+    work on a machine whose global config names a person and fails everywhere
+    else -- on a clean CI runner git reports "Author identity unknown" and
+    exits 128.
+    """
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", message)
+
+
 def build(root: Path) -> Path:
     """
     Create the repository at `root` and return it.
