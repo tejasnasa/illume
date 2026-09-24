@@ -66,7 +66,15 @@ jobs:
           host: ${{ secrets.DO_HOST }}
           username: tejas
           key: ${{ secrets.DO_SSH_KEY }}
+          # The default is 10m, which the image pull alone exceeds on this VM's link.
+          # Hitting it kills the SSH session mid-pull while the remote shell keeps
+          # running, and the pull's non-zero exit then falls through to the
+          # ``docker run`` block below -- relaunching every container from the
+          # previous local image. ``set -e`` is what stops that second half.
+          command_timeout: 60m
           script: |
+            set -e
+
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker pull ghcr.io/${{ env.IMAGE_NAME }}:latest
 
@@ -90,6 +98,13 @@ jobs:
               -p 8000:8000 \
               --env-file /home/tejas/illume.env \
               ghcr.io/${{ env.IMAGE_NAME }}:latest
+
+            # Migrations run against the live database before the worker and beat
+            # pick up the new code, because a release that adds a column the new
+            # code queries would otherwise break every repository read rather than
+            # just the feature that needed it. Each revision is written to be
+            # idempotent, so re-running this on an unchanged schema is a no-op.
+            docker exec illume-server alembic upgrade head
 
             docker stop illume-worker || true
             docker rm illume-worker || true

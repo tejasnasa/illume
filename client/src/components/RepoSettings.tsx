@@ -75,7 +75,7 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
   };
 
   return (
-    <div className="p-4 max-h-[90vh] overflow-y-auto custom-scrollbar min-w-2xl">
+    <div className="p-4 max-h-[90vh] overflow-y-auto custom-scrollbar w-2xl">
       <div className="flex items-center gap-3 mb-6 text-(--primary)">
         <GearFineIcon size={28} weight="duotone" />
         <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
