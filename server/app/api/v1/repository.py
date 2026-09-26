@@ -87,6 +87,15 @@ class RepositoryResponse(BaseModel):
     last_sync_error: str | None = None
     consecutive_sync_failures: int = 0
     last_sync_summary: dict | None = None
+    # ``sync_available`` is user-level state surfaced on a repo DTO. The
+    # keyless free tier cannot pay for auto-update or a manual sync, so the
+    # UI disables the toggle + interval picker + ``Sync now`` button when
+    # this is False. The flag is computed from the owning user's stored
+    # credential -- the source of truth -- and populated by the route
+    # handlers below. Threading it through here (rather than separately
+    # in the navbar) keeps one GET /repository response feeding every
+    # component.
+    sync_available: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -94,6 +103,24 @@ class RepositoryResponse(BaseModel):
 def _extract_repo_name(github_url: str) -> str:
     """Derive the repo name from its GitHub URL's trailing segment."""
     return github_url.rstrip("/").split("/")[-1]
+
+
+async def _user_has_ai_key(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Whether the user has a stored BYOK credential.
+
+    Surfaces user-level state on a repo DTO (``RepositoryResponse.sync_available``).
+    The keyless free tier cannot pay for auto-update or a manual sync -- this
+    is the single source of truth for "may this repo sync at all?", and it
+    matches the route-level gate in :func:`_require_user_key`.
+    """
+    from sqlalchemy import exists
+
+    from app.models.user import User
+
+    has_key = await db.execute(
+        select(exists().where(User.id == user_id, User.ai_api_key.isnot(None)))
+    )
+    return bool(has_key.scalar())
 
 
 # The exact text of the 402. Single source so every quota gate renders the
@@ -427,7 +454,9 @@ async def get_repository(
     ).scalar_one_or_none()
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
-    return repo
+    data = RepositoryResponse.model_validate(repo)
+    data.sync_available = await _user_has_ai_key(db, user_id)
+    return data
 
 
 @router.get("", response_model=list[RepositoryResponse])
@@ -456,10 +485,13 @@ async def list_repositories(request: Request, db: AsyncSession = Depends(get_asy
         .all()
     )
 
+    sync_available = await _user_has_ai_key(db, user_id) if user_id else False
+
     results = []
 
     for repo in repositories:
         data = RepositoryResponse.model_validate(repo)
+        data.sync_available = sync_available
         if data.architecture_summary and len(data.architecture_summary) > 200:
             data.architecture_summary = data.architecture_summary[:200] + "..."
         results.append(data)

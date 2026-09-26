@@ -20,7 +20,8 @@ pytestmark = pytest.mark.smoke
 # or removed so that an accidental drop shows up as a failing test, not a silent gap.
 # 27 -> 29 with the auto-update PATCH and the sync-now POST under
 # ``/api/v1/repository/{repo_id}/...``.
-EXPECTED_API_ROUTE_COUNT = 29
+# 29 -> 32 with the AI credentials GET/PUT/DELETE under ``/api/v1/auth/me``.
+EXPECTED_API_ROUTE_COUNT = 32
 
 EXPECTED_TAGS = {
     "auth",
