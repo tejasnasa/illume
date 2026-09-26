@@ -370,6 +370,255 @@ class TestAutoUpdateDefaults:
         assert row.sync_lease_expires_at is None
 
 
+class TestByokAndFreeTierDefaults:
+    """
+    ``c3d4e5f6a7b8`` adds the BYOK credential columns and free-tier counters
+    to ``users``. Two invariants must hold for the schema to be usable
+    without application code reaching for ``None`` on every read:
+
+    * the four BYOK columns are nullable -- a user with no key is the
+      free-tier case, not a malformed row;
+    * the two counter columns are NOT NULL with ``server_default`` so a raw
+      ``INSERT`` (the reingest rebuild path that lists every column
+      explicitly) still lands a usable row.
+
+    The migration's two backfill ``UPDATE``s also live here as regression
+    tests: a user with a stored key keeps ``auto_update_enabled`` (so the
+    operator's free-tier key cannot opt them into auto-update), and a
+    keyless user with a repository gets ``auto_update_enabled`` flipped to
+    ``false`` and ``next_sync_at`` cleared.
+    """
+
+    async def test_a_freshly_inserted_user_row_has_free_tier_defaults(self, db_session):
+        """``make_user`` lists every column explicitly; the new ones must still land populated."""
+        from sqlalchemy import select
+
+        from app.models.user import User
+        from tests.factories import make_user
+
+        user = await make_user(db_session)
+
+        stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+
+        # BYOK columns start NULL -- a user with no key is the free-tier case.
+        assert stored.ai_provider is None
+        assert stored.ai_api_key is None
+        assert stored.ai_model is None
+        assert stored.ai_key_validated_at is None
+        # Free-tier counters carry their ``server_default`` values.
+        assert stored.free_ingest_used is False
+        assert stored.free_chat_messages_used == 0
+
+    async def test_the_schema_has_six_columns_with_the_expected_types(self):
+        """
+        Query the catalog directly: the six columns must exist with the
+        types and nullability the model declares. This is the schema-level
+        companion to the row-level check above -- a future migration that
+        drops a column or changes its type surfaces here.
+        """
+        from sqlalchemy import create_engine, text
+
+        from tests.conftest import TEST_SYNC_DB_URL
+
+        engine = create_engine(TEST_SYNC_DB_URL)
+        try:
+            with engine.connect() as connection:
+                rows = connection.execute(
+                    text(
+                        """
+                        SELECT column_name, data_type, is_nullable, column_default
+                        FROM information_schema.columns
+                        WHERE table_name = 'users'
+                          AND column_name IN (
+                            'ai_provider', 'ai_api_key', 'ai_model', 'ai_key_validated_at',
+                            'free_ingest_used', 'free_chat_messages_used'
+                          )
+                        """
+                    )
+                ).all()
+        finally:
+            engine.dispose()
+
+        by_name = {row.column_name: row for row in rows}
+        assert set(by_name) == {
+            "ai_provider",
+            "ai_api_key",
+            "ai_model",
+            "ai_key_validated_at",
+            "free_ingest_used",
+            "free_chat_messages_used",
+        }
+
+        # BYOK columns are nullable -- a keyless user is a valid state.
+        for nullable_column in ("ai_provider", "ai_api_key", "ai_model", "ai_key_validated_at"):
+            assert by_name[nullable_column].is_nullable == "YES", (
+                f"{nullable_column} must be nullable so a keyless user is not malformed"
+            )
+
+        # Counters are NOT NULL with server defaults so a raw INSERT lands a usable row.
+        assert by_name["free_ingest_used"].is_nullable == "NO"
+        assert "false" in (by_name["free_ingest_used"].column_default or "").lower()
+        assert by_name["free_chat_messages_used"].is_nullable == "NO"
+        assert "0" in (by_name["free_chat_messages_used"].column_default or "")
+
+
+class TestByokAndFreeTierBackfill:
+    """
+    The migration's two ``UPDATE``s reflect a deliberate operational state
+    change for existing accounts: anyone with a repository has used their
+    free ingestion, and keyless users stop getting auto-update subsidised
+    on the server key.
+
+    These tests run against the migrated database and inspect what the
+    backfill left behind. They construct rows that match the predicates the
+    ``UPDATE``s check, so the assertions exercise the actual backfill shape
+    rather than its absence.
+    """
+
+    async def test_a_user_without_a_repository_is_backfilled_as_unused(self, db_session):
+        """A user with no repository has not ingested -- their counter stays at the default."""
+        from sqlalchemy import select
+
+        from app.models.user import User
+        from tests.factories import make_user
+
+        user = await make_user(db_session)
+
+        stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+
+        # The backfill's first UPDATE only marks users-with-a-repository. A
+        # fresh user with no repos has not had the flag flipped.
+        assert stored.free_ingest_used is False
+
+    async def test_a_user_with_a_repository_is_backfilled_as_used(self, db_session):
+        """A user who already owns a repo has demonstrably ingested at least once."""
+        from tests.factories import make_repo, make_user
+
+        user = await make_user(db_session)
+        await make_repo(db_session, user)
+
+        # Apply the migration's first backfill UPDATE -- the same statement
+        # the migration executes, imported from the migration module so the
+        # SQL cannot drift between migration and test.
+        await db_session.execute(_migration_text("MARK_USERS_WITH_REPOS_AS_FREE_INGEST_USED"))
+        await db_session.flush()
+
+        # ``make_user`` put the ``User`` row in the session's identity map
+        # via ``refresh``; a raw ``UPDATE`` does not invalidate it.
+        # ``refresh`` re-reads the row so the assertion below observes the
+        # post-backfill state rather than the snapshot the factory cached.
+        await db_session.refresh(user)
+
+        assert user.free_ingest_used is True
+
+    async def test_a_keyless_user_with_a_repo_has_auto_update_cleared(self, db_session):
+        """
+        A user with no stored key cannot pay for an auto-update cycle.
+
+        The migration flips ``auto_update_enabled`` to ``false`` and
+        clears ``next_sync_at`` so the sweep's claim predicate never
+        reaches the repo. Re-enabling auto-update requires the user to
+        have a stored key -- the settings screen's contract.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        from tests.factories import make_repo, make_user
+
+        user = await make_user(db_session)
+        repo = await make_repo(
+            db_session,
+            user,
+            # ``make_repo`` defaults ``auto_update_enabled`` to ``false``;
+            # flip it back on so the backfill's effect is observable.
+        )
+        repo.auto_update_enabled = True
+        repo.next_sync_at = datetime.now(UTC) + timedelta(hours=1)
+        await db_session.flush()
+
+        # Apply the migration's second UPDATE shape -- imported from the
+        # migration module so the SQL stays in lockstep.
+        await db_session.execute(_migration_text("CLEAR_AUTO_UPDATE_FOR_KEYLESS_OWNERS"))
+        await db_session.flush()
+
+        # The ``Repository`` is in the identity map from ``make_repo``; the
+        # raw ``UPDATE`` does not invalidate the in-memory copy. ``refresh``
+        # re-reads the row so the assertion below observes the post-backfill
+        # state rather than the snapshot the factory cached.
+        await db_session.refresh(repo)
+
+        assert repo.auto_update_enabled is False
+        assert repo.next_sync_at is None
+
+    async def test_a_user_with_a_stored_key_keeps_auto_update_enabled(self, db_session):
+        """
+        The backfill is conditioned on ``ai_api_key IS NULL``: a user who
+        has set up their own key keeps the auto-update state the
+        application recorded for them.
+
+        This is the symmetric case to the test above -- a regression that
+        unconditionally clears auto-update would silently disable
+        background syncing for every BYOK user.
+        """
+        from datetime import UTC, datetime
+
+        from tests.factories import make_repo, make_user
+
+        user = await make_user(db_session)
+        user.ai_provider = "openai"
+        user.ai_api_key = "sk-test"
+        user.ai_model = "gpt-4o-mini"
+        user.ai_key_validated_at = datetime.now(UTC)
+        await db_session.flush()
+
+        repo = await make_repo(db_session, user)
+        repo.auto_update_enabled = True
+        await db_session.flush()
+
+        # Apply the migration's second UPDATE shape. Because ``ai_api_key``
+        # is populated, the WHERE clause that selects rows to clear does
+        # not match this user's repositories.
+        await db_session.execute(_migration_text("CLEAR_AUTO_UPDATE_FOR_KEYLESS_OWNERS"))
+        await db_session.flush()
+
+        # ``make_user`` / ``make_repo`` put both rows in the identity map;
+        # the raw ``UPDATE`` does not invalidate them. Refresh both so the
+        # assertions observe the post-backfill state.
+        await db_session.refresh(user)
+        await db_session.refresh(repo)
+
+        assert user.ai_api_key == "sk-test"
+        assert repo.auto_update_enabled is True
+
+
+def _migration_text(name: str):
+    """Load the named module-level SQL constant from the BYOK / free-tier migration.
+
+    The migration file lives under ``alembic/versions/``, which has no
+    ``__init__.py`` so it is not a Python package -- a plain
+    ``from alembic.versions.X`` would not resolve. Loading the file by
+    path keeps the migration's SQL as the single source of truth while
+    still letting the test reference it.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    from sqlalchemy import text
+
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "alembic"
+        / "versions"
+        / "c3d4e5f6a7b8_add_byok_and_free_tier.py"
+    )
+    spec = importlib.util.spec_from_file_location("_byok_free_tier_migration", path)
+    assert spec is not None and spec.loader is not None, (
+        f"failed to load migration module from {path}"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return text(getattr(module, name))
+
+
 def model_schema_diff(metadata=None) -> list:
     """
     Compare the migrated database against the ORM metadata.
