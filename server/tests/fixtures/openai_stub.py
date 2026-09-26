@@ -11,6 +11,13 @@ glossary needs definitions for the symbols actually present, and the reading ord
 annotations for the files actually in the order. A stub that returned a fixed list would
 let a wiring bug pass, because the persistence code would still have something to store.
 
+It also records the constructor arguments on :attr:`FakeOpenAI.init_kwargs` so a test
+can ask "did this client construction carry the user's BYOK key?". The original stub
+recorded what was asked but never who paid -- and that is the property it makes
+testable by threading an :class:`~app.services.llm_config.LLMConfig` through every
+generation service and verifying the resulting ``OpenAI(**llm.client_kwargs())`` call
+shape on every code path that takes a credential.
+
 Vectors are derived from the text rather than random, so the same chunk always embeds to
 the same point -- which is what lets a retrieval test assert anything about ordering.
 """
@@ -135,6 +142,25 @@ class FakeOpenAI:
         # exceeds ``LLM_MAX_WORKERS`` and was > 1 at least once.
         self.in_flight_log: list[int] = []
         self._call_lock = threading.Lock()
+        # Every constructor invocation captured verbatim, so a test can
+        # distinguish "this call used the BYOK key" from "this call used
+        # the server key" by reading ``init_kwargs``. The risk it
+        # exists to retire is *silently using the server key*: every
+        # ``OpenAI(...)`` site is supposed to receive the resolved
+        # ``LLMConfig.client_kwargs()``, and an assertion against this
+        # list is what makes that contract testable.
+        #
+        # ``install`` appends to this list when the factory is called --
+        # ``__init__`` runs once for the shared instance, the factory
+        # runs on every ``OpenAI(...)`` call.
+        self.init_kwargs: list[dict[str, Any]] = []
+        # Optional exception to raise from the next LLM call. Tests that
+        # want to assert the byok path is taken at all can set this to a
+        # non-None value to abort a would-be request -- the
+        # ``architecture_brief`` and ``_annotate_files`` paths log and
+        # swallow, so a raised exception there still surfaces a
+        # successful ingest.
+        self.inject_exc: BaseException | None = None
 
     def _record_in_flight(self, value: int) -> None:
         self._call_lock.acquire()
@@ -149,8 +175,15 @@ class FakeOpenAI:
         The ``delay_s`` sleep lives inside the in-flight region so the
         concurrency bound is observable: without a delay, single-threaded
         callers would race through the pool so fast that any pool size
-        passes the bound test trivially.
+        passes the bound test trivially. Tests that want to short-circuit
+        the LLM call -- to assert a path was *taken* without paying for
+        a real response -- set :attr:`inject_exc`; it is cleared after
+        one raise so subsequent calls behave normally.
         """
+        if self.inject_exc is not None:
+            exc = self.inject_exc
+            self.inject_exc = None
+            raise exc
         if self.delay_s > 0:
             time.sleep(self.delay_s)
         if kind == "responses":
@@ -226,21 +259,32 @@ def install(monkeypatch) -> FakeOpenAI:
 
     So the `openai` module's own attribute is patched as well. `AsyncOpenAI` is included
     for `rag.py`, which the pipeline task does not call but which a chat test would.
+
+    The factory captures every constructor invocation: the lambda returns a single
+    shared :class:`FakeOpenAI` (so existing tests can introspect ``calls`` /
+    ``embedded_texts`` on a single object), but each invocation's kwargs are also
+    appended to ``fake.init_kwargs``. The risk Phase 4 exists to retire is
+    "silently using the server key", and a thread-pooled pipeline makes multiple
+    ``OpenAI(...)`` calls per run -- without per-invocation recording a test could
+    only ever see the first one.
     """
     import openai
 
     from app.services import architecture_brief, embedder, glossary_builder, onboarding, rag
 
     fake = FakeOpenAI()
-    factory = lambda *args, **kwargs: fake  # noqa: E731
 
-    monkeypatch.setattr(openai, "OpenAI", factory)
-    monkeypatch.setattr(openai, "AsyncOpenAI", factory)
+    def _factory(*args, **kwargs):
+        fake.init_kwargs.append(dict(kwargs))
+        return fake
+
+    monkeypatch.setattr(openai, "OpenAI", _factory)
+    monkeypatch.setattr(openai, "AsyncOpenAI", _factory)
 
     for module in (architecture_brief, embedder, glossary_builder, onboarding):
         if hasattr(module, "OpenAI"):
-            monkeypatch.setattr(module, "OpenAI", factory)
+            monkeypatch.setattr(module, "OpenAI", _factory)
     if hasattr(rag, "AsyncOpenAI"):
-        monkeypatch.setattr(rag, "AsyncOpenAI", factory)
+        monkeypatch.setattr(rag, "AsyncOpenAI", _factory)
 
     return fake

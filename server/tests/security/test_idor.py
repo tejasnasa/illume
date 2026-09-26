@@ -107,10 +107,15 @@ def stub_rag(monkeypatch):
     Ownership is checked before the RAG pipeline runs, so a correct route never reaches
     this. It is stubbed so that an *incorrect* one fails on the status assertion rather
     than by calling OpenAI.
+
+    The signature carries the ``llm=`` keyword the chat route forwards --
+    Phase 4 threads the resolved credential through, and the stub has to
+    accept (and silently drop) the same kwarg or the route signature
+    changes leak into the security tests.
     """
     calls: list = []
 
-    async def fake_answer_question(query, repository_id, db, history=None):
+    async def fake_answer_question(query, repository_id, db, history=None, *, llm=None):
         calls.append(query)
         return RAGResponse(
             answer="stubbed",

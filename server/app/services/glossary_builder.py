@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models import AstSymbol, File, GlossaryEntry, Repository
 from app.services._concurrency import gather_in_order
+from app.services.llm_config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ def build_glossary(
     repo: Repository,
     *,
     mode: Literal["full", "incremental"] = "full",
+    llm: LLMConfig | None = None,
 ) -> int:
     """Regenerate glossary definitions for a repository.
 
@@ -143,11 +145,27 @@ def build_glossary(
         repo: Repository whose glossary should be updated.
         mode: ``"full"`` for initial ingest; ``"incremental"`` for the
             sync task.
+        llm: The credential bundle to authenticate the LLM call with.
+            ``None`` falls through to the server key for backwards
+            compatibility -- the route layer's quota gates 
+            are what make ``None`` legitimate in production.
 
     Returns:
         Number of glossary entries created.
     """
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    client_kwargs = llm.client_kwargs() if llm is not None else {"api_key": settings.OPENAI_API_KEY}
+    client = OpenAI(**client_kwargs)
+    model = llm.model if llm is not None else settings.AI_MODEL
+    # Resolve the per-call ``responses.create`` extras once. The legacy
+    # ``llm=None`` path keeps the historical ``reasoning.effort="minimal"``
+    # payload; the configured-byok path delegates to ``LLMConfig`` so a
+    # reasoning-incapable preset (Groq) sends an empty dict rather than
+    # 400-ing on a parameter the model does not understand.
+    response_kwargs = (
+        llm.response_kwargs("minimal") if llm is not None else {"reasoning": {"effort": "minimal"}}
+    )
+    if not response_kwargs:
+        response_kwargs = {"reasoning": {"effort": "minimal"}}
 
     logger.info("[glossary] Starting for repo %s (mode=%s)", repo.id, mode)
 
@@ -187,8 +205,8 @@ def build_glossary(
                 Callable[[], Any],
                 (
                     lambda p=prompt: client.responses.create(
-                        model=settings.AI_MODEL,
-                        reasoning={"effort": "minimal"},
+                        model=model,
+                        **response_kwargs,
                         input=[{"role": "user", "content": p}],
                         max_output_tokens=2000,
                     )

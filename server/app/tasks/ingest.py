@@ -8,8 +8,10 @@ from app.core.celery import celery
 from app.core.database import get_sync_db
 from app.core.redis import get_sync_redis
 from app.models.repository import Repository
+from app.models.user import User
 from app.services._stage_timer import stage
 from app.services.cloner import cleanup_clone, clone_repository
+from app.services.entitlements import llm_config_for
 from app.services.pipeline import run_full_analysis
 from app.tasks._parallel import run_pr_fetch_in_thread
 
@@ -77,14 +79,19 @@ def ingest_repository(
                     commit_sha=commit_sha,
                 )
 
-            # Capture the only two fields the parallel threads need; this
+            # Capture the only fields the parallel threads need; this
             # is what stops them from reaching back into the main session's
             # identity map (a stale-instance hazard if
-            # ``expire_on_commit=False`` were ever flipped on).
+            # ``expire_on_commit=False`` were ever flipped on). The
+            # ``LLMConfig`` is a frozen value object of strings and
+            # booleans -- safe to hand to ``ThreadPoolExecutor.submit``
+            # because the parallel helpers accept scalars only.
             from uuid import UUID
 
             repo_id_value: UUID = repo.id
             repo_github_url: str = repo.github_url
+            owner = db.get(User, repo.user_id)
+            llm_config = llm_config_for(owner)
 
             repo.ingested_branch = actual_branch
             repo.ingested_commit_sha = actual_sha
@@ -116,6 +123,7 @@ def ingest_repository(
                     publish,
                     manage_status=True,
                     overlap_llm=True,
+                    llm_config=llm_config,
                 )
             finally:
                 cleanup_clone(tmp_dir)

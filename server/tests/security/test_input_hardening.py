@@ -118,7 +118,7 @@ class TestFiltersNeverError:
 
         seen: list[str] = []
 
-        async def fake(query, repository_id, db, history=None):
+        async def fake(query, repository_id, db, history=None, *, llm=None):
             seen.append(query)
             return RAGResponse(answer="ok", sources=[])
 
@@ -263,7 +263,7 @@ class TestPayloadLimits:
     async def test_a_very_long_chat_question_is_accepted(self, client, target, monkeypatch):
         from app.services.rag import RAGResponse
 
-        async def fake(query, repository_id, db, history=None):
+        async def fake(query, repository_id, db, history=None, *, llm=None):
             return RAGResponse(answer="ok", sources=[])
 
         import app.api.v1.chat as chat_module
@@ -285,7 +285,7 @@ class TestPayloadLimits:
 
         forwarded: list = []
 
-        async def fake(query, repository_id, db, history=None):
+        async def fake(query, repository_id, db, history=None, *, llm=None):
             forwarded.append(history)
             return RAGResponse(answer="ok", sources=[])
 

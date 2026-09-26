@@ -9,14 +9,17 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, select
+
 from app.api.validation import FreeText
 from app.core.database import AsyncSession, get_async_db
 from app.models.chat_message import ChatMessage as ChatMessageModel
 from app.models.repository import Repository
+from app.models.user import User
+from app.services.entitlements import llm_config_for
 from app.services.rag import ChatMessage, answer_question
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import delete, select
 
 logger = logging.getLogger(__name__)
 
@@ -101,9 +104,7 @@ async def chat(
     user_id = getattr(request.state, "user_id", None)
     repo = (
         await db.execute(
-            select(Repository).filter(
-                Repository.id == repo_id, Repository.user_id == user_id
-            )
+            select(Repository).filter(Repository.id == repo_id, Repository.user_id == user_id)
         )
     ).scalar_one_or_none()
     if not repo:
@@ -118,11 +119,22 @@ async def chat(
     # Cap forwarded history so long sessions don't blow up the LLM prompt.
     history = payload.history[-5:]
 
+    # Resolve the credential bundle: the user's stored BYOK key wins
+    # over the server key, and ``None`` from ``llm_config_for`` is the
+    # route layer's cue to return 402 (added in Phase 5 -- the gates
+    # that decide whether the request is allowed at all). ``llm_config``
+    # is then forwarded to the RAG pipeline as a frozen value object;
+    # the embedding call still uses the server key, the generation
+    # call is what honours this override.
+    owner = await db.get(User, user_id) if user_id else None
+    llm_config = llm_config_for(owner)
+
     result = await answer_question(
         query=payload.question,
         repository_id=repo_id,
         db=db,
         history=[ChatMessage(role=m.role, content=m.content) for m in history],
+        llm=llm_config,
     )
 
     serialized_sources = [
@@ -198,9 +210,7 @@ async def get_chat_history(
 
     repo = (
         await db.execute(
-            select(Repository).filter(
-                Repository.id == repo_id, Repository.user_id == user_id
-            )
+            select(Repository).filter(Repository.id == repo_id, Repository.user_id == user_id)
         )
     ).scalar_one_or_none()
     if not repo:

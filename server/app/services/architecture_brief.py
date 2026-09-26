@@ -27,6 +27,7 @@ from app.models import (
     Repository,
 )
 from app.services.file_graph import build_dep_path_map
+from app.services.llm_config import LLMConfig
 from app.services.onboarding import _upsert_guide
 
 logger = logging.getLogger(__name__)
@@ -365,13 +366,27 @@ def _build_narrative_prompt(
     return "\n".join(lines)
 
 
-def _call_llm_narrative(prompt: str) -> str:
-    """Call the LLM for a narrative; returns empty string on failure."""
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+def _call_llm_narrative(prompt: str, llm: LLMConfig | None = None) -> str:
+    """Call the LLM for a narrative; returns empty string on failure.
+
+    ``architecture_brief`` is the one site that asks for ``reasoning.effort="low"``
+    (the others ask for ``"minimal"``), because the narrative runs longer than
+    the keyword-style calls. ``LLMConfig.response_kwargs("low")`` is what threads
+    that distinction through; the default-fallback branch keeps the historical
+    string for the ``llm=None`` case.
+    """
+    client_kwargs = llm.client_kwargs() if llm is not None else {"api_key": settings.OPENAI_API_KEY}
+    client = OpenAI(**client_kwargs)
+    model = llm.model if llm is not None else settings.AI_MODEL
+    response_kwargs = (
+        llm.response_kwargs("low") if llm is not None else {"reasoning": {"effort": "low"}}
+    )
+    if not response_kwargs:
+        response_kwargs = {"reasoning": {"effort": "low"}}
 
     try:
         response = client.responses.create(
-            model=settings.AI_MODEL,
+            model=model,
             input=cast(
                 ResponseInputParam,
                 [
@@ -386,7 +401,7 @@ def _call_llm_narrative(prompt: str) -> str:
                 ],
             ),
             max_output_tokens=1200,
-            reasoning={"effort": "low"},
+            **response_kwargs,
         )
         content = response.output_text
         return content.strip() if content else ""
@@ -396,7 +411,11 @@ def _call_llm_narrative(prompt: str) -> str:
 
 
 def generate_brief(
-    db: Session, repo: Repository, readme_content: str | None = None
+    db: Session,
+    repo: Repository,
+    readme_content: str | None = None,
+    *,
+    llm: LLMConfig | None = None,
 ) -> OnboardingGuide:
     """Generate an architecture brief for a repository.
 
@@ -410,6 +429,9 @@ def generate_brief(
         db: SQLAlchemy database session.
         repo: The repository to summarize.
         readme_content: Optional README text included in the LLM prompt.
+        llm: The credential bundle forwarded to the narrative call. ``None``
+            falls through to the server key -- the route layer's quota
+            gates are what make ``None`` legitimate in production.
 
     Returns:
         The upserted OnboardingGuide with populated architecture sections.
@@ -516,7 +538,7 @@ def generate_brief(
         readme_content=readme_content,
     )
 
-    narrative = _call_llm_narrative(prompt)
+    narrative = _call_llm_narrative(prompt, llm=llm)
     # Persist a placeholder rather than failing the whole brief when the LLM is down.
     if not narrative:
         narrative = "Architecture summary could not be generated."

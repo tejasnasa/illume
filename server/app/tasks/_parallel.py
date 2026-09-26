@@ -32,6 +32,7 @@ from app.models.repository import Repository
 from app.services._stage_timer import stage
 from app.services.architecture_brief import generate_brief
 from app.services.glossary_builder import build_glossary
+from app.services.llm_config import LLMConfig
 from app.services.onboarding import build_reading_order
 from app.services.pr_fetcher import fetch_pull_requests
 
@@ -75,6 +76,7 @@ def run_pr_fetch_in_thread(
 def run_glossary_in_thread(
     repo_id: UUID,
     github_url: str,
+    llm_config: LLMConfig | None = None,
 ) -> int:
     """Run ``build_glossary`` on its own sync session.
 
@@ -86,7 +88,7 @@ def run_glossary_in_thread(
     try:
         repo = Repository(id=repo_id, github_url=github_url)
         with stage("glossary", measure_memory=False):
-            return build_glossary(session, repo)
+            return build_glossary(session, repo, llm=llm_config)
     finally:
         session.close()
 
@@ -94,13 +96,14 @@ def run_glossary_in_thread(
 def run_reading_order_in_thread(
     repo_id: UUID,
     github_url: str,
+    llm_config: LLMConfig | None = None,
 ) -> None:
     """Run ``build_reading_order`` on its own sync session."""
     session = SyncSessionLocal()
     try:
         repo = Repository(id=repo_id, github_url=github_url)
         with stage("reading_order", measure_memory=False):
-            build_reading_order(session, repo)
+            build_reading_order(session, repo, llm=llm_config)
     finally:
         session.close()
 
@@ -108,6 +111,7 @@ def run_reading_order_in_thread(
 def run_brief_in_thread(
     repo_id: UUID,
     readme_content: str | None,
+    llm_config: LLMConfig | None = None,
 ) -> None:
     """Run ``generate_brief`` on its own sync session.
 
@@ -132,6 +136,7 @@ def run_brief_in_thread(
         repo_id: Repository row id, captured as a scalar by the caller.
         readme_content: README text for the prompt, read before the clone is
             cleaned up.
+        llm_config: The resolved credential bundle handed to ``generate_brief``.
 
     Raises:
         ValueError: If the repository row no longer exists -- the task's
@@ -144,6 +149,6 @@ def run_brief_in_thread(
         if repo is None:
             raise ValueError(f"Repository {repo_id} not found for brief generation")
         with stage("brief", measure_memory=False):
-            generate_brief(session, repo, readme_content=readme_content)
+            generate_brief(session, repo, readme_content=readme_content, llm=llm_config)
     finally:
         session.close()

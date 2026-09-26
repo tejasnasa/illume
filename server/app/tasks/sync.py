@@ -34,13 +34,16 @@ from sqlalchemy.orm import Session
 from app.core.celery import celery
 from app.core.database import get_sync_db
 from app.models.repository import Repository
+from app.models.user import User
 from app.services.criticality import run_criticality_scoring
 from app.services.dependency_resolver import (
     compute_fan_metrics,
     delete_repo_edges,
     resolve_dependencies,
 )
+from app.services.entitlements import llm_config_for
 from app.services.git_analyzer import analyze_git_history
+from app.services.llm_config import LLMConfig
 from app.services.repo_cache import (
     CLONE_CACHE_ENABLED,
     ensure_clone,
@@ -257,6 +260,7 @@ def _ingest_artifact_frame(
     repo: Repository,
     repo_root: Path,
     manage_status: bool,
+    llm_config: LLMConfig | None = None,
 ) -> int:
     """Regenerate the architecture brief; placeholder for Phase 5 hooks.
 
@@ -264,6 +268,10 @@ def _ingest_artifact_frame(
     so the repo's main status stays ``ready``. Returns 1 on success so
     the caller's summary can include a single brief-regenerated entry;
     the embedding counter is the workhorse for the LLM-call metric.
+
+    Args:
+        llm_config: The resolved credential bundle forwarded to
+            ``generate_brief``. ``None`` falls through to the server key.
     """
     from app.services.architecture_brief import generate_brief
 
@@ -273,7 +281,7 @@ def _ingest_artifact_frame(
         if candidate.is_file():
             readme_content = candidate.read_text(errors="ignore")
             break
-    generate_brief(db, repo, readme_content=readme_content)
+    generate_brief(db, repo, readme_content=readme_content, llm=llm_config)
     return 1
 
 
@@ -357,6 +365,13 @@ def _do_sync(
     token = _resolve_token(db, repo, access_token)
     (_, max_files, max_ratio, _, _) = _sync_tunables()
 
+    # Resolve the owner's LLM credential once and hand it to every LLM
+    # call. A frozen value object of strings and booleans -- safe to
+    # carry alongside the token because nothing in this function
+    # mutates it, and the sync task does not spawn parallel threads.
+    owner = db.get(User, repo.user_id)
+    llm_config = llm_config_for(owner)
+
     # Phase 1 of Step 0: bring the working tree to the head.
     _set_sync_status(db, repo_id_value, "checking")
 
@@ -415,7 +430,7 @@ def _do_sync(
             # -- it deletes every ``File`` row, re-parses, re-resolves,
             # re-scores. ``manage_status=False`` keeps ``status='ready'``
             # throughout.
-            return _run_full_sync(db, repo, repo_root, new_sha, generation, now)
+            return _run_full_sync(db, repo, repo_root, new_sha, generation, now, llm_config)
 
         upserted, deleted, changed_file_ids = _run_step_a(db, repo, repo_root, diff)
 
@@ -430,7 +445,7 @@ def _do_sync(
     try:
         glossary_added = 0
         embeddings_added = 0
-        _ingest_artifact_frame(db, repo, repo_root, manage_status=False)
+        _ingest_artifact_frame(db, repo, repo_root, manage_status=False, llm_config=llm_config)
         # ``build_glossary`` in incremental mode skips the delete and
         # only defines symbols lacking an entry, ranked by the *current*
         # file fan-in. The return value is the number of new entries
@@ -439,8 +454,8 @@ def _do_sync(
         from app.services.glossary_builder import build_glossary
         from app.services.onboarding import build_reading_order
 
-        glossary_added = build_glossary(db, repo, mode="incremental")
-        build_reading_order(db, repo, mode="incremental")
+        glossary_added = build_glossary(db, repo, mode="incremental", llm=llm_config)
+        build_reading_order(db, repo, mode="incremental", llm=llm_config)
         embeddings_added = embed_repository_symbols(
             db,
             None,
@@ -489,6 +504,7 @@ def _run_full_sync(
     new_sha: str,
     generation: uuid.UUID,
     now: datetime,
+    llm_config: LLMConfig | None = None,
 ) -> dict:
     """Escalation path: behave like a fresh ingest, but without changing status.
 
@@ -499,6 +515,11 @@ def _run_full_sync(
 
     ``cleanup_clone`` is a no-op for the cache clone and a recursive
     delete for the ephemeral one; calling it is safe in either case.
+
+    Args:
+        llm_config: Resolved credential bundle forwarded to
+            ``run_full_analysis`` for every LLM stage. ``None`` falls
+            through to the server key on each call.
     """
     try:
         # Step A: delete every File row (cascade clears symbols,
@@ -520,6 +541,7 @@ def _run_full_sync(
             _publish,
             manage_status=False,
             overlap_llm=False,
+            llm_config=llm_config,
         )
         repo.ingested_commit_sha = new_sha
         db.commit()

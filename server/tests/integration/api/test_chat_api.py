@@ -51,11 +51,18 @@ def rag(monkeypatch):
     Patched on the chat module rather than on `app.services.rag`, because the route bound
     the name at import time -- patching the source module would leave the route calling
     the original.
+
+    The signature carries the new ``llm=`` keyword that threading the
+    credential through added -- the chat route resolves the owner's
+    ``LLMConfig`` and forwards it to the RAG pipeline, so the recorder
+    has to accept (and silently ignore) the same kwarg.
     """
     calls: list[dict] = []
 
-    async def fake_answer_question(query, repository_id, db, history=None):
-        calls.append({"query": query, "repository_id": repository_id, "history": history})
+    async def fake_answer_question(query, repository_id, db, history=None, *, llm=None):
+        calls.append(
+            {"query": query, "repository_id": repository_id, "history": history, "llm": llm}
+        )
         return RAGResponse(
             answer=f"Answer to: {query}",
             sources=[symbol_source(), commit_source()],

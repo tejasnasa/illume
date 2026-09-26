@@ -47,6 +47,7 @@ from app.models.repository import Repository
 from app.services._stage_timer import stage
 from app.services.criticality import run_criticality_scoring
 from app.services.git_analyzer import analyze_git_history
+from app.services.llm_config import LLMConfig
 from app.services.scanner import (
     embed_repository_symbols,
     process_repository_files,
@@ -86,6 +87,7 @@ def run_full_analysis(
     *,
     manage_status: bool = True,
     overlap_llm: bool = True,
+    llm_config: LLMConfig | None = None,
 ) -> str | None:
     """Run every analysis stage for an already-cloned repository.
 
@@ -127,6 +129,13 @@ def run_full_analysis(
             the same shape as the original ingest task. Set ``False`` to
             run them sequentially; the sync task does not have a parallel
             executor and uses this knob.
+        llm_config: The resolved credential bundle forwarded to the four
+            LLM-bearing stages (glossary, reading-order, brief, and
+            ``generate_brief``). ``None`` falls through to the server key
+            on each call -- the legacy behaviour -- and the route
+            layer's quota gates (added in Phase 5) are what make
+            ``None`` legitimate in production. Embeddings remain on the
+            server key by decision.
 
     Returns:
         The README content as a string, or ``None`` if no README was
@@ -171,10 +180,10 @@ def run_full_analysis(
         parallel_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pipeline-llm")
         try:
             glossary_future = parallel_executor.submit(
-                run_glossary_in_thread, repo_id_value, repo_github_url
+                run_glossary_in_thread, repo_id_value, repo_github_url, llm_config
             )
             reading_order_future = parallel_executor.submit(
-                run_reading_order_in_thread, repo_id_value, repo_github_url
+                run_reading_order_in_thread, repo_id_value, repo_github_url, llm_config
             )
             # Wall-clock for the overlapped pair. Comparing it against the
             # two helpers' individual walls shows whether the overlap paid
@@ -189,15 +198,17 @@ def run_full_analysis(
         from app.services.glossary_builder import build_glossary
         from app.services.onboarding import build_reading_order
 
-        build_glossary(db, repo)
-        build_reading_order(db, repo)
+        build_glossary(db, repo, llm=llm_config)
+        build_reading_order(db, repo, llm=llm_config)
 
     publish("embedding_started", "Generating embeddings...")
     publish("brief_started", "Synthesizing AI architecture brief...")
     if overlap_llm:
         brief_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline-brief")
         try:
-            brief_future = brief_executor.submit(run_brief_in_thread, repo_id_value, readme_content)
+            brief_future = brief_executor.submit(
+                run_brief_in_thread, repo_id_value, readme_content, llm_config
+            )
             with stage("embed_and_brief_join", measure_memory=False):
                 embed_repository_symbols(
                     db,
@@ -226,6 +237,6 @@ def run_full_analysis(
         )
         from app.services.architecture_brief import generate_brief
 
-        generate_brief(db, repo, readme_content=readme_content)
+        generate_brief(db, repo, readme_content=readme_content, llm=llm_config)
 
     return readme_content

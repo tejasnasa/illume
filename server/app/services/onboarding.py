@@ -41,6 +41,7 @@ from app.core.config import settings
 from app.models import File, OnboardingGuide, Repository
 from app.services._concurrency import gather_in_order
 from app.services.file_graph import build_int_adjacency, iter_file_edges
+from app.services.llm_config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,7 @@ def _annotate_files(
     language_by_path: dict[str, str | None],
     *,
     reusable: dict[str, str] | None = None,
+    llm: LLMConfig | None = None,
 ) -> dict[str, str]:
     """Request LLM annotations in batches; failures skip the batch silently.
 
@@ -220,8 +222,23 @@ def _annotate_files(
     failure), and the parent thread merges them. A worker exception is
     captured and converted into ``None`` so the "failures skip the
     batch silently" contract survives the threading layer.
+
+    Args:
+        ordered_files: Tier-ordered file rows; see :func:`build_reading_order`.
+        language_by_path: Side table mapping path to language.
+        reusable: Existing annotations to reuse without re-asking the LLM.
+        llm: The credential bundle to authenticate the LLM call with.
+            ``None`` falls through to the server key -- the route layer's
+            quota gates are what make ``None`` legitimate in production.
     """
-    client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    client_kwargs = llm.client_kwargs() if llm is not None else {"api_key": settings.OPENAI_API_KEY}
+    client = openai.OpenAI(**client_kwargs)
+    model = llm.model if llm is not None else settings.AI_MODEL
+    response_kwargs = (
+        llm.response_kwargs("minimal") if llm is not None else {"reasoning": {"effort": "minimal"}}
+    )
+    if not response_kwargs:
+        response_kwargs = {"reasoning": {"effort": "minimal"}}
 
     if reusable:
         # Compute the set the LLM actually has to fill: the first
@@ -252,8 +269,8 @@ def _annotate_files(
         prompt = _build_annotation_prompt(batch)
         try:
             response = client.responses.create(
-                model=settings.AI_MODEL,
-                reasoning={"effort": "minimal"},
+                model=model,
+                **response_kwargs,
                 input=[{"role": "user", "content": prompt}],
                 max_output_tokens=1000,
             )
@@ -305,6 +322,7 @@ def build_reading_order(
     repo: Repository,
     *,
     mode: Literal["full", "incremental"] = "full",
+    llm: LLMConfig | None = None,
 ) -> OnboardingGuide:
     """Build and persist a suggested file reading order for a repository.
 
@@ -329,6 +347,10 @@ def build_reading_order(
         repo: The repository to build the reading order for.
         mode: ``"full"`` for initial ingest; ``"incremental"`` for the
             sync task.
+        llm: The credential bundle forwarded to the annotation request.
+            ``None`` falls through to the server key -- the route layer's
+            quota gates (added in Phase 5) are what make ``None``
+            legitimate in production.
 
     Returns:
         The upserted OnboardingGuide containing the annotated reading order.
@@ -413,6 +435,7 @@ def build_reading_order(
         ordered_flat,
         language_by_path,
         reusable=reusable_annotations if mode == "incremental" else None,
+        llm=llm,
     )
 
     # Apply annotations in two passes: reusable entries win first so a

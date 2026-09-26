@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import AstSymbol, Commit, Embedding, File, PullRequest
+from app.services.llm_config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +83,7 @@ class ChatMessage:
     content: str
 
 
-def _apply_diversity_caps(
-    embeddings: Sequence[Embedding], total: int = TOP_K
-) -> list[Embedding]:
+def _apply_diversity_caps(embeddings: Sequence[Embedding], total: int = TOP_K) -> list[Embedding]:
     """Selects up to `total` hits while respecting per-type caps, then fills any remaining slots by relevance order."""
     type_counts = defaultdict(int)
     selected = []
@@ -141,9 +140,7 @@ async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceRefer
     # missing rows degrade to None fields rather than dropping the citation.
     if embedding.source_type == "symbol":
         symbol = (
-            await db.execute(
-                select(AstSymbol).filter(AstSymbol.id == embedding.source_id)
-            )
+            await db.execute(select(AstSymbol).filter(AstSymbol.id == embedding.source_id))
         ).scalar_one_or_none()
         file = (
             await db.execute(select(File).filter(File.id == embedding.file_id))
@@ -170,9 +167,7 @@ async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceRefer
 
     elif embedding.source_type == "pull_request":
         pr = (
-            await db.execute(
-                select(PullRequest).filter(PullRequest.id == embedding.source_id)
-            )
+            await db.execute(select(PullRequest).filter(PullRequest.id == embedding.source_id))
         ).scalar_one_or_none()
         return SourceReference(
             source_type="pull_request",
@@ -238,6 +233,8 @@ async def answer_question(
     repository_id: UUID,
     db: AsyncSession,
     history: list[ChatMessage] | None = None,
+    *,
+    llm: LLMConfig | None = None,
 ) -> RAGResponse:
     """Answer a natural-language question about a repository.
 
@@ -253,16 +250,28 @@ async def answer_question(
         db: Async SQLAlchemy session for vector search and lookups.
         history: Optional prior conversation turns included before the new
             user message.
+        llm: The credential bundle forwarded to the generation call.
+            ``None`` falls through to the server key -- the route layer's
+            quota gates are what make ``None``
+            legitimate in production. The **embedding** client is always
+            the server key by decision: a per-user embedding key would
+            make the index provider-dependent and trigger a migration,
+            since the 1536 dimensions are baked into the schema.
 
     Returns:
         A RAGResponse with the generated answer and resolved sources. If no
         sufficiently similar chunks exist, returns a fallback message with
         empty sources without calling the LLM.
     """
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # Embeddings stay on the server key by design -- the 1536-dim vector
+    # column is shared across all users, and a per-user embedding key would
+    # shard the index. The retrieval half of the pipeline therefore keeps
+    # its single client; the generation half gets a second client built
+    # from the resolved credential.
+    embed_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
     logger.info(f"Embedding query for repo {repository_id}: {query!r}")
-    query_vector = await _embed_query(client, query)
+    query_vector = await _embed_query(embed_client, query)
 
     chunks = await _vector_search(db, repository_id, query_vector, 10)
     logger.info(f"Retrieved {len(chunks)} chunks from pgvector")
@@ -286,10 +295,24 @@ async def answer_question(
 
     messages.append({"role": "user", "content": query})
 
+    # Generation client: the user's BYOK key when present, otherwise the
+    # server key. ``client_kwargs`` omits ``base_url`` when None so the
+    # SDK default applies (which is also how the E2E stub is reached).
+    generation_client_kwargs = (
+        llm.client_kwargs() if llm is not None else {"api_key": settings.OPENAI_API_KEY}
+    )
+    generation_client = AsyncOpenAI(**generation_client_kwargs)
+    generation_model = llm.model if llm is not None else settings.AI_MODEL
+    generation_response_kwargs = (
+        llm.response_kwargs("minimal") if llm is not None else {"reasoning": {"effort": "minimal"}}
+    )
+    if not generation_response_kwargs:
+        generation_response_kwargs = {"reasoning": {"effort": "minimal"}}
+
     logger.info("Calling LLM for answer generation")
-    response = await client.responses.create(
-        model=settings.AI_MODEL,
-        reasoning={"effort": "minimal"},
+    response = await generation_client.responses.create(
+        model=generation_model,
+        **generation_response_kwargs,
         input=cast(ResponseInputParam, messages),
         max_output_tokens=1000,
     )
