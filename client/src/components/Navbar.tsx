@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react/dist/ssr";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import OptionsMenu from "./ui/OptionsMenu";
 
 /**
@@ -29,6 +30,7 @@ export default function Navbar({
   userData?: User | null;
 }) {
   const logout = useLogout();
+  const router = useRouter();
 
   return (
     <header className="flex justify-between">
@@ -65,6 +67,7 @@ export default function Navbar({
           {
             label: "Settings",
             icon: <GearSixIcon size={"inherit"} />,
+            onClick: () => router.push("/settings"),
           },
           {
             label: "Logout",

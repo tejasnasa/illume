@@ -25,6 +25,12 @@ interface OptionMenuProps {
   size: "sm" | "lg";
   direction: "left" | "right";
   className?: string;
+  /**
+   * Extra classes applied to the wrapper around the trigger button. The wrapper is
+   * `inline-block` by default so the trigger shrinks to its content; pass a block-level
+   * class like `w-full` (with a flex/block wrapper) to make the trigger span the parent.
+   */
+  wrapperClassName?: string;
 }
 
 /**
@@ -42,6 +48,7 @@ export default function OptionMenu({
   size,
   direction,
   className,
+  wrapperClassName,
 }: OptionMenuProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -56,14 +63,24 @@ export default function OptionMenu({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // The wrapper is `inline-block` by default so the trigger shrinks to its
+  // content (the AutoUpdateSection cadence picker). When the caller passes a
+  // wrapperClassName like `block w-full`, swap the display value so the
+  // trigger can fill its parent without the inline-block rule winning the
+  // CSS cascade. The caller controls the layout; we just defer to it.
+  const displayClass = wrapperClassName ?? "inline-block";
+
   return (
-    <div className="relative inline-block" ref={ref}>
+    <div className={`relative ${displayClass}`} ref={ref}>
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="block border-0 bg-transparent p-0"
+        // `w-full` so the trigger fills its block-level wrapper (used by the
+        // BYOK provider picker); inline callers that don't pass `wrapperClassName`
+        // already get a content-sized button from the default `inline-block`.
+        className={`${wrapperClassName ? "w-full" : ""} block border-0 bg-transparent p-0`}
       >
         {trigger}
       </button>

@@ -12,7 +12,10 @@ export const signupSchema = z.object({
   name: z
     .string()
     .min(2, { message: "Full name must be at least 2 characters long." }),
-  email: z.string().trim().pipe(z.email({ message: "Enter a valid email." })),
+  email: z
+    .string()
+    .trim()
+    .pipe(z.email({ message: "Enter a valid email." })),
   password: z
     .string()
     .trim()
@@ -31,7 +34,10 @@ export const signupSchema = z.object({
  * Login form validation: email plus minimum-length password.
  */
 export const loginSchema = z.object({
-  email: z.string().trim().pipe(z.email({ message: "Enter a valid email." })),
+  email: z
+    .string()
+    .trim()
+    .pipe(z.email({ message: "Enter a valid email." })),
   password: z.string().trim().min(8, { message: "Enter a valid password" }),
 });
 
@@ -47,4 +53,20 @@ export const repoCreateSchema = z.object({
     .refine((url) => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/.test(url), {
       message: "URL must point to a valid GitHub repository.",
     }),
+});
+
+/**
+ * BYOK credentials form validation.
+ */
+export const aiCredentialsSchema = z.object({
+  provider: z.string().min(1, { message: "Pick a provider." }),
+  apiKey: z
+    .string()
+    .trim()
+    .min(8, { message: "API key must be at least 8 characters." })
+    .max(512, { message: "API key must be at most 512 characters." }),
+  model: z
+    .string()
+    .trim()
+    .max(128, { message: "Model id must be at most 128 characters." }),
 });
