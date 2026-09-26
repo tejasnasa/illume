@@ -144,9 +144,18 @@ async def victim(client, db_session):
     Populated so that every route in the matrix would succeed for its owner, which is
     what makes the 404 assertions meaningful. The attacker's session is installed on the
     client; the victim's user is returned unauthenticated.
+
+    The victim user carries a stored BYOK credential -- the route-layer
+    quota gates refuse reingest / sync / auto-update for keyless users,
+    so without this every owner-success case would land on 402 before the
+    404 assertions below prove anything about IDOR.
     """
-    attacker = await make_user(db_session)
-    victim_user = await make_user(db_session)
+    # Both users carry a BYOK credential: the IDOR security property
+    # only holds when the *quota gate* allows the call to reach the
+    # route layer, so a keyless attacker would 402 and mask what the
+    # test is really pinning -- access control between users.
+    attacker = await make_user(db_session, ai_api_key="sk-attacker")
+    victim_user = await make_user(db_session, ai_api_key="sk-victim")
     repo, files = await make_ingested_repo(db_session, victim_user)
 
     await make_glossary_entry(db_session, repo, name="Widget", definition="A widget.")

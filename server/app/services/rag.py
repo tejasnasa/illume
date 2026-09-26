@@ -69,10 +69,23 @@ class SourceReference:
 
 @dataclass
 class RAGResponse:
-    """Final RAG result: generated answer text and its source citations."""
+    """Final RAG result: generated answer text and its source citations.
+
+    Attributes:
+        answer: The model's response text, or the canned fallback when
+            retrieval returned nothing.
+        sources: Citation objects backing each chunk the model saw. Empty
+            when nothing survived the similarity filter.
+        generated: ``True`` when the LLM was called and produced an
+            answer; ``False`` when the pipeline short-circuited on its
+            no-context early return. The chat route charges a free-tier
+            message only when this is ``True``; inferring the same fact
+            from ``sources`` would let a stubbed answer bypass the quota.
+    """
 
     answer: str
     sources: list[SourceReference]
+    generated: bool = False
 
 
 @dataclass
@@ -259,9 +272,14 @@ async def answer_question(
             since the 1536 dimensions are baked into the schema.
 
     Returns:
-        A RAGResponse with the generated answer and resolved sources. If no
-        sufficiently similar chunks exist, returns a fallback message with
-        empty sources without calling the LLM.
+        A :class:`RAGResponse` carrying ``generated=False`` (and a canned
+        answer with empty ``sources``) when retrieval returned nothing --
+        the LLM was never called. When generation succeeds, ``generated``
+        is ``True``. The flag is what the chat route uses to decide
+        whether to charge a free-tier message; inferring the same fact
+        from a non-empty ``sources`` would be brittle (a stub answer with
+        no retrieved chunks is exactly the case where the free tier
+        should not be billed).
     """
     # Embeddings stay on the server key by design -- the 1536-dim vector
     # column is shared across all users, and a per-user embedding key would
@@ -280,6 +298,7 @@ async def answer_question(
         return RAGResponse(
             answer="No relevant code was found in this repository for your question.",
             sources=[],
+            generated=False,
         )
 
     sources = [await _resolve_source(db, e) for e in chunks]
@@ -319,4 +338,4 @@ async def answer_question(
 
     answer = (response.output_text or "").strip()
 
-    return RAGResponse(answer=answer, sources=sources)
+    return RAGResponse(answer=answer, sources=sources, generated=True)

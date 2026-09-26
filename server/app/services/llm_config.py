@@ -1,11 +1,11 @@
 """Resolved LLM credentials handed to every generation call.
 
 Why a value object rather than reading ``settings.OPENAI_API_KEY`` directly at
-each call site: by Phase 5, the credential to use depends on whose key paid
-for it -- the user's stored key if they have one, otherwise the server's
-deepseek key for the free tier, otherwise ``None`` and the call is refused.
-Threading that decision through every service as three separate globals is
-what got us into the one-key-pays-for-everyone state in the first place.
+each call site: the credential to use depends on whose key paid for it --
+the user's stored key if they have one, otherwise the server's deepseek key
+for the free tier, otherwise ``None`` and the call is refused. Threading that
+decision through every service as three separate globals is what got us into
+the one-key-pays-for-everyone state in the first place.
 
 ``LLMConfig`` is a frozen value object of strings and booleans -- safe to
 hand to the thread helpers in :mod:`app/tasks/_parallel.py`, whose docstring

@@ -360,12 +360,13 @@ class TestKeylessCredentialThreading:
     def test_legacy_fallback_uses_the_server_key_when_ai_api_key_is_empty(
         self, monkeypatch, tmp_path
     ):
-        """With ``AI_API_KEY`` empty, ``llm_config_for`` returns ``None`` and the four services fall back to ``settings.OPENAI_API_KEY``.
+        """With ``AI_API_KEY`` empty the four services fall back to ``settings.OPENAI_API_KEY``.
 
-        Phase 5's gates render this path unreachable in production, but
-        the *plumbing* has to handle it: ``llm=None`` stays the default
-        on each service signature. The recorded ``init_kwargs`` should
-        carry the server key with no preset ``base_url``.
+        The route-layer quota gates render this path unreachable in
+        production, but the *plumbing* has to handle it: ``llm=None``
+        stays the default on each service signature. The recorded
+        ``init_kwargs`` should carry the server key with no preset
+        ``base_url``.
         """
         engine, Session = _sync_session_factory()
         session = Session()
@@ -472,13 +473,14 @@ class TestChatRouteForwardsTheResolvedConfig:
     async def test_a_keyless_user_receives_none_or_the_server_default(
         self, client, db_session, monkeypatch
     ):
-        """A user with no stored key receives ``None`` (or the server default when ``AI_API_KEY`` is set).
+        """A keyless user receives ``None`` (or the server default when ``AI_API_KEY`` is set).
 
         The route delegates the resolution to :func:`llm_config_for`,
         so the assertion is shape-only: ``None`` when the server has
-        no key, a ``server``-sourced config otherwise. The exact branch
-        Phase 5 gates, but the plumbing forwards whichever the
-        entitlement policy returns.
+        no key, a ``server``-sourced config otherwise. The route-layer
+        quota gates turn ``None`` into a 402 rather than forwarding it
+        onward, so the route short-circuits with no LLM call; the
+        assertion below pins the policy output that drives the 402.
         """
         from tests.factories import make_ingested_repo, make_user
 
@@ -492,6 +494,33 @@ class TestChatRouteForwardsTheResolvedConfig:
         # it here to control the assertion without depending on the
         # test config.
         monkeypatch.setattr(settings, "AI_API_KEY", "", raising=False)
+
+        # The route-layer quota gates turn ``None`` into a 402 before
+        # any LLM call. The assertion is the status code.
+        response = await client.post(f"/api/v1/repository/{repo.id}/chat", json={"question": "q"})
+
+        assert response.status_code == 402
+        assert "API key" in response.json()["detail"]
+
+    async def test_a_keyless_user_with_server_key_admits_with_server_config(
+        self, client, db_session, monkeypatch
+    ):
+        """With ``AI_API_KEY`` set, the keyless user is admitted on the server default.
+
+        This is the *admitted* branch of the same case the previous
+        test pins as a 402. Phase 4's plumbing assertion still holds
+        here: the route forwards whatever :func:`llm_config_for`
+        resolves, and the resolved shape is the ``server`` config.
+        """
+        from tests.factories import make_ingested_repo, make_user
+
+        user = await make_user(db_session)
+        repo, _ = await make_ingested_repo(db_session, user)
+        from tests.helpers import authenticate
+
+        await authenticate(client, user)
+
+        monkeypatch.setattr(settings, "AI_API_KEY", "sk-server-test", raising=False)
 
         recorder: list[dict] = []
 
@@ -512,11 +541,11 @@ class TestChatRouteForwardsTheResolvedConfig:
 
         monkeypatch.setattr(chat_module, "answer_question", fake_answer_question)
 
-        await client.post(f"/api/v1/repository/{repo.id}/chat", json={"question": "q"})
+        response = await client.post(f"/api/v1/repository/{repo.id}/chat", json={"question": "q"})
 
+        assert response.status_code == 200
         assert recorder
         forwarded = recorder[0]["llm"]
-        # ``AI_API_KEY=""`` -> ``server_default()`` returns ``None`` ->
-        # the route forwards ``None``. Phase 5 decides whether to 402
-        # on this case; Phase 4 only pins the plumbing.
-        assert forwarded is None
+        assert forwarded is not None
+        assert forwarded.source == "server"
+        assert forwarded.api_key == "sk-server-test"

@@ -349,8 +349,7 @@ def build_reading_order(
             sync task.
         llm: The credential bundle forwarded to the annotation request.
             ``None`` falls through to the server key -- the route layer's
-            quota gates (added in Phase 5) are what make ``None``
-            legitimate in production.
+            quota gates are what make ``None`` legitimate in production.
 
     Returns:
         The upserted OnboardingGuide containing the annotated reading order.

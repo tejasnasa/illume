@@ -7,9 +7,10 @@ and exposes history listing plus single-message and full-history deletion.
 import logging
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from openai import APIConnectionError, APIStatusError, APITimeoutError, AuthenticationError
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select
 
@@ -18,7 +19,11 @@ from app.core.database import AsyncSession, get_async_db
 from app.models.chat_message import ChatMessage as ChatMessageModel
 from app.models.repository import Repository
 from app.models.user import User
-from app.services.entitlements import llm_config_for
+from app.services.entitlements import (
+    FREE_CHAT_MESSAGES,
+    aclaim_free_chat_message,
+    llm_config_for,
+)
 from app.services.rag import ChatMessage, answer_question
 
 logger = logging.getLogger(__name__)
@@ -121,21 +126,97 @@ async def chat(
 
     # Resolve the credential bundle: the user's stored BYOK key wins
     # over the server key, and ``None`` from ``llm_config_for`` is the
-    # route layer's cue to return 402 (added in Phase 5 -- the gates
-    # that decide whether the request is allowed at all). ``llm_config``
-    # is then forwarded to the RAG pipeline as a frozen value object;
-    # the embedding call still uses the server key, the generation
-    # call is what honours this override.
-    owner = await db.get(User, user_id) if user_id else None
-    llm_config = llm_config_for(owner)
-
-    result = await answer_question(
-        query=payload.question,
-        repository_id=repo_id,
-        db=db,
-        history=[ChatMessage(role=m.role, content=m.content) for m in history],
-        llm=llm_config,
+    # route layer's cue to return 402. ``llm_config`` is then forwarded
+    # to the RAG pipeline as a frozen value object; the embedding call
+    # still uses the server key, the generation call is what honours
+    # this override. ``populate_existing=True`` is the read-through-
+    # cached-row guard the free-tier charge depends on: without it, a
+    # session with ``expire_on_commit=False`` would silently serve a
+    # stale ``free_chat_messages_used`` value across requests in the
+    # same session, so the quota pre-check would always be 0 and the
+    # (N+1)-th call would never get the 402 it is owed.
+    owner = (
+        (
+            await db.execute(
+                select(User).where(User.id == user_id).execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if user_id
+        else None
     )
+    llm_config = llm_config_for(owner)
+    if llm_config is None:
+        # Neither the user nor the server holds a key. The free tier is the
+        # one place this can land in production -- if the operator never
+        # set ``AI_API_KEY``, the entire tier is off and the very first
+        # question is refused.
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "Add your own API key to ask questions about this repository. "
+                "Configure one in your account settings."
+            ),
+        )
+
+    on_free_tier = owner is not None and owner.ai_api_key is None
+    if on_free_tier and owner is not None and owner.free_chat_messages_used >= FREE_CHAT_MESSAGES:
+        # Pre-check so a doomed request doesn't spend an LLM call. The
+        # ``aclaim_*`` helper enforces the bound atomically again at charge
+        # time, but the pre-check preserves the existing client UX: the
+        # quota message is a 402 with a stable ``detail``.
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                "You've used all of your free chat questions. "
+                "Add your own API key in your account settings to keep asking."
+            ),
+        )
+
+    try:
+        result = await answer_question(
+            query=payload.question,
+            repository_id=repo_id,
+            db=db,
+            history=[ChatMessage(role=m.role, content=m.content) for m in history],
+            llm=llm_config,
+        )
+    except AuthenticationError as exc:
+        # The credential was rejected -- forward as a 502 with the SDK's
+        # message. The user owns the key, so the operator's logs are the
+        # only place they can debug; opaque 500s would just hide that.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Provider rejected the API key: {exc}",
+        ) from exc
+    except (APIConnectionError, APITimeoutError) as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not reach the LLM provider: {exc}",
+        ) from exc
+    except APIStatusError as exc:
+        # Any other status error from the provider (4xx/5xx responses
+        # other than auth/connect/timeout). Include the SDK's message
+        # verbatim -- the operator's logs and the client error banner
+        # both benefit from the real reason.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Provider returned an error: {exc}",
+        ) from exc
+
+    if on_free_tier and result.generated:
+        # Charge the free tier only when an answer was actually generated.
+        # The ``RAGResponse.generated`` flag is the authoritative signal
+        # here -- the no-context fallback short-circuits before any LLM
+        # call and must not eat an allowance unit. ``aclaim_free_chat_message``
+        # commits in its own transaction, so the ``users`` row lock is
+        # released long before the response serialises.
+        # ``user_id`` is narrowed to ``None`` only by ``getattr`` falling
+        # back to a default; the route is always reached via a verified
+        # session so the value is, in practice, always present. mypy
+        # cannot infer that, so the cast is the documented way to tell
+        # it "trust me, the AuthMiddleware wouldn't have let us this far
+        # without a user".
+        await aclaim_free_chat_message(db, cast(uuid.UUID, user_id))
 
     serialized_sources = [
         {

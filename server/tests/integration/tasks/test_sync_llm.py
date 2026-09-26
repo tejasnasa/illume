@@ -1,7 +1,6 @@
-"""Phase 5: incremental LLM content for the sync task.
+"""Incremental LLM content for the sync task.
 
-The headline assertions on the LLM phase that the headline plan
-section calls out:
+The headline assertions on the LLM phase:
 
 * A sync that adds one new file with two new symbols produces
   **exactly two** new glossary entries, no duplicates, existing
@@ -58,14 +57,28 @@ def _sync_session_factory():
     return engine, sessionmaker(bind=engine)
 
 
-def _make_user(session, *, with_token: bool = True) -> User:
-    return User(
+def _make_user(session, *, with_token: bool = True, with_ai_key: bool = True) -> User:
+    """Create a user suitable for sync LLM tests.
+
+    ``with_ai_key=True`` is the default because the task-level backstop
+    in :func:`app.tasks.sync.sync_repository` returns ``None`` when the
+    owner has no stored key -- which would short-circuit every existing
+    sync test.
+    """
+    user = User(
         id=uuid.uuid4(),
         github_id=str(uuid.uuid4().int)[:20],
         email=f"sync-llm-{uuid.uuid4().int}@example.test",
         name="Sync LLM Test User",
         github_access_token="ghp_test_token" if with_token else None,
     )
+    if with_ai_key:
+        user.ai_provider = "openai"
+        user.ai_api_key = "sk-test"
+        user.ai_model = "gpt-4o-mini"
+    session.add(user)
+    session.commit()
+    return user
 
 
 def _make_repo(

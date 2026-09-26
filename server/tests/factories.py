@@ -69,8 +69,20 @@ async def make_user(
     github_access_token: str | None = None,
     github_id: str | None = None,
     avatar_url: str | None = None,
+    ai_api_key: str | None = None,
+    ai_provider: str | None = None,
+    ai_model: str | None = None,
 ) -> User:
-    """Insert a user and return it, flushed so `user.id` is populated."""
+    """Insert a user and return it, flushed so `user.id` is populated.
+
+    The ``ai_api_key`` knob lets a test place the user on the BYOK tier
+    instead of the free tier -- a route-layer test exercising auto-update,
+    sync, or reingest has to set one (those paths refuse keyless users),
+    and accepting the argument here keeps the call sites free of a manual
+    ``db.execute(update(User)...)``. Setting ``ai_api_key`` defaults the
+    provider and model to the same preset-aligned values a real save would
+    write, so the call site stays one line.
+    """
     user = User(
         email=email or unique_email(),
         name=name,
@@ -78,6 +90,9 @@ async def make_user(
         github_access_token=github_access_token,
         github_id=github_id,
         avatar_url=avatar_url,
+        ai_api_key=ai_api_key,
+        ai_provider="openai" if ai_api_key else ai_provider,
+        ai_model="gpt-4o-mini" if ai_api_key else ai_model,
     )
     db.add(user)
     await db.flush()

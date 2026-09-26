@@ -262,7 +262,7 @@ def _ingest_artifact_frame(
     manage_status: bool,
     llm_config: LLMConfig | None = None,
 ) -> int:
-    """Regenerate the architecture brief; placeholder for Phase 5 hooks.
+    """Regenerate the architecture brief; placeholder for richer hooks.
 
     Today the brief is a single LLM call; it is run with ``manage_status=False``
     so the repo's main status stays ``ready``. Returns 1 on success so
@@ -316,6 +316,25 @@ def sync_repository(self, repo_id: str, access_token: str | None = None) -> dict
             return None
         if not repo.ingested_commit_sha:
             logger.info("sync_repository: repo %s has no ingested_commit_sha; skipping", repo_id)
+            return None
+
+        # Free-tier backstop. The route layer already gates ``POST
+        # /{repo_id}/sync`` on the owner's stored key, but a swept sync
+        # has no route to claim anything -- a free repo whose owner
+        # never saved a key would otherwise quietly run on the server
+        # key. Also closes the window where a sync was enqueued before
+        # the user removed their key. ``ingest_repository`` deliberately
+        # has no such gate: its route already claimed the allowance,
+        # and refusing here would strand a claimed-but-unrun free
+        # ingestion.
+        from app.models.user import User
+
+        owner = db.get(User, repo.user_id)
+        if owner is not None and LLMConfig.from_user(owner) is None:
+            logger.info(
+                "sync_repository: owner of repo %s has no API key; skipping",
+                repo_id,
+            )
             return None
 
         now = datetime.now(UTC)

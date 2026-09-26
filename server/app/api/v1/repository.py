@@ -18,7 +18,9 @@ from app.api.deps import get_current_user, get_repo_for_user
 from app.api.validation import FreeText, OptionalFreeText
 from app.core.database import AsyncSession, get_async_db
 from app.models import Repository, User
+from app.services.entitlements import aclaim_free_ingestion
 from app.services.illume_exporter import generate_illume_file
+from app.services.llm_config import LLMConfig
 from app.tasks.autoupdate import AUTO_UPDATE_ENABLED
 from app.tasks.ingest import ingest_repository
 
@@ -94,6 +96,47 @@ def _extract_repo_name(github_url: str) -> str:
     return github_url.rstrip("/").split("/")[-1]
 
 
+# The exact text of the 402. Single source so every quota gate renders the
+# same message and a future wording tweak is one edit, not five.
+QUOTA_EXHAUSTED_DETAIL = (
+    "Add your own API key to ingest another repository. Configure one in your account settings."
+)
+
+
+async def _require_quota_for_creation(db: AsyncSession, user: User) -> None:
+    """Raise 402 if ``user`` cannot ingest another repository.
+
+    BYOK users are admitted immediately -- their stored key is the
+    authorisation. Keyless users must still have their one free ingestion;
+    if it has already been spent, a freshly-keyless request gets a 402
+    rather than a silent free pass.
+
+    The free-tier claim and the ``Repository`` insert run inside the same
+    transaction: a failed insert rolls the claim back, so a flaky
+    downstream write does not burn the user's allowance. The claim
+    function does **not** commit by design; the caller owns the commit.
+    """
+    config = LLMConfig.from_user(user)
+    if config is not None:
+        return
+
+    if not await aclaim_free_ingestion(db, user.id):
+        raise HTTPException(status_code=402, detail=QUOTA_EXHAUSTED_DETAIL)
+
+
+def _require_user_key(user: User) -> None:
+    """Raise 402 if ``user`` has no stored API key.
+
+    Auto-update, manual sync, and re-ingest are never free: a keyless
+    user who already had their free ingestion should not be able to keep
+    the artefact set current on the operator's bill. The free-tier gate
+    is at :func:`_require_quota_for_creation`; this gate covers the paths
+    a free repo cannot reach while it is alive.
+    """
+    if LLMConfig.from_user(user) is None:
+        raise HTTPException(status_code=402, detail=QUOTA_EXHAUSTED_DETAIL)
+
+
 @router.post("", status_code=202)
 async def create_repository(
     payload: RepositoryCreate,
@@ -112,10 +155,18 @@ async def create_repository(
     Returns:
         Dict with the new ``repo_id`` and ``repo_num``.
     """
+    await _require_quota_for_creation(db, current_user)
+
+    # Free-ingestion repos deliberately ship with auto-update off: the
+    # server key stops paying the moment the free ingestion ends. A user
+    # who later saves a key can re-enable it from the settings screen;
+    # until then the sweep's claim predicate never sees the row.
     repo = Repository(
         github_url=payload.github_url,
         name=_extract_repo_name(payload.github_url),
         user_id=current_user.id,
+        auto_update_enabled=False,
+        next_sync_at=None,
     )
     db.add(repo)
     await db.commit()
@@ -159,8 +210,11 @@ async def reingest_repository(
         Dict with the reused ``repo_id`` and ``repo_num``.
 
     Raises:
-        HTTPException: 404 if not found, 400 if ingestion is still in progress.
+        HTTPException: 404 if not found, 400 if ingestion is still in
+            progress, 402 if the owner has no stored API key.
     """
+    _require_user_key(current_user)
+
     result = await db.execute(
         select(Repository).where(
             Repository.id == repo_id,
@@ -247,6 +301,10 @@ async def update_auto_update(
     user_id = getattr(request.state, "user_id", None)
     repo = await get_repo_for_user(repo_id, user_id, db)
 
+    owner = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if owner is not None:
+        _require_user_key(owner)
+
     if (
         payload.interval_hours is not None
         and payload.interval_hours not in ALLOWED_AUTO_UPDATE_INTERVALS
@@ -306,6 +364,10 @@ async def sync_repository(
     """
     user_id = getattr(request.state, "user_id", None)
     repo = await get_repo_for_user(repo_id, user_id, db)
+
+    owner = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if owner is not None:
+        _require_user_key(owner)
 
     if not AUTO_UPDATE_ENABLED:
         raise HTTPException(

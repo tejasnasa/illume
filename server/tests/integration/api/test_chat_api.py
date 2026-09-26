@@ -77,7 +77,7 @@ def rag(monkeypatch):
 @pytest.fixture
 async def chattable(client, db_session):
     """A signed-in user with a ready repository."""
-    user = await make_user(db_session)
+    user = await make_user(db_session, ai_api_key="sk-test")
     repo, _ = await make_ingested_repo(db_session, user)
     await authenticate(client, user)
     return user, repo
@@ -198,7 +198,7 @@ class TestAskGuards:
         400 rather than 409 here -- the chat route and the graph route disagree on the
         code for "not ready", and the client's error handling follows each one.
         """
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user, status="parsing")
         await authenticate(client, user)
 
@@ -209,8 +209,8 @@ class TestAskGuards:
         assert rag == []
 
     async def test_another_users_repository_is_not_found(self, client, db_session, rag):
-        mine = await make_user(db_session)
-        theirs = await make_user(db_session)
+        mine = await make_user(db_session, ai_api_key="sk-test")
+        theirs = await make_user(db_session, ai_api_key="sk-test")
         their_repo, _ = await make_ingested_repo(db_session, theirs)
         await authenticate(client, mine)
 
@@ -220,7 +220,7 @@ class TestAskGuards:
         assert rag == []
 
     async def test_an_unknown_id_is_not_found(self, client, db_session, rag):
-        await authenticate(client, await make_user(db_session))
+        await authenticate(client, await make_user(db_session, ai_api_key="sk-test"))
 
         response = await client.post(
             f"/api/v1/repository/{random_uuid()}/chat", json={"question": "q"}

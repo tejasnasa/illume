@@ -133,9 +133,8 @@ def run_full_analysis(
             LLM-bearing stages (glossary, reading-order, brief, and
             ``generate_brief``). ``None`` falls through to the server key
             on each call -- the legacy behaviour -- and the route
-            layer's quota gates (added in Phase 5) are what make
-            ``None`` legitimate in production. Embeddings remain on the
-            server key by decision.
+            layer's quota gates are what make ``None`` legitimate in
+            production. Embeddings remain on the server key by decision.
 
     Returns:
         The README content as a string, or ``None`` if no README was

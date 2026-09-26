@@ -74,7 +74,16 @@ def sync_session():
 # --- Fixture helpers -------------------------------------------------------
 
 
-def _make_user(session, *, with_token: bool = True) -> User:
+def _make_user(session, *, with_token: bool = True, with_ai_key: bool = True) -> User:
+    """Create a user suitable for sync tests.
+
+    ``with_ai_key=True`` is the default because the task-level backstop
+    in :func:`app.tasks.sync.sync_repository` returns ``None`` when the
+    owner has no stored key -- which would short-circuit every existing
+    sync test that exercised a real head-but-no-watermark sync. The flag
+    passes through the parameters a real save would write (``provider``,
+    ``key``, ``model``).
+    """
     user = User(
         id=uuid.uuid4(),
         github_id=str(uuid.uuid4().int)[:20],
@@ -82,6 +91,10 @@ def _make_user(session, *, with_token: bool = True) -> User:
         name="Sync Test User",
         github_access_token="ghp_test_token" if with_token else None,
     )
+    if with_ai_key:
+        user.ai_provider = "openai"
+        user.ai_api_key = "sk-test"
+        user.ai_model = "gpt-4o-mini"
     session.add(user)
     session.commit()
     return user

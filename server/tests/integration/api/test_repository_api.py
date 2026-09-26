@@ -229,7 +229,7 @@ class TestDelete:
 
 class TestReingest:
     async def test_resets_a_ready_repository(self, client, db_session, dispatched):
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user, status="ready")
         await authenticate(client, user)
 
@@ -244,7 +244,7 @@ class TestReingest:
 
         from app.models.repository import Repository
 
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user, status="failed")
         original_number = repo.repo_number
         await authenticate(client, user)
@@ -267,7 +267,7 @@ class TestReingest:
 
         from app.models.file import File
 
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo, files = await make_ingested_repo(db_session, user)
         await authenticate(client, user)
 
@@ -277,7 +277,7 @@ class TestReingest:
         assert result.scalars().all() == []
 
     async def test_refuses_while_ingestion_is_in_progress(self, client, db_session, dispatched):
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         # Any status other than ready/failed must be refused. `cloning` is a real value of
         # the repo_status enum, though the enum in the model and the one in the database
         # do not agree on every label.
@@ -291,8 +291,8 @@ class TestReingest:
         assert dispatched == []
 
     async def test_cannot_reingest_another_users_repository(self, client, db_session, dispatched):
-        mine = await make_user(db_session)
-        theirs = await make_user(db_session)
+        mine = await make_user(db_session, ai_api_key="sk-test")
+        theirs = await make_user(db_session, ai_api_key="sk-test")
         their_repo = await make_repo(db_session, theirs, status="ready")
         await authenticate(client, mine)
 
@@ -314,7 +314,7 @@ class TestReingest:
 
         from app.models.repository import Repository
 
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user, status="ready")
         repo.auto_update_enabled = True
         repo.auto_update_interval_hours = 3
@@ -344,7 +344,7 @@ class TestAutoUpdatePatch:
         before the first sync lands. The PATCH sets ``next_sync_at`` to ``now()``;
         the next sweep tick (within ``SWEEP_INTERVAL_MINUTES``) will see it.
         """
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         repo.auto_update_enabled = False
         repo.next_sync_at = None
@@ -364,7 +364,7 @@ class TestAutoUpdatePatch:
 
     async def test_enabling_without_interval_keeps_the_existing_one(self, client, db_session):
         """An omitted ``interval_hours`` leaves the cadence alone."""
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         repo.auto_update_interval_hours = 12
         await db_session.commit()
@@ -384,7 +384,7 @@ class TestAutoUpdatePatch:
         never claimed. ``consecutive_sync_failures`` and ``last_sync_error``
         reset so a fresh enable starts from a clean slate.
         """
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         repo.auto_update_enabled = True
         repo.next_sync_at = repo.updated_at  # any non-NULL sentinel
@@ -407,7 +407,7 @@ class TestAutoUpdatePatch:
 
     async def test_an_invalid_interval_returns_422(self, client, db_session):
         """Reject anything outside the allowed set; the picker renders only these options."""
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         await authenticate(client, user)
 
@@ -420,7 +420,7 @@ class TestAutoUpdatePatch:
 
     async def test_an_empty_patch_leaves_everything_alone(self, client, db_session):
         """Both fields optional; omitting both is a no-op rather than a 422."""
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         repo.auto_update_enabled = False
         repo.auto_update_interval_hours = 24
@@ -436,8 +436,8 @@ class TestAutoUpdatePatch:
 
     async def test_cannot_patch_another_users_repository(self, client, db_session):
         """404, never 403 -- a 403 would confirm the repository exists."""
-        mine = await make_user(db_session)
-        theirs = await make_user(db_session)
+        mine = await make_user(db_session, ai_api_key="sk-test")
+        theirs = await make_user(db_session, ai_api_key="sk-test")
         their_repo = await make_repo(db_session, theirs)
         await authenticate(client, mine)
 
@@ -449,7 +449,7 @@ class TestAutoUpdatePatch:
         assert response.status_code == 404
 
     async def test_requires_authentication(self, client, db_session):
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
 
         response = await client.patch(
@@ -468,7 +468,7 @@ class TestSyncNow:
     """
 
     async def test_returns_202_with_queued_status(self, client, db_session):
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         await authenticate(client, user)
 
@@ -487,7 +487,7 @@ class TestSyncNow:
         """
         from datetime import UTC, datetime, timedelta
 
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         repo.sync_status = "updating"
         repo.sync_lease_expires_at = datetime.now(UTC) + timedelta(minutes=30)
@@ -505,7 +505,7 @@ class TestSyncNow:
         """
         from datetime import UTC, datetime, timedelta
 
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         repo.sync_status = "updating"
         repo.sync_lease_expires_at = datetime.now(UTC) - timedelta(minutes=1)
@@ -525,7 +525,7 @@ class TestSyncNow:
         import app.api.v1.repository as repository_module
 
         monkeypatch.setattr(repository_module, "AUTO_UPDATE_ENABLED", False)
-        user = await make_user(db_session)
+        user = await make_user(db_session, ai_api_key="sk-test")
         repo = await make_repo(db_session, user)
         await authenticate(client, user)
 
@@ -534,8 +534,8 @@ class TestSyncNow:
         assert response.status_code == 409
 
     async def test_cannot_sync_another_users_repository(self, client, db_session):
-        mine = await make_user(db_session)
-        theirs = await make_user(db_session)
+        mine = await make_user(db_session, ai_api_key="sk-test")
+        theirs = await make_user(db_session, ai_api_key="sk-test")
         their_repo = await make_repo(db_session, theirs)
         await authenticate(client, mine)
 
