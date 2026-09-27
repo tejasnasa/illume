@@ -44,7 +44,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine, delete
+from sqlalchemy import create_engine, delete, update
 from sqlalchemy.orm import sessionmaker
 
 from app.models.file import File as FileModel
@@ -577,8 +577,14 @@ def _lease_of(repo_id):
 
 
 def _write_row(session, repo, **values) -> None:
-    """Write ``values`` straight onto the row, bypassing the ORM identity map."""
-    session.execute(Repository.__table__.update().where(Repository.id == repo.id).values(**values))
+    """Write ``values`` straight onto the row, bypassing the ORM identity map.
+
+    ``update(Repository)`` rather than ``Repository.__table__.update()``: the
+    latter is typed as ``FromClause``, which carries no ``update``, so the
+    attribute access fails a type check that this function's return annotation
+    opts it into.
+    """
+    session.execute(update(Repository).where(Repository.id == repo.id).values(**values))
     session.commit()
 
 
