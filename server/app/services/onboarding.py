@@ -272,7 +272,7 @@ def _annotate_files(
                 model=model,
                 **response_kwargs,
                 input=[{"role": "user", "content": prompt}],
-                max_output_tokens=1000,
+                max_output_tokens=1500,
             )
         except Exception as exc:
             logger.error("reading_order: LLM annotation call failed: %s", exc)

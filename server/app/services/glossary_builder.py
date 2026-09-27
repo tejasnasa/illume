@@ -208,7 +208,7 @@ def build_glossary(
                         model=model,
                         **response_kwargs,
                         input=[{"role": "user", "content": p}],
-                        max_output_tokens=2000,
+                        max_output_tokens=3000,
                     )
                 ),
             )

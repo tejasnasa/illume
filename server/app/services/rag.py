@@ -333,7 +333,7 @@ async def answer_question(
         model=generation_model,
         **generation_response_kwargs,
         input=cast(ResponseInputParam, messages),
-        max_output_tokens=1000,
+        max_output_tokens=3000,
     )
 
     answer = (response.output_text or "").strip()

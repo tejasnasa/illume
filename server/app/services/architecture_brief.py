@@ -400,7 +400,7 @@ def _call_llm_narrative(prompt: str, llm: LLMConfig | None = None) -> str:
                     {"role": "user", "content": prompt},
                 ],
             ),
-            max_output_tokens=1200,
+            max_output_tokens=4000,
             **response_kwargs,
         )
         content = response.output_text
