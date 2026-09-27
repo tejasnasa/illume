@@ -1,11 +1,10 @@
-
 <div align="center">
 
 # 🧠 Illume
 
-  **AI Powered Codebase Onboarding & Architecture Intelligence**
+**AI Powered Codebase Onboarding & Architecture Intelligence**
 
-  An enterprise-grade codebase intelligence and developer velocity platform. Illume parses multi-language syntax trees, builds relational dependency graphs, digests git history, and applies LLM reasoning to compile static repositories into living, interactive onboarding guides.
+An enterprise-grade codebase intelligence and developer velocity platform. Illume parses multi-language syntax trees, builds relational dependency graphs, digests git history, and applies LLM reasoning to compile static repositories into living, interactive onboarding guides.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Python: 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg?logo=python&logoColor=white&style=flat-square)](https://www.python.org)
@@ -18,7 +17,6 @@
 [![Backend coverage](https://img.shields.io/badge/backend%20coverage-80%25-brightgreen?style=flat-square)](#-running-tests)
 [![Frontend coverage](https://img.shields.io/badge/frontend%20coverage-62%25-brightgreen?style=flat-square)](#-running-tests)
 
-
 [Live Demo](https://illume.tejasnasa.me) · [Architecture Deep-Dive](#-system-architecture) · [Key Features](#-core-capabilities) · [Getting Started](#-installation--getting-started)
 
 </div>
@@ -30,6 +28,7 @@
 Codebases grow in complexity far faster than engineering teams can scale. When a new engineer joins a team, they face a massive cognitive load: thousands of lines of code, complex module connections, outdated wikis, and hidden tribal knowledge about who owns what. Traditional static documentations get stale immediately, and senior engineers spend valuable hours manually walking new hires through the architecture.
 
 **Illume** is built on the philosophy that **the codebase itself is the single source of truth**. By combining:
+
 1. **Deterministic AST Parsing** (using Tree-sitter) to extract syntax models.
 2. **Git intelligence mining** to attribute active contributions and capture knowledge silos.
 3. **Graph-theoretic topological analysis** to calculate dependency tiers.
@@ -42,34 +41,54 @@ Illume builds a fully indexable, interactive, 3D visual workspace that turns rep
 ## ⚡ Core Capabilities
 
 ### 🗺️ Deterministic Topological Learning Paths
+
 Rather than listing files alphabetically or leaving it to guesswork, Illume runs a **Topological Sorting Algorithm** on the codebase's internal import graph.
-* **How it works**: Files are nodes, and directed edges are created when a file imports a symbol defined in another file.
-* **Cycle Handling**: Codebases frequently contain cyclic dependencies. Illume identifies cycles, groups them cleanly, and falls back to sorting files within cycles by their architectural weight (**fan-in** count) before appending them to the reading guide.
-* **AI Contextualization**: Each step in the path is sent in batches to the LLM to generate clear, 1-2 sentence descriptions detailing *why* reading this file unlocks understanding of downstream components.
+
+- **How it works**: Files are nodes, and directed edges are created when a file imports a symbol defined in another file.
+- **Cycle Handling**: Codebases frequently contain cyclic dependencies. Illume identifies cycles, groups them cleanly, and falls back to sorting files within cycles by their architectural weight (**fan-in** count) before appending them to the reading guide.
+- **AI Contextualization**: Each step in the path is sent in batches to the LLM to generate clear, 1-2 sentence descriptions detailing _why_ reading this file unlocks understanding of downstream components.
 
 ### 👥 Git Intelligence & Knowledge Silo Maps
+
 Illume mines up to `500` historical git commits using `git log --numstat` parsing.
-* **Contribution Attribution**: Calculates exactly what percentage of each file's changes were authored by which engineer.
-* **Knowledge Silo Flags**: Flags files with a **Bus Factor of 1** (e.g., touched only by a single engineer) so teams can spot single points of human failure immediately.
-* **Test Presence Safeguards**: Auto-generates template mappings (e.g., `test_{stem}.py`, `{stem}.spec.ts`) to cross-check file test coverage against git update frequency.
+
+- **Contribution Attribution**: Calculates exactly what percentage of each file's changes were authored by which engineer.
+- **Knowledge Silo Flags**: Flags files with a **Bus Factor of 1** (e.g., touched only by a single engineer) so teams can spot single points of human failure immediately.
+- **Test Presence Safeguards**: Auto-generates template mappings (e.g., `test_{stem}.py`, `{stem}.spec.ts`) to cross-check file test coverage against git update frequency.
 
 ### 🔴 Architectural Criticality (Traffic-Light Prioritization)
+
 Files are automatically grouped into three distinct priority levels based on mathematical thresholds:
-* 🔴 **Critical**: Core plumbing and highly volatile infrastructure. Identified by high code **fan-in** (imported by $\ge 10$ files), alignment with sensitive path patterns (e.g., `database.py`, `auth.py`, `middleware/`), or lack of test coverage despite high change frequency.
-* 🟡 **Caution**: Moderate architectural importance (imported by 5–9 files).
-* 🟢 **Safe to Explore**: Low risk, decoupled modules, perfect for new hires to start writing PRs.
+
+- 🔴 **Critical**: Core plumbing and highly volatile infrastructure. Identified by high code **fan-in** (imported by $\ge 10$ files), alignment with sensitive path patterns (e.g., `database.py`, `auth.py`, `middleware/`), or lack of test coverage despite high change frequency.
+- 🟡 **Caution**: Moderate architectural importance (imported by 5–9 files).
+- 🟢 **Safe to Explore**: Low risk, decoupled modules, perfect for new hires to start writing PRs.
 
 ### 🌐 Interactive 3D WebGL Dependency Graph
+
 Renders module imports dynamically inside the browser utilizing WebGL and `react-force-graph-3d` (powered by Three.js).
-* **Visual Semantics**: Nodes represent files, sized relative to their **architectural weight** (sum of fan-in & fan-out) and colored according to their traffic-light criticality.
-* **Focus States**: Highlighting a node reveals its immediate upstream importers and downstream dependencies, entirely removing the obscurity of microservice architectures.
+
+- **Visual Semantics**: Nodes represent files, sized relative to their **architectural weight** (sum of fan-in & fan-out) and colored according to their traffic-light criticality.
+- **Focus States**: Highlighting a node reveals its immediate upstream importers and downstream dependencies, entirely removing the obscurity of microservice architectures.
 
 ### 🔍 Unified Semantic RAG Chat & Glossary
-* **Domain Glossary**: Tree-sitter extracts all classes, functions, and interfaces. The LLM translates these technical symbols into business-domain definitions, compiling a searchable, living glossary.
-* **Multi-Source RAG**: Vector search combines code syntax blocks, commit messages, and PR summaries. Embedding vectors are generated using `text-embedding-3-small` (1536 dimensions) and indexed in `pgvector` for fast cosine-similarity search.
+
+- **Domain Glossary**: Tree-sitter extracts all classes, functions, and interfaces. The LLM translates these technical symbols into business-domain definitions, compiling a searchable, living glossary.
+- **Multi-Source RAG**: Vector search combines code syntax blocks, commit messages, and PR summaries. Embedding vectors are generated using `text-embedding-3-small` (1536 dimensions) and indexed in `pgvector` for fast cosine-similarity search.
 
 ### 🔄 Background Auto-Update
+
 A per-repository switch keeps an ingested analysis current without a manual `reingest`. A Celery beat process claims repos whose `next_sync_at` is due, probes the head SHA cheaply, and dispatches a worker that updates only the files that actually changed. The deterministic graph rebuild and the LLM/glossary/embed phase are both reused from the ingest path — work scales with the diff, not the repository size, while the graph stays live (`status='ready'`) the whole time.
+
+### 🔑 Bring-Your-Own API Key (BYOK) & One-Ingestion Free Tier
+
+A new user can ingest **one** repository and ask **five** chat questions on the operator's key before being asked to attach their own. Embeddings stay on the server because the index is provider-uniform; everything else (glossary, reading order, architecture brief, chat answers) runs on the user's chosen provider.
+
+- **Presets** — OpenAI, Groq, OpenRouter, DeepSeek. Pick one in `/settings`, paste a key, save. The save handler probes with a 16-token Responses call, so an incompatible provider/model/reasoning combination fails at the form rather than as silently empty artefacts.
+- **Embeddings** — Server key, `text-embedding-3-small`. The 1536 dimensions are baked into the schema; switching the embed provider is a migration, not a configuration.
+- **The free tier** — without a stored key, the first ingest and the next five chat questions run on the operator's DeepSeek key. After that, reingest, auto-update and any further chat question need a stored key.
+- **Stored key always wins** — once a user has a key, the gate is open regardless of counters. Removing the key does not restore the allowance.
+- **Plaintext at rest** — keys are stored as plaintext to match `github_access_token`. A user's OpenAI key carries billing, so treat your account credentials accordingly; never share a session cookie, and rotate a key at the provider the moment it has been exposed.
 
 ---
 
@@ -77,17 +96,17 @@ A per-repository switch keeps an ingested analysis current without a manual `rei
 
 Illume leverages a modern, robust tech stack designed for architectural scanning, distributed ingestion, and high-performance visual graphing.
 
-| Layer | Technology | Description |
-|---|---|---|
-| **Frontend Framework** | Next.js 16 (App Router) | Dynamic React framework for production-grade web applications. |
-| **Backend Framework** | FastAPI (Python 3.12+, Async) | High-performance web framework for APIs and WebSocket logic. |
-| **Syntax Parsing** | Tree-sitter | Deterministic multi-language Abstract Syntax Tree (AST) scanning. |
-| **Task Queue** | Celery + Redis | Distributed asynchronous queue pipeline for heavy clone and scan operations. |
-| **Database & ORM** | PostgreSQL + SQLAlchemy 2.0 | Scalable relational storage for file graphs, AST symbols, and git logs. |
-| **Vector Search** | pgvector + OpenAI Embeddings | Cosine-similarity searches over 1536-dimensional semantic chunk spaces. |
-| **Real-time Logs** | WebSockets + Redis Pub/Sub | Real-time progressive ingestion log streams from worker to browser. |
-| **3D Force Graphing** | WebGL (react-force-graph-3d) | Accelerated interactive 3D module import graph visualization. |
-| **UI & Animations** | Tailwind CSS 4 + Motion | Modern design tokens and fluid micro-animations for high-fidelity UX. |
+| Layer                  | Technology                    | Description                                                                  |
+| ---------------------- | ----------------------------- | ---------------------------------------------------------------------------- |
+| **Frontend Framework** | Next.js 16 (App Router)       | Dynamic React framework for production-grade web applications.               |
+| **Backend Framework**  | FastAPI (Python 3.12+, Async) | High-performance web framework for APIs and WebSocket logic.                 |
+| **Syntax Parsing**     | Tree-sitter                   | Deterministic multi-language Abstract Syntax Tree (AST) scanning.            |
+| **Task Queue**         | Celery + Redis                | Distributed asynchronous queue pipeline for heavy clone and scan operations. |
+| **Database & ORM**     | PostgreSQL + SQLAlchemy 2.0   | Scalable relational storage for file graphs, AST symbols, and git logs.      |
+| **Vector Search**      | pgvector + OpenAI Embeddings  | Cosine-similarity searches over 1536-dimensional semantic chunk spaces.      |
+| **Real-time Logs**     | WebSockets + Redis Pub/Sub    | Real-time progressive ingestion log streams from worker to browser.          |
+| **3D Force Graphing**  | WebGL (react-force-graph-3d)  | Accelerated interactive 3D module import graph visualization.                |
+| **UI & Animations**    | Tailwind CSS 4 + Motion       | Modern design tokens and fluid micro-animations for high-fidelity UX.        |
 
 ---
 
@@ -136,15 +155,17 @@ illume/
 ## 🚀 Installation & Getting Started
 
 ### 📋 Prerequisites
-* **Python 3.12+** (configured via [uv](https://github.com/astral-sh/uv) package manager)
-* **Node.js 18+** & **npm**
-* **Docker & Docker Compose** (for PostgreSQL and Redis microservices)
-* **OpenAI API Key** (for RAG and glossary building)
-* **GitHub OAuth app credentials** (Optional, for scanning private repositories)
+
+- **Python 3.12+** (configured via [uv](https://github.com/astral-sh/uv) package manager)
+- **Node.js 18+** & **npm**
+- **Docker & Docker Compose** (for PostgreSQL and Redis microservices)
+- **OpenAI API Key** (for RAG and glossary building)
+- **GitHub OAuth app credentials** (Optional, for scanning private repositories)
 
 ---
 
 ### 📦 Step 1: Start PostgreSQL and Redis Infrastructure
+
 Illume uses a pre-configured Docker Compose cluster. PostgreSQL includes the `pgvector` extension by default.
 
 Verify that your `.env` is configured correctly, then run:
@@ -155,6 +176,7 @@ docker compose up -d
 ```
 
 Verify that PostgreSQL and Redis are running:
+
 ```bash
 docker compose ps
 ```
@@ -162,6 +184,7 @@ docker compose ps
 ---
 
 ### 🐍 Step 2: Configure the FastAPI Backend Server
+
 Navigate to the `server/` directory, set up your `.env` from `.env.example`, sync dependencies, and perform database migrations.
 
 ```bash
@@ -170,6 +193,7 @@ cp .env.example .env
 ```
 
 #### Synchronize Python Package Manager (UV)
+
 ```bash
 # Sync dependency packages
 uv sync
@@ -184,6 +208,7 @@ uv run fastapi dev
 ---
 
 ### 🌾 Step 3: Run the Celery Worker Pipeline
+
 Celery handles long-running, multi-layered repository ingestion tasks. Start a worker pointing to Redis.
 
 ```bash
@@ -194,6 +219,7 @@ uv run celery -A app.core.celery worker --loglevel=info -P threads
 ---
 
 ### 💻 Step 4: Boot the Next.js Web Client
+
 Navigate to the `client/` directory, install packages, and boot the frontend dev server.
 
 ```bash
@@ -269,7 +295,7 @@ they stay true between runs — update them in the same commit that moves a floo
 `unit`, `integration`, `security`, `migration`, `slow`.
 
 > **Note:** `tests/conftest.py` points the app at the test database by setting environment
-> variables *before* importing anything under `app`. Settings and both database engines are
+> variables _before_ importing anything under `app`. Settings and both database engines are
 > constructed at import time, so this ordering is required — see the module docstring before
 > moving those imports.
 

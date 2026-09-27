@@ -5,7 +5,6 @@
 
 import removeAiCredentialsAction from "@/actions/removeAiCredentials";
 import saveAiCredentialsAction from "@/actions/saveAiCredentials";
-import { toast } from "@/lib/use-toast";
 import { aiCredentialsSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -83,11 +82,6 @@ export default function useAiCredentialsForm({
       // validated credential. Clear the key field -- the server never echoes it
       // back, and we never want to sit on it in component state across renders.
       form.resetField("apiKey");
-      toast({
-        title: "AI credentials saved",
-        description: `Key validated against ${preset?.label ?? "your provider"}. Future analyses will use your provider.`,
-        variant: "success",
-      });
       router.refresh();
     } catch (error) {
       // Backend message lands in root so the banner shows it (not a field).
@@ -108,12 +102,6 @@ export default function useAiCredentialsForm({
     setIsRemoving(true);
     try {
       await removeAiCredentialsAction();
-      toast({
-        title: "AI credentials removed",
-        description:
-          "Your existing analyses are preserved. Future ingests will require a new key.",
-        variant: "success",
-      });
       router.refresh();
     } catch (error) {
       form.setError("root", {

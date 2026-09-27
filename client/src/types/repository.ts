@@ -36,4 +36,5 @@ export default interface Repository {
   last_sync_error: string | null;
   consecutive_sync_failures: number;
   last_sync_summary: unknown;
+  sync_available: boolean;
 }

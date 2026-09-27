@@ -51,4 +51,10 @@ export const serverEnv = {
   OPENAI_API_KEY: "stub-key-not-a-credential",
   OPENAI_BASE_URL: `${STUB_URL}/v1`,
   AI_MODEL: "gpt-4o-mini",
+  // Server-side free-tier credential. Without this the operator's keyless
+  // path would call the real DeepSeek API during an E2E run -- this is the
+  // same override mechanism, used for the same reason, as OPENAI_BASE_URL
+  // above: the suite must never make a billed call.
+  AI_API_KEY: "stub-key-not-a-credential",
+  AI_BASE_URL: `${STUB_URL}/v1`,
 };

@@ -64,6 +64,7 @@ function makeRepo(overrides: Partial<Repository> = {}): Repository {
     last_sync_error: null,
     consecutive_sync_failures: 0,
     last_sync_summary: null,
+    sync_available: true,
     ...overrides,
   };
 }
@@ -294,6 +295,70 @@ describe("sync now", () => {
     await waitFor(() =>
       expect(screen.getByText(/already in flight/)).toBeInTheDocument(),
     );
+  });
+});
+
+describe("the sync_available gate", () => {
+  it("disables the switch when sync_available is false", () => {
+    render(
+      <AutoUpdateSection
+        repo={makeRepo({ sync_available: false, auto_update_enabled: true })}
+      />,
+    );
+
+    expect(screen.getByRole("switch")).toBeDisabled();
+  });
+
+  it("disables the sync-now button when sync_available is false", () => {
+    render(<AutoUpdateSection repo={makeRepo({ sync_available: false })} />);
+
+    expect(screen.getByRole("button", { name: /Sync now/i })).toBeDisabled();
+  });
+
+  it("disables the interval picker when sync_available is false", async () => {
+    const user = userEvent.setup();
+    render(
+      <AutoUpdateSection
+        repo={makeRepo({
+          sync_available: false,
+          auto_update_enabled: true,
+          auto_update_interval_hours: 6,
+        })}
+      />,
+    );
+
+    // The interval picker exists only when auto_update_enabled is true. Open it
+    // and try to pick a different value -- `OptionMenu` items carry their own
+    // `disabled` flag forwarded from `isSubmitting`, but here the gate is on
+    // the parent -- so the action must not fire when sync_available is false.
+    await user.click(screen.getByRole("button", { name: /Every 6 hours/i }));
+    const items = screen.getAllByRole("button", { name: /Every hour/i });
+    await user.click(items[items.length - 1]);
+
+    expect(updateAutoUpdateMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the key-required note when sync_available is false", () => {
+    render(<AutoUpdateSection repo={makeRepo({ sync_available: false })} />);
+
+    expect(
+      screen.getByText(/Syncing runs on your own API key/i),
+    ).toBeInTheDocument();
+  });
+
+  it("links the key-required note to /settings", () => {
+    render(<AutoUpdateSection repo={makeRepo({ sync_available: false })} />);
+
+    const link = screen.getByRole("link", { name: /Add one in settings/i });
+    expect(link).toHaveAttribute("href", "/settings");
+  });
+
+  it("does not show the key-required note when sync_available is true", () => {
+    render(<AutoUpdateSection repo={makeRepo({ sync_available: true })} />);
+
+    expect(
+      screen.queryByText(/Syncing runs on your own API key/i),
+    ).not.toBeInTheDocument();
   });
 });
 

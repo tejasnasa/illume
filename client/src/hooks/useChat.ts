@@ -9,6 +9,17 @@ import ChatMessage from "@/types/chat";
 import { useCallback, useEffect, useState } from "react";
 
 /**
+ * Failure kinds the hook differentiates between.
+ *
+ * - `generic` is the catch-all default rendered as the same retry string as
+ *   before; `quota` is the 402 from the free-tier quota gate, which carries
+ *   its own message that links to /settings. Separating them lets the panel
+ *   give the user an actionable next step for one specific failure mode
+ *   without treating every 5xx the same as a quota exhaustion.
+ */
+export type ChatErrorKind = "generic" | "quota";
+
+/**
  * One conversation turn; pending turns have a null answer until resolved.
  */
 interface Message {
@@ -16,6 +27,7 @@ interface Message {
   question: string;
   answer: ChatMessage | null;
   error?: boolean;
+  errorKind?: ChatErrorKind;
 }
 
 /**
@@ -91,6 +103,34 @@ export function useChat({ repoId }: { repoId: string }) {
         );
 
         if (!res.ok) {
+          // 402 is the free-tier quota gate -- the rest of the message body is
+          // the detail string the backend wrote, which is what links the user
+          // back to /settings. Throwing here would lose the status code, so
+          // handle the branch inline and only fall through to the generic
+          // branch for everything else.
+          if (res.status === 402) {
+            let detail =
+              "Free chat allowance used up. Add your own API key to keep chatting.";
+            try {
+              const body = await res.json();
+              if (body && typeof body.detail === "string") detail = body.detail;
+            } catch {
+              // Body was not JSON; the canned copy above is what the user sees.
+            }
+            setMessages((curr) =>
+              curr.map((m) =>
+                m.id === id
+                  ? {
+                      ...m,
+                      error: true,
+                      errorKind: "quota",
+                      answer: { answer: detail, sources: [] },
+                    }
+                  : m,
+              ),
+            );
+            return;
+          }
           throw new Error("Failed to get response");
         }
 
@@ -119,6 +159,7 @@ export function useChat({ repoId }: { repoId: string }) {
               ? {
                   ...m,
                   error: true,
+                  errorKind: "generic",
                   answer: {
                     answer: "Failed to get response. Try again.",
                     sources: [],

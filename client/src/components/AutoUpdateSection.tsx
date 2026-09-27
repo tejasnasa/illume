@@ -11,8 +11,10 @@ import {
   CheckCircleIcon,
   CircleDashedIcon,
   ClockIcon,
+  KeyIcon,
   WarningIcon,
 } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Repository from "@/types/repository";
@@ -80,7 +82,16 @@ export default function AutoUpdateSection({ repo }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const isActive = ACTIVE_SYNC_STATUSES.has(repo.sync_status);
-  const disabled = isSubmitting || isSyncing || isActive;
+  /**
+   * The keyless free tier cannot pay for a sync -- the toggle / interval
+   * picker / "Sync now" button are all gated on `repo.sync_available`, which
+   * is the backend's derived user-level signal rather than a derived value
+   * computed here. Locking all three controls off a single flag is what keeps
+   * the gate honest; otherwise one of them would slip through silently and
+   * the user would learn from a 402 on submit.
+   */
+  const disabled =
+    isSubmitting || isSyncing || isActive || !repo.sync_available;
 
   const summary = (repo.last_sync_summary ?? null) as SyncSummary | null;
 
@@ -178,7 +189,14 @@ export default function AutoUpdateSection({ repo }: Props) {
               size="sm"
               direction="left"
               trigger={
-                <span className="inline-flex items-center gap-1.5 text-xs text-(--foreground) bg-(--muted)/40 border border-(--border) rounded-sm px-3 py-1.5 hover:bg-(--muted)/60 transition-colors">
+                <span
+                  aria-disabled={!repo.sync_available}
+                  className={`inline-flex items-center gap-1.5 text-xs text-(--foreground) bg-(--muted)/40 border border-(--border) rounded-sm px-3 py-1.5 transition-colors ${
+                    repo.sync_available
+                      ? "hover:bg-(--muted)/60"
+                      : "opacity-50 cursor-not-allowed"
+                  }`}
+                >
                   <ClockIcon size={12} />
                   {formatInterval(repo.auto_update_interval_hours)}
                   <span className="text-(--muted-foreground)">▾</span>
@@ -186,7 +204,7 @@ export default function AutoUpdateSection({ repo }: Props) {
               }
               items={INTERVAL_OPTIONS.map((opt) => ({
                 label: opt.label,
-                disabled: isSubmitting,
+                disabled: isSubmitting || !repo.sync_available,
                 onClick: () => handleIntervalChange(opt.hours),
               }))}
             />
@@ -210,6 +228,22 @@ export default function AutoUpdateSection({ repo }: Props) {
           Sync now
         </Button>
       </div>
+
+      {!repo.sync_available && (
+        <div className="px-5 py-3 text-xs text-(--muted-foreground) border-t border-(--primary)/10 flex items-start gap-1.5">
+          <KeyIcon size={12} weight="duotone" className="mt-0.5 shrink-0" />
+          <span>
+            Syncing runs on your own API key.{" "}
+            <Link
+              href="/settings"
+              className="text-(--primary) underline-offset-2 hover:underline"
+            >
+              Add one in settings
+            </Link>
+            .
+          </span>
+        </div>
+      )}
 
       {error && (
         <div className="px-5 py-3 text-xs text-red-400 border-t border-red-500/10">

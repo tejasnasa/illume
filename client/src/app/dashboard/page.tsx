@@ -5,6 +5,7 @@
 import GetMyData from "@/api/auth";
 import { getRepositories } from "@/api/repository";
 import DashboardRefresh from "@/components/DashboardRefresh";
+import FreeTierBanner from "@/components/FreeTierBanner";
 import Navbar from "@/components/Navbar";
 import RepoPickerModal from "@/components/RepoPickerModal";
 import Button from "@/components/ui/Button";
@@ -65,6 +66,7 @@ export default async function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <FreeTierBanner user={myData} />
             {repositories.map((repo) => (
               <RepoCard key={repo.id} repo={repo} />
             ))}

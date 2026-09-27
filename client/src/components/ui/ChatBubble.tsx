@@ -2,8 +2,10 @@
  * Chat message bubble pairing a user question with its AI answer.
  * @module ChatBubble
  */
+import type { ChatErrorKind } from "@/hooks/useChat";
 import ChatMessage from "@/types/chat";
 import { BookBookmarkIcon, TrashIcon } from "@phosphor-icons/react";
+import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import CitationCard from "./CitationCard";
@@ -16,6 +18,7 @@ interface Props {
   question: string;
   message: ChatMessage | null;
   error?: boolean;
+  errorKind?: ChatErrorKind;
   url: string;
   branch?: string | null;
   onDelete?: (id: string) => void;
@@ -27,6 +30,8 @@ interface Props {
  * @param question The user's question text.
  * @param message The answer payload, or null while the response is pending.
  * @param error When true, styles the answer as an error message.
+ * @param errorKind Narrows the error styling: `quota` is the free-tier 402
+ *                  and gets a /settings link instead of the generic string.
  * @param url Repository URL used to build citation links.
  * @param branch Repository's ingested branch; passed through to citation cards.
  * @param onDelete Optional handler to delete this message.
@@ -37,6 +42,7 @@ export default function ChatBubble({
   question,
   message,
   error,
+  errorKind,
   url,
   branch,
   onDelete,
@@ -71,9 +77,22 @@ export default function ChatBubble({
             <div
               className={`prose prose-sm dark:prose-invert max-w-none ${error ? "text-red-400 font-medium" : "text-(--foreground)"}`}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.answer}
-              </ReactMarkdown>
+              {errorKind === "quota" ? (
+                <p>
+                  {message.answer}{" "}
+                  <Link
+                    href="/settings"
+                    className="text-(--primary) underline-offset-2 hover:underline"
+                  >
+                    Add your own API key
+                  </Link>{" "}
+                  to keep chatting.
+                </p>
+              ) : (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {message.answer}
+                </ReactMarkdown>
+              )}
             </div>
 
             {message.sources && message.sources.length > 0 && (

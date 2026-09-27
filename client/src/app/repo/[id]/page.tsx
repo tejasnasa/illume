@@ -2,6 +2,7 @@
  * Repository overview with architecture summary, tech stack, and chat.
  * @module RepositoryPage
  */
+import GetMyData from "@/api/auth";
 import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import Chat from "@/components/Chat";
@@ -46,6 +47,27 @@ export default async function Repository({
 
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value || "";
+
+  /**
+   * Resolves the chat quota so the composer can disable itself before any
+   * request goes out. The backend exposes the user's free-tier counter on
+   * /me; for a BYOK user the count is irrelevant (`null` in the panel), so the
+   * gate only fires for keyless users and after the allowance is spent.
+   *
+   * Wrapped in a try/catch because /me is unrelated to the page load -- a
+   * transient failure here must not block rendering. The chat composer is the
+   * one place the count is consumed today, and it falls back to `null`
+   * (unknown), which behaves as "do not disable".
+   */
+  let freeChatRemaining: number | null = null;
+  try {
+    const me = await GetMyData();
+    if (!me.has_ai_key) {
+      freeChatRemaining = Math.max(0, 5 - me.free_chat_messages_used);
+    }
+  } catch {
+    // Leave the count unknown; the chat composer remains enabled.
+  }
 
   return (
     <main className="p-4 h-[calc(100vh-64px)] flex gap-4 max-w-7xl mx-auto">
@@ -333,6 +355,7 @@ export default async function Repository({
             repoId={repo.id}
             url={repo.github_url}
             branch={repo.ingested_branch}
+            freeChatRemaining={freeChatRemaining}
           />
         ) : (
           <TerminalLogs repoId={repo.id} token={token} />

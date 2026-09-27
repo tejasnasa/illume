@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
 
-import { readSeed, REINGEST_REPO_NAME, repoNamed, type SeededRepo } from "../fixtures";
+import {
+  readSeed,
+  REINGEST_REPO_NAME,
+  repoNamed,
+  type SeededRepo,
+} from "../fixtures";
 
 /**
  * Re-ingest: choosing a version and handing the repository back to the pipeline.
@@ -8,13 +13,17 @@ import { readSeed, REINGEST_REPO_NAME, repoNamed, type SeededRepo } from "../fix
  * Runs against a repository of its own (`reingest-me`), because the endpoint **deletes the
  * repository row and recreates it**, cascading away every file, symbol, guide, and chat
  * turn. If this spec targeted the browsing fixture, the rest of the suite would pass or
- * fail depending on whether Playwright ran this file first.
+ * fail depending on whether Playwright happened to run this file first.
  *
- * Nothing here waits for the ingestion to complete. There is no Celery worker in the E2E
- * stack and no GitHub credential to clone with, so the repository is expected to sit at
- * `pending` -- which is exactly what the assertion is about: the request was accepted and
- * the UI reflects the new state. The pipeline itself is covered by the eager Celery tests
- * on the backend.
+ * The free-tier quota gate refuses re-ingest for keyless users (the seeded user is
+ * keyless; the chat suite shares the same account, and pre-seeding a key would break
+ * the chat spec's free-tier flow). The UI flow that used to live in this file -- click
+ * Regenerate, observe the row move to ``pending`` on the dashboard -- is therefore
+ * asserted at the gate instead: the keyless user gets the 402 message and stays on the
+ * page. The full BYOK path is tested by the backend's integration suite
+ * (``tests/integration/api/test_free_tier.py``); the E2E contribution here is that the
+ * gate fires end-to-end and the dashboard render is not torn down by an action that
+ * will not actually run.
  */
 
 /**
@@ -77,23 +86,34 @@ test.describe("the settings panel", () => {
 });
 
 test.describe("re-ingesting", () => {
-  test("resets the repository and reports the new status", async ({ page }) => {
+  test("refuses for a keyless user and stays on the repo page", async ({
+    page,
+  }) => {
+    // The seeded user is keyless (the chat suite shares the account and needs
+    // the free-tier counter at zero to drive the chat budget; pre-seeding a
+    // BYOK key would mask that). The route gates re-ingest on ``has_ai_key``,
+    // so the destructive action is refused and the page never navigates --
+    // which is what keeps the dashboard render intact.
     await page.goto(home);
     await settle(page);
     await expect(page.getByText(/^ready$/).first()).toBeVisible();
 
     await settingsGear(page).click();
 
-    // Two steps: the panel's "Regenerate" opens a confirmation, and the confirmation's
-    // "REGENERATE" is what acts. Matched exactly, since the two labels differ only in case.
+    // Two steps: the panel's "Regenerate" opens a confirmation, and the
+    // confirmation's "REGENERATE" is what acts. Matched exactly, since
+    // the two labels differ only in case.
     await page.getByRole("button", { name: "Regenerate", exact: true }).click();
     await page.getByRole("button", { name: "REGENERATE", exact: true }).click();
 
-    // The panel's action navigates to the dashboard on success, where the repository
-    // card carries the status the server now reports. `pending` is the observable
-    // outcome: the row was recreated and queued.
-    await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByText(repo.name).first()).toBeVisible();
-    await expect(page.getByText("pending").first()).toBeVisible({ timeout: 20_000 });
+    // The route returns 402 and the action throws a generic error -- the
+    // observable outcome is that the page never navigates to /dashboard.
+    // If the gate regressed and re-ingest went through, the dashboard would
+    // briefly hide the ``reingest-me`` card mid-flight and the rest of the
+    // suite would see an unexpected "repository not found". Give the
+    // server-action redirect a moment to fire (or not) before asserting.
+    await page.waitForTimeout(2_000);
+    await expect(page).toHaveURL(/\/repo\//);
+    await expect(page).not.toHaveURL(/\/dashboard/);
   });
 });

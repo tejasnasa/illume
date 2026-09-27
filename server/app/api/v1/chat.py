@@ -168,7 +168,6 @@ async def chat(
             status_code=402,
             detail=(
                 "You've used all of your free chat questions. "
-                "Add your own API key in your account settings to keep asking."
             ),
         )
 
