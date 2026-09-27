@@ -55,8 +55,13 @@ test.describe("the dashboard", () => {
     // whether the repository page renders the guide or a log stream.
     await page.goto("/dashboard");
 
-    const card = page.locator("div").filter({ hasText: repo.name }).first();
-    await expect(card.getByText("ready")).toBeVisible();
+    // Scope the card by its role and accessible name rather than by a wrapper div.
+    // A `div` filter matches every ancestor that contains the name, so `.first()`
+    // resolves to the grid holding *all* cards and the status assertion matches more
+    // than one of them. The card is a link whose accessible name begins with the
+    // repository name, which is exactly one element.
+    const card = page.getByRole("link", { name: repo.name });
+    await expect(card.getByText("ready", { exact: true })).toBeVisible();
   });
 });
 

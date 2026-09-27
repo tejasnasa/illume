@@ -51,8 +51,17 @@ TRAVERSAL = [
 
 @pytest.fixture
 async def target(client, db_session):
-    """A signed-in user with a populated repository to probe."""
-    user = await make_user(db_session)
+    """
+    A signed-in user with a populated repository to probe.
+
+    The user carries a BYOK key so the chat probes below exercise input
+    handling rather than credential policy: a keyless user is subject to the
+    free-tier allowance (and to 402 when the deployment has no server key),
+    which would make these assertions depend on billing state. Every other
+    route-layer module that posts a chat turn sets a key for the same
+    reason.
+    """
+    user = await make_user(db_session, ai_api_key="sk-test")
     repo, _ = await make_ingested_repo(db_session, user)
     await make_glossary_entry(db_session, repo, name="Widget", definition="A widget.")
     await authenticate(client, user)
