@@ -36,4 +36,14 @@ def publish_log(redis_client, repo_id: str, event: str, message: str, **kwargs) 
     except Exception as exc:  # noqa: BLE001
         logger.warning("Redis publish failed (channel=%s): %s", channel, exc)
     else:
-        logger.info("[%s] %s: %s", repo_id, event, message)
+        # ``stage``/``phase`` are logged so a worker-log grep lines up with
+        # what subscribers received on the channel; frames that carry
+        # neither (an unmigrated caller, the failure frame) log as ``-``.
+        logger.info(
+            "[%s] %s: %s (stage=%s phase=%s)",
+            repo_id,
+            event,
+            message,
+            kwargs.get("stage", "-"),
+            kwargs.get("phase", "-"),
+        )

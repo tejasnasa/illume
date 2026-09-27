@@ -481,10 +481,24 @@ class TestHappyPath:
         """
         Progress events are what the WebSocket relays, so the client's live log depends
         on these being emitted with the documented channel and shape.
+
+        The terminal frame carries `stage="ready"`, which is the one stage the task
+        wrapper owns -- every other stage is published from inside the pipeline.
         """
+        import json
+
         published = published_frames(pipeline_repo, monkeypatch)
 
         assert any('"status": "ready"' in frame for frame in published)
+
+        ready_frames = [
+            json.loads(frame)
+            for frame in published
+            if frame not in ("DONE", "ERROR") and json.loads(frame).get("status") == "ready"
+        ]
+        assert ready_frames, "no frame announced the ready status"
+        assert ready_frames[-1]["stage"] == "ready"
+        assert ready_frames[-1]["phase"] == "done"
 
     def test_the_terminal_marker_is_a_json_frame(self, pipeline_repo, stubbed, monkeypatch):
         """

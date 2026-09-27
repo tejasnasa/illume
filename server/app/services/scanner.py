@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.models import AstSymbol, File, Repository
 from app.services._publish import publish_log
 from app.services._stage_timer import stage
+from app.services._stages import Phase, Stage
 from app.services.dependency_resolver import compute_fan_metrics, resolve_dependencies
 from app.services.embedder import generate_embeddings
 from app.services.parser import parse_file
@@ -58,9 +59,14 @@ def _update_status(
     redis_client,
     repo: Repository,
     status: str,
+    stage: Stage,
     manage_status: bool = True,
 ) -> None:
     """Persist a new repo status and broadcast it over the log stream.
+
+    ``stage`` is passed in rather than derived from ``status`` because the
+    two are not one-to-one: ``parsing`` stays set across several stages, so
+    only the caller knows which stage the status flip belongs to.
 
     See :func:`app.services.cloner._update_status` for the
     ``manage_status=False`` contract -- the sync path uses it to leave a
@@ -76,6 +82,8 @@ def _update_status(
         "status_update",
         f"Status changed to {status}",
         status=status,
+        stage=stage,
+        phase=Phase.STARTED,
     )
 
 
@@ -181,14 +189,29 @@ def process_repository_files(
     Returns:
         Number of source files successfully parsed and stored.
     """
-    _update_status(db, redis_client, repo, "parsing", manage_status=manage_status)
-    publish_log(redis_client, str(repo.id), "parsing_started", "Starting file analysis...")
+    _update_status(db, redis_client, repo, "parsing", Stage.PARSE, manage_status=manage_status)
+    publish_log(
+        redis_client,
+        str(repo.id),
+        "parsing_started",
+        "Starting file analysis...",
+        stage=Stage.PARSE,
+        phase=Phase.STARTED,
+    )
     db.query(File).filter(File.repository_id == repo.id).delete()
     db.commit()
 
     source_files = walk_source_files(repo_root)
     total = len(source_files)
-    publish_log(redis_client, str(repo.id), "file_discovery", f"Found {total} source files.")
+    publish_log(
+        redis_client,
+        str(repo.id),
+        "file_discovery",
+        f"Found {total} source files.",
+        stage=Stage.PARSE,
+        phase=Phase.PROGRESS,
+        total=total,
+    )
 
     processed = 0
     # File rows pending insertion; flushed every ``FILE_BATCH_SIZE`` files.
@@ -266,6 +289,10 @@ def process_repository_files(
                     str(repo.id),
                     "file_processed",
                     f"{processed}/{total} files indexed",
+                    stage=Stage.PARSE,
+                    phase=Phase.PROGRESS,
+                    processed=processed,
+                    total=total,
                 )
                 last_publish_at = processed
 
@@ -283,8 +310,20 @@ def process_repository_files(
         str(repo.id),
         "db_storage_complete",
         f"Stored {processed} files in DB.",
+        stage=Stage.PARSE,
+        phase=Phase.DONE,
+        processed=processed,
+        total=total,
     )
 
+    publish_log(
+        redis_client,
+        str(repo.id),
+        "deps_resolved_started",
+        "Resolving imports...",
+        stage=Stage.RESOLVE_DEPENDENCIES,
+        phase=Phase.STARTED,
+    )
     with stage("resolve_dependencies"):
         dep_count = resolve_dependencies(db, repo.id, str(repo_root))
     publish_log(
@@ -292,6 +331,9 @@ def process_repository_files(
         str(repo.id),
         "deps_resolved",
         f"Resolved {dep_count} dependencies.",
+        stage=Stage.RESOLVE_DEPENDENCIES,
+        phase=Phase.DONE,
+        count=dep_count,
     )
 
     publish_log(
@@ -299,9 +341,19 @@ def process_repository_files(
         str(repo.id),
         "metrics_started",
         "Computing fan-in/fan-out metrics...",
+        stage=Stage.COMPUTE_FAN_METRICS,
+        phase=Phase.STARTED,
     )
     with stage("compute_fan_metrics"):
         compute_fan_metrics(db, repo.id)
+    publish_log(
+        redis_client,
+        str(repo.id),
+        "metrics_complete",
+        "Fan-in/fan-out metrics computed.",
+        stage=Stage.COMPUTE_FAN_METRICS,
+        phase=Phase.DONE,
+    )
 
     with stage("detect_stack"):
         repo.detected_stack = detect_stack(repo_root)
@@ -313,6 +365,8 @@ def process_repository_files(
         str(repo.id),
         "stack_detected",
         f"Stack detected: {repo.detected_stack.get('languages', [])}",
+        stage=Stage.DETECT_STACK,
+        phase=Phase.DONE,
     )
 
     return processed
@@ -659,17 +713,33 @@ def embed_repository_symbols(
     Returns:
         Number of embedding vectors stored.
     """
-    _update_status(db, redis_client, repo, "embedding", manage_status=manage_status)
+    _update_status(
+        db,
+        redis_client,
+        repo,
+        "embedding",
+        Stage.GENERATE_EMBEDDINGS,
+        manage_status=manage_status,
+    )
     publish_log(
         redis_client,
         str(repo.id),
         "embedding_started",
         "Starting embedding generation...",
+        stage=Stage.GENERATE_EMBEDDINGS,
+        phase=Phase.STARTED,
     )
 
     def publish_progress(msg: str):
         """Forward embedder messages to the repo's log stream."""
-        publish_log(redis_client, str(repo.id), "embedding_progress", msg)
+        publish_log(
+            redis_client,
+            str(repo.id),
+            "embedding_progress",
+            msg,
+            stage=Stage.GENERATE_EMBEDDINGS,
+            phase=Phase.PROGRESS,
+        )
 
     with stage("generate_embeddings", measure_memory=measure_memory):
         count = generate_embeddings(
@@ -686,5 +756,8 @@ def embed_repository_symbols(
         str(repo.id),
         "embedding_complete",
         f"Embedding complete — {count} vectors stored.",
+        stage=Stage.GENERATE_EMBEDDINGS,
+        phase=Phase.DONE,
+        count=count,
     )
     return count

@@ -6,8 +6,7 @@ import GetMyData from "@/api/auth";
 import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import Chat from "@/components/Chat";
-import TerminalLogs from "@/components/TerminalLogs";
-import Skeleton from "@/components/ui/Skeleton";
+import IngestFlow from "@/components/IngestFlow";
 import { timeAgo } from "@/utils/timeAgo";
 import {
   AtomIcon,
@@ -17,7 +16,6 @@ import {
   GitBranchIcon,
   GithubLogoIcon,
   LinkIcon,
-  SpinnerIcon,
   TreeStructureIcon,
   WrenchIcon,
 } from "@phosphor-icons/react/dist/ssr";
@@ -47,6 +45,22 @@ export default async function Repository({
 
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value || "";
+
+  // While indexing there is nothing to summarise yet, so the whole page
+  // becomes the live progress view. Returning early also skips the quota
+  // round trip below, which only the chat composer needs.
+  if (!isReady) {
+    return (
+      <IngestFlow
+        repoId={repo.id}
+        token={token}
+        repoLabel={repo.github_url.split("github.com/")[1]}
+        branch={repo.ingested_branch}
+        commitSha={repo.ingested_commit_sha}
+        status={repo.status}
+      />
+    );
+  }
 
   /**
    * Resolves the chat quota so the composer can disable itself before any
@@ -118,14 +132,10 @@ export default async function Repository({
             </span>
             <div className="flex items-end justify-between">
               <div>
-                <div
-                  className={`flex items-center gap-2 font-bold text-xl uppercase ${isReady ? "text-green-500" : "text-yellow-500"}`}
-                >
-                  {isReady ? (
-                    <CheckCircleIcon size={24} weight="fill" />
-                  ) : (
-                    <SpinnerIcon size={24} className="animate-spin" />
-                  )}
+                {/* Reaching this card means the repository is indexed, so the
+                    status is always the terminal one here. */}
+                <div className="flex items-center gap-2 font-bold text-xl uppercase text-(--success)">
+                  <CheckCircleIcon size={24} weight="fill" />
                   {repo.status}
                 </div>
               </div>
@@ -139,227 +149,188 @@ export default async function Repository({
           </div>
         </div>
 
-        {!isReady ? (
-          <>
-            <div className="glass-card rounded-sm p-6 flex-1 min-h-0 flex flex-col border border-(--border) bg-(--secondary)/10">
-              <Skeleton className="w-48 h-6 mb-6" />
-              <div className="space-y-3 flex-1">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-11/12" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-4/5" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-2/3" />
+        <>
+          <div className="glass-card rounded-sm p-4 flex-1 min-h-0 flex flex-col relative overflow-hidden animate-fade-in">
+            <h2 className="text-lg font-bold mb-4 text-(--foreground) flex items-center gap-2 shrink-0">
+              <TreeStructureIcon size={20} className="text-(--primary)" />
+              AI Architecture Overview
+            </h2>
+            {repo.architecture_summary ? (
+              <div className="overflow-y-auto custom-scrollbar pr-2.5 text-sm text-(--muted-foreground) leading-relaxed text-justify prose prose-sm dark:prose-invert">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {repo.architecture_summary}
+                </ReactMarkdown>
               </div>
-            </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-(--muted-foreground) text-sm italic">
+                No architecture summary generated.
+              </div>
+            )}
+          </div>
 
-            <div className="glass-card rounded-sm p-6 shrink-0 h-40 flex flex-col border border-(--border) bg-(--secondary)/10">
-              <Skeleton className="w-32 h-5 mb-4" />
-              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-                <div>
-                  <Skeleton className="w-20 h-3 mb-2" />
-                  <div className="flex gap-2">
-                    <Skeleton className="w-12 h-5" />
-                    <Skeleton className="w-16 h-5" />
+          <div className="glass-card rounded-sm p-4 shrink-0 flex flex-col animate-fade-in">
+            <h2 className="text-lg font-bold mb-4 text-(--foreground) flex items-center gap-2 shrink-0">
+              <AtomIcon size={20} className="text-(--primary)" />
+              Tech Stack Detected
+            </h2>
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 grid grid-cols-2 gap-x-6 gap-y-3">
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
+                  <CodeIcon size={12} /> Languages
+                </h3>
+                {repo.detected_stack?.languages?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {repo.detected_stack.languages.map(
+                      (tool: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-(--destructive)/10 text-(--destructive) border border-(--destructive)/20 text-[10px] font-mono"
+                        >
+                          {tool}
+                        </span>
+                      ),
+                    )}
                   </div>
-                </div>
-                <div>
-                  <Skeleton className="w-24 h-3 mb-2" />
-                  <div className="flex gap-2">
-                    <Skeleton className="w-14 h-5" />
+                ) : (
+                  <span className="text-xs text-(--muted-foreground)/50 italic">
+                    None detected
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
+                  <WrenchIcon size={12} /> Frameworks
+                </h3>
+                {repo.detected_stack?.frameworks?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {repo.detected_stack.frameworks.map(
+                      (tool: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                        >
+                          {tool}
+                        </span>
+                      ),
+                    )}
                   </div>
-                </div>
+                ) : (
+                  <span className="text-xs text-(--muted-foreground)/50 italic">
+                    None detected
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
+                  <DatabaseIcon size={12} /> Databases
+                </h3>
+                {repo.detected_stack?.databases?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {repo.detected_stack.databases.map(
+                      (tool: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                        >
+                          {tool}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-(--muted-foreground)/50 italic">
+                    None detected
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
+                  <DatabaseIcon size={12} /> Infrastructure
+                </h3>
+                {repo.detected_stack?.infrastructure?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {repo.detected_stack.infrastructure?.map(
+                      (tool: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                        >
+                          {tool}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-(--muted-foreground)/50 italic">
+                    None detected
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
+                  <GitBranchIcon size={12} />
+                  CI/CD And Infra
+                </h3>
+                {repo.detected_stack?.ci_cd?.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {repo.detected_stack.ci_cd.map(
+                      (tool: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                        >
+                          {tool}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-(--muted-foreground)/50 italic">
+                    None detected
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--primary) mb-1.5 flex items-center gap-1.5">
+                  <DatabaseIcon size={12} /> External
+                </h3>
+                {(guide?.architecture_brief?.external_integrations?.length ??
+                  0) > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {guide?.architecture_brief?.external_integrations?.map(
+                      (tool: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
+                        >
+                          {tool.charAt(0).toUpperCase() + tool.slice(1)}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-xs text-(--muted-foreground)/50 italic">
+                    None detected
+                  </span>
+                )}
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <div className="glass-card rounded-sm p-4 flex-1 min-h-0 flex flex-col relative overflow-hidden animate-fade-in">
-              <h2 className="text-lg font-bold mb-4 text-(--foreground) flex items-center gap-2 shrink-0">
-                <TreeStructureIcon size={20} className="text-(--primary)" />
-                AI Architecture Overview
-              </h2>
-              {repo.architecture_summary ? (
-                <div className="overflow-y-auto custom-scrollbar pr-2.5 text-sm text-(--muted-foreground) leading-relaxed text-justify prose prose-sm dark:prose-invert">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {repo.architecture_summary}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-(--muted-foreground) text-sm italic">
-                  No architecture summary generated.
-                </div>
-              )}
-            </div>
-
-            <div className="glass-card rounded-sm p-4 shrink-0 flex flex-col animate-fade-in">
-              <h2 className="text-lg font-bold mb-4 text-(--foreground) flex items-center gap-2 shrink-0">
-                <AtomIcon size={20} className="text-(--primary)" />
-                Tech Stack Detected
-              </h2>
-              <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 grid grid-cols-2 gap-x-6 gap-y-3">
-                <div>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
-                    <CodeIcon size={12} /> Languages
-                  </h3>
-                  {repo.detected_stack?.languages?.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {repo.detected_stack.languages.map(
-                        (tool: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-(--destructive)/10 text-(--destructive) border border-(--destructive)/20 text-[10px] font-mono"
-                          >
-                            {tool}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-(--muted-foreground)/50 italic">
-                      None detected
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
-                    <WrenchIcon size={12} /> Frameworks
-                  </h3>
-                  {repo.detected_stack?.frameworks?.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {repo.detected_stack.frameworks.map(
-                        (tool: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
-                          >
-                            {tool}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-(--muted-foreground)/50 italic">
-                      None detected
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
-                    <DatabaseIcon size={12} /> Databases
-                  </h3>
-                  {repo.detected_stack?.databases?.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {repo.detected_stack.databases.map(
-                        (tool: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
-                          >
-                            {tool}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-(--muted-foreground)/50 italic">
-                      None detected
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
-                    <DatabaseIcon size={12} /> Infrastructure
-                  </h3>
-                  {repo.detected_stack?.infrastructure?.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {repo.detected_stack.infrastructure?.map(
-                        (tool: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
-                          >
-                            {tool}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-(--muted-foreground)/50 italic">
-                      None detected
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
-                    <GitBranchIcon size={12} />
-                    CI/CD And Infra
-                  </h3>
-                  {repo.detected_stack?.ci_cd?.length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {repo.detected_stack.ci_cd.map(
-                        (tool: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
-                          >
-                            {tool}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-(--muted-foreground)/50 italic">
-                      None detected
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--primary) mb-1.5 flex items-center gap-1.5">
-                    <DatabaseIcon size={12} /> External
-                  </h3>
-                  {(guide?.architecture_brief?.external_integrations?.length ??
-                    0) > 0 ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {guide?.architecture_brief?.external_integrations?.map(
-                        (tool: string, i: number) => (
-                          <span
-                            key={i}
-                            className="px-2 py-0.5 bg-(--chart-1)/10 text-(--chart-1) border border-(--chart-1)/20 text-[10px] font-mono"
-                          >
-                            {tool.charAt(0).toUpperCase() + tool.slice(1)}
-                          </span>
-                        ),
-                      )}
-                    </div>
-                  ) : (
-                    <span className="text-xs text-(--muted-foreground)/50 italic">
-                      None detected
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </>
-        )}
+          </div>
+        </>
       </section>
 
       <section className="w-1/2 h-full flex flex-col glass-card rounded-sm overflow-hidden border border-(--border)">
-        {isReady ? (
-          <Chat
-            repoId={repo.id}
-            url={repo.github_url}
-            branch={repo.ingested_branch}
-            freeChatRemaining={freeChatRemaining}
-          />
-        ) : (
-          <TerminalLogs repoId={repo.id} token={token} />
-        )}
+        <Chat
+          repoId={repo.id}
+          url={repo.github_url}
+          branch={repo.ingested_branch}
+          freeChatRemaining={freeChatRemaining}
+        />
       </section>
     </main>
   );

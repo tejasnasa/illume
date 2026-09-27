@@ -127,7 +127,7 @@ illume/
 │   │   ├── components/         # High-Fidelity UI Components
 │   │   │   ├── Chat.tsx        # Floating AI RAG chat system
 │   │   │   ├── GraphClient.tsx # 3D force-graph wrapper
-│   │   │   └── TerminalLogs.tsx# WebSocket streaming telemetry logger
+│   │   │   └── IngestFlow.tsx  # Live pipeline progress over the ingest WebSocket
 │   │   └── hooks/              # Custom React logic hooks (useChat, etc.)
 │   └── package.json            # Frontend dependency specifications
 │

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models import CodeOwner, Commit, File
 from app.services._publish import publish_log
+from app.services._stages import Phase, Stage
 from app.services.stack_detector import SKIP_DIRS
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,12 @@ def analyze_git_history(
         RuntimeError: If the underlying ``git log`` command fails or times out.
     """
     publish_log(
-        redis_client, repo.id, "git_analysis_started", "Starting git history analysis"
+        redis_client,
+        repo.id,
+        "git_analysis_started",
+        "Starting git history analysis",
+        stage=Stage.GIT_HISTORY,
+        phase=Phase.STARTED,
     )
 
     raw_commits = _run_git_log(clone_path)
@@ -85,8 +91,14 @@ def analyze_git_history(
         repo.id,
         "commits_parsed",
         f"Parsed {len(parsed)} commits from git log",
+        stage=Stage.GIT_HISTORY,
+        phase=Phase.PROGRESS,
+        count=len(parsed),
     )
 
+    # ``git_analysis_complete`` fires only on this empty-history return; the
+    # populated path completes with ``ownership_written`` below. Both carry
+    # the same stage/phase pair, so the stage is done either way.
     if not parsed:
         logger.warning("repo=%s  No commits found – skipping git analysis", repo.id)
         publish_log(
@@ -94,6 +106,8 @@ def analyze_git_history(
             repo.id,
             "git_analysis_complete",
             "No commits found; git analysis skipped",
+            stage=Stage.GIT_HISTORY,
+            phase=Phase.DONE,
         )
         return
 
@@ -106,6 +120,9 @@ def analyze_git_history(
         repo.id,
         "file_stats_aggregated",
         f"Aggregated ownership stats for {len(file_stats)} files",
+        stage=Stage.GIT_HISTORY,
+        phase=Phase.PROGRESS,
+        count=len(file_stats),
     )
 
     has_tests_map = _detect_test_files(clone_path, list(file_stats.keys()))
@@ -119,6 +136,9 @@ def analyze_git_history(
         repo.id,
         "ownership_written",
         f"Code ownership records written for {len(file_stats)} files",
+        stage=Stage.GIT_HISTORY,
+        phase=Phase.DONE,
+        count=len(file_stats),
     )
 
     logger.info("repo=%s  Git analysis complete", repo.id)

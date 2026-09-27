@@ -22,6 +22,7 @@
   --accent: oklch(0.274 0.006 286.033);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.75 0.16 155);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.552 0.016 285.938);
@@ -192,4 +193,36 @@ html {
 
 .animate-fade-in {
   animation: fade-in 0.5s ease-out forwards;
+}
+
+/* ── Ingestion flow ──
+   The only repeating animation in the progress view. It is done in CSS
+   rather than a requestAnimationFrame loop so a long parse does not cost a
+   frame of JavaScript work per tick, and so it can be switched off wholesale
+   for anyone who has asked for reduced motion. */
+@keyframes flow-ring {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+
+.flow-node-ring {
+  animation: flow-ring 1.6s linear infinite;
+}
+
+/* ── Reduced motion ──
+   Everything above is decorative; none of it carries information that is not
+   also present as text or colour. Switching the whole set off leaves the
+   progress view readable rather than blank. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer,
+  .gradient-text,
+  .animate-fade-in,
+  .flow-node-ring {
+    animation: none;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
 }

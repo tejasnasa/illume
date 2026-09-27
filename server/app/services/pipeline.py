@@ -45,6 +45,7 @@ from sqlalchemy.orm import Session
 
 from app.models.repository import Repository
 from app.services._stage_timer import stage
+from app.services._stages import Phase, Stage
 from app.services.criticality import run_criticality_scoring
 from app.services.git_analyzer import analyze_git_history
 from app.services.llm_config import LLMConfig
@@ -116,9 +117,9 @@ def run_full_analysis(
             used by the task wrapper to push status-update frames. The
             pipeline itself uses :func:`publish_log` for progress events;
             ``publish`` is reserved for higher-level frames the caller
-            may want (``"criticality_started"``, ``"glossary_started"``,
-            ``"reading_order_started"``, ``"embedding_started"``,
-            ``"brief_started"``).
+            may want. Each of the four LLM-bearing stages announces its
+            own ``*_started`` and ``*_complete`` pair, because none of
+            them emits a progress event of its own.
         manage_status: When ``False``, suppress the ``status='parsing'`` /
             ``status='embedding'`` / ``status='cloning'`` flips and their
             ``status_update`` log frames. Used by the sync path to keep a
@@ -169,13 +170,34 @@ def run_full_analysis(
     # ``ON CONFLICT DO NOTHING`` means a re-fetch is a no-op, so calling it
     # here would just be a slow no-op on the sync path.
 
-    publish("criticality_started", "Scoring file criticality...")
+    publish(
+        "criticality_started",
+        "Scoring file criticality...",
+        stage=Stage.CRITICALITY,
+        phase=Phase.STARTED,
+    )
     with stage("criticality"):
         run_criticality_scoring(db, repo.id)
+    publish(
+        "criticality_complete",
+        "File criticality scored.",
+        stage=Stage.CRITICALITY,
+        phase=Phase.DONE,
+    )
 
     if overlap_llm:
-        publish("glossary_started", "Building project glossary...")
-        publish("reading_order_started", "Generating recommended reading order...")
+        publish(
+            "glossary_started",
+            "Building project glossary...",
+            stage=Stage.GLOSSARY,
+            phase=Phase.STARTED,
+        )
+        publish(
+            "reading_order_started",
+            "Generating recommended reading order...",
+            stage=Stage.READING_ORDER,
+            phase=Phase.STARTED,
+        )
         parallel_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="pipeline-llm")
         try:
             glossary_future = parallel_executor.submit(
@@ -189,8 +211,24 @@ def run_full_analysis(
             # off: the pair should land near max(glossary, reading_order),
             # not their sum.
             with stage("glossary_and_reading_order_join", measure_memory=False):
+                # Each completion is published immediately after its own
+                # ``result()`` returns, so it marks that future resolving and
+                # not the join -- the two branches finish at different times
+                # even though the block they share is entered together.
                 glossary_future.result()
+                publish(
+                    "glossary_complete",
+                    "Project glossary ready.",
+                    stage=Stage.GLOSSARY,
+                    phase=Phase.DONE,
+                )
                 reading_order_future.result()
+                publish(
+                    "reading_order_complete",
+                    "Reading order ready.",
+                    stage=Stage.READING_ORDER,
+                    phase=Phase.DONE,
+                )
         finally:
             parallel_executor.shutdown(wait=True)
     else:
@@ -198,10 +236,32 @@ def run_full_analysis(
         from app.services.onboarding import build_reading_order
 
         build_glossary(db, repo, llm=llm_config)
+        publish(
+            "glossary_complete",
+            "Project glossary ready.",
+            stage=Stage.GLOSSARY,
+            phase=Phase.DONE,
+        )
         build_reading_order(db, repo, llm=llm_config)
+        publish(
+            "reading_order_complete",
+            "Reading order ready.",
+            stage=Stage.READING_ORDER,
+            phase=Phase.DONE,
+        )
 
-    publish("embedding_started", "Generating embeddings...")
-    publish("brief_started", "Synthesizing AI architecture brief...")
+    publish(
+        "embedding_started",
+        "Generating embeddings...",
+        stage=Stage.GENERATE_EMBEDDINGS,
+        phase=Phase.STARTED,
+    )
+    publish(
+        "brief_started",
+        "Synthesizing AI architecture brief...",
+        stage=Stage.BRIEF,
+        phase=Phase.STARTED,
+    )
     if overlap_llm:
         brief_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline-brief")
         try:
@@ -222,6 +282,12 @@ def run_full_analysis(
                 # as an exception, exactly as it did when the call was
                 # sequential.
                 brief_future.result()
+            publish(
+                "brief_complete",
+                "Architecture brief ready.",
+                stage=Stage.BRIEF,
+                phase=Phase.DONE,
+            )
         finally:
             brief_executor.shutdown(wait=True)
     else:
@@ -237,5 +303,11 @@ def run_full_analysis(
         from app.services.architecture_brief import generate_brief
 
         generate_brief(db, repo, readme_content=readme_content, llm=llm_config)
+        publish(
+            "brief_complete",
+            "Architecture brief ready.",
+            stage=Stage.BRIEF,
+            phase=Phase.DONE,
+        )
 
     return readme_content

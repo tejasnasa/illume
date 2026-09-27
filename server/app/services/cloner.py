@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Repository
 from app.services._publish import publish_log
+from app.services._stages import Phase, Stage
 from app.services.repo_cache import CLONE_CACHE_ENABLED
 from app.services.repo_cache import ensure_clone as _ensure_cached_clone
 from app.services.repo_cache import refresh_clone as _refresh_cached_clone
@@ -35,6 +36,7 @@ def _update_status(
     redis_client,
     repo: Repository,
     status: str,
+    stage: Stage,
     manage_status: bool = True,
 ) -> None:
     """Persist a new repo status and broadcast it over the log stream.
@@ -43,7 +45,7 @@ def _update_status(
     sync must leave ``status='ready'`` alone, so this becomes a no-op for
     the row and the log stream. The frame is suppressed rather than the
     rest of the work, because ``status_update`` frames are what the
-    client's ``TerminalLogs`` mounts on -- emitting one mid-sync would
+    client's progress view mounts on -- emitting one mid-sync would
     mount a useless panel against a row that never actually transitioned.
     """
     if not manage_status:
@@ -56,6 +58,7 @@ def _update_status(
         "status_update",
         f"Status changed to {status}",
         status=status,
+        stage=stage,
     )
 
 
@@ -128,19 +131,21 @@ def clone_repository(
             ephemeral clones the temp directory is removed before raising;
             for cached clones the cache entry is removed before raising.
     """
-    _update_status(db, redis_client, repo, "cloning", manage_status=manage_status)
+    _update_status(db, redis_client, repo, "cloning", Stage.CLONE, manage_status=manage_status)
 
     target_branch = _branch_for(repo, branch)
 
     if CLONE_CACHE_ENABLED:
         # Status/log framing for the cache path deliberately mirrors the
-        # ephemeral path -- ``clone_started``/``clone_complete`` are the
-        # frames the TerminalLogs panel already keys off.
+        # ephemeral path -- both publish the same stage and phase pair, so
+        # a client cannot tell which path ran and does not need to.
         publish_log(
             redis_client,
             str(repo.id),
             "clone_started",
             f"Preparing repository (branch={target_branch}, commit={commit_sha or 'HEAD'})...",
+            stage=Stage.CLONE,
+            phase=Phase.STARTED,
         )
         path, actual_branch, actual_sha = _ensure_cached_clone(
             repo.id,
@@ -154,6 +159,8 @@ def clone_repository(
             str(repo.id),
             "clone_complete",
             f"Clone complete at branch={actual_branch}, commit={actual_sha[:7]}.",
+            stage=Stage.CLONE,
+            phase=Phase.DONE,
         )
         return path, actual_branch, actual_sha
 
@@ -162,6 +169,8 @@ def clone_repository(
         str(repo.id),
         "clone_started",
         f"Cloning repository (branch={branch or 'default'}, commit={commit_sha or 'HEAD'})...",
+        stage=Stage.CLONE,
+        phase=Phase.STARTED,
     )
 
     clone_url = _build_clone_url(repo.github_url, github_access_token)
@@ -183,6 +192,8 @@ def clone_repository(
                 str(repo.id),
                 "checkout_started",
                 f"Checking out commit {commit_sha[:7]}...",
+                stage=Stage.CLONE,
+                phase=Phase.PROGRESS,
             )
             git_repo.git.checkout(commit_sha)
 
@@ -202,6 +213,8 @@ def clone_repository(
         str(repo.id),
         "clone_complete",
         f"Clone complete at branch={actual_branch}, commit={actual_sha[:7]}.",
+        stage=Stage.CLONE,
+        phase=Phase.DONE,
     )
     return Path(tmp_dir), actual_branch, actual_sha
 

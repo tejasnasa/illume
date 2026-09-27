@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models import PullRequest
 from app.services._publish import publish_log
+from app.services._stages import Phase, Stage
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +67,24 @@ def fetch_pull_requests(
         repo.id,
         "prs_fetch_started",
         f"Fetching merged PRs for {owner}/{repo_name}",
+        stage=Stage.PR_FETCH,
+        phase=Phase.STARTED,
     )
 
     prs = _fetch_merged_prs(owner, repo_name, access_token)
 
+    # Both exits publish the same completion frame; only ``count`` differs,
+    # so a client never has to treat "no PRs" as a distinct terminal state.
     if not prs:
-        publish_log(redis_client, repo.id, "prs_fetch_complete", "No merged PRs found")
+        publish_log(
+            redis_client,
+            repo.id,
+            "prs_fetch_complete",
+            "No merged PRs found",
+            stage=Stage.PR_FETCH,
+            phase=Phase.DONE,
+            count=0,
+        )
         return 0
 
     inserted = _bulk_insert_pull_requests(db, repo.id, prs)
@@ -81,6 +94,9 @@ def fetch_pull_requests(
         repo.id,
         "prs_fetch_complete",
         f"Stored {inserted} merged pull requests",
+        stage=Stage.PR_FETCH,
+        phase=Phase.DONE,
+        count=inserted,
     )
     logger.info("repo=%s  Inserted %d PR rows", repo.id, inserted)
     return inserted

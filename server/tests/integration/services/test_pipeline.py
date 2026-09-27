@@ -39,6 +39,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from app.services._stages import Stage
 from tests.fixtures import openai_stub, sample_repo
 from tests.helpers import committed_repo_number_base
 
@@ -481,6 +482,89 @@ class TestManageStatusTrueIsTheDefault:
             f"manage_status=True should publish at least one status_update "
             f"frame, got {status_update_frames}"
         )
+
+
+class TestStageVocabularyOnTheWire:
+    """Every stage the progress view draws must actually be published.
+
+    A stage that silently stops publishing leaves its node pending forever,
+    and no unit test can catch that -- it is a property of a whole pipeline
+    run, which is why it is pinned here against a real one.
+
+    ``clone`` and ``pr_fetch`` are absent from the expected set on purpose:
+    cloning happens in the task wrapper, and the PR fetch is monkeypatched
+    out by ``stubbed_clone``. The wrapper's frames are covered in
+    ``test_ingest_task.py``.
+    """
+
+    # The stages ``run_full_analysis`` itself owns, in the order the view
+    # draws them. ``READY`` belongs to the task wrapper.
+    RENDERED_STAGES = (
+        Stage.PARSE,
+        Stage.RESOLVE_DEPENDENCIES,
+        Stage.COMPUTE_FAN_METRICS,
+        Stage.DETECT_STACK,
+        Stage.GIT_HISTORY,
+        Stage.CRITICALITY,
+        Stage.GLOSSARY,
+        Stage.READING_ORDER,
+        Stage.GENERATE_EMBEDDINGS,
+        Stage.BRIEF,
+    )
+
+    def test_every_rendered_stage_publishes_at_least_one_frame(
+        self, pipeline_repo, clone_root, stubbed_clone
+    ):
+        recorder = _run_pipeline(pipeline_repo, clone_root)
+
+        published = {frame["stage"] for frame in recorder.frames if "stage" in frame}
+        missing = set(self.RENDERED_STAGES) - published
+        assert missing == set(), (
+            f"stages the progress view draws that never published a frame: {sorted(missing)}"
+        )
+
+    def test_every_published_stage_is_a_member_of_the_enum(
+        self, pipeline_repo, clone_root, stubbed_clone
+    ):
+        """A typo'd stage literal would otherwise reach the client unnamed."""
+        recorder = _run_pipeline(pipeline_repo, clone_root)
+
+        published = {frame["stage"] for frame in recorder.frames if "stage" in frame}
+        unknown = published - set(Stage)
+        assert unknown == set(), f"frames carried stage ids outside Stage: {sorted(unknown)}"
+
+    def test_every_stage_that_starts_also_completes(
+        self, pipeline_repo, clone_root, stubbed_clone
+    ):
+        """
+        The pairing the four LLM stages lacked: a ``started`` with no matching
+        ``done`` would leave a node spinning for the rest of the run.
+        """
+        recorder = _run_pipeline(pipeline_repo, clone_root)
+
+        started = {frame["stage"] for frame in recorder.frames if frame.get("phase") == "started"}
+        done = {frame["stage"] for frame in recorder.frames if frame.get("phase") == "done"}
+
+        assert started <= done, f"stages that started but never completed: {sorted(started - done)}"
+
+    def test_the_parse_stage_reports_real_file_counts(
+        self, pipeline_repo, clone_root, stubbed_clone
+    ):
+        """Parse is the only stage with a truthful determinate progress bar."""
+        recorder = _run_pipeline(pipeline_repo, clone_root)
+
+        progress = [
+            frame
+            for frame in recorder.frames
+            if frame.get("stage") == Stage.PARSE and "processed" in frame
+        ]
+        assert progress, "parse published no structured progress frames"
+
+        for frame in progress:
+            assert isinstance(frame["processed"], int)
+            assert isinstance(frame["total"], int)
+            assert frame["total"] > 0, "a zero total would divide by zero in the view"
+            assert frame["processed"] <= frame["total"]
 
 
 # ``Callable`` was used to silence a forward-reference lint about the

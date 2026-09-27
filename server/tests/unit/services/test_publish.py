@@ -14,6 +14,7 @@ import fakeredis
 import pytest
 
 from app.services._publish import publish_log
+from app.services._stages import Phase, Stage
 
 pytestmark = pytest.mark.unit
 
@@ -90,6 +91,34 @@ class TestPayload:
 
         payload = json.loads(pubsub.get_message(timeout=1, ignore_subscribe_messages=True)["data"])
         assert payload["status"] == "ready"
+
+    def test_enum_kwargs_serialise_as_bare_strings(self, redis):
+        """
+        `Stage` and `Phase` are `StrEnum`, so the wire carries plain strings and no
+        consumer has to know they were ever enums. A plain `Enum` would serialise as
+        an enum repr and break every client without any other test noticing.
+        """
+        pubsub = redis.pubsub()
+        pubsub.subscribe(CHANNEL)
+        pubsub.get_message(timeout=1)
+
+        publish_log(
+            redis,
+            REPO_ID,
+            "file_processed",
+            "512/1024 files indexed",
+            stage=Stage.PARSE,
+            phase=Phase.PROGRESS,
+            processed=512,
+            total=1024,
+        )
+
+        payload = json.loads(pubsub.get_message(timeout=1, ignore_subscribe_messages=True)["data"])
+        assert payload["stage"] == "parse"
+        assert payload["phase"] == "progress"
+        assert type(payload["stage"]) is str
+        assert payload["processed"] == 512
+        assert payload["total"] == 1024
 
     def test_payload_is_json_serializable_with_nested_values(self, redis):
         pubsub = redis.pubsub()

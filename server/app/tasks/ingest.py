@@ -10,6 +10,7 @@ from app.core.redis import get_sync_redis
 from app.models.repository import Repository
 from app.models.user import User
 from app.services._stage_timer import stage
+from app.services._stages import Phase, Stage
 from app.services.cloner import cleanup_clone, clone_repository
 from app.services.entitlements import llm_config_for
 from app.services.pipeline import run_full_analysis
@@ -135,8 +136,14 @@ def ingest_repository(
 
             repo.status = "ready"
             db.commit()
-            publish("status_update", "Ingestion complete!", status="ready")
-            publish("done", "DONE")
+            publish(
+                "status_update",
+                "Ingestion complete!",
+                status="ready",
+                stage=Stage.READY,
+                phase=Phase.DONE,
+            )
+            publish("done", "DONE", stage=Stage.READY, phase=Phase.DONE)
 
         except Exception as exc:
             logger.exception("Ingestion failed for repo %s", repo_id)
@@ -148,8 +155,12 @@ def ingest_repository(
                     db.commit()
             except Exception:
                 pass
-            publish("status_update", f"Error: {exc}", status="failed")
-            publish("error", "ERROR")
+            # No ``stage`` on either of these: this catch-all runs outside
+            # ``run_full_analysis``, so the stage that raised is genuinely
+            # unknown here. Naming the last stage that happened to publish
+            # would be a guess the client would render as fact.
+            publish("status_update", f"Error: {exc}", status="failed", phase=Phase.FAILED)
+            publish("error", "ERROR", phase=Phase.FAILED)
             raise self.retry(exc=exc, countdown=10)
 
         finally:
