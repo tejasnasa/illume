@@ -29,6 +29,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.celery import celery
@@ -59,6 +60,11 @@ from app.services.scanner import (
 from app.services.stack_detector import detect_entry_points, detect_stack
 
 logger = logging.getLogger(__name__)
+
+# Every ``sync_status`` a row can hold while an attempt is still in flight.
+# Anything outside this set -- ``idle``, ``failed`` -- is the settled result of
+# an attempt, and :func:`_release_lease` must never overwrite it.
+ACTIVE_SYNC_STATUSES = ("queued", "checking", "updating")
 
 
 def _sync_tunables() -> tuple[int, float, int, int, int]:
@@ -103,7 +109,16 @@ def _take_lease(db: Session, repo: Repository, now: datetime) -> uuid.UUID | Non
         .where(
             Repository.id == repo.id,
             Repository.status == "ready",
-            Repository.sync_lease_expires_at.is_(None),
+            # Must stay identical to the lease clause in ``_claim_predicate``:
+            # a lease that has expired is not a live one, so the sweep is free
+            # to claim the row and this CAS has to agree with that decision.
+            # Requiring NULL here instead is what wedged repositories -- the
+            # sweep claims the row on every tick, this refuses every time, and
+            # nothing in between ever clears the stale lease.
+            or_(
+                Repository.sync_lease_expires_at.is_(None),
+                Repository.sync_lease_expires_at < now,
+            ),
         )
         .values(
             sync_status="updating",
@@ -113,24 +128,62 @@ def _take_lease(db: Session, repo: Repository, now: datetime) -> uuid.UUID | Non
         )
     )
     if result.rowcount == 0:
-        logger.warning("DEBUG: _take_lease FAILED (rowcount=0) for %s", repo.id)
         db.rollback()
         return None
     db.commit()
     return generation
 
 
-def _release_lease(db: Session, repo_id: uuid.UUID) -> None:
-    """Clear the lease fields and set ``sync_status='idle'``.
+def _release_lease(
+    db: Session,
+    repo_id: uuid.UUID,
+    generation: uuid.UUID | None,
+) -> None:
+    """Return a row this attempt left mid-flight to ``idle``; else a no-op.
 
-    Best-effort: the lease expiry already bounds how long a wedged sync
-    can hold the repo, so a failure here is logged but not raised. The
-    caller already has a ``finally`` around it for cleanup paths.
+    Two guards, and both are load-bearing:
+
+    * **Settled results are never overwritten.** By the time this runs,
+      :func:`_record_success` or :func:`_record_failure` has usually already
+      stamped the outcome -- ``idle`` with a fresh ``last_synced_at``, or
+      ``failed`` with the error and the backoff. Only a row that is *still*
+      reporting an attempt in progress may be touched.
+    * **Ownership.** ``generation`` is the value :func:`_take_lease` wrote, or
+      ``None`` when this attempt never took the lease. Without this guard, an
+      attempt that *lost* the race would clear the winner's live lease and let
+      a third sync start alongside it -- exactly what the lease exists to
+      prevent. So with no lease taken, only a row still waiting to be picked up
+      (``queued``, no lease) is settled; ``checking`` and ``updating`` belong
+      to whoever does hold it.
+
+    Nothing here existed before, and the consequence was that every exit from
+    :func:`sync_repository` which did not settle the row -- the guard clauses,
+    a lost race, the generation-changed aborts -- left ``sync_status``
+    non-idle. The settings panel reads any non-idle value as "a sync is in
+    flight", so it repainted the repository every five seconds indefinitely and
+    never re-enabled the controls.
+
+    Best-effort: a failure here is logged, not raised, so it cannot mask the
+    exception already propagating out of the task.
     """
+    if generation is None:
+        ownership = (
+            Repository.sync_status == "queued",
+            Repository.sync_lease_expires_at.is_(None),
+        )
+    else:
+        ownership = (
+            Repository.sync_status.in_(ACTIVE_SYNC_STATUSES),
+            or_(
+                Repository.sync_generation.is_(None),
+                Repository.sync_generation == generation,
+            ),
+        )
+
     try:
         db.execute(
             Repository.__table__.update()
-            .where(Repository.id == repo_id)
+            .where(Repository.id == repo_id, *ownership)
             .values(
                 sync_status="idle",
                 sync_lease_expires_at=None,
@@ -175,13 +228,6 @@ def _record_failure(
     backoff_minutes = base_minutes * (2 ** (consecutive - 1))
     next_sync_at = now + timedelta(minutes=backoff_minutes)
     auto_update_enabled = repo.auto_update_enabled if consecutive < max_failures else False
-    logger.warning(
-        "DEBUG _record_failure: repo=%s consecutive=%s max_failures=%s -> auto_update_enabled=%s",
-        repo.id,
-        consecutive,
-        max_failures,
-        auto_update_enabled,
-    )
     db.execute(
         Repository.__table__.update()
         .where(Repository.id == repo.id)
@@ -302,6 +348,10 @@ def sync_repository(self, repo_id: str, access_token: str | None = None) -> dict
     """
     repo_uuid = uuid.UUID(str(repo_id))
     db = next(get_sync_db())
+    # Assigned once the lease is taken. It stays ``None`` on every guard clause
+    # below, which is how ``_release_lease`` knows this attempt never owned the
+    # row and must not clear a lease belonging to the attempt that does.
+    generation: uuid.UUID | None = None
     try:
         repo = db.get(Repository, repo_uuid)
         if repo is None:
@@ -355,10 +405,11 @@ def sync_repository(self, repo_id: str, access_token: str | None = None) -> dict
                 raise rec_exc from exc
             logger.exception("sync_repository: %s failed", repo_id)
             raise
-        # ``finally`` releases the lease in either case, but the success
-        # path is responsible for stamping its own sync_status back to
-        # 'idle'; the failure path leaves 'failed' behind.
     finally:
+        # Runs on every exit -- including the ``return None`` guards above and
+        # the two generation-changed aborts in ``_do_sync``, none of which
+        # settle the row on their own.
+        _release_lease(db, repo_uuid, generation)
         db.close()
 
 
@@ -421,9 +472,6 @@ def _do_sync(
 
     # Step A only needs to run if the deterministic watermark lags.
     if repo.ingested_commit_sha != new_sha:
-        logger.warning(
-            "DEBUG: about to set updating, ingested=%r, new=%r", repo.ingested_commit_sha, new_sha
-        )
         _set_sync_status(db, repo_id_value, "updating")
 
         # Force-push / branch switch / rebase / non-branch ingest: the

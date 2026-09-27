@@ -40,6 +40,7 @@ import itertools
 import shutil
 import subprocess
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -552,3 +553,178 @@ class TestSyncAgainstLocalClone:
         sync_repository.apply(args=[str(repo.id), None])
         after = len(stubbed_openai.embedded_texts)
         assert after == before, "no-change sync must not call embeddings"
+
+
+# --- Lease settlement -------------------------------------------------------
+#
+# ``sync_status`` is what the settings panel polls, and every value in
+# ``ACTIVE_SYNC_STATUSES`` reads there as "a sync is running". An exit that
+# leaves one behind therefore repaints the repository page every few seconds
+# indefinitely and keeps its controls disabled, because nothing else in the
+# system clears that field -- the sweep only ever moves ``next_sync_at``.
+
+
+def _lease_of(repo_id):
+    """The repository's ``sync_lease_expires_at``, read on a fresh connection."""
+    engine, Session = sync_session()
+    try:
+        return (
+            Session().query(Repository).filter(Repository.id == repo_id).one().sync_lease_expires_at
+        )
+    finally:
+        Session().close()
+        engine.dispose()
+
+
+def _write_row(session, repo, **values) -> None:
+    """Write ``values`` straight onto the row, bypassing the ORM identity map."""
+    session.execute(Repository.__table__.update().where(Repository.id == repo.id).values(**values))
+    session.commit()
+
+
+class TestEveryExitSettlesTheRow:
+    """A guard clause must not leave the row reading as in-flight.
+
+    Each of these returns ``None`` without a summary: the task declined to do
+    the work. The row it was dispatched for is still marked ``queued`` by the
+    route, and before the ``finally`` released it that mark outlived the
+    attempt -- permanently, since nothing else clears it.
+    """
+
+    def test_a_missing_baseline_settles_the_row(self, sync_repo):
+        """No ``ingested_commit_sha`` means there is nothing to diff against.
+
+        This is the state of every repository ingested before the watermark
+        column existed, so on a long-lived deployment it is the common case
+        rather than an edge.
+        """
+        factory, session = sync_repo
+        repo = factory()
+        _write_row(session, repo, ingested_commit_sha=None, sync_status="queued")
+
+        result = sync_repository.apply(args=[str(repo.id), None])
+
+        assert result.successful()
+        assert result.get() is None
+        assert _sync_status_of(repo.id) == "idle"
+        assert _lease_of(repo.id) is None
+
+    def test_a_non_ready_repository_settles_the_row(self, sync_repo):
+        """A repository mid-ingest is skipped rather than synced twice."""
+        factory, session = sync_repo
+        repo = factory()
+        _write_row(
+            session,
+            repo,
+            status="parsing",
+            ingested_commit_sha="a" * 40,
+            sync_status="queued",
+        )
+
+        result = sync_repository.apply(args=[str(repo.id), None])
+
+        assert result.successful()
+        assert result.get() is None
+        assert _sync_status_of(repo.id) == "idle"
+
+    def test_an_owner_without_a_key_settles_the_row(self, sync_repo):
+        """The free-tier backstop skips a keyless owner; the row still settles."""
+        factory, session = sync_repo
+        repo = factory()
+        session.execute(
+            User.__table__.update()
+            .where(User.id == repo.user_id)
+            .values(ai_provider=None, ai_api_key=None, ai_model=None)
+        )
+        _write_row(session, repo, ingested_commit_sha="a" * 40, sync_status="queued")
+
+        result = sync_repository.apply(args=[str(repo.id), None])
+
+        assert result.successful()
+        assert result.get() is None
+        assert _sync_status_of(repo.id) == "idle"
+
+    def test_losing_the_lease_race_leaves_the_winners_lease_alone(self, sync_repo):
+        """A live lease belongs to the attempt holding it, not to this one.
+
+        Settling the row here would clear the winner's lease and let a third
+        sync start alongside it -- precisely what the lease exists to prevent.
+        """
+        factory, session = sync_repo
+        repo = factory()
+        winner_expiry = datetime.now(UTC) + timedelta(minutes=30)
+        _write_row(
+            session,
+            repo,
+            ingested_commit_sha="a" * 40,
+            sync_status="updating",
+            sync_lease_expires_at=winner_expiry,
+        )
+
+        result = sync_repository.apply(args=[str(repo.id), None])
+
+        assert result.successful()
+        assert result.get() is None
+        assert _sync_status_of(repo.id) == "updating"
+        assert _lease_of(repo.id) == winner_expiry
+
+    def test_a_recorded_failure_is_left_alone(self, sync_repo, monkeypatch):
+        """``failed`` is a settled result; the release must not overwrite it."""
+        factory, session = sync_repo
+        repo = factory()
+        _write_row(session, repo, ingested_commit_sha="a" * 40, sync_status="queued")
+
+        import app.tasks.sync as sync_module
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated clone failure")
+
+        monkeypatch.setattr(sync_module, "ensure_clone", boom)
+        sync_repository.apply(args=[str(repo.id), None])
+
+        assert _sync_status_of(repo.id) == "failed"
+        assert _lease_of(repo.id) is None
+
+
+class TestAnExpiredLeaseIsReclaimable:
+    """An expired lease must not wedge a repository permanently.
+
+    ``_claim_predicate`` treats an expired lease as claimable, so the sweep
+    dispatches a sync for the row. ``_take_lease`` used to require the lease to
+    be NULL, so it refused every one of those dispatches -- the sweep re-claimed
+    on every tick, the task declined every time, and nothing in between ever
+    cleared the stale lease. The two predicates have to agree about what
+    "claimable" means.
+    """
+
+    def test_an_expired_lease_is_taken_and_the_sync_runs(
+        self, cloner_stubbed_to_local, stubbed_openai, sync_repo
+    ):
+        """The row is reclaimed and settles, rather than refusing forever."""
+        factory, session = sync_repo
+        repo = factory()
+        head_sha = subprocess.run(
+            ["git", "-C", str(cloner_stubbed_to_local), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        # A lease left behind by a worker that was killed mid-sync, now lapsed.
+        _write_row(
+            session,
+            repo,
+            ingested_commit_sha=head_sha,
+            analysis_commit_sha=head_sha,
+            sync_status="updating",
+            sync_lease_expires_at=datetime.now(UTC) - timedelta(minutes=5),
+        )
+
+        result = sync_repository.apply(args=[str(repo.id), None])
+
+        # Both watermarks match the head, so the sync short-circuits -- a path
+        # only reachable if the lease was taken. Refusing returns ``None``.
+        assert result.successful()
+        assert result.get() is not None
+        assert _sync_status_of(repo.id) == "idle"
+        assert _lease_of(repo.id) is None

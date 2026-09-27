@@ -141,12 +141,20 @@ export default function AutoUpdateSection({ repo }: Props) {
   /**
    * POSTs /sync and refreshes the page so the layout picks up the new
    * `sync_status='queued'` and `next_sync_at`.
+   *
+   * A refusal is a normal outcome, not an exception: the backend answers 409
+   * when there is no baseline commit to diff against, and that reasoning is
+   * exactly what the user needs to see.
    */
   const handleSyncNow = async () => {
     setError(null);
     setIsSyncing(true);
     try {
-      await triggerSyncAction(repo.id);
+      const result = await triggerSyncAction(repo.id);
+      if (!result.ok) {
+        setError(result.detail);
+        return;
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to queue sync");

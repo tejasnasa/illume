@@ -76,7 +76,7 @@ beforeEach(() => {
   triggerSyncMock.mockReset();
   updateAutoUpdateMock.mockResolvedValue(undefined as never);
   triggerSyncMock.mockResolvedValue({
-    repo_id: REPO_ID,
+    ok: true,
     sync_status: "queued",
     next_sync_at: "2026-01-01T00:00:00Z",
   } as never);
@@ -283,10 +283,14 @@ describe("sync now", () => {
     expect(screen.getByRole("button", { name: /Sync now/i })).toBeDisabled();
   });
 
-  it("surfaces the action's error message on a failure", async () => {
-    triggerSyncMock.mockRejectedValueOnce(
-      new Error("A sync is already in flight (lease expires at ...)."),
-    );
+  it("surfaces the backend's reason when the sync is refused", async () => {
+    // A refusal comes back as a returned value, not a thrown error: Next.js
+    // replaces the message of an error thrown out of a Server Action in
+    // production, so the reason a 409 carries has to travel as a value.
+    triggerSyncMock.mockResolvedValueOnce({
+      ok: false,
+      detail: "A sync is already in flight (lease expires at ...).",
+    } as never);
     const user = userEvent.setup();
     render(<AutoUpdateSection repo={makeRepo()} />);
 
@@ -295,6 +299,34 @@ describe("sync now", () => {
     await waitFor(() =>
       expect(screen.getByText(/already in flight/)).toBeInTheDocument(),
     );
+  });
+
+  it("surfaces a message when the action itself throws", async () => {
+    triggerSyncMock.mockRejectedValueOnce(new Error("Network unreachable"));
+    const user = userEvent.setup();
+    render(<AutoUpdateSection repo={makeRepo()} />);
+
+    await user.click(screen.getByRole("button", { name: /Sync now/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Network unreachable/)).toBeInTheDocument(),
+    );
+  });
+
+  it("does not refresh when the sync is refused", async () => {
+    triggerSyncMock.mockResolvedValueOnce({
+      ok: false,
+      detail: "This repository has no recorded baseline commit.",
+    } as never);
+    const user = userEvent.setup();
+    render(<AutoUpdateSection repo={makeRepo()} />);
+
+    await user.click(screen.getByRole("button", { name: /Sync now/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/no recorded baseline/)).toBeInTheDocument(),
+    );
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
 

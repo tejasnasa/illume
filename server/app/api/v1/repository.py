@@ -7,7 +7,7 @@ bundle for ready repositories.
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -23,6 +23,11 @@ from app.services.illume_exporter import generate_illume_file
 from app.services.llm_config import LLMConfig
 from app.tasks.autoupdate import AUTO_UPDATE_ENABLED
 from app.tasks.ingest import ingest_repository
+
+# Aliased: the route handler below is itself named ``sync_repository``, so a
+# plain import would be shadowed by the ``def`` and dispatch the handler
+# instead of the Celery task.
+from app.tasks.sync import sync_repository as sync_repository_task
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/repository", tags=["repository"])
@@ -412,9 +417,45 @@ async def sync_repository(
             ),
         )
 
+    # A sync diffs the repository against ``ingested_commit_sha``. Repositories
+    # ingested before that watermark existed have none, and the worker's own
+    # guard skips them -- so without this the request would queue a job that can
+    # never run, leaving the panel reporting a sync in flight forever.
+    if not repo.ingested_commit_sha:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This repository has no recorded baseline commit, so there is "
+                "nothing to diff an update against. Re-ingest it to enable syncing."
+            ),
+        )
+
     repo.sync_status = "queued"
-    repo.next_sync_at = now
+    # Pushed forward so a sweep ticking in the meantime cannot claim and
+    # dispatch a second copy of the same work; ``_record_success`` overwrites it.
+    repo.next_sync_at = now + timedelta(hours=repo.auto_update_interval_hours or 6)
     await db.commit()
+
+    # Dispatched here rather than left for the sweep. The sweep only claims
+    # repositories whose ``auto_update_enabled`` is set, so a manual sync
+    # requested with the toggle off was marked queued and never picked up --
+    # which the panel then showed as a sync that never finished.
+    try:
+        sync_repository_task.delay(str(repo_id))
+    except Exception:
+        # ``queued`` is already committed. Without putting it back, a broker
+        # that refused the task would leave the row mid-flight forever and the
+        # settings panel polling it forever.
+        repo.sync_status = "idle"
+        repo.next_sync_at = None
+        await db.commit()
+        logger.exception("Failed to queue manual sync for repo %s", repo_id)
+        # ``from None``: the broker error is already logged, and chaining it
+        # into the response would only add noise to an expected failure mode.
+        raise HTTPException(
+            status_code=503,
+            detail="Could not queue the sync. Please try again.",
+        ) from None
 
     logger.info("Manual sync requested for repo %s", repo_id)
 
