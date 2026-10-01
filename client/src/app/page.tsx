@@ -7,6 +7,8 @@
 import dashboard from "@/assets/dashboard.png";
 import explorer from "@/assets/explorer.png";
 import graph from "@/assets/graph.png";
+import BackgroundGraph from "@/components/BackgroundGraph";
+import graphData from "@/data/data2.json";
 import {
   ArrowDownIcon,
   ArrowRightIcon,
@@ -18,7 +20,6 @@ import {
   ListChecksIcon,
   MagnifyingGlassIcon,
   MapTrifoldIcon,
-  PulseIcon,
   SparkleIcon,
   StarFourIcon,
   TreeStructureIcon,
@@ -164,7 +165,7 @@ export default function Home() {
       </div>
 
       <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl border-b border-(--border)">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link
             href={"/"}
             className="relative h-12 flex items-center justify-center m-2 gap-2"
@@ -212,98 +213,110 @@ export default function Home() {
         </div>
       </nav>
 
-      <section className="relative min-h-screen flex flex-col items-center justify-center px-6 pt-48 pb-20 text-center overflow-hidden">
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={stagger}
-          className="flex flex-col items-center"
-        >
-
-          <motion.h1 variants={fadeUp} custom={1} className="max-w-7xl">
-            <span className="block text-[clamp(4rem,7vw,8rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
-              Onboard engineers
-            </span>
-            <span className="block text-[clamp(4rem,7vw,8rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
-              in days, not weeks
-            </span>
-          </motion.h1>
-
-          <motion.p
-            variants={fadeUp}
-            custom={2}
-            className="mt-6 text-md sm:text-xl text-(--muted-foreground) max-w-2xl leading-relaxed"
-          >
-            Illume ingests a GitHub repository and generates an{" "}
-            <span className="text-(--foreground) font-medium">
-              interactive onboarding guide
-            </span>{" "}
-            — architecture briefs, reading orders, glossaries, and ownership
-            maps.{" "}
-            <span className="text-(--primary) font-medium">All automated.</span>
-          </motion.p>
-
+      <section className="relative max-w-6xl mx-auto min-h-screen flex items-center py-20 overflow-hidden">
+        <div className="w-full flex items-center">
           <motion.div
-            variants={fadeUp}
-            custom={3}
-            className="flex flex-col sm:flex-row gap-4 mt-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1, delay: 0.2 }}
+            className="relative h-[20rem] sm:h-[26rem] lg:h-[48rem] w-4/10"
           >
-            <Link
-              href="/login"
-              className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-(--primary) text-(--primary-foreground) font-medium text-md hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300"
-            >
-              Get Started
-              <ArrowRightIcon
-                size={16}
-                weight="bold"
-                className="group-hover:translate-x-0.5 transition-transform"
-              />
-            </Link>
-            <a
-              href="#preview"
-              className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--border) text-(--muted-foreground) font-medium text-md hover:border-(--primary) hover:text-(--foreground) transition-all duration-300"
-            >
-              See It In Action
-              <ArrowDownIcon size={16} weight="bold" />
-            </a>
+            {/* Layout tuning lives here; see BackgroundGraph's props for what
+                each value does. Lower linkDistance = larger-looking graph;
+                cooldownTicks is what decides how long the hero takes to appear. */}
+            <BackgroundGraph
+              variant="contained"
+              graph={graphData}
+              nodeColor="rgb(0, 184, 219)"
+              linkDistance={450}
+              chargeStrength={-280}
+              nodeRelSize={6}
+              fitPadding={1}
+              cooldownTicks={80}
+              d3AlphaDecay={0.05}
+            />
           </motion.div>
 
           <motion.div
-            variants={fadeUp}
-            custom={4}
-            className="mt-14 flex items-center gap-8 text-md text-(--muted-foreground)"
+            initial="hidden"
+            animate="visible"
+            variants={stagger}
+            className="flex flex-col text-center lg:text-right w-6/10"
           >
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-3xl font-bold text-(--foreground)">9</span>
-              <span className="text-sm">Features</span>
-            </div>
-            <div className="w-px h-8 bg-(--border)" />
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-3xl font-bold text-(--foreground)">6</span>
-              <span className="text-sm">AI Pipelines</span>
-            </div>
-            <div className="w-px h-8 bg-(--border)" />
-            <div className="flex flex-col items-center gap-1">
-              <span className="text-3xl font-bold text-(--foreground)">3D</span>
-              <span className="text-sm">Graph View</span>
-            </div>
-          </motion.div>
-        </motion.div>
+            <motion.h1 variants={fadeUp} custom={1}>
+              <span className="block text-[clamp(2.5rem,6vw,4.65rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
+                Onboard engineers
+              </span>
+              <span className="block text-[clamp(2.5rem,6vw,4.65rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
+                in days, not weeks
+              </span>
+            </motion.h1>
 
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.2 }}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2"
-        >
-          <span className="text-[10px] tracking-[0.2em] uppercase text-(--muted-foreground)">
-            Scroll
-          </span>
-          <ArrowDownIcon
-            size={16}
-            className="text-(--muted-foreground) animate-bounce"
-          />
-        </motion.div>
+            <motion.p
+              variants={fadeUp}
+              custom={2}
+              className="mt-6 text-md sm:text-lg text-(--muted-foreground) max-w-xl leading-relaxed mx-auto lg:mx-0 lg:ml-auto"
+            >
+              Illume ingests a GitHub repository and generates an{" "}
+              <span className="text-(--foreground) font-medium">
+                interactive onboarding guide
+              </span>{" "}
+              — architecture briefs, reading orders, glossaries, and ownership
+              maps.{" "}
+              <span className="text-(--primary) font-medium">
+                All automated.
+              </span>
+            </motion.p>
+
+            <motion.div
+              variants={fadeUp}
+              custom={3}
+              className="flex flex-col sm:flex-row gap-4 mt-10 justify-center lg:justify-end"
+            >
+              <Link
+                href="/login"
+                className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-(--primary) text-(--primary-foreground) font-medium text-md hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300"
+              >
+                Get Started
+                <ArrowRightIcon
+                  size={16}
+                  weight="bold"
+                  className="group-hover:translate-x-0.5 transition-transform"
+                />
+              </Link>
+              <a
+                href="#preview"
+                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--border) text-(--muted-foreground) font-medium text-md hover:border-(--primary) hover:text-(--foreground) transition-all duration-300"
+              >
+                See It In Action
+                <ArrowDownIcon size={16} weight="bold" />
+              </a>
+            </motion.div>
+
+            <motion.div
+              variants={fadeUp}
+              custom={4}
+              className="mt-14 flex items-center justify-center lg:justify-end gap-8 text-md text-(--muted-foreground)"
+            >
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-3xl font-bold text-(--foreground)">9</span>
+                <span className="text-sm">Features</span>
+              </div>
+              <div className="w-px h-8 bg-(--border)" />
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-3xl font-bold text-(--foreground)">6</span>
+                <span className="text-sm">AI Pipelines</span>
+              </div>
+              <div className="w-px h-8 bg-(--border)" />
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-3xl font-bold text-(--foreground)">
+                  3D
+                </span>
+                <span className="text-sm">Graph View</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        </div>
       </section>
 
       <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />

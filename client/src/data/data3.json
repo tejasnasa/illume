@@ -1,0 +1,1126 @@
+{
+  "nodes": [
+    {
+      "id": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "label": "Echo.tsx",
+      "path": "src/components/home/Echo.tsx",
+      "group": "src/components/home",
+      "kind": "file",
+      "loc": 88,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 5,
+      "fan_out": 10
+    },
+    {
+      "id": "732d4e09-88a5-445b-9a13-cb37e143ae8b",
+      "label": "ShareOptions.tsx",
+      "path": "src/components/home/ShareOptions.tsx",
+      "group": "src/components/home",
+      "kind": "file",
+      "loc": 64,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "7e218657-3a5e-4cd5-b265-d4f817468c24",
+      "label": "ImageGrid.tsx",
+      "path": "src/components/ImageGrid.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 52,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "93602e84-f16c-4534-a076-a4902b7bbbd0",
+      "label": "Capture.tsx",
+      "path": "src/components/buttons/Capture.tsx",
+      "group": "src/components/buttons",
+      "kind": "file",
+      "loc": 50,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "a453653d-c6be-4121-b897-f32431c131ea",
+      "label": "Loader.tsx",
+      "path": "src/components/Loader.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 10,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 6,
+      "fan_out": 0
+    },
+    {
+      "id": "c12213f9-bf25-499f-b835-3b8e84612be7",
+      "label": "Repost.tsx",
+      "path": "src/components/buttons/Repost.tsx",
+      "group": "src/components/buttons",
+      "kind": "file",
+      "loc": 50,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "cce19d19-d5b4-48d7-8b3b-ae4629ab77ac",
+      "label": "ReplyBlock.tsx",
+      "path": "src/components/ReplyBlock.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 110,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "d61ef6d2-9c3e-4505-bc11-66ea64d19fc6",
+      "label": "ChangePasswordForm.tsx",
+      "path": "src/components/ChangePasswordForm.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 114,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "dcf3bea5-08d6-4743-a4a1-eba6bff1f652",
+      "label": "UpdateProfileForm.tsx",
+      "path": "src/components/UpdateProfileForm.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 85,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "fc231fb2-b652-4670-a320-1ec3d713df88",
+      "label": "LoginForm.tsx",
+      "path": "src/components/LoginForm.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 108,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "413d2b4d-4f4d-444b-8d5b-36719413271b",
+      "label": "CreateModal.tsx",
+      "path": "src/components/CreateModal.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 126,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "3678f7f0-017c-4701-8100-03fc0ab88ecb",
+      "label": "SearchModal.tsx",
+      "path": "src/components/SearchModal.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 73,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    {
+      "id": "3a5f7e19-8700-4a06-88c2-631cfadeaad9",
+      "label": "SignupForm.tsx",
+      "path": "src/components/SignupForm.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 127,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "2b05997e-0c97-44fa-b297-eedfe2e70b90",
+      "label": "Like.tsx",
+      "path": "src/components/buttons/Like.tsx",
+      "group": "src/components/buttons",
+      "kind": "file",
+      "loc": 53,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "0315c155-91a7-4d45-810d-b9fee6fd470e",
+      "label": "Reply.tsx",
+      "path": "src/components/buttons/Reply.tsx",
+      "group": "src/components/buttons",
+      "kind": "file",
+      "loc": 19,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "label": "_layout.tsx",
+      "path": "src/routes/_layout.tsx",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 194,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 7
+    },
+    {
+      "id": "01cec0ce-a72e-4494-907b-b107b02480c2",
+      "label": "archive.tsx",
+      "path": "src/routes/_layout/archive.tsx",
+      "group": "src/routes/_layout",
+      "kind": "file",
+      "loc": 142,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 4
+    },
+    {
+      "id": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "label": "e.$postSerId.tsx",
+      "path": "src/routes/_layout/e.$postSerId.tsx",
+      "group": "src/routes/_layout",
+      "kind": "file",
+      "loc": 130,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 12
+    },
+    {
+      "id": "f50ece49-564b-4de0-9204-ecf2901f891b",
+      "label": "explore.tsx",
+      "path": "src/routes/_layout/explore.tsx",
+      "group": "src/routes/_layout",
+      "kind": "file",
+      "loc": 35,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    {
+      "id": "20250728-8a17-41d8-ba5f-53f815c5c8ab",
+      "label": "index.tsx",
+      "path": "src/routes/_layout/index.tsx",
+      "group": "src/routes/_layout",
+      "kind": "file",
+      "loc": 37,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    {
+      "id": "5514cc00-b2bc-4069-85cd-bb84cf4ab45d",
+      "label": "search.tsx",
+      "path": "src/routes/_layout/search.tsx",
+      "group": "src/routes/_layout",
+      "kind": "file",
+      "loc": 10,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "f7755244-b6e3-4d9b-80a4-c9d9b454f562",
+      "label": "settings.tsx",
+      "path": "src/routes/_layout/settings.tsx",
+      "group": "src/routes/_layout",
+      "kind": "file",
+      "loc": 109,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 5
+    },
+    {
+      "id": "3d3ac26e-44b5-43a3-9240-b6a50b9fa005",
+      "label": "u.$userSerId.tsx",
+      "path": "src/routes/_layout/u.$userSerId.tsx",
+      "group": "src/routes/_layout",
+      "kind": "file",
+      "loc": 159,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 4
+    },
+    {
+      "id": "2332dc72-6128-4680-8bb5-52c06ba5020e",
+      "label": "login.tsx",
+      "path": "src/routes/login.tsx",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 64,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 4
+    },
+    {
+      "id": "f13b5a7b-4d18-484f-8de4-497f297f2bd4",
+      "label": "signup.tsx",
+      "path": "src/routes/signup.tsx",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 62,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    {
+      "id": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "label": "routeTree.gen.ts",
+      "path": "src/routeTree.gen.ts",
+      "group": "src",
+      "kind": "file",
+      "loc": 368,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 12
+    },
+    {
+      "id": "8236d49a-72e9-4905-8909-37e1aff019cc",
+      "label": "auth.ts",
+      "path": "src/api/auth.ts",
+      "group": "src/api",
+      "kind": "file",
+      "loc": 77,
+      "criticality": "critical",
+      "criticality_score": 100.0,
+      "language": "typescript",
+      "fan_in": 6,
+      "fan_out": 0
+    },
+    {
+      "id": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "label": "fetchPost.ts",
+      "path": "src/api/fetchPost.ts",
+      "group": "src/api",
+      "kind": "file",
+      "loc": 216,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 8,
+      "fan_out": 3
+    },
+    {
+      "id": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "label": "user.ts",
+      "path": "src/api/user.ts",
+      "group": "src/api",
+      "kind": "file",
+      "loc": 179,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 4,
+      "fan_out": 3
+    },
+    {
+      "id": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "label": "definitions.ts",
+      "path": "src/utils/definitions.ts",
+      "group": "src/utils",
+      "kind": "file",
+      "loc": 82,
+      "criticality": "critical",
+      "criticality_score": 100.0,
+      "language": "typescript",
+      "fan_in": 10,
+      "fan_out": 0
+    },
+    {
+      "id": "22f79559-3586-4b39-9a36-91385b405d0d",
+      "label": "self.ts",
+      "path": "src/api/self.ts",
+      "group": "src/api",
+      "kind": "file",
+      "loc": 58,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "label": "misc.ts",
+      "path": "src/api/misc.ts",
+      "group": "src/api",
+      "kind": "file",
+      "loc": 36,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 5,
+      "fan_out": 3
+    },
+    {
+      "id": "76d69dc4-7dfe-43b0-8393-02cf3e8282c8",
+      "label": "randomPic.ts",
+      "path": "src/utils/temp/randomPic.ts",
+      "group": "src/utils/temp",
+      "kind": "file",
+      "loc": 15,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 5,
+      "fan_out": 0
+    },
+    {
+      "id": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "label": "main.tsx",
+      "path": "src/main.tsx",
+      "group": "src",
+      "kind": "file",
+      "loc": 41,
+      "criticality": "critical",
+      "criticality_score": 100.0,
+      "language": "tsx",
+      "fan_in": 8,
+      "fan_out": 4
+    },
+    {
+      "id": "cb9f6f85-3261-4c16-a0ca-acde880ee5b7",
+      "label": "__root.tsx",
+      "path": "src/routes/__root.tsx",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 26,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "1cd524fd-fb2f-456f-b4e5-82520e13fe32",
+      "label": "forgotpassword.tsx",
+      "path": "src/routes/forgotpassword.tsx",
+      "group": "src/routes",
+      "kind": "file",
+      "loc": 10,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "26cc61b9-76b3-46ba-8417-d0108c133030",
+      "label": "Error.tsx",
+      "path": "src/components/Error.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 17,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "20b6acb3-db54-4a6a-b284-25f6e408512c",
+      "label": "NotFound.tsx",
+      "path": "src/components/NotFound.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 15,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "8dc96933-82a6-4388-a79d-037b09ded854",
+      "label": "post.ts",
+      "path": "src/api/post.ts",
+      "group": "src/api",
+      "kind": "file",
+      "loc": 23,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "e39ed50b-ac3c-42fa-8085-fdb3e7dbd676",
+      "label": "datetime.ts",
+      "path": "src/utils/datetime.ts",
+      "group": "src/utils",
+      "kind": "file",
+      "loc": 42,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "19be99df-3907-449d-b005-01140787a6d1",
+      "label": "PostForm.tsx",
+      "path": "src/components/PostForm.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 35,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    }
+  ],
+  "links": [
+    {
+      "source": "01cec0ce-a72e-4494-907b-b107b02480c2",
+      "target": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "01cec0ce-a72e-4494-907b-b107b02480c2",
+      "target": "76d69dc4-7dfe-43b0-8393-02cf3e8282c8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "01cec0ce-a72e-4494-907b-b107b02480c2",
+      "target": "7e218657-3a5e-4cd5-b265-d4f817468c24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "01cec0ce-a72e-4494-907b-b107b02480c2",
+      "target": "a453653d-c6be-4121-b897-f32431c131ea",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "target": "76d69dc4-7dfe-43b0-8393-02cf3e8282c8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "target": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "target": "22f79559-3586-4b39-9a36-91385b405d0d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "target": "8236d49a-72e9-4905-8909-37e1aff019cc",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "target": "3678f7f0-017c-4701-8100-03fc0ab88ecb",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "target": "413d2b4d-4f4d-444b-8d5b-36719413271b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "19be99df-3907-449d-b005-01140787a6d1",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "20250728-8a17-41d8-ba5f-53f815c5c8ab",
+      "target": "a453653d-c6be-4121-b897-f32431c131ea",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "20250728-8a17-41d8-ba5f-53f815c5c8ab",
+      "target": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "20250728-8a17-41d8-ba5f-53f815c5c8ab",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "22f79559-3586-4b39-9a36-91385b405d0d",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "22f79559-3586-4b39-9a36-91385b405d0d",
+      "target": "8236d49a-72e9-4905-8909-37e1aff019cc",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2332dc72-6128-4680-8bb5-52c06ba5020e",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2332dc72-6128-4680-8bb5-52c06ba5020e",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2332dc72-6128-4680-8bb5-52c06ba5020e",
+      "target": "8236d49a-72e9-4905-8909-37e1aff019cc",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2332dc72-6128-4680-8bb5-52c06ba5020e",
+      "target": "fc231fb2-b652-4670-a320-1ec3d713df88",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2b05997e-0c97-44fa-b297-eedfe2e70b90",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "76d69dc4-7dfe-43b0-8393-02cf3e8282c8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "20b6acb3-db54-4a6a-b284-25f6e408512c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "a453653d-c6be-4121-b897-f32431c131ea",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "cce19d19-d5b4-48d7-8b3b-ae4629ab77ac",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "93602e84-f16c-4534-a076-a4902b7bbbd0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "c12213f9-bf25-499f-b835-3b8e84612be7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "0315c155-91a7-4d45-810d-b9fee6fd470e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "2b05997e-0c97-44fa-b297-eedfe2e70b90",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "e39ed50b-ac3c-42fa-8085-fdb3e7dbd676",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3678f7f0-017c-4701-8100-03fc0ab88ecb",
+      "target": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3678f7f0-017c-4701-8100-03fc0ab88ecb",
+      "target": "76d69dc4-7dfe-43b0-8393-02cf3e8282c8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3678f7f0-017c-4701-8100-03fc0ab88ecb",
+      "target": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3a5f7e19-8700-4a06-88c2-631cfadeaad9",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3d3ac26e-44b5-43a3-9240-b6a50b9fa005",
+      "target": "a453653d-c6be-4121-b897-f32431c131ea",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3d3ac26e-44b5-43a3-9240-b6a50b9fa005",
+      "target": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3d3ac26e-44b5-43a3-9240-b6a50b9fa005",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3d3ac26e-44b5-43a3-9240-b6a50b9fa005",
+      "target": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "target": "8dc96933-82a6-4388-a79d-037b09ded854",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "413d2b4d-4f4d-444b-8d5b-36719413271b",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "target": "26cc61b9-76b3-46ba-8417-d0108c133030",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "target": "20b6acb3-db54-4a6a-b284-25f6e408512c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "target": "a453653d-c6be-4121-b897-f32431c131ea",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "target": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "31c2806b-8fa9-4fb1-a71f-6d9834ee9e13",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "3d3ac26e-44b5-43a3-9240-b6a50b9fa005",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "01cec0ce-a72e-4494-907b-b107b02480c2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "f50ece49-564b-4de0-9204-ecf2901f891b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "5514cc00-b2bc-4069-85cd-bb84cf4ab45d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "f7755244-b6e3-4d9b-80a4-c9d9b454f562",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "20250728-8a17-41d8-ba5f-53f815c5c8ab",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "1445c0ed-521c-4258-926e-55d1aca20e2a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "1cd524fd-fb2f-456f-b4e5-82520e13fe32",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "2332dc72-6128-4680-8bb5-52c06ba5020e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "f13b5a7b-4d18-484f-8de4-497f297f2bd4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "491732d1-e137-41b7-814d-18d6f3658ceb",
+      "target": "cb9f6f85-3261-4c16-a0ca-acde880ee5b7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "76d69dc4-7dfe-43b0-8393-02cf3e8282c8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "7e218657-3a5e-4cd5-b265-d4f817468c24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "732d4e09-88a5-445b-9a13-cb37e143ae8b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "0315c155-91a7-4d45-810d-b9fee6fd470e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "93602e84-f16c-4534-a076-a4902b7bbbd0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "c12213f9-bf25-499f-b835-3b8e84612be7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "2b05997e-0c97-44fa-b297-eedfe2e70b90",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "e39ed50b-ac3c-42fa-8085-fdb3e7dbd676",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "target": "8dc96933-82a6-4388-a79d-037b09ded854",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "93602e84-f16c-4534-a076-a4902b7bbbd0",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "target": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b5493140-2cbb-49eb-b498-922d07e8ca03",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c12213f9-bf25-499f-b835-3b8e84612be7",
+      "target": "42339f3f-657e-490b-a4d1-08b239c3fcf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cb9f6f85-3261-4c16-a0ca-acde880ee5b7",
+      "target": "8236d49a-72e9-4905-8909-37e1aff019cc",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cce19d19-d5b4-48d7-8b3b-ae4629ab77ac",
+      "target": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cce19d19-d5b4-48d7-8b3b-ae4629ab77ac",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d61ef6d2-9c3e-4505-bc11-66ea64d19fc6",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dcf3bea5-08d6-4743-a4a1-eba6bff1f652",
+      "target": "408901c3-1300-4b57-bdc7-a6a94f48917b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f13b5a7b-4d18-484f-8de4-497f297f2bd4",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f13b5a7b-4d18-484f-8de4-497f297f2bd4",
+      "target": "8236d49a-72e9-4905-8909-37e1aff019cc",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f13b5a7b-4d18-484f-8de4-497f297f2bd4",
+      "target": "3a5f7e19-8700-4a06-88c2-631cfadeaad9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f50ece49-564b-4de0-9204-ecf2901f891b",
+      "target": "a453653d-c6be-4121-b897-f32431c131ea",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f50ece49-564b-4de0-9204-ecf2901f891b",
+      "target": "7019393d-8ae1-4fff-84c5-a339a35e487f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f50ece49-564b-4de0-9204-ecf2901f891b",
+      "target": "7d38817a-4cfd-46c1-a871-2f8a2000e85e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7755244-b6e3-4d9b-80a4-c9d9b454f562",
+      "target": "22f79559-3586-4b39-9a36-91385b405d0d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7755244-b6e3-4d9b-80a4-c9d9b454f562",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7755244-b6e3-4d9b-80a4-c9d9b454f562",
+      "target": "d61ef6d2-9c3e-4505-bc11-66ea64d19fc6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7755244-b6e3-4d9b-80a4-c9d9b454f562",
+      "target": "dcf3bea5-08d6-4743-a4a1-eba6bff1f652",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7755244-b6e3-4d9b-80a4-c9d9b454f562",
+      "target": "8236d49a-72e9-4905-8909-37e1aff019cc",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fc231fb2-b652-4670-a320-1ec3d713df88",
+      "target": "3bfeea22-e35b-4508-8a20-811f44c1fbe1",
+      "type": "imports",
+      "weight": 1
+    }
+  ],
+  "metadata": {
+    "total_nodes": 50,
+    "total_edges": 97,
+    "clusters": 2
+  }
+}

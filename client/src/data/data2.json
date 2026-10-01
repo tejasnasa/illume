@@ -1,0 +1,6632 @@
+{
+  "nodes": [
+    {
+      "id": "0d6caa20-6e94-46f0-8135-d4b5e211449f",
+      "label": "next.js",
+      "path": "packages/eslint-config/next.js",
+      "group": "packages/eslint-config",
+      "kind": "file",
+      "loc": 58,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "javascript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "00664cd9-1d06-4c18-9b47-a30b147c2a07",
+      "label": "DocTabs.test.tsx",
+      "path": "packages/ui/__tests__/DocTabs.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 189,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "011a6c97-c3a6-4474-a8f3-8ac5e0e850ec",
+      "label": "Chat.tsx",
+      "path": "packages/ui/src/components/icons/Chat.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "020963c9-5d3f-4568-b9cd-501b966c5d88",
+      "label": "workspace.controller.ts",
+      "path": "apps/api/src/controllers/workspace.controller.ts",
+      "group": "apps/api/src/controllers",
+      "kind": "file",
+      "loc": 555,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 3
+    },
+    {
+      "id": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "label": "server.ts",
+      "path": "apps/web/tests/msw/server.ts",
+      "group": "apps/web/tests/msw",
+      "kind": "file",
+      "loc": 11,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 18,
+      "fan_out": 1
+    },
+    {
+      "id": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "label": "presentational.test.tsx",
+      "path": "packages/ui/__tests__/presentational.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 218,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 10
+    },
+    {
+      "id": "0510aeba-07a6-4de7-9b78-476692a34754",
+      "label": "Eye.tsx",
+      "path": "packages/ui/src/components/icons/Eye.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "05aee780-4d30-4c9d-b0e3-cb7bdc7f3d3c",
+      "label": "OptionsMenu.test.tsx",
+      "path": "packages/ui/__tests__/OptionsMenu.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 126,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "label": "Input.tsx",
+      "path": "packages/ui/src/components/Input.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 25,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 8,
+      "fan_out": 0
+    },
+    {
+      "id": "07b1aa85-ed0d-4212-baf0-22595c2aa659",
+      "label": "TypingIndicator.test.tsx",
+      "path": "apps/web/tests/components/TypingIndicator.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 51,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "0850e9a0-0425-4641-bc8b-28e5a00e721b",
+      "label": "canvas.socket.test.ts",
+      "path": "apps/api/src/__tests__/integration/socket/canvas.socket.test.ts",
+      "group": "apps/api/src/__tests__/integration/socket",
+      "kind": "file",
+      "loc": 270,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "0882c231-673d-4bd6-8aec-6b583a65ab8e",
+      "label": "Canvas.tsx",
+      "path": "apps/web/components/Canvas.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 122,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "08d73969-ed1c-4050-ab59-0830027131bd",
+      "label": "message.router.ts",
+      "path": "apps/api/src/routers/message.router.ts",
+      "group": "apps/api/src/routers",
+      "kind": "file",
+      "loc": 21,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "091cada0-c35a-465c-be37-59dd4e972eb5",
+      "label": "AlertDialog.test.tsx",
+      "path": "packages/ui/__tests__/AlertDialog.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 95,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "0a913865-c685-4502-84a9-ead21316880b",
+      "label": "appliedSchema.test.ts",
+      "path": "packages/database/__tests__/appliedSchema.test.ts",
+      "group": "packages/database/__tests__",
+      "kind": "file",
+      "loc": 221,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "0af8c0a9-00aa-44ce-b7ec-d21724644938",
+      "label": "WorkspaceCard.test.tsx",
+      "path": "packages/ui/__tests__/WorkspaceCard.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 120,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "0b9341ed-c7b2-426f-9289-37e06bb02dcd",
+      "label": "redis.test.ts",
+      "path": "apps/api/src/__tests__/unit/redis.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 102,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "0b9ec833-3459-4ad0-81a6-95f6ac5855de",
+      "label": "canvasGeneration.ts",
+      "path": "apps/api/src/lib/canvasGeneration.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 1077,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "0bf44c57-455c-45d5-8f4e-8f1898719bef",
+      "label": "canvasGeneration.test.ts",
+      "path": "apps/api/src/__tests__/unit/canvasGeneration.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 917,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "0d418b84-b95c-4a25-bca5-fc235721a3fd",
+      "label": "cascade.test.ts",
+      "path": "packages/database/__tests__/cascade.test.ts",
+      "group": "packages/database/__tests__",
+      "kind": "file",
+      "loc": 176,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "0ff16405-7890-427e-8480-55ec45168d4b",
+      "label": "document.controller.ts",
+      "path": "apps/api/src/controllers/document.controller.ts",
+      "group": "apps/api/src/controllers",
+      "kind": "file",
+      "loc": 132,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 4
+    },
+    {
+      "id": "111ce90a-0db7-401b-b187-a6e3670e2e40",
+      "label": "AvatarGroup.tsx",
+      "path": "packages/ui/src/components/AvatarGroup.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 54,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "12313adf-c7a9-4454-a1d4-7899c3a83277",
+      "label": "useWorkspaceForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useWorkspaceForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 275,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "131f0ba0-9961-478d-87a3-470cf867d5d4",
+      "label": "bot.socket.test.ts",
+      "path": "apps/api/src/__tests__/integration/socket/bot.socket.test.ts",
+      "group": "apps/api/src/__tests__/integration/socket",
+      "kind": "file",
+      "loc": 259,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "label": "WorkspaceCard.tsx",
+      "path": "packages/ui/src/components/WorkspaceCard.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 98,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 10
+    },
+    {
+      "id": "176bbf73-2aca-46d2-9cac-4c807aa11087",
+      "label": "parseUserAgent.ts",
+      "path": "apps/web/lib/parseUserAgent.ts",
+      "group": "apps/web/lib",
+      "kind": "file",
+      "loc": 60,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "17c29bff-0bd0-49ea-8992-ac1b67a5e579",
+      "label": "workspaces.ts",
+      "path": "packages/types/src/api/workspaces.ts",
+      "group": "packages/types/src/api",
+      "kind": "file",
+      "loc": 24,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "17e70445-c655-4606-8c5e-228718784461",
+      "label": "VoiceProvider.tsx",
+      "path": "apps/web/providers/VoiceProvider.tsx",
+      "group": "apps/web/providers",
+      "kind": "file",
+      "loc": 73,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 2
+    },
+    {
+      "id": "17f2989f-fae1-40c2-a42c-9fd057a2847b",
+      "label": "FormSwitch.test.tsx",
+      "path": "apps/web/tests/components/FormSwitch.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 250,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "label": "Cloud.tsx",
+      "path": "packages/ui/src/components/icons/Cloud.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 16,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 7,
+      "fan_out": 0
+    },
+    {
+      "id": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "label": "AccountSettings.tsx",
+      "path": "apps/web/components/AccountSettings.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 727,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 16
+    },
+    {
+      "id": "197ee54a-b6ec-4db5-9bd5-c7d98ebde69a",
+      "label": "turnCredentials.ts",
+      "path": "apps/api/src/lib/turnCredentials.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 30,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "1b8eb704-e16b-42ac-b953-2164703716f3",
+      "label": "turn.controller.ts",
+      "path": "apps/api/src/controllers/turn.controller.ts",
+      "group": "apps/api/src/controllers",
+      "kind": "file",
+      "loc": 47,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "1c762973-dee4-4704-bcb1-81320c8f2ab9",
+      "label": "client.ts",
+      "path": "packages/database/src/client.ts",
+      "group": "packages/database/src",
+      "kind": "file",
+      "loc": 45,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 6,
+      "fan_out": 0
+    },
+    {
+      "id": "1ceaaa49-096b-40b9-84ae-1708921bfc5d",
+      "label": "VerifyEmailDialog.test.tsx",
+      "path": "packages/ui/__tests__/VerifyEmailDialog.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 71,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "1eba97d9-203f-4b76-a5a0-67c228284a7c",
+      "label": "Logout.tsx",
+      "path": "packages/ui/src/components/icons/Logout.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 12,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "20fbb137-22f5-4aa5-b0bd-e7e62f2168c0",
+      "label": "Duplicate.tsx",
+      "path": "packages/ui/src/components/icons/Duplicate.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 12,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "21f7aebb-f616-419a-bc46-0fe72f400b2d",
+      "label": "upload.http.test.ts",
+      "path": "apps/api/src/__tests__/integration/http/upload.http.test.ts",
+      "group": "apps/api/src/__tests__/integration/http",
+      "kind": "file",
+      "loc": 284,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "22745b0a-6df2-4766-b518-866d16d3baf6",
+      "label": "canvas.ts",
+      "path": "apps/api/src/socket/canvas.ts",
+      "group": "apps/api/src/socket",
+      "kind": "file",
+      "loc": 188,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 4,
+      "fan_out": 1
+    },
+    {
+      "id": "249772dc-4425-4c51-b485-f92e930094b5",
+      "label": "canvasGeneration.fixtures.ts",
+      "path": "apps/api/src/__tests__/fixtures/canvasGeneration.fixtures.ts",
+      "group": "apps/api/src/__tests__/fixtures",
+      "kind": "file",
+      "loc": 183,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "28b3ab67-28db-4ea0-a467-54fa306dc58a",
+      "label": "MicrophoneOff.tsx",
+      "path": "packages/ui/src/components/icons/MicrophoneOff.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "2ac67b00-4322-4d20-948c-1c589e76a858",
+      "label": "document.http.test.ts",
+      "path": "apps/api/src/__tests__/integration/http/document.http.test.ts",
+      "group": "apps/api/src/__tests__/integration/http",
+      "kind": "file",
+      "loc": 166,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "2af3a96e-e042-4763-9e8e-6b7a098e4f69",
+      "label": "auth.tsx",
+      "path": "apps/web/actions/auth.tsx",
+      "group": "apps/web/actions",
+      "kind": "file",
+      "loc": 15,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "label": "Button.tsx",
+      "path": "packages/ui/src/components/Button.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 65,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 10,
+      "fan_out": 1
+    },
+    {
+      "id": "2b7c7980-5272-438d-a046-244936dc4372",
+      "label": "Signup.tsx",
+      "path": "packages/ui/src/components/icons/Signup.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "2e18583b-3942-4ce7-abc0-fff25a633801",
+      "label": "useChangePasswordForm.ts",
+      "path": "apps/web/hooks/useChangePasswordForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 261,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "2e8ed6ce-7ca4-467a-ae6b-a02af7106a1d",
+      "label": "setup.ts",
+      "path": "apps/api/testhelpers/setup.ts",
+      "group": "apps/api/testhelpers",
+      "kind": "file",
+      "loc": 45,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "2f988163-ef48-454c-a26c-d3b6e2cdd7d7",
+      "label": "fixtures.ts",
+      "path": "apps/web/e2e/fixtures.ts",
+      "group": "apps/web/e2e",
+      "kind": "file",
+      "loc": 58,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 6,
+      "fan_out": 0
+    },
+    {
+      "id": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "label": "WorkspaceSettings.test.tsx",
+      "path": "apps/web/tests/components/WorkspaceSettings.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 407,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 7
+    },
+    {
+      "id": "31db6409-4825-4b83-8b6b-5796e2f3dd7a",
+      "label": "cookieAttributes.ts",
+      "path": "apps/api/src/lib/cookieAttributes.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 126,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "339daee3-6072-4c03-a8d5-03fa82592ba3",
+      "label": "message.ts",
+      "path": "apps/web/api/message.ts",
+      "group": "apps/web/api",
+      "kind": "file",
+      "loc": 30,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "33b4058b-2637-4666-bf92-99267e484e12",
+      "label": "redis.ts",
+      "path": "apps/api/src/lib/redis.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 159,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 7,
+      "fan_out": 1
+    },
+    {
+      "id": "377a29ef-c51e-40d2-8d58-d4ae197814cc",
+      "label": "migrations.test.ts",
+      "path": "packages/database/__tests__/migrations.test.ts",
+      "group": "packages/database/__tests__",
+      "kind": "file",
+      "loc": 121,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "37c2a5a3-b137-4343-a9ff-da691703e381",
+      "label": "useWorkspaceDocumentForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useWorkspaceDocumentForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 325,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "37d49d62-a128-493b-8324-6c86b1386f7f",
+      "label": "useDeleteAccount.ts",
+      "path": "apps/web/hooks/useDeleteAccount.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 258,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "3968665f-eed5-4c72-8d96-cd78b9d461fa",
+      "label": "eslint.config.js",
+      "path": "apps/api/eslint.config.js",
+      "group": "apps/api",
+      "kind": "file",
+      "loc": 14,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "javascript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "399a3611-6156-4214-be80-ed354158699a",
+      "label": "Navbar.test.tsx",
+      "path": "packages/ui/__tests__/Navbar.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 120,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "3a014a12-a0bf-4630-9993-b68db3da1a26",
+      "label": "error.middleware.test.ts",
+      "path": "apps/api/src/__tests__/unit/error.middleware.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 181,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "3a623269-f970-4b04-9fd9-ff78d1523f44",
+      "label": "setup.ts",
+      "path": "apps/web/tests/setup.ts",
+      "group": "apps/web/tests",
+      "kind": "file",
+      "loc": 28,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "3ab253ce-203d-4fc9-bfb7-02bb35d237c9",
+      "label": "ToggleGroup.test.tsx",
+      "path": "packages/ui/__tests__/ToggleGroup.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 90,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "3e5012b7-faec-4841-935a-9c287397be52",
+      "label": "email.ts",
+      "path": "apps/api/src/lib/email.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 206,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "label": "Error.tsx",
+      "path": "packages/ui/src/components/icons/Error.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "critical",
+      "criticality_score": 100.0,
+      "language": "tsx",
+      "fan_in": 10,
+      "fan_out": 0
+    },
+    {
+      "id": "44de556d-566d-45b7-ab3b-a3ad10ead2d1",
+      "label": "useWorkspaceDocuments.ts",
+      "path": "apps/web/hooks/useWorkspaceDocuments.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 44,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "455df2f8-9175-453c-8711-df1efc3fd9f5",
+      "label": "Settings.tsx",
+      "path": "packages/ui/src/components/icons/Settings.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "46312e18-bbce-46db-8900-db06d7989f67",
+      "label": "signup.ts",
+      "path": "packages/types/src/validations/signup.ts",
+      "group": "packages/types/src/validations",
+      "kind": "file",
+      "loc": 28,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "46cae151-d334-4711-a8c3-2044334253ce",
+      "label": "page.tsx",
+      "path": "apps/web/app/home/page.tsx",
+      "group": "apps/web/app/home",
+      "kind": "file",
+      "loc": 57,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "471bc1f3-94c4-478f-b646-c59a4eda5c23",
+      "label": "validate.middleware.ts",
+      "path": "apps/api/src/middleware/validate.middleware.ts",
+      "group": "apps/api/src/middleware",
+      "kind": "file",
+      "loc": 36,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 1
+    },
+    {
+      "id": "47a64744-515a-4e36-81df-3ad756c817f3",
+      "label": "VoiceOverlay.test.tsx",
+      "path": "apps/web/tests/components/VoiceOverlay.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 112,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "47afd4ad-f053-4a03-826d-f666b265eeed",
+      "label": "presence.test.ts",
+      "path": "apps/api/src/__tests__/unit/presence.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 84,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "4a0926c7-589e-4e82-97f2-e3dcd8d279c5",
+      "label": "bot.test.ts",
+      "path": "apps/api/src/__tests__/unit/bot.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 260,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "4ae4b7d4-1b89-45f6-9af7-52580a0b50cd",
+      "label": "Skeleton.tsx",
+      "path": "packages/ui/src/components/Skeleton.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 20,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "4c05256a-b922-4042-8d26-a8a179f38ec5",
+      "label": "timeAgo.test.ts",
+      "path": "packages/utils/__tests__/timeAgo.test.ts",
+      "group": "packages/utils/__tests__",
+      "kind": "file",
+      "loc": 143,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "label": "app.ts",
+      "path": "apps/api/src/app.ts",
+      "group": "apps/api/src",
+      "kind": "file",
+      "loc": 123,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 21,
+      "fan_out": 9
+    },
+    {
+      "id": "4dd5cc14-d2fd-49eb-be8f-a0796e180cef",
+      "label": "TypingIndicator.tsx",
+      "path": "apps/web/components/TypingIndicator.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 53,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "4dd7c832-25fc-4142-a0dc-2787a99021a8",
+      "label": "Star.tsx",
+      "path": "packages/ui/src/components/icons/Star.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 12,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "label": "DocEditor.tsx",
+      "path": "apps/web/components/DocEditor.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 331,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 7
+    },
+    {
+      "id": "4f821b89-7db9-47f1-85bb-8c6549715eb2",
+      "label": "turn.router.ts",
+      "path": "apps/api/src/routers/turn.router.ts",
+      "group": "apps/api/src/routers",
+      "kind": "file",
+      "loc": 19,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "522a9340-af1f-412a-b746-99823b26c344",
+      "label": "VerifyEmailDialog.tsx",
+      "path": "packages/ui/src/components/VerifyEmailDialog.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 82,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "53600aab-8db3-4a00-9124-828059d629a6",
+      "label": "Clock.tsx",
+      "path": "packages/ui/src/components/icons/Clock.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 17,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "53d5519d-889e-4986-aa98-4c55aade4e2b",
+      "label": "VoiceControls.test.tsx",
+      "path": "apps/web/tests/components/VoiceControls.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 174,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 5
+    },
+    {
+      "id": "53f100eb-30ec-4501-8dd8-aa2606028c11",
+      "label": "chat.socket.test.ts",
+      "path": "apps/api/src/__tests__/integration/socket/chat.socket.test.ts",
+      "group": "apps/api/src/__tests__/integration/socket",
+      "kind": "file",
+      "loc": 238,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "54b7d380-a1c2-467b-b777-bb808c4e701b",
+      "label": "ResetPasswordForm.test.tsx",
+      "path": "apps/web/tests/components/ResetPasswordForm.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 121,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "554fdacd-206d-45f5-9358-9c23d8bf8aae",
+      "label": "boot.test.ts",
+      "path": "apps/api/src/__tests__/smoke/boot.test.ts",
+      "group": "apps/api/src/__tests__/smoke",
+      "kind": "file",
+      "loc": 52,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "label": "document.ts",
+      "path": "apps/api/src/socket/document.ts",
+      "group": "apps/api/src/socket",
+      "kind": "file",
+      "loc": 177,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 6,
+      "fan_out": 1
+    },
+    {
+      "id": "5696e821-afcb-4877-a50a-d628e9f4f8e4",
+      "label": "settings.spec.ts",
+      "path": "apps/web/e2e/settings.spec.ts",
+      "group": "apps/web/e2e",
+      "kind": "file",
+      "loc": 189,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "58269bc1-42ce-4d01-86c7-ce337903b683",
+      "label": "index.ts",
+      "path": "packages/utils/src/index.ts",
+      "group": "packages/utils/src",
+      "kind": "file",
+      "loc": 9,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 4,
+      "fan_out": 2
+    },
+    {
+      "id": "58280714-cd8b-4c49-a810-2d914cd927fa",
+      "label": "env.test.ts",
+      "path": "apps/api/src/__tests__/unit/env.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 110,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "584b4ac8-0135-4436-afcf-d67a1261f77e",
+      "label": "Options.tsx",
+      "path": "packages/ui/src/components/icons/Options.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "58d5708c-a7aa-4992-a319-8632f5b0e3b1",
+      "label": "bot.ts",
+      "path": "apps/api/src/lib/bot.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 149,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 3
+    },
+    {
+      "id": "5992acd7-e1f4-4260-a0cb-5d9ca861b36e",
+      "label": "contract.test.ts",
+      "path": "apps/api/src/__tests__/integration/contract.test.ts",
+      "group": "apps/api/src/__tests__/integration",
+      "kind": "file",
+      "loc": 128,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "5a0364d8-c93a-423b-ba0e-8eed40a555aa",
+      "label": "workspace.ts",
+      "path": "packages/types/src/validations/workspace.ts",
+      "group": "packages/types/src/validations",
+      "kind": "file",
+      "loc": 24,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "5a215f9d-05e4-470e-86d8-797e457d917d",
+      "label": "useProfileForm.ts",
+      "path": "apps/web/hooks/useProfileForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 114,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "5b56af5b-eb24-44ef-b0e8-25b29c883235",
+      "label": "ToggleGroup.tsx",
+      "path": "packages/ui/src/components/ToggleGroup.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 49,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "5bfb395c-7625-4f36-b0da-a54040ee48c0",
+      "label": "login.ts",
+      "path": "packages/types/src/validations/login.ts",
+      "group": "packages/types/src/validations",
+      "kind": "file",
+      "loc": 31,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "5ce01844-5c3e-413b-9251-d52bc9ae13f1",
+      "label": "ViewWorkspaces.test.tsx",
+      "path": "apps/web/tests/components/ViewWorkspaces.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 111,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "5dff4d8d-b516-4e43-a4de-ea2ad5526490",
+      "label": "not-found.tsx",
+      "path": "apps/web/app/workspace/[id]/not-found.tsx",
+      "group": "apps/web/app/workspace/[id]",
+      "kind": "file",
+      "loc": 50,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "5e8f2095-f9b5-4890-b6b3-9ef80d7569f4",
+      "label": "socketProvider.tsx",
+      "path": "apps/web/providers/socketProvider.tsx",
+      "group": "apps/web/providers",
+      "kind": "file",
+      "loc": 35,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "5f8ca2a9-16a3-4d2a-a616-9901ffd52e34",
+      "label": "factories.ts",
+      "path": "apps/api/testhelpers/factories.ts",
+      "group": "apps/api/testhelpers",
+      "kind": "file",
+      "loc": 104,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "601e0716-8d6c-4851-9f0c-8295bed89614",
+      "label": "DocEditor.test.tsx",
+      "path": "apps/web/tests/components/DocEditor.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 141,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "611c7ff6-56bf-4fc2-bd71-1fd9d2988c29",
+      "label": "voicePresence.ts",
+      "path": "apps/api/src/lib/voicePresence.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 68,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "6212b08e-25b0-4e95-8993-363deeaa2af9",
+      "label": "Spinner.tsx",
+      "path": "packages/ui/src/components/icons/Spinner.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 12,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "645f29e1-c82e-462a-91e0-b3a62058047d",
+      "label": "AiGenOverlay.tsx",
+      "path": "apps/web/components/AiGenOverlay.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 145,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "65050f07-c510-42cb-bbd4-c8472a9bde2e",
+      "label": "useWorkspacePermissions.ts",
+      "path": "apps/web/hooks/useWorkspacePermissions.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 78,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "6543378c-9e21-482d-8cdc-8b50431cb493",
+      "label": "workspace.spec.ts",
+      "path": "apps/web/e2e/workspace.spec.ts",
+      "group": "apps/web/e2e",
+      "kind": "file",
+      "loc": 85,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "66b15225-4e06-43d6-ac4c-cc3785fefdcc",
+      "label": "globalSetup.ts",
+      "path": "packages/database/testhelpers/globalSetup.ts",
+      "group": "packages/database/testhelpers",
+      "kind": "file",
+      "loc": 91,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "66db47de-b579-4faf-b361-2aa7104233b9",
+      "label": "useLoginForm.ts",
+      "path": "apps/web/hooks/useLoginForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 60,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "6767a8a5-50fb-4ec2-b312-b98c8b9007c8",
+      "label": "serverResponse.ts",
+      "path": "packages/types/src/api/serverResponse.ts",
+      "group": "packages/types/src/api",
+      "kind": "file",
+      "loc": 96,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "679d484f-96f6-4ae7-b990-08467247f794",
+      "label": "voice.socket.test.ts",
+      "path": "apps/api/src/__tests__/integration/socket/voice.socket.test.ts",
+      "group": "apps/api/src/__tests__/integration/socket",
+      "kind": "file",
+      "loc": 312,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "67a5a86f-6816-4d15-9bce-baa82fd44a33",
+      "label": "UserNavbar.tsx",
+      "path": "apps/web/components/UserNavbar.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 58,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 2
+    },
+    {
+      "id": "682037af-a9d9-40dc-b10a-5144aa6b666b",
+      "label": "HeadphonesOff.tsx",
+      "path": "packages/ui/src/components/icons/HeadphonesOff.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "69f45242-b971-4fd4-aeed-336e56912bc3",
+      "label": "useUpdateWorkspaceSettingsForm.ts",
+      "path": "apps/web/hooks/useUpdateWorkspaceSettingsForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 68,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "6a14292b-5c6a-40be-9210-e52b365638e7",
+      "label": "slugGenerator.ts",
+      "path": "packages/utils/src/slugGenerator.ts",
+      "group": "packages/utils/src",
+      "kind": "file",
+      "loc": 31,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "6a32ae80-1d91-4b09-8fb0-c22f00ffcc5c",
+      "label": "markdownGeneration.test.ts",
+      "path": "apps/api/src/__tests__/unit/markdownGeneration.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 139,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "6ba4b6f8-78ac-4163-b63b-3adacc873bed",
+      "label": "Clipboard.tsx",
+      "path": "packages/ui/src/components/icons/Clipboard.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 12,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "6c910b74-435f-4774-abfe-5d8ab788b573",
+      "label": "Edit.tsx",
+      "path": "packages/ui/src/components/icons/Edit.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "6c9333eb-9d3c-4626-95e2-fcd0e07a21eb",
+      "label": "MarkdownEditor.tsx",
+      "path": "apps/web/components/MarkdownEditor.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 235,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "6ec45ec4-faae-4f17-b35e-89a5ab47b443",
+      "label": "useActiveSessions.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useActiveSessions.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 348,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "label": "index.ts",
+      "path": "packages/database/src/index.ts",
+      "group": "packages/database/src",
+      "kind": "file",
+      "loc": 12,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 11,
+      "fan_out": 1
+    },
+    {
+      "id": "71f00f30-b235-419c-807b-b157f67a9dee",
+      "label": "useProfileForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useProfileForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 180,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "724b0ded-4443-4ebc-816d-ebf9efb63296",
+      "label": "AiGenOverlay.test.tsx",
+      "path": "apps/web/tests/components/AiGenOverlay.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 121,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "7390cc57-addd-431e-96cb-0b90eeb4e095",
+      "label": "workspace.controller.test.ts",
+      "path": "apps/api/src/__tests__/unit/workspace.controller.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 343,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "73cea40c-a80c-4a88-ae81-d0c7b4072d9f",
+      "label": "dbTestUtils.ts",
+      "path": "packages/database/__tests__/dbTestUtils.ts",
+      "group": "packages/database/__tests__",
+      "kind": "file",
+      "loc": 143,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 4,
+      "fan_out": 2
+    },
+    {
+      "id": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "label": "auth.ts",
+      "path": "apps/api/src/lib/auth.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 168,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 4,
+      "fan_out": 5
+    },
+    {
+      "id": "7700119b-602c-4265-a3f3-3bf0a089fc5d",
+      "label": "Avatar.tsx",
+      "path": "packages/ui/src/components/Avatar.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 37,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 6,
+      "fan_out": 0
+    },
+    {
+      "id": "7807b0d0-1c6a-435b-abb7-12256d0c03a1",
+      "label": "Plus.tsx",
+      "path": "packages/ui/src/components/icons/Plus.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "78429ab8-daca-4fe8-b3bc-7845b94f2882",
+      "label": "SettingTabs.test.tsx",
+      "path": "packages/ui/__tests__/SettingTabs.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 60,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "78be517c-18a8-4d0f-8d4b-d094d57adb5c",
+      "label": "OptionsMenu.tsx",
+      "path": "packages/ui/src/components/OptionsMenu.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 100,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 4,
+      "fan_out": 0
+    },
+    {
+      "id": "7b3cf7b0-b72f-48bb-b991-f1a514491efa",
+      "label": "guards.security.test.ts",
+      "path": "apps/api/src/__tests__/security/guards.security.test.ts",
+      "group": "apps/api/src/__tests__/security",
+      "kind": "file",
+      "loc": 374,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "7b4f4db1-bb5e-4e65-b3aa-ff2d6f661a0c",
+      "label": "page.tsx",
+      "path": "apps/web/app/settings/page.tsx",
+      "group": "apps/web/app/settings",
+      "kind": "file",
+      "loc": 63,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "7dc3e9ef-031e-436a-8f2e-2890fdcde797",
+      "label": "voice.ts",
+      "path": "packages/types/src/socket/voice.ts",
+      "group": "packages/types/src/socket",
+      "kind": "file",
+      "loc": 17,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "7dde92e0-637c-46cf-957a-e8ad65d8ee59",
+      "label": "debouncedSave.test.ts",
+      "path": "apps/api/src/__tests__/integration/persistence/debouncedSave.test.ts",
+      "group": "apps/api/src/__tests__/integration/persistence",
+      "kind": "file",
+      "loc": 156,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "7ee2954c-c59b-4d31-89d8-56f94800bf6e",
+      "label": "workspace.ts",
+      "path": "apps/web/api/workspace.ts",
+      "group": "apps/web/api",
+      "kind": "file",
+      "loc": 90,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "7f3266d4-86a8-4950-8073-8044031a1e7e",
+      "label": "socket.middleware.ts",
+      "path": "apps/api/src/middleware/socket.middleware.ts",
+      "group": "apps/api/src/middleware",
+      "kind": "file",
+      "loc": 41,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "80748c1a-5814-4355-ab74-e67d49019991",
+      "label": "AlertDialog.tsx",
+      "path": "packages/ui/src/components/AlertDialog.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 81,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 5,
+      "fan_out": 0
+    },
+    {
+      "id": "8171ff9c-53fb-44d9-9aa1-f494712e19d6",
+      "label": "document.router.ts",
+      "path": "apps/api/src/routers/document.router.ts",
+      "group": "apps/api/src/routers",
+      "kind": "file",
+      "loc": 56,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    {
+      "id": "819a592e-57d1-4f00-8ed7-4f0d0b2bd676",
+      "label": "serverResponse.test.ts",
+      "path": "apps/api/src/__tests__/unit/serverResponse.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 92,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "81e2565a-50e5-42d0-8dd4-d187bdd3de33",
+      "label": "tailwind.config.ts",
+      "path": "packages/ui/tailwind.config.ts",
+      "group": "packages/ui",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "82f535c3-9c43-43f1-b394-1523c5c35850",
+      "label": "groqClient.ts",
+      "path": "apps/api/src/lib/groqClient.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 16,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "83685da7-842f-468f-90a5-064ec0db3d48",
+      "label": "email.test.ts",
+      "path": "apps/api/src/__tests__/unit/email.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 150,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "842b00c6-4ac9-4ea6-bfb5-e9ada09d006e",
+      "label": "chat.spec.ts",
+      "path": "apps/web/e2e/chat.spec.ts",
+      "group": "apps/web/e2e",
+      "kind": "file",
+      "loc": 74,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "label": "auth-client.ts",
+      "path": "apps/web/lib/auth-client.ts",
+      "group": "apps/web/lib",
+      "kind": "file",
+      "loc": 15,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 17,
+      "fan_out": 0
+    },
+    {
+      "id": "86deeb2d-a0d6-48fa-b6db-4d165bd3589b",
+      "label": "Button.test.tsx",
+      "path": "packages/ui/__tests__/Button.test.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 103,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "8789e341-9eb4-4533-b437-3f1e823f7395",
+      "label": "VoiceOverlay.tsx",
+      "path": "apps/web/components/VoiceOverlay.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 123,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "88713b69-db31-4831-8ebe-846af77482df",
+      "label": "testDatabase.ts",
+      "path": "packages/database/testhelpers/testDatabase.ts",
+      "group": "packages/database/testhelpers",
+      "kind": "file",
+      "loc": 71,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "8951b2b8-8a30-49a9-b52d-45c4fee55590",
+      "label": "OrContinueWith.tsx",
+      "path": "packages/ui/src/components/OrContinueWith.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 17,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "8a2b9cbd-7b68-4cf3-83d7-74b467f209a4",
+      "label": "message.ts",
+      "path": "packages/types/src/api/message.ts",
+      "group": "packages/types/src/api",
+      "kind": "file",
+      "loc": 15,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "8ad7efa3-d4bf-4deb-8554-4b9e162c2d81",
+      "label": "tailwind.config.ts",
+      "path": "apps/web/tailwind.config.ts",
+      "group": "apps/web",
+      "kind": "file",
+      "loc": 18,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "8b1566f0-f281-4cb3-8748-37fe1ae99ec0",
+      "label": "page.tsx",
+      "path": "apps/web/app/login/page.tsx",
+      "group": "apps/web/app/login",
+      "kind": "file",
+      "loc": 36,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "8b19e380-a1f9-4525-adc4-b4f6f7097c41",
+      "label": "useAvatarUpload.ts",
+      "path": "apps/web/hooks/useAvatarUpload.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 198,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "label": "getAvatarForUser.ts",
+      "path": "packages/ui/src/utils/getAvatarForUser.ts",
+      "group": "packages/ui/src/utils",
+      "kind": "file",
+      "loc": 43,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 8,
+      "fan_out": 0
+    },
+    {
+      "id": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "label": "FormSwitch.tsx",
+      "path": "apps/web/components/FormSwitch.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 93,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 5
+    },
+    {
+      "id": "8d98b611-e3f5-4e97-82c9-9fc365942902",
+      "label": "useWorkspaceJoinForm.ts",
+      "path": "apps/web/hooks/useWorkspaceJoinForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 60,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "8e197165-9b1a-443e-88ab-60990f51e23f",
+      "label": "useResetPasswordForm.ts",
+      "path": "apps/web/hooks/useResetPasswordForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 66,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "8f962453-fedc-4202-ac61-383dbdd06ffb",
+      "label": "Github.tsx",
+      "path": "packages/ui/src/components/icons/Github.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 8,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "8fafd235-4c1b-418a-afd3-64c21dd766f6",
+      "label": "rbac.security.test.ts",
+      "path": "apps/api/src/__tests__/security/rbac.security.test.ts",
+      "group": "apps/api/src/__tests__/security",
+      "kind": "file",
+      "loc": 194,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "90b17487-3c69-427b-a2af-c052db6a46eb",
+      "label": "LoginForm.test.tsx",
+      "path": "apps/web/tests/components/LoginForm.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 125,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "91213b3a-1011-4381-ad13-f109171f7be9",
+      "label": "useTypingIndicator.ts",
+      "path": "apps/web/hooks/useTypingIndicator.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 188,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "label": "index.ts",
+      "path": "packages/types/src/index.ts",
+      "group": "packages/types/src",
+      "kind": "file",
+      "loc": 32,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 40,
+      "fan_out": 11
+    },
+    {
+      "id": "93b86c17-3a11-455a-a9e1-47f8f676c195",
+      "label": "CreateWorkspaceCard.test.tsx",
+      "path": "apps/web/tests/components/CreateWorkspaceCard.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 179,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "94061f6c-480b-4801-bfbf-dc3ae0d70563",
+      "label": "env.ts",
+      "path": "apps/api/src/lib/env.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 115,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "94a04b63-bf0e-49ae-9f0f-7495880cb9f9",
+      "label": "ChatMsgA.tsx",
+      "path": "packages/ui/src/components/ChatMsgA.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 60,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "94a748b9-e4c8-4a5b-a55c-ad023e44d1f1",
+      "label": "workspace.router.ts",
+      "path": "apps/api/src/routers/workspace.router.ts",
+      "group": "apps/api/src/routers",
+      "kind": "file",
+      "loc": 109,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 3
+    },
+    {
+      "id": "94ca578a-705e-4df9-8a98-35143f873789",
+      "label": "Flow.tsx",
+      "path": "packages/ui/src/components/icons/Flow.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "9723a862-f3dc-4fc9-8f0b-2fff2b74779a",
+      "label": "Linkedin.tsx",
+      "path": "packages/ui/src/components/icons/Linkedin.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "98189ea2-d4a0-4b98-b9af-21a30116b2d7",
+      "label": "useWorkspaceMembers.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useWorkspaceMembers.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 192,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "9852722a-2853-4849-80f6-32c071cce990",
+      "label": "SettingTabs.tsx",
+      "path": "packages/ui/src/components/SettingTabs.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 46,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "9879852e-33f3-4dd2-91e5-15a78dda5f0a",
+      "label": "getAvatarForUser.test.ts",
+      "path": "packages/ui/__tests__/getAvatarForUser.test.ts",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 34,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "98ae64ba-4c1b-48a0-bda8-6d5754fb0e71",
+      "label": "useWorkspacePermissions.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useWorkspacePermissions.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 254,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "9a5642b6-275b-412b-a8ef-f25f98d091a6",
+      "label": "Microphone.tsx",
+      "path": "packages/ui/src/components/icons/Microphone.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "9adcb828-2cf3-4d59-b80e-5aa752f14df1",
+      "label": "auth.http.test.ts",
+      "path": "apps/api/src/__tests__/integration/http/auth.http.test.ts",
+      "group": "apps/api/src/__tests__/integration/http",
+      "kind": "file",
+      "loc": 771,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "9b403eca-8f15-4bd9-9e1e-06d7eed722b3",
+      "label": "useWorkspaceDocuments.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useWorkspaceDocuments.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 157,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "9ba851f0-26fa-47f5-88ae-21fd45c4ef35",
+      "label": "transport.security.test.ts",
+      "path": "apps/api/src/__tests__/security/transport.security.test.ts",
+      "group": "apps/api/src/__tests__/security",
+      "kind": "file",
+      "loc": 122,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "9bc30ed4-81cf-4106-b122-5e22cfaa6fdd",
+      "label": "ChatMsgB.tsx",
+      "path": "packages/ui/src/components/ChatMsgB.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 57,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "9c98b3dc-33f8-44c1-97aa-ae2920be2dba",
+      "label": "Login.tsx",
+      "path": "packages/ui/src/components/icons/Login.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "label": "handlers.ts",
+      "path": "apps/web/tests/msw/handlers.ts",
+      "group": "apps/web/tests/msw",
+      "kind": "file",
+      "loc": 212,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 17,
+      "fan_out": 0
+    },
+    {
+      "id": "a0a36547-7517-4da1-99b0-f85eda8b2230",
+      "label": "document.ts",
+      "path": "packages/types/src/validations/document.ts",
+      "group": "packages/types/src/validations",
+      "kind": "file",
+      "loc": 18,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "a1132790-d55c-41fa-a142-c7294b6aa97c",
+      "label": "useWorkspaceJoinForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useWorkspaceJoinForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 178,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "a1f5cb2f-f820-4f82-8afd-3736065286a5",
+      "label": "openaiClient.ts",
+      "path": "apps/api/src/lib/openaiClient.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 16,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "a2a208f5-e655-4fcb-97d6-e8b84e0605f4",
+      "label": "upload.controller.ts",
+      "path": "apps/api/src/controllers/upload.controller.ts",
+      "group": "apps/api/src/controllers",
+      "kind": "file",
+      "loc": 33,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "a3a5419a-7424-48fc-9ef4-7a495ded11c7",
+      "label": "MarkdownEditor.test.tsx",
+      "path": "apps/web/tests/components/MarkdownEditor.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 82,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "a5b79571-0adc-4d79-bd45-661f8abc7189",
+      "label": "useDeleteAccount.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useDeleteAccount.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 396,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "label": "master.router.ts",
+      "path": "apps/api/src/routers/master.router.ts",
+      "group": "apps/api/src/routers",
+      "kind": "file",
+      "loc": 24,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 6
+    },
+    {
+      "id": "a81de1f8-5079-4f0e-b56c-6766b2025cf0",
+      "label": "Textarea.tsx",
+      "path": "packages/ui/src/components/Textarea.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 26,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 4,
+      "fan_out": 0
+    },
+    {
+      "id": "a81e90b8-1a98-472f-be17-2df22317f044",
+      "label": "useResetPasswordForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useResetPasswordForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 224,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "label": "testUtils.ts",
+      "path": "apps/web/tests/components/testUtils.ts",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 67,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 18,
+      "fan_out": 1
+    },
+    {
+      "id": "aa3d612f-2388-4de1-bf69-4017df3cb328",
+      "label": "page.tsx",
+      "path": "apps/web/app/email-verified/page.tsx",
+      "group": "apps/web/app/email-verified",
+      "kind": "file",
+      "loc": 49,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "ab08fd27-e9f8-4a4f-b1ae-2363caa5d849",
+      "label": "useUpdateWorkspaceSettingsForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useUpdateWorkspaceSettingsForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 223,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "ab3db635-e1da-49b4-8020-d1f91648a7c1",
+      "label": "parseUserAgent.test.ts",
+      "path": "apps/web/tests/unit/lib/parseUserAgent.test.ts",
+      "group": "apps/web/tests/unit/lib",
+      "kind": "file",
+      "loc": 97,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "ab84bfca-8baf-4cd4-9ee2-39033d89c4fb",
+      "label": "cookieAttributes.test.ts",
+      "path": "apps/api/src/__tests__/unit/cookieAttributes.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 141,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "abfcb18e-72ea-4f86-989a-dda6bbd2bd88",
+      "label": "useSignupForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useSignupForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 234,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "acf18469-31da-49d1-8db9-83311e086863",
+      "label": "useWorkspaceDocumentForm.ts",
+      "path": "apps/web/hooks/useWorkspaceDocumentForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 87,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "ae09c648-c9bf-4ec5-bbf9-483799c9b1ca",
+      "label": "useSignupForm.ts",
+      "path": "apps/web/hooks/useSignupForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 65,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "af5dfb86-d5bc-4102-af0f-55d2a42c395a",
+      "label": "error.middleware.ts",
+      "path": "apps/api/src/middleware/error.middleware.ts",
+      "group": "apps/api/src/middleware",
+      "kind": "file",
+      "loc": 90,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "aff002e8-c75e-43e7-be6e-3f182e45afdf",
+      "label": "UserNavbar.test.tsx",
+      "path": "apps/web/tests/components/UserNavbar.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 127,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "b0fb2405-432e-4c60-9310-ced6b3c0a063",
+      "label": "SignupForm.test.tsx",
+      "path": "apps/web/tests/components/SignupForm.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 165,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "b47e8645-73e0-4992-96d3-8bed1d52248b",
+      "label": "workspace.http.test.ts",
+      "path": "apps/api/src/__tests__/integration/http/workspace.http.test.ts",
+      "group": "apps/api/src/__tests__/integration/http",
+      "kind": "file",
+      "loc": 229,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "b6266ea9-07a7-4ce2-b689-e3e132ca1d93",
+      "label": "useTypingIndicator.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useTypingIndicator.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 306,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "b843b687-d904-469b-964b-ae18c27825d6",
+      "label": "authCheck.middleware.ts",
+      "path": "apps/api/src/middleware/authCheck.middleware.ts",
+      "group": "apps/api/src/middleware",
+      "kind": "file",
+      "loc": 35,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "b89bd445-a2b9-4398-9e31-736c85c7223d",
+      "label": "constraints.test.ts",
+      "path": "packages/database/__tests__/constraints.test.ts",
+      "group": "packages/database/__tests__",
+      "kind": "file",
+      "loc": 433,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "b9287a80-ad1e-4e47-87de-a13af5bf1509",
+      "label": "useWorkspaceMembers.ts",
+      "path": "apps/web/hooks/useWorkspaceMembers.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 75,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "ba0891a1-06b3-41f3-89a2-f9f06b43dc2a",
+      "label": "useVoiceChat.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useVoiceChat.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 889,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "ba46b41c-979c-4faf-a5b9-1cc4d56f6b19",
+      "label": "turnCredentials.test.ts",
+      "path": "apps/api/src/__tests__/unit/turnCredentials.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 72,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "label": "DocEditorRefContext.tsx",
+      "path": "apps/web/components/DocEditorRefContext.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 35,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 7,
+      "fan_out": 1
+    },
+    {
+      "id": "bc150768-bddd-4578-8a56-702d2ec5483d",
+      "label": "redis-adapter.test.ts",
+      "path": "apps/api/src/__tests__/integration/socket/redis-adapter.test.ts",
+      "group": "apps/api/src/__tests__/integration/socket",
+      "kind": "file",
+      "loc": 169,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "bce97d80-eceb-4479-aade-b133a09df237",
+      "label": "validate.middleware.test.ts",
+      "path": "apps/api/src/__tests__/unit/validate.middleware.test.ts",
+      "group": "apps/api/src/__tests__/unit",
+      "kind": "file",
+      "loc": 109,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "bd8a6429-dd0e-41e3-acb1-888665489188",
+      "label": "DocTabs.tsx",
+      "path": "packages/ui/src/components/DocTabs.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 136,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "bda5129b-0e25-424b-a62e-7a7fa5e1c1e9",
+      "label": "markdownGeneration.ts",
+      "path": "apps/api/src/lib/markdownGeneration.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 54,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "be3ed54a-2277-4c95-a6c4-4df9ee90fa26",
+      "label": "useLoginForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useLoginForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 204,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "bf0f986e-50d3-442d-8820-30ec51c189fb",
+      "label": "loading.tsx",
+      "path": "apps/web/app/home/loading.tsx",
+      "group": "apps/web/app/home",
+      "kind": "file",
+      "loc": 44,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "bf661d54-96f7-410c-ac11-89c0b3c9548a",
+      "label": "accountDeletion.ts",
+      "path": "apps/api/src/lib/accountDeletion.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 68,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "label": "Navbar.tsx",
+      "path": "packages/ui/src/components/Navbar.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 88,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 6
+    },
+    {
+      "id": "c0561b13-50fb-47cd-8ee0-26db7b396de9",
+      "label": "infra.test.ts",
+      "path": "apps/api/src/__tests__/smoke/infra.test.ts",
+      "group": "apps/api/src/__tests__/smoke",
+      "kind": "file",
+      "loc": 54,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "c06ba98f-cf2d-455e-a3b2-1ffaf3eeb64f",
+      "label": "message.controller.ts",
+      "path": "apps/api/src/controllers/message.controller.ts",
+      "group": "apps/api/src/controllers",
+      "kind": "file",
+      "loc": 56,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "c0fec039-2fbe-4847-85b1-3d10258e750f",
+      "label": "loading.tsx",
+      "path": "apps/web/app/workspace/[id]/loading.tsx",
+      "group": "apps/web/app/workspace/[id]",
+      "kind": "file",
+      "loc": 34,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "c252d265-563a-448a-a63c-8b814d1f6648",
+      "label": "auth.spec.ts",
+      "path": "apps/web/e2e/auth.spec.ts",
+      "group": "apps/web/e2e",
+      "kind": "file",
+      "loc": 152,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "c3f2363a-a9f3-4cf8-bd69-bc6e37c89811",
+      "label": "base.js",
+      "path": "packages/eslint-config/base.js",
+      "group": "packages/eslint-config",
+      "kind": "file",
+      "loc": 33,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "javascript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "c5bcd75b-436b-4369-bcee-04d72607f669",
+      "label": "account.ts",
+      "path": "packages/types/src/validations/account.ts",
+      "group": "packages/types/src/validations",
+      "kind": "file",
+      "loc": 85,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "c5ca586b-a521-4c00-9ed7-e5e67ab25977",
+      "label": "useWorkspaceForm.ts",
+      "path": "apps/web/hooks/useWorkspaceForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 60,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "c5f9f9f2-365e-4d04-bbf3-55221ac62842",
+      "label": "upload.router.ts",
+      "path": "apps/api/src/routers/upload.router.ts",
+      "group": "apps/api/src/routers",
+      "kind": "file",
+      "loc": 24,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "label": "VoiceControls.tsx",
+      "path": "apps/web/components/VoiceControls.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 124,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 12
+    },
+    {
+      "id": "c6a3f653-a878-44f2-8b31-7afff94d4150",
+      "label": "useAvatarUpload.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useAvatarUpload.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 270,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "c73985a7-a9b0-41b0-9d74-4ccc36220c4a",
+      "label": "useActiveSessions.ts",
+      "path": "apps/web/hooks/useActiveSessions.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 152,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 1
+    },
+    {
+      "id": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "label": "Chat.tsx",
+      "path": "apps/web/components/Chat.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 236,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 13
+    },
+    {
+      "id": "cb6e3eb8-6a27-4838-9214-54668f0607f9",
+      "label": "index.test.ts",
+      "path": "packages/utils/__tests__/index.test.ts",
+      "group": "packages/utils/__tests__",
+      "kind": "file",
+      "loc": 21,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "label": "page.tsx",
+      "path": "apps/web/app/page.tsx",
+      "group": "apps/web/app",
+      "kind": "file",
+      "loc": 798,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 11
+    },
+    {
+      "id": "cf1ca100-98ff-4072-9e1e-8ef1c3559f13",
+      "label": "AiGenOrb.tsx",
+      "path": "packages/ui/src/components/AiGenOrb.tsx",
+      "group": "packages/ui/src/components",
+      "kind": "file",
+      "loc": 127,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "d041d654-354a-4f63-b795-55aa96e6b4ee",
+      "label": "chat.ts",
+      "path": "apps/api/src/socket/chat.ts",
+      "group": "apps/api/src/socket",
+      "kind": "file",
+      "loc": 283,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 5
+    },
+    {
+      "id": "d1692e16-483d-4bdf-8108-863c8956a6ab",
+      "label": "useForgotPasswordForm.ts",
+      "path": "apps/web/hooks/useForgotPasswordForm.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 59,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "d2cc1693-6e9f-4351-bc74-bab4ca57bc5f",
+      "label": "ViewWorkspaces.tsx",
+      "path": "apps/web/components/ViewWorkspaces.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 73,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 4
+    },
+    {
+      "id": "d4bbbafb-aa52-4df4-9729-01b7ceb964ec",
+      "label": "cloudinary.ts",
+      "path": "apps/api/src/lib/cloudinary.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 133,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "d4ec319d-9d6f-4c3b-9d22-5e989b18d849",
+      "label": "Delete.tsx",
+      "path": "packages/ui/src/components/icons/Delete.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "d5356c59-d65f-4253-988d-6bd16e3b86e0",
+      "label": "voice.ts",
+      "path": "apps/api/src/socket/voice.ts",
+      "group": "apps/api/src/socket",
+      "kind": "file",
+      "loc": 186,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "d61c6eb9-6091-43ba-b7c1-449e7d7b29a0",
+      "label": "database.ts",
+      "path": "apps/api/testhelpers/database.ts",
+      "group": "apps/api/testhelpers",
+      "kind": "file",
+      "loc": 73,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 2
+    },
+    {
+      "id": "d6349337-ac82-4e6e-a864-28f0c6275f77",
+      "label": "ForgotPasswordForm.test.tsx",
+      "path": "apps/web/tests/components/ForgotPasswordForm.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 120,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "d70b8937-cdb2-46b7-a540-c78a89ea803c",
+      "label": "yjs.convergence.test.ts",
+      "path": "apps/api/src/__tests__/integration/socket/yjs.convergence.test.ts",
+      "group": "apps/api/src/__tests__/integration/socket",
+      "kind": "file",
+      "loc": 176,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "d7e71fc8-c489-4b0c-b493-c21cc01cd649",
+      "label": "session.ts",
+      "path": "apps/api/testhelpers/session.ts",
+      "group": "apps/api/testhelpers",
+      "kind": "file",
+      "loc": 97,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "d89b4332-d5f1-497e-b1e8-deefa076a297",
+      "label": "useForgotPasswordForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useForgotPasswordForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 165,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "da85b4e9-e056-4687-ae36-1970bed81a32",
+      "label": "smoke.spec.ts",
+      "path": "apps/web/e2e/smoke.spec.ts",
+      "group": "apps/web/e2e",
+      "kind": "file",
+      "loc": 77,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "db43e3bc-341b-457d-a674-93d47f3783d9",
+      "label": "AccountSettings.test.tsx",
+      "path": "apps/web/tests/components/AccountSettings.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 431,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    },
+    {
+      "id": "db78ab9a-3ca3-4a1c-bc0d-3e7cad9a23bb",
+      "label": "socketEvents.ts",
+      "path": "packages/types/src/socket/socketEvents.ts",
+      "group": "packages/types/src/socket",
+      "kind": "file",
+      "loc": 149,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "dbe958c4-0c8c-4737-9e84-80af55085f31",
+      "label": "index.ts",
+      "path": "apps/api/testhelpers/index.ts",
+      "group": "apps/api/testhelpers",
+      "kind": "file",
+      "loc": 22,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 5
+    },
+    {
+      "id": "de932dc7-fc8e-4edf-8582-2c5836d8bdd6",
+      "label": "Twitter.tsx",
+      "path": "packages/ui/src/components/icons/Twitter.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 8,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "df198eef-6ab6-47b7-bb85-40e7661061cd",
+      "label": "socketHarness.ts",
+      "path": "apps/api/testhelpers/socketHarness.ts",
+      "group": "apps/api/testhelpers",
+      "kind": "file",
+      "loc": 91,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "e319e8bf-cd10-4c76-b5d5-c168235c01a6",
+      "label": "useVoiceChat.ts",
+      "path": "apps/web/hooks/useVoiceChat.ts",
+      "group": "apps/web/hooks",
+      "kind": "file",
+      "loc": 720,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "e455068c-9c69-419f-a1e7-ac024f77a5d3",
+      "label": "Headphones.tsx",
+      "path": "packages/ui/src/components/icons/Headphones.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "e4a717a9-66d5-4585-921d-49d0cc2bca1a",
+      "label": "Markdown.tsx",
+      "path": "packages/ui/src/components/icons/Markdown.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "e4be62fa-49ea-43dd-a9e4-5e20a274bcd5",
+      "label": "document.socket.test.ts",
+      "path": "apps/api/src/__tests__/integration/socket/document.socket.test.ts",
+      "group": "apps/api/src/__tests__/integration/socket",
+      "kind": "file",
+      "loc": 262,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "label": "SignupForm.tsx",
+      "path": "apps/web/components/SignupForm.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 153,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 8
+    },
+    {
+      "id": "e7085a04-8df9-4d50-84c9-c12932ae6c54",
+      "label": "turn.http.test.ts",
+      "path": "apps/api/src/__tests__/integration/http/turn.http.test.ts",
+      "group": "apps/api/src/__tests__/integration/http",
+      "kind": "file",
+      "loc": 105,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "ea378709-3a1b-4e11-8a15-94eac329905c",
+      "label": "layout.tsx",
+      "path": "apps/web/app/layout.tsx",
+      "group": "apps/web/app",
+      "kind": "file",
+      "loc": 115,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "label": "document.ts",
+      "path": "apps/web/api/document.ts",
+      "group": "apps/web/api",
+      "kind": "file",
+      "loc": 64,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "typescript",
+      "fan_in": 12,
+      "fan_out": 0
+    },
+    {
+      "id": "eed8ead3-2121-4172-88ab-d69ae3340cc0",
+      "label": "useChangePasswordForm.test.tsx",
+      "path": "apps/web/tests/unit/hooks/useChangePasswordForm.test.tsx",
+      "group": "apps/web/tests/unit/hooks",
+      "kind": "file",
+      "loc": 411,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "label": "CreateWorkspaceCard.tsx",
+      "path": "apps/web/components/CreateWorkspaceCard.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 189,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 9
+    },
+    {
+      "id": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "label": "WorkspaceSettings.tsx",
+      "path": "apps/web/components/WorkspaceSettings.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 523,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 24
+    },
+    {
+      "id": "f30397ca-d866-463b-8399-a5361abfd078",
+      "label": "testUtils.tsx",
+      "path": "packages/ui/__tests__/testUtils.tsx",
+      "group": "packages/ui/__tests__",
+      "kind": "file",
+      "loc": 109,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 10,
+      "fan_out": 0
+    },
+    {
+      "id": "f456b554-187c-4c59-a8a8-caa87604f307",
+      "label": "CreateDocument.tsx",
+      "path": "packages/ui/src/components/icons/CreateDocument.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "label": "ResetPasswordForm.tsx",
+      "path": "apps/web/components/ResetPasswordForm.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 98,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 6
+    },
+    {
+      "id": "f476fd0e-7ca1-4ec3-985d-18047b9446fd",
+      "label": "eslint.config.js",
+      "path": "apps/web/eslint.config.js",
+      "group": "apps/web",
+      "kind": "file",
+      "loc": 19,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "javascript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "f4c8f7e7-111b-4c19-a02b-0870f2805d27",
+      "label": "presence.ts",
+      "path": "apps/api/src/lib/presence.ts",
+      "group": "apps/api/src/lib",
+      "kind": "file",
+      "loc": 46,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 1
+    },
+    {
+      "id": "f5839f36-3d01-415a-bd6d-3c8996e734fd",
+      "label": "Canvas.test.tsx",
+      "path": "apps/web/tests/components/Canvas.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 71,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "f59ba8b5-a6e9-41db-8510-a79decff695b",
+      "label": "bot.ts",
+      "path": "packages/types/src/api/bot.ts",
+      "group": "packages/types/src/api",
+      "kind": "file",
+      "loc": 22,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "f6adf3b7-4cff-40ab-b46f-bf7cacaf17de",
+      "label": "page.tsx",
+      "path": "apps/web/app/reset-password/page.tsx",
+      "group": "apps/web/app/reset-password",
+      "kind": "file",
+      "loc": 47,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 2
+    },
+    {
+      "id": "f6fe2982-8def-4713-9333-bde34f6e041c",
+      "label": "message.http.test.ts",
+      "path": "apps/api/src/__tests__/integration/http/message.http.test.ts",
+      "group": "apps/api/src/__tests__/integration/http",
+      "kind": "file",
+      "loc": 117,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "label": "LoginForm.tsx",
+      "path": "apps/web/components/LoginForm.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 136,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 7
+    },
+    {
+      "id": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "label": "socket.ts",
+      "path": "apps/web/lib/socket.ts",
+      "group": "apps/web/lib",
+      "kind": "file",
+      "loc": 23,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 7,
+      "fan_out": 1
+    },
+    {
+      "id": "f8d166a1-ffe6-43d2-92a0-2425784cec17",
+      "label": "timeAgo.ts",
+      "path": "packages/utils/src/timeAgo.ts",
+      "group": "packages/utils/src",
+      "kind": "file",
+      "loc": 52,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "f935a780-4940-4f8b-aa7f-5d20e76a0e87",
+      "label": "index.ts",
+      "path": "apps/api/src/index.ts",
+      "group": "apps/api/src",
+      "kind": "file",
+      "loc": 49,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 4
+    },
+    {
+      "id": "f93b5050-1f3b-4bda-bf90-12d993948e31",
+      "label": "documents.spec.ts",
+      "path": "apps/web/e2e/documents.spec.ts",
+      "group": "apps/web/e2e",
+      "kind": "file",
+      "loc": 51,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "f98ffb84-00db-49e6-90e5-0cd9f19c9411",
+      "label": "slugGenerator.test.ts",
+      "path": "packages/utils/__tests__/slugGenerator.test.ts",
+      "group": "packages/utils/__tests__",
+      "kind": "file",
+      "loc": 102,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "label": "ForgotPasswordForm.tsx",
+      "path": "apps/web/components/ForgotPasswordForm.tsx",
+      "group": "apps/web/components",
+      "kind": "file",
+      "loc": 96,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 5
+    },
+    {
+      "id": "fb0d13ca-4f11-4831-93d4-5c2620a1b923",
+      "label": "Lock.tsx",
+      "path": "packages/ui/src/components/icons/Lock.tsx",
+      "group": "packages/ui/src/components/icons",
+      "kind": "file",
+      "loc": 13,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 0
+    },
+    {
+      "id": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "label": "page.tsx",
+      "path": "apps/web/app/workspace/[id]/page.tsx",
+      "group": "apps/web/app/workspace/[id]",
+      "kind": "file",
+      "loc": 85,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 10
+    },
+    {
+      "id": "ff8f2111-7755-4e4c-9284-b8563fed90c4",
+      "label": "DocEditorRefContext.test.tsx",
+      "path": "apps/web/tests/components/DocEditorRefContext.test.tsx",
+      "group": "apps/web/tests/components",
+      "kind": "file",
+      "loc": 141,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 3
+    }
+  ],
+  "links": [
+    {
+      "source": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "target": "1c762973-dee4-4704-bcb1-81320c8f2ab9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0d418b84-b95c-4a25-bca5-fc235721a3fd",
+      "target": "73cea40c-a80c-4a88-ae81-d0c7b4072d9f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0d418b84-b95c-4a25-bca5-fc235721a3fd",
+      "target": "1c762973-dee4-4704-bcb1-81320c8f2ab9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0a913865-c685-4502-84a9-ead21316880b",
+      "target": "73cea40c-a80c-4a88-ae81-d0c7b4072d9f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0a913865-c685-4502-84a9-ead21316880b",
+      "target": "1c762973-dee4-4704-bcb1-81320c8f2ab9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b89bd445-a2b9-4398-9e31-736c85c7223d",
+      "target": "73cea40c-a80c-4a88-ae81-d0c7b4072d9f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b89bd445-a2b9-4398-9e31-736c85c7223d",
+      "target": "1c762973-dee4-4704-bcb1-81320c8f2ab9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "377a29ef-c51e-40d2-8d58-d4ae197814cc",
+      "target": "73cea40c-a80c-4a88-ae81-d0c7b4072d9f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "377a29ef-c51e-40d2-8d58-d4ae197814cc",
+      "target": "1c762973-dee4-4704-bcb1-81320c8f2ab9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "73cea40c-a80c-4a88-ae81-d0c7b4072d9f",
+      "target": "88713b69-db31-4831-8ebe-846af77482df",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "73cea40c-a80c-4a88-ae81-d0c7b4072d9f",
+      "target": "1c762973-dee4-4704-bcb1-81320c8f2ab9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "66b15225-4e06-43d6-ac4c-cc3785fefdcc",
+      "target": "88713b69-db31-4831-8ebe-846af77482df",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "58269bc1-42ce-4d01-86c7-ce337903b683",
+      "target": "f8d166a1-ffe6-43d2-92a0-2425784cec17",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "58269bc1-42ce-4d01-86c7-ce337903b683",
+      "target": "6a14292b-5c6a-40be-9210-e52b365638e7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f98ffb84-00db-49e6-90e5-0cd9f19c9411",
+      "target": "6a14292b-5c6a-40be-9210-e52b365638e7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cb6e3eb8-6a27-4838-9214-54668f0607f9",
+      "target": "f8d166a1-ffe6-43d2-92a0-2425784cec17",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cb6e3eb8-6a27-4838-9214-54668f0607f9",
+      "target": "6a14292b-5c6a-40be-9210-e52b365638e7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cb6e3eb8-6a27-4838-9214-54668f0607f9",
+      "target": "58269bc1-42ce-4d01-86c7-ce337903b683",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4c05256a-b922-4042-8d26-a8a179f38ec5",
+      "target": "f8d166a1-ffe6-43d2-92a0-2425784cec17",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "f59ba8b5-a6e9-41db-8510-a79decff695b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "7dc3e9ef-031e-436a-8f2e-2890fdcde797",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "db78ab9a-3ca3-4a1c-bc0d-3e7cad9a23bb",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "17c29bff-0bd0-49ea-8992-ac1b67a5e579",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "8a2b9cbd-7b68-4cf3-83d7-74b467f209a4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "6767a8a5-50fb-4ec2-b312-b98c8b9007c8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "5a0364d8-c93a-423b-ba0e-8eed40a555aa",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "46312e18-bbce-46db-8900-db06d7989f67",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "5bfb395c-7625-4f36-b0da-a54040ee48c0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "a0a36547-7517-4da1-99b0-f85eda8b2230",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "target": "c5bcd75b-436b-4369-bcee-04d72607f669",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "db78ab9a-3ca3-4a1c-bc0d-3e7cad9a23bb",
+      "target": "7dc3e9ef-031e-436a-8f2e-2890fdcde797",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "db78ab9a-3ca3-4a1c-bc0d-3e7cad9a23bb",
+      "target": "8a2b9cbd-7b68-4cf3-83d7-74b467f209a4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "target": "6212b08e-25b0-4e95-8993-363deeaa2af9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "target": "1eba97d9-203f-4b76-a5a0-67c228284a7c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "target": "455df2f8-9175-453c-8711-df1efc3fd9f5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "target": "78be517c-18a8-4d0f-8d4b-d094d57adb5c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "target": "7700119b-602c-4265-a3f3-3bf0a089fc5d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "target": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "20fbb137-22f5-4aa5-b0bd-e7e62f2168c0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "6ba4b6f8-78ac-4163-b63b-3adacc873bed",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "d4ec319d-9d6f-4c3b-9d22-5e989b18d849",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "584b4ac8-0135-4436-afcf-d67a1261f77e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "78be517c-18a8-4d0f-8d4b-d094d57adb5c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "53600aab-8db3-4a00-9124-828059d629a6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "58269bc1-42ce-4d01-86c7-ce337903b683",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "target": "111ce90a-0db7-401b-b187-a6e3670e2e40",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "94a04b63-bf0e-49ae-9f0f-7495880cb9f9",
+      "target": "7700119b-602c-4265-a3f3-3bf0a089fc5d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9bc30ed4-81cf-4106-b122-5e22cfaa6fdd",
+      "target": "7700119b-602c-4265-a3f3-3bf0a089fc5d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "522a9340-af1f-412a-b746-99823b26c344",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "78429ab8-daca-4fe8-b3bc-7845b94f2882",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "78429ab8-daca-4fe8-b3bc-7845b94f2882",
+      "target": "9852722a-2853-4849-80f6-32c071cce990",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "091cada0-c35a-465c-be37-59dd4e972eb5",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "091cada0-c35a-465c-be37-59dd4e972eb5",
+      "target": "80748c1a-5814-4355-ab74-e67d49019991",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9879852e-33f3-4dd2-91e5-15a78dda5f0a",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "399a3611-6156-4214-be80-ed354158699a",
+      "target": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "399a3611-6156-4214-be80-ed354158699a",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "00664cd9-1d06-4c18-9b47-a30b147c2a07",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "00664cd9-1d06-4c18-9b47-a30b147c2a07",
+      "target": "bd8a6429-dd0e-41e3-acb1-888665489188",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "cf1ca100-98ff-4072-9e1e-8ef1c3559f13",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "8951b2b8-8a30-49a9-b52d-45c4fee55590",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "4ae4b7d4-1b89-45f6-9af7-52580a0b50cd",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "a81de1f8-5079-4f0e-b56c-6766b2025cf0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "9bc30ed4-81cf-4106-b122-5e22cfaa6fdd",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "94a04b63-bf0e-49ae-9f0f-7495880cb9f9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "111ce90a-0db7-401b-b187-a6e3670e2e40",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0296259f-f9d7-49bc-bf4b-ae54475015c1",
+      "target": "7700119b-602c-4265-a3f3-3bf0a089fc5d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "05aee780-4d30-4c9d-b0e3-cb7bdc7f3d3c",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "05aee780-4d30-4c9d-b0e3-cb7bdc7f3d3c",
+      "target": "78be517c-18a8-4d0f-8d4b-d094d57adb5c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0af8c0a9-00aa-44ce-b7ec-d21724644938",
+      "target": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0af8c0a9-00aa-44ce-b7ec-d21724644938",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1ceaaa49-096b-40b9-84ae-1708921bfc5d",
+      "target": "522a9340-af1f-412a-b746-99823b26c344",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1ceaaa49-096b-40b9-84ae-1708921bfc5d",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3ab253ce-203d-4fc9-bfb7-02bb35d237c9",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3ab253ce-203d-4fc9-bfb7-02bb35d237c9",
+      "target": "5b56af5b-eb24-44ef-b0e8-25b29c883235",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "86deeb2d-a0d6-48fa-b6db-4d165bd3589b",
+      "target": "f30397ca-d866-463b-8399-a5361abfd078",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "86deeb2d-a0d6-48fa-b6db-4d165bd3589b",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3968665f-eed5-4c72-8d96-cd78b9d461fa",
+      "target": "c3f2363a-a9f3-4cf8-bd69-bc6e37c89811",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "d5356c59-d65f-4253-988d-6bd16e3b86e0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "d041d654-354a-4f63-b795-55aa96e6b4ee",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "22745b0a-6df2-4766-b518-866d16d3baf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "7f3266d4-86a8-4950-8073-8044031a1e7e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "af5dfb86-d5bc-4102-af0f-55d2a42c395a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "33b4058b-2637-4666-bf92-99267e484e12",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "target": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f935a780-4940-4f8b-aa7f-5d20e76a0e87",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f935a780-4940-4f8b-aa7f-5d20e76a0e87",
+      "target": "31db6409-4825-4b83-8b6b-5796e2f3dd7a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f935a780-4940-4f8b-aa7f-5d20e76a0e87",
+      "target": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f935a780-4940-4f8b-aa7f-5d20e76a0e87",
+      "target": "94061f6c-480b-4801-bfbf-dc3ae0d70563",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d5356c59-d65f-4253-988d-6bd16e3b86e0",
+      "target": "611c7ff6-56bf-4fc2-bd71-1fd9d2988c29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d5356c59-d65f-4253-988d-6bd16e3b86e0",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d041d654-354a-4f63-b795-55aa96e6b4ee",
+      "target": "f4c8f7e7-111b-4c19-a02b-0870f2805d27",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d041d654-354a-4f63-b795-55aa96e6b4ee",
+      "target": "bda5129b-0e25-424b-a62e-7a7fa5e1c1e9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d041d654-354a-4f63-b795-55aa96e6b4ee",
+      "target": "0b9ec833-3459-4ad0-81a6-95f6ac5855de",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d041d654-354a-4f63-b795-55aa96e6b4ee",
+      "target": "58d5708c-a7aa-4992-a319-8632f5b0e3b1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d041d654-354a-4f63-b795-55aa96e6b4ee",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "22745b0a-6df2-4766-b518-866d16d3baf6",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "471bc1f3-94c4-478f-b646-c59a4eda5c23",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7f3266d4-86a8-4950-8073-8044031a1e7e",
+      "target": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "af5dfb86-d5bc-4102-af0f-55d2a42c395a",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b843b687-d904-469b-964b-ae18c27825d6",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b843b687-d904-469b-964b-ae18c27825d6",
+      "target": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "020963c9-5d3f-4568-b9cd-501b966c5d88",
+      "target": "58269bc1-42ce-4d01-86c7-ce337903b683",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "020963c9-5d3f-4568-b9cd-501b966c5d88",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "020963c9-5d3f-4568-b9cd-501b966c5d88",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c06ba98f-cf2d-455e-a3b2-1ffaf3eeb64f",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c06ba98f-cf2d-455e-a3b2-1ffaf3eeb64f",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1b8eb704-e16b-42ac-b953-2164703716f3",
+      "target": "197ee54a-b6ec-4db5-9bd5-c7d98ebde69a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1b8eb704-e16b-42ac-b953-2164703716f3",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0ff16405-7890-427e-8480-55ec45168d4b",
+      "target": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0ff16405-7890-427e-8480-55ec45168d4b",
+      "target": "22745b0a-6df2-4766-b518-866d16d3baf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0ff16405-7890-427e-8480-55ec45168d4b",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0ff16405-7890-427e-8480-55ec45168d4b",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a2a208f5-e655-4fcb-97d6-e8b84e0605f4",
+      "target": "d4bbbafb-aa52-4df4-9729-01b7ceb964ec",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a2a208f5-e655-4fcb-97d6-e8b84e0605f4",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "target": "3e5012b7-faec-4841-935a-9c287397be52",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "target": "d4bbbafb-aa52-4df4-9729-01b7ceb964ec",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "target": "31db6409-4825-4b83-8b6b-5796e2f3dd7a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "target": "bf661d54-96f7-410c-ac11-89c0b3c9548a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "76c7fcbf-b3e1-4f40-ba5a-34e8d480e45e",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f4c8f7e7-111b-4c19-a02b-0870f2805d27",
+      "target": "33b4058b-2637-4666-bf92-99267e484e12",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "58d5708c-a7aa-4992-a319-8632f5b0e3b1",
+      "target": "82f535c3-9c43-43f1-b394-1523c5c35850",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "58d5708c-a7aa-4992-a319-8632f5b0e3b1",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "58d5708c-a7aa-4992-a319-8632f5b0e3b1",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "33b4058b-2637-4666-bf92-99267e484e12",
+      "target": "94061f6c-480b-4801-bfbf-dc3ae0d70563",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "611c7ff6-56bf-4fc2-bd71-1fd9d2988c29",
+      "target": "33b4058b-2637-4666-bf92-99267e484e12",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "611c7ff6-56bf-4fc2-bd71-1fd9d2988c29",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0b9ec833-3459-4ad0-81a6-95f6ac5855de",
+      "target": "a1f5cb2f-f820-4f82-8afd-3736065286a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "bf661d54-96f7-410c-ac11-89c0b3c9548a",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "bda5129b-0e25-424b-a62e-7a7fa5e1c1e9",
+      "target": "82f535c3-9c43-43f1-b394-1523c5c35850",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "94a748b9-e4c8-4a5b-a55c-ad023e44d1f1",
+      "target": "020963c9-5d3f-4568-b9cd-501b966c5d88",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "94a748b9-e4c8-4a5b-a55c-ad023e44d1f1",
+      "target": "471bc1f3-94c4-478f-b646-c59a4eda5c23",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "94a748b9-e4c8-4a5b-a55c-ad023e44d1f1",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f821b89-7db9-47f1-85bb-8c6549715eb2",
+      "target": "1b8eb704-e16b-42ac-b953-2164703716f3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8171ff9c-53fb-44d9-9aa1-f494712e19d6",
+      "target": "0ff16405-7890-427e-8480-55ec45168d4b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8171ff9c-53fb-44d9-9aa1-f494712e19d6",
+      "target": "471bc1f3-94c4-478f-b646-c59a4eda5c23",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8171ff9c-53fb-44d9-9aa1-f494712e19d6",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c5f9f9f2-365e-4d04-bbf3-55221ac62842",
+      "target": "a2a208f5-e655-4fcb-97d6-e8b84e0605f4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "08d73969-ed1c-4050-ab59-0830027131bd",
+      "target": "c06ba98f-cf2d-455e-a3b2-1ffaf3eeb64f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "target": "94a748b9-e4c8-4a5b-a55c-ad023e44d1f1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "target": "c5f9f9f2-365e-4d04-bbf3-55221ac62842",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "target": "4f821b89-7db9-47f1-85bb-8c6549715eb2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "target": "08d73969-ed1c-4050-ab59-0830027131bd",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "target": "8171ff9c-53fb-44d9-9aa1-f494712e19d6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a7b0f8ad-5f2f-4e85-8377-0573bc51bed1",
+      "target": "b843b687-d904-469b-964b-ae18c27825d6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5992acd7-e1f4-4260-a0cb-5d9ca861b36e",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0850e9a0-0425-4641-bc8b-28e5a00e721b",
+      "target": "22745b0a-6df2-4766-b518-866d16d3baf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0850e9a0-0425-4641-bc8b-28e5a00e721b",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e4be62fa-49ea-43dd-a9e4-5e20a274bcd5",
+      "target": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e4be62fa-49ea-43dd-a9e4-5e20a274bcd5",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "679d484f-96f6-4ae7-b990-08467247f794",
+      "target": "611c7ff6-56bf-4fc2-bd71-1fd9d2988c29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "679d484f-96f6-4ae7-b990-08467247f794",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "bc150768-bddd-4578-8a56-702d2ec5483d",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d70b8937-cdb2-46b7-a540-c78a89ea803c",
+      "target": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d70b8937-cdb2-46b7-a540-c78a89ea803c",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "53f100eb-30ec-4501-8dd8-aa2606028c11",
+      "target": "f4c8f7e7-111b-4c19-a02b-0870f2805d27",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "53f100eb-30ec-4501-8dd8-aa2606028c11",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "131f0ba0-9961-478d-87a3-470cf867d5d4",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7dde92e0-637c-46cf-957a-e8ad65d8ee59",
+      "target": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7dde92e0-637c-46cf-957a-e8ad65d8ee59",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e7085a04-8df9-4d50-84c9-c12932ae6c54",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2ac67b00-4322-4d20-948c-1c589e76a858",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b47e8645-73e0-4992-96d3-8bed1d52248b",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9adcb828-2cf3-4d59-b80e-5aa752f14df1",
+      "target": "bf661d54-96f7-410c-ac11-89c0b3c9548a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9adcb828-2cf3-4d59-b80e-5aa752f14df1",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "21f7aebb-f616-419a-bc46-0fe72f400b2d",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f6fe2982-8def-4713-9333-bde34f6e041c",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "819a592e-57d1-4f00-8ed7-4f0d0b2bd676",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ba46b41c-979c-4faf-a5b9-1cc4d56f6b19",
+      "target": "197ee54a-b6ec-4db5-9bd5-c7d98ebde69a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4a0926c7-589e-4e82-97f2-e3dcd8d279c5",
+      "target": "58d5708c-a7aa-4992-a319-8632f5b0e3b1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "47afd4ad-f053-4a03-826d-f666b265eeed",
+      "target": "33b4058b-2637-4666-bf92-99267e484e12",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "47afd4ad-f053-4a03-826d-f666b265eeed",
+      "target": "f4c8f7e7-111b-4c19-a02b-0870f2805d27",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0bf44c57-455c-45d5-8f4e-8f1898719bef",
+      "target": "0b9ec833-3459-4ad0-81a6-95f6ac5855de",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0bf44c57-455c-45d5-8f4e-8f1898719bef",
+      "target": "249772dc-4425-4c51-b485-f92e930094b5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ab84bfca-8baf-4cd4-9ee2-39033d89c4fb",
+      "target": "31db6409-4825-4b83-8b6b-5796e2f3dd7a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3a014a12-a0bf-4630-9993-b68db3da1a26",
+      "target": "af5dfb86-d5bc-4102-af0f-55d2a42c395a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "83685da7-842f-468f-90a5-064ec0db3d48",
+      "target": "3e5012b7-faec-4841-935a-9c287397be52",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "58280714-cd8b-4c49-a810-2d914cd927fa",
+      "target": "94061f6c-480b-4801-bfbf-dc3ae0d70563",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7390cc57-addd-431e-96cb-0b90eeb4e095",
+      "target": "020963c9-5d3f-4568-b9cd-501b966c5d88",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0b9341ed-c7b2-426f-9289-37e06bb02dcd",
+      "target": "33b4058b-2637-4666-bf92-99267e484e12",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "6a32ae80-1d91-4b09-8fb0-c22f00ffcc5c",
+      "target": "bda5129b-0e25-424b-a62e-7a7fa5e1c1e9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "bce97d80-eceb-4479-aade-b133a09df237",
+      "target": "471bc1f3-94c4-478f-b646-c59a4eda5c23",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "554fdacd-206d-45f5-9358-9c23d8bf8aae",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c0561b13-50fb-47cd-8ee0-26db7b396de9",
+      "target": "33b4058b-2637-4666-bf92-99267e484e12",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7b3cf7b0-b72f-48bb-b991-f1a514491efa",
+      "target": "557ad179-ad0a-4ae2-8b9c-b98da4937d69",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7b3cf7b0-b72f-48bb-b991-f1a514491efa",
+      "target": "22745b0a-6df2-4766-b518-866d16d3baf6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7b3cf7b0-b72f-48bb-b991-f1a514491efa",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8fafd235-4c1b-418a-afd3-64c21dd766f6",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9ba851f0-26fa-47f5-88ae-21fd45c4ef35",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5f8ca2a9-16a3-4d2a-a616-9901ffd52e34",
+      "target": "d61c6eb9-6091-43ba-b7c1-449e7d7b29a0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d7e71fc8-c489-4b0c-b493-c21cc01cd649",
+      "target": "d61c6eb9-6091-43ba-b7c1-449e7d7b29a0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d61c6eb9-6091-43ba-b7c1-449e7d7b29a0",
+      "target": "33b4058b-2637-4666-bf92-99267e484e12",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d61c6eb9-6091-43ba-b7c1-449e7d7b29a0",
+      "target": "6f3a391d-93b8-4aae-8765-dd20bb25792e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "df198eef-6ab6-47b7-bb85-40e7661061cd",
+      "target": "4cdc5882-34ea-48cb-a90a-70a8bf4acb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dbe958c4-0c8c-4737-9e84-80af55085f31",
+      "target": "2e8ed6ce-7ca4-467a-ae6b-a02af7106a1d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dbe958c4-0c8c-4737-9e84-80af55085f31",
+      "target": "df198eef-6ab6-47b7-bb85-40e7661061cd",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dbe958c4-0c8c-4737-9e84-80af55085f31",
+      "target": "d7e71fc8-c489-4b0c-b493-c21cc01cd649",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dbe958c4-0c8c-4737-9e84-80af55085f31",
+      "target": "5f8ca2a9-16a3-4d2a-a616-9901ffd52e34",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dbe958c4-0c8c-4737-9e84-80af55085f31",
+      "target": "d61c6eb9-6091-43ba-b7c1-449e7d7b29a0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f476fd0e-7ca1-4ec3-985d-18047b9446fd",
+      "target": "0d6caa20-6e94-46f0-8135-d4b5e211449f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8ad7efa3-d4bf-4deb-8554-4b9e162c2d81",
+      "target": "81e2565a-50e5-42d0-8dd4-d187bdd3de33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5696e821-afcb-4877-a50a-d628e9f4f8e4",
+      "target": "2f988163-ef48-454c-a26c-d3b6e2cdd7d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c252d265-563a-448a-a63c-8b814d1f6648",
+      "target": "2f988163-ef48-454c-a26c-d3b6e2cdd7d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f93b5050-1f3b-4bda-bf90-12d993948e31",
+      "target": "2f988163-ef48-454c-a26c-d3b6e2cdd7d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "842b00c6-4ac9-4ea6-bfb5-e9ada09d006e",
+      "target": "2f988163-ef48-454c-a26c-d3b6e2cdd7d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "da85b4e9-e056-4687-ae36-1970bed81a32",
+      "target": "2f988163-ef48-454c-a26c-d3b6e2cdd7d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "6543378c-9e21-482d-8cdc-8b50431cb493",
+      "target": "2f988163-ef48-454c-a26c-d3b6e2cdd7d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c5ca586b-a521-4c00-9ed7-e5e67ab25977",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8d98b611-e3f5-4e97-82c9-9fc365942902",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8b19e380-a1f9-4525-adc4-b4f6f7097c41",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "66db47de-b579-4faf-b361-2aa7104233b9",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "66db47de-b579-4faf-b361-2aa7104233b9",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "acf18469-31da-49d1-8db9-83311e086863",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "acf18469-31da-49d1-8db9-83311e086863",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ae09c648-c9bf-4ec5-bbf9-483799c9b1ca",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ae09c648-c9bf-4ec5-bbf9-483799c9b1ca",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e319e8bf-cd10-4c76-b5d5-c168235c01a6",
+      "target": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e319e8bf-cd10-4c76-b5d5-c168235c01a6",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8e197165-9b1a-443e-88ab-60990f51e23f",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8e197165-9b1a-443e-88ab-60990f51e23f",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "91213b3a-1011-4381-ad13-f109171f7be9",
+      "target": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "69f45242-b971-4fd4-aeed-336e56912bc3",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2e18583b-3942-4ce7-abc0-fff25a633801",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2e18583b-3942-4ce7-abc0-fff25a633801",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c73985a7-a9b0-41b0-9d74-4ccc36220c4a",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d1692e16-483d-4bdf-8108-863c8956a6ab",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d1692e16-483d-4bdf-8108-863c8956a6ab",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5a215f9d-05e4-470e-86d8-797e457d917d",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5a215f9d-05e4-470e-86d8-797e457d917d",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "37d49d62-a128-493b-8324-6c86b1386f7f",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "37d49d62-a128-493b-8324-6c86b1386f7f",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7ee2954c-c59b-4d31-89d8-56f94800bf6e",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "339daee3-6072-4c03-a8d5-03fa82592ba3",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d2cc1693-6e9f-4351-bc74-bab4ca57bc5f",
+      "target": "14e9a039-497b-4f95-b03a-ac7a1b59eb24",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d2cc1693-6e9f-4351-bc74-bab4ca57bc5f",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d2cc1693-6e9f-4351-bc74-bab4ca57bc5f",
+      "target": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d2cc1693-6e9f-4351-bc74-bab4ca57bc5f",
+      "target": "5b56af5b-eb24-44ef-b0e8-25b29c883235",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "17e70445-c655-4606-8c5e-228718784461",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "455df2f8-9175-453c-8711-df1efc3fd9f5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "28b3ab67-28db-4ea0-a467-54fa306dc58a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "9a5642b6-275b-412b-a8ef-f25f98d091a6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "682037af-a9d9-40dc-b10a-5144aa6b666b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "e455068c-9c69-419f-a1e7-ac024f77a5d3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "111ce90a-0db7-401b-b187-a6e3670e2e40",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "80748c1a-5814-4355-ab74-e67d49019991",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "target": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "target": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "target": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "target": "ae09c648-c9bf-4ec5-bbf9-483799c9b1ca",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "target": "66db47de-b579-4faf-b361-2aa7104233b9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "target": "6c9333eb-9d3c-4626-95e2-fcd0e07a21eb",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "target": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "target": "0882c231-673d-4bd6-8aec-6b583a65ab8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "target": "645f29e1-c82e-462a-91e0-b3a62058047d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "target": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "target": "bd8a6429-dd0e-41e3-acb1-888665489188",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "target": "d1692e16-483d-4bdf-8108-863c8956a6ab",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "target": "9c98b3dc-33f8-44c1-97aa-ae2920be2dba",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "5a215f9d-05e4-470e-86d8-797e457d917d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "37d49d62-a128-493b-8324-6c86b1386f7f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "2e18583b-3942-4ce7-abc0-fff25a633801",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "8b19e380-a1f9-4525-adc4-b4f6f7097c41",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "c73985a7-a9b0-41b0-9d74-4ccc36220c4a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "176bbf73-2aca-46d2-9cac-4c807aa11087",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "9852722a-2853-4849-80f6-32c071cce990",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "6c910b74-435f-4774-abfe-5d8ab788b573",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "d4ec319d-9d6f-4c3b-9d22-5e989b18d849",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "53600aab-8db3-4a00-9124-828059d629a6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "80748c1a-5814-4355-ab74-e67d49019991",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "target": "7700119b-602c-4265-a3f3-3bf0a089fc5d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "2b7c7980-5272-438d-a046-244936dc4372",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "7807b0d0-1c6a-435b-abb7-12256d0c03a1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "8d98b611-e3f5-4e97-82c9-9fc365942902",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "c5ca586b-a521-4c00-9ed7-e5e67ab25977",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "a81de1f8-5079-4f0e-b56c-6766b2025cf0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "80748c1a-5814-4355-ab74-e67d49019991",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "0882c231-673d-4bd6-8aec-6b583a65ab8e",
+      "target": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "645f29e1-c82e-462a-91e0-b3a62058047d",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "645f29e1-c82e-462a-91e0-b3a62058047d",
+      "target": "cf1ca100-98ff-4072-9e1e-8ef1c3559f13",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8789e341-9eb4-4533-b437-3f1e823f7395",
+      "target": "17e70445-c655-4606-8c5e-228718784461",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8789e341-9eb4-4533-b437-3f1e823f7395",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "target": "9c98b3dc-33f8-44c1-97aa-ae2920be2dba",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "target": "8951b2b8-8a30-49a9-b52d-45c4fee55590",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "6c9333eb-9d3c-4626-95e2-fcd0e07a21eb",
+      "target": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "67a5a86f-6816-4d15-9bce-baa82fd44a33",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "67a5a86f-6816-4d15-9bce-baa82fd44a33",
+      "target": "c03284c0-b305-4183-ab81-62ed5f326207",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "target": "6212b08e-25b0-4e95-8993-363deeaa2af9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "target": "8e197165-9b1a-443e-88ab-60990f51e23f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "target": "fb0d13ca-4f11-4831-93d4-5c2620a1b923",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "65050f07-c510-42cb-bbd4-c8472a9bde2e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "b9287a80-ad1e-4e47-87de-a13af5bf1509",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "44de556d-566d-45b7-ab3b-a3ad10ead2d1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "acf18469-31da-49d1-8db9-83311e086863",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "69f45242-b971-4fd4-aeed-336e56912bc3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "5b56af5b-eb24-44ef-b0e8-25b29c883235",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "a81de1f8-5079-4f0e-b56c-6766b2025cf0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "9852722a-2853-4849-80f6-32c071cce990",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "78be517c-18a8-4d0f-8d4b-d094d57adb5c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "455df2f8-9175-453c-8711-df1efc3fd9f5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "7807b0d0-1c6a-435b-abb7-12256d0c03a1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "e4a717a9-66d5-4585-921d-49d0cc2bca1a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "fb0d13ca-4f11-4831-93d4-5c2620a1b923",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "94ca578a-705e-4df9-8a98-35143f873789",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "d4ec319d-9d6f-4c3b-9d22-5e989b18d849",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "7700119b-602c-4265-a3f3-3bf0a089fc5d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "80748c1a-5814-4355-ab74-e67d49019991",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "522a9340-af1f-412a-b746-99823b26c344",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "8951b2b8-8a30-49a9-b52d-45c4fee55590",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "06cab943-0508-4cff-ad6e-11d1da866aaf",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "2b7c7980-5272-438d-a046-244936dc4372",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "4dd5cc14-d2fd-49eb-be8f-a0796e180cef",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "91213b3a-1011-4381-ad13-f109171f7be9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "58269bc1-42ce-4d01-86c7-ce337903b683",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "8b8193fb-0480-422a-917e-b13be5fdc672",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "011a6c97-c3a6-4474-a8f3-8ac5e0e850ec",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "a81de1f8-5079-4f0e-b56c-6766b2025cf0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "9bc30ed4-81cf-4106-b122-5e22cfaa6fdd",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "94a04b63-bf0e-49ae-9f0f-7495880cb9f9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "2b16a3c7-c900-4dfd-a669-c1c306f426e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "17e70445-c655-4606-8c5e-228718784461",
+      "target": "e319e8bf-cd10-4c76-b5d5-c168235c01a6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "17e70445-c655-4606-8c5e-228718784461",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5e8f2095-f9b5-4890-b6b3-9ef80d7569f4",
+      "target": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "de932dc7-fc8e-4edf-8582-2c5836d8bdd6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "4dd7c832-25fc-4142-a0dc-2787a99021a8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "e4a717a9-66d5-4585-921d-49d0cc2bca1a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "9723a862-f3dc-4fc9-8f0b-2fff2b74779a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "e455068c-9c69-419f-a1e7-ac024f77a5d3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "8f962453-fedc-4202-ac61-383dbdd06ffb",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "94ca578a-705e-4df9-8a98-35143f873789",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "0510aeba-07a6-4de7-9b78-476692a34754",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "f456b554-187c-4c59-a8a8-caa87604f307",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "cd523c85-07cc-42c3-b41a-e0608b06274c",
+      "target": "011a6c97-c3a6-4474-a8f3-8ac5e0e850ec",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ea378709-3a1b-4e11-8a15-94eac329905c",
+      "target": "5e8f2095-f9b5-4890-b6b3-9ef80d7569f4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7b4f4db1-bb5e-4e65-b3aa-ff2d6f661a0c",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7b4f4db1-bb5e-4e65-b3aa-ff2d6f661a0c",
+      "target": "67a5a86f-6816-4d15-9bce-baa82fd44a33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7b4f4db1-bb5e-4e65-b3aa-ff2d6f661a0c",
+      "target": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "aa3d612f-2388-4de1-bf69-4017df3cb328",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "aa3d612f-2388-4de1-bf69-4017df3cb328",
+      "target": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "46cae151-d334-4711-a8c3-2044334253ce",
+      "target": "d2cc1693-6e9f-4351-bc74-bab4ca57bc5f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "46cae151-d334-4711-a8c3-2044334253ce",
+      "target": "7ee2954c-c59b-4d31-89d8-56f94800bf6e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "46cae151-d334-4711-a8c3-2044334253ce",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "46cae151-d334-4711-a8c3-2044334253ce",
+      "target": "67a5a86f-6816-4d15-9bce-baa82fd44a33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "bf0f986e-50d3-442d-8820-30ec51c189fb",
+      "target": "4ae4b7d4-1b89-45f6-9af7-52580a0b50cd",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f6adf3b7-4cff-40ab-b46f-bf7cacaf17de",
+      "target": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f6adf3b7-4cff-40ab-b46f-bf7cacaf17de",
+      "target": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "17e70445-c655-4606-8c5e-228718784461",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "8789e341-9eb4-4533-b437-3f1e823f7395",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "c9ff43cb-cb2d-40ec-b0b9-aca841ebf3b5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "7ee2954c-c59b-4d31-89d8-56f94800bf6e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "339daee3-6072-4c03-a8d5-03fa82592ba3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "fb9705ee-e2b3-4d3b-b423-8a6bc1224549",
+      "target": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c0fec039-2fbe-4847-85b1-3d10258e750f",
+      "target": "4ae4b7d4-1b89-45f6-9af7-52580a0b50cd",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5dff4d8d-b516-4e43-a4de-ea2ad5526490",
+      "target": "3fa48fea-2039-44b1-85f1-e38be2015b42",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5dff4d8d-b516-4e43-a4de-ea2ad5526490",
+      "target": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8b1566f0-f281-4cb3-8748-37fe1ae99ec0",
+      "target": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8b1566f0-f281-4cb3-8748-37fe1ae99ec0",
+      "target": "18c7eb37-7901-4cd1-a926-5ca44cc061b2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f8649e0e-6359-482f-a0d8-5335b7af3766",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2af3a96e-e042-4763-9e8e-6b7a098e4f69",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "3a623269-f970-4b04-9fd9-ff78d1523f44",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ba0891a1-06b3-41f3-89a2-f9f06b43dc2a",
+      "target": "e319e8bf-cd10-4c76-b5d5-c168235c01a6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ba0891a1-06b3-41f3-89a2-f9f06b43dc2a",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ba0891a1-06b3-41f3-89a2-f9f06b43dc2a",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a5b79571-0adc-4d79-bd45-661f8abc7189",
+      "target": "37d49d62-a128-493b-8324-6c86b1386f7f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "98ae64ba-4c1b-48a0-bda8-6d5754fb0e71",
+      "target": "65050f07-c510-42cb-bbd4-c8472a9bde2e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "98ae64ba-4c1b-48a0-bda8-6d5754fb0e71",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "98ae64ba-4c1b-48a0-bda8-6d5754fb0e71",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "12313adf-c7a9-4454-a1d4-7899c3a83277",
+      "target": "c5ca586b-a521-4c00-9ed7-e5e67ab25977",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "12313adf-c7a9-4454-a1d4-7899c3a83277",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "12313adf-c7a9-4454-a1d4-7899c3a83277",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b6266ea9-07a7-4ce2-b689-e3e132ca1d93",
+      "target": "91213b3a-1011-4381-ad13-f109171f7be9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "abfcb18e-72ea-4f86-989a-dda6bbd2bd88",
+      "target": "ae09c648-c9bf-4ec5-bbf9-483799c9b1ca",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "eed8ead3-2121-4172-88ab-d69ae3340cc0",
+      "target": "2e18583b-3942-4ce7-abc0-fff25a633801",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c6a3f653-a878-44f2-8b31-7afff94d4150",
+      "target": "8b19e380-a1f9-4525-adc4-b4f6f7097c41",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c6a3f653-a878-44f2-8b31-7afff94d4150",
+      "target": "8670ccd3-5263-42bd-80d9-ee1fdf523076",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ab08fd27-e9f8-4a4f-b1ae-2363caa5d849",
+      "target": "69f45242-b971-4fd4-aeed-336e56912bc3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ab08fd27-e9f8-4a4f-b1ae-2363caa5d849",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ab08fd27-e9f8-4a4f-b1ae-2363caa5d849",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ab08fd27-e9f8-4a4f-b1ae-2363caa5d849",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a81e90b8-1a98-472f-be17-2df22317f044",
+      "target": "8e197165-9b1a-443e-88ab-60990f51e23f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "be3ed54a-2277-4c95-a6c4-4df9ee90fa26",
+      "target": "66db47de-b579-4faf-b361-2aa7104233b9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b403eca-8f15-4bd9-9e1e-06d7eed722b3",
+      "target": "44de556d-566d-45b7-ab3b-a3ad10ead2d1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b403eca-8f15-4bd9-9e1e-06d7eed722b3",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b403eca-8f15-4bd9-9e1e-06d7eed722b3",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "37c2a5a3-b137-4343-a9ff-da691703e381",
+      "target": "acf18469-31da-49d1-8db9-83311e086863",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "37c2a5a3-b137-4343-a9ff-da691703e381",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "37c2a5a3-b137-4343-a9ff-da691703e381",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "37c2a5a3-b137-4343-a9ff-da691703e381",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "6ec45ec4-faae-4f17-b35e-89a5ab47b443",
+      "target": "c73985a7-a9b0-41b0-9d74-4ccc36220c4a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d89b4332-d5f1-497e-b1e8-deefa076a297",
+      "target": "d1692e16-483d-4bdf-8108-863c8956a6ab",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "71f00f30-b235-419c-807b-b157f67a9dee",
+      "target": "5a215f9d-05e4-470e-86d8-797e457d917d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "71f00f30-b235-419c-807b-b157f67a9dee",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "98189ea2-d4a0-4b98-b9af-21a30116b2d7",
+      "target": "b9287a80-ad1e-4e47-87de-a13af5bf1509",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "98189ea2-d4a0-4b98-b9af-21a30116b2d7",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "98189ea2-d4a0-4b98-b9af-21a30116b2d7",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a1132790-d55c-41fa-a142-c7294b6aa97c",
+      "target": "8d98b611-e3f5-4e97-82c9-9fc365942902",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a1132790-d55c-41fa-a142-c7294b6aa97c",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a1132790-d55c-41fa-a142-c7294b6aa97c",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ab3db635-e1da-49b4-8020-d1f91648a7c1",
+      "target": "176bbf73-2aca-46d2-9cac-4c807aa11087",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "target": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "target": "f1653930-684b-4fb8-83ee-4c703c6c3380",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2fb90305-7d91-47fd-8800-761e7c862ea2",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b0fb2405-432e-4c60-9310-ced6b3c0a063",
+      "target": "e609450e-92d4-44d0-8f90-8a25d94d0372",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b0fb2405-432e-4c60-9310-ced6b3c0a063",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "b0fb2405-432e-4c60-9310-ced6b3c0a063",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "93b86c17-3a11-455a-a9e1-47f8f676c195",
+      "target": "f03f1e2d-e5a9-4917-910f-720a6eeb0865",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "93b86c17-3a11-455a-a9e1-47f8f676c195",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "93b86c17-3a11-455a-a9e1-47f8f676c195",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "93b86c17-3a11-455a-a9e1-47f8f676c195",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "90b17487-3c69-427b-a2af-c052db6a46eb",
+      "target": "f7d1625b-a696-45f4-bf6f-79e9832dcb7c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "90b17487-3c69-427b-a2af-c052db6a46eb",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "90b17487-3c69-427b-a2af-c052db6a46eb",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "aff002e8-c75e-43e7-be6e-3f182e45afdf",
+      "target": "67a5a86f-6816-4d15-9bce-baa82fd44a33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "aff002e8-c75e-43e7-be6e-3f182e45afdf",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "aff002e8-c75e-43e7-be6e-3f182e45afdf",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "aff002e8-c75e-43e7-be6e-3f182e45afdf",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a3a5419a-7424-48fc-9ef4-7a495ded11c7",
+      "target": "6c9333eb-9d3c-4626-95e2-fcd0e07a21eb",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "a3a5419a-7424-48fc-9ef4-7a495ded11c7",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "724b0ded-4443-4ebc-816d-ebf9efb63296",
+      "target": "645f29e1-c82e-462a-91e0-b3a62058047d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "724b0ded-4443-4ebc-816d-ebf9efb63296",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "07b1aa85-ed0d-4212-baf0-22595c2aa659",
+      "target": "4dd5cc14-d2fd-49eb-be8f-a0796e180cef",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "07b1aa85-ed0d-4212-baf0-22595c2aa659",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ff8f2111-7755-4e4c-9284-b8563fed90c4",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ff8f2111-7755-4e4c-9284-b8563fed90c4",
+      "target": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ff8f2111-7755-4e4c-9284-b8563fed90c4",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "17f2989f-fae1-40c2-a42c-9fd057a2847b",
+      "target": "8ce99be7-27ca-4f27-9675-a96ff995b5b9",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "17f2989f-fae1-40c2-a42c-9fd057a2847b",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "17f2989f-fae1-40c2-a42c-9fd057a2847b",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "17f2989f-fae1-40c2-a42c-9fd057a2847b",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5ce01844-5c3e-413b-9251-d52bc9ae13f1",
+      "target": "d2cc1693-6e9f-4351-bc74-bab4ca57bc5f",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5ce01844-5c3e-413b-9251-d52bc9ae13f1",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "5ce01844-5c3e-413b-9251-d52bc9ae13f1",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f5839f36-3d01-415a-bd6d-3c8996e734fd",
+      "target": "0882c231-673d-4bd6-8aec-6b583a65ab8e",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f5839f36-3d01-415a-bd6d-3c8996e734fd",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "47a64744-515a-4e36-81df-3ad756c817f3",
+      "target": "8789e341-9eb4-4533-b437-3f1e823f7395",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "47a64744-515a-4e36-81df-3ad756c817f3",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "601e0716-8d6c-4851-9f0c-8295bed89614",
+      "target": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "601e0716-8d6c-4851-9f0c-8295bed89614",
+      "target": "4f2ec802-8902-43ec-845a-832673d372a2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "601e0716-8d6c-4851-9f0c-8295bed89614",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "601e0716-8d6c-4851-9f0c-8295bed89614",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "db43e3bc-341b-457d-a674-93d47f3783d9",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "db43e3bc-341b-457d-a674-93d47f3783d9",
+      "target": "18cb68c2-41d7-4f96-afbd-d75e9d2685f0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "db43e3bc-341b-457d-a674-93d47f3783d9",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d6349337-ac82-4e6e-a864-28f0c6275f77",
+      "target": "f99a7d3a-18db-4607-a302-a39ec4cdcfe1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d6349337-ac82-4e6e-a864-28f0c6275f77",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d6349337-ac82-4e6e-a864-28f0c6275f77",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d6349337-ac82-4e6e-a864-28f0c6275f77",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "53d5519d-889e-4986-aa98-4c55aade4e2b",
+      "target": "bb4b2d60-c811-40fb-9d4b-f2719bdb3f29",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "53d5519d-889e-4986-aa98-4c55aade4e2b",
+      "target": "c62ec974-edc3-44ec-abde-c7f32c197646",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "53d5519d-889e-4986-aa98-4c55aade4e2b",
+      "target": "ee822e8a-8a30-4e54-8d32-5e08ef0010a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "53d5519d-889e-4986-aa98-4c55aade4e2b",
+      "target": "9254012b-a954-4ab4-94d4-ea92d794dc33",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "53d5519d-889e-4986-aa98-4c55aade4e2b",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "54b7d380-a1c2-467b-b777-bb808c4e701b",
+      "target": "f45b818a-4bd5-486c-b6a5-1a7fc013de54",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "54b7d380-a1c2-467b-b777-bb808c4e701b",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "54b7d380-a1c2-467b-b777-bb808c4e701b",
+      "target": "a8289c46-8a2e-49d6-9219-1933e9abc489",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "54b7d380-a1c2-467b-b777-bb808c4e701b",
+      "target": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "025b8780-48ff-45e6-aaf9-c1869d2ecbc0",
+      "target": "a0597c7f-cfaf-4915-a0f3-926c3e5629d7",
+      "type": "imports",
+      "weight": 1
+    }
+  ],
+  "metadata": {
+    "total_nodes": 290,
+    "total_edges": 512,
+    "clusters": 2
+  }
+}

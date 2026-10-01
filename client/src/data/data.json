@@ -1,0 +1,758 @@
+{
+  "nodes": [
+    {
+      "id": "6e9a2581-4409-4b37-bc4b-ac79b85fee6d",
+      "label": "page.tsx",
+      "path": "src/app/page.tsx",
+      "group": "src/app",
+      "kind": "file",
+      "loc": 6,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "7c7515a1-2af4-44eb-8284-ff8959a721c8",
+      "label": "coming-soon.tsx",
+      "path": "src/components/coming-soon.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 29,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "c99ed62e-77b9-4c4b-940d-8522af023356",
+      "label": "page.tsx",
+      "path": "src/app/dash/page.tsx",
+      "group": "src/app/dash",
+      "kind": "file",
+      "loc": 287,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "e9c1e95a-d0df-4072-8866-fe33344f9676",
+      "label": "page.tsx",
+      "path": "src/app/dashboard/page.tsx",
+      "group": "src/app/dashboard",
+      "kind": "file",
+      "loc": 158,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 6
+    },
+    {
+      "id": "314f3707-c8af-4260-b4a3-68481fce0250",
+      "label": "app-sidebar.tsx",
+      "path": "src/components/app-sidebar.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 68,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "d15e23c1-56b5-4282-b877-7b07230ce496",
+      "label": "montlyspend.tsx",
+      "path": "src/components/charts/montlyspend.tsx",
+      "group": "src/components/charts",
+      "kind": "file",
+      "loc": 135,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "776610da-4af1-4e3a-8d3d-3dc317c9a851",
+      "label": "savinggoals.tsx",
+      "path": "src/components/charts/savinggoals.tsx",
+      "group": "src/components/charts",
+      "kind": "file",
+      "loc": 99,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "ff028fc0-25a0-457a-bcd2-b5a8b0d675a5",
+      "label": "temp.tsx",
+      "path": "src/components/charts/temp.tsx",
+      "group": "src/components/charts",
+      "kind": "file",
+      "loc": 136,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "f2e3dfaf-e4c0-4c30-87ff-36dcdd83e7e8",
+      "label": "weeklyspend.tsx",
+      "path": "src/components/charts/weeklyspend.tsx",
+      "group": "src/components/charts",
+      "kind": "file",
+      "loc": 122,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 2
+    },
+    {
+      "id": "6cad67e1-6ad1-452c-8b1d-9d386d03550d",
+      "label": "chart.tsx",
+      "path": "src/components/ui/chart.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 366,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 4,
+      "fan_out": 1
+    },
+    {
+      "id": "38d6a40b-1e4f-44c9-b4be-850faa9d0de0",
+      "label": "separator.tsx",
+      "path": "src/components/ui/separator.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 32,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "8e0b77c1-e8e2-40a8-9492-0ab0f51830f2",
+      "label": "sheet.tsx",
+      "path": "src/components/ui/sheet.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 141,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "label": "sidebar.tsx",
+      "path": "src/components/ui/sidebar.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 764,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 8
+    },
+    {
+      "id": "4dbb0a80-617f-40e6-beba-81dd4da94ad6",
+      "label": "skeleton.tsx",
+      "path": "src/components/ui/skeleton.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 16,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "f315fead-1a3b-4b2c-8f7c-08c916c19052",
+      "label": "tooltip.tsx",
+      "path": "src/components/ui/tooltip.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 31,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "a28e99b1-6091-45a1-9592-0135490d7b3b",
+      "label": "use-mobile.tsx",
+      "path": "src/hooks/use-mobile.tsx",
+      "group": "src/hooks",
+      "kind": "file",
+      "loc": 20,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "label": "card.tsx",
+      "path": "src/components/ui/card.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 80,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 6,
+      "fan_out": 1
+    },
+    {
+      "id": "620a179a-18cd-47bf-bd30-d53f2095ca8c",
+      "label": "dal.ts",
+      "path": "src/lib/dal.ts",
+      "group": "src/lib",
+      "kind": "file",
+      "loc": 18,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "7d8b87d6-a1da-4b7f-a43d-87685976e5a8",
+      "label": "auth.tsx",
+      "path": "src/actions/auth.tsx",
+      "group": "src/actions",
+      "kind": "file",
+      "loc": 93,
+      "criticality": "caution",
+      "criticality_score": 75.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 3
+    },
+    {
+      "id": "9b964329-b781-4763-8292-3ede90daeb7b",
+      "label": "page.tsx",
+      "path": "src/app/login/page.tsx",
+      "group": "src/app/login",
+      "kind": "file",
+      "loc": 10,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "f693ed4e-44f3-4e97-9b6b-edd6420f1d60",
+      "label": "page.tsx",
+      "path": "src/app/signup/page.tsx",
+      "group": "src/app/signup",
+      "kind": "file",
+      "loc": 11,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "064882d5-6d3e-4e49-b125-2afbeff9aad6",
+      "label": "login-form.tsx",
+      "path": "src/components/auth/login-form.tsx",
+      "group": "src/components/auth",
+      "kind": "file",
+      "loc": 91,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 5
+    },
+    {
+      "id": "1ad86e45-82a6-4acf-a533-fa1af16e4632",
+      "label": "signup-form.tsx",
+      "path": "src/components/auth/signup-form.tsx",
+      "group": "src/components/auth",
+      "kind": "file",
+      "loc": 106,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 5
+    },
+    {
+      "id": "9afa10e8-178a-4d47-a809-52d20faa8db4",
+      "label": "definitions.ts",
+      "path": "src/lib/definitions.ts",
+      "group": "src/lib",
+      "kind": "file",
+      "loc": 30,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "ff3b66a0-b1c6-4135-b613-89f480d1eb91",
+      "label": "button.tsx",
+      "path": "src/components/ui/button.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 57,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 1
+    },
+    {
+      "id": "dc4f264a-28ff-4109-8650-ad56f2fccb7b",
+      "label": "form.tsx",
+      "path": "src/components/ui/form.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 179,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 2,
+      "fan_out": 2
+    },
+    {
+      "id": "82d5c7a7-57ff-4005-bad5-e19c121b0f0a",
+      "label": "input.tsx",
+      "path": "src/components/ui/input.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 23,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 3,
+      "fan_out": 1
+    },
+    {
+      "id": "d41d2fda-aaf2-40d8-a694-c752bec8155c",
+      "label": "label.tsx",
+      "path": "src/components/ui/label.tsx",
+      "group": "src/components/ui",
+      "kind": "file",
+      "loc": 27,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 1
+    },
+    {
+      "id": "0e400272-9402-406d-823d-aa4aad539551",
+      "label": "prisma.ts",
+      "path": "src/lib/prisma.ts",
+      "group": "src/lib",
+      "kind": "file",
+      "loc": 14,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 1,
+      "fan_out": 0
+    },
+    {
+      "id": "3132710d-06e9-4a75-ba36-ae77da8362d3",
+      "label": "session.ts",
+      "path": "src/lib/session.ts",
+      "group": "src/lib",
+      "kind": "file",
+      "loc": 48,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 3,
+      "fan_out": 0
+    },
+    {
+      "id": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "label": "utils.ts",
+      "path": "src/lib/utils.ts",
+      "group": "src/lib",
+      "kind": "file",
+      "loc": 7,
+      "criticality": "critical",
+      "criticality_score": 100.0,
+      "language": "typescript",
+      "fan_in": 11,
+      "fan_out": 0
+    },
+    {
+      "id": "1e9b2cc6-8fbe-4ce8-9b28-5b344d44fcad",
+      "label": "middleware.ts",
+      "path": "src/middleware.ts",
+      "group": "src",
+      "kind": "file",
+      "loc": 34,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "typescript",
+      "fan_in": 0,
+      "fan_out": 1
+    },
+    {
+      "id": "78022f6a-45a8-4a3c-9c4b-f1d600bdbeb1",
+      "label": "theme-changer.tsx",
+      "path": "src/components/theme-changer.tsx",
+      "group": "src/components",
+      "kind": "file",
+      "loc": 18,
+      "criticality": "safe",
+      "criticality_score": 25.0,
+      "language": "tsx",
+      "fan_in": 1,
+      "fan_out": 0
+    }
+  ],
+  "links": [
+    {
+      "source": "064882d5-6d3e-4e49-b125-2afbeff9aad6",
+      "target": "7d8b87d6-a1da-4b7f-a43d-87685976e5a8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "064882d5-6d3e-4e49-b125-2afbeff9aad6",
+      "target": "82d5c7a7-57ff-4005-bad5-e19c121b0f0a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "064882d5-6d3e-4e49-b125-2afbeff9aad6",
+      "target": "dc4f264a-28ff-4109-8650-ad56f2fccb7b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "064882d5-6d3e-4e49-b125-2afbeff9aad6",
+      "target": "ff3b66a0-b1c6-4135-b613-89f480d1eb91",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "064882d5-6d3e-4e49-b125-2afbeff9aad6",
+      "target": "9afa10e8-178a-4d47-a809-52d20faa8db4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1ad86e45-82a6-4acf-a533-fa1af16e4632",
+      "target": "9afa10e8-178a-4d47-a809-52d20faa8db4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1ad86e45-82a6-4acf-a533-fa1af16e4632",
+      "target": "82d5c7a7-57ff-4005-bad5-e19c121b0f0a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1ad86e45-82a6-4acf-a533-fa1af16e4632",
+      "target": "dc4f264a-28ff-4109-8650-ad56f2fccb7b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1ad86e45-82a6-4acf-a533-fa1af16e4632",
+      "target": "ff3b66a0-b1c6-4135-b613-89f480d1eb91",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1ad86e45-82a6-4acf-a533-fa1af16e4632",
+      "target": "7d8b87d6-a1da-4b7f-a43d-87685976e5a8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "1e9b2cc6-8fbe-4ce8-9b28-5b344d44fcad",
+      "target": "3132710d-06e9-4a75-ba36-ae77da8362d3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "314f3707-c8af-4260-b4a3-68481fce0250",
+      "target": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "38d6a40b-1e4f-44c9-b4be-850faa9d0de0",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dbb0a80-617f-40e6-beba-81dd4da94ad6",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "f315fead-1a3b-4b2c-8f7c-08c916c19052",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "4dbb0a80-617f-40e6-beba-81dd4da94ad6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "8e0b77c1-e8e2-40a8-9492-0ab0f51830f2",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "38d6a40b-1e4f-44c9-b4be-850faa9d0de0",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "82d5c7a7-57ff-4005-bad5-e19c121b0f0a",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "ff3b66a0-b1c6-4135-b613-89f480d1eb91",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "4dc1c49f-cf68-4d95-8a96-5fd02f7c76ea",
+      "target": "a28e99b1-6091-45a1-9592-0135490d7b3b",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "620a179a-18cd-47bf-bd30-d53f2095ca8c",
+      "target": "3132710d-06e9-4a75-ba36-ae77da8362d3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "6cad67e1-6ad1-452c-8b1d-9d386d03550d",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "6e9a2581-4409-4b37-bc4b-ac79b85fee6d",
+      "target": "7c7515a1-2af4-44eb-8284-ff8959a721c8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "776610da-4af1-4e3a-8d3d-3dc317c9a851",
+      "target": "6cad67e1-6ad1-452c-8b1d-9d386d03550d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "776610da-4af1-4e3a-8d3d-3dc317c9a851",
+      "target": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7d8b87d6-a1da-4b7f-a43d-87685976e5a8",
+      "target": "9afa10e8-178a-4d47-a809-52d20faa8db4",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7d8b87d6-a1da-4b7f-a43d-87685976e5a8",
+      "target": "3132710d-06e9-4a75-ba36-ae77da8362d3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "7d8b87d6-a1da-4b7f-a43d-87685976e5a8",
+      "target": "0e400272-9402-406d-823d-aa4aad539551",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "82d5c7a7-57ff-4005-bad5-e19c121b0f0a",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "8e0b77c1-e8e2-40a8-9492-0ab0f51830f2",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "9b964329-b781-4763-8292-3ede90daeb7b",
+      "target": "064882d5-6d3e-4e49-b125-2afbeff9aad6",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "c99ed62e-77b9-4c4b-940d-8522af023356",
+      "target": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d15e23c1-56b5-4282-b877-7b07230ce496",
+      "target": "6cad67e1-6ad1-452c-8b1d-9d386d03550d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d15e23c1-56b5-4282-b877-7b07230ce496",
+      "target": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "d41d2fda-aaf2-40d8-a694-c752bec8155c",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dc4f264a-28ff-4109-8650-ad56f2fccb7b",
+      "target": "d41d2fda-aaf2-40d8-a694-c752bec8155c",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "dc4f264a-28ff-4109-8650-ad56f2fccb7b",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e9c1e95a-d0df-4072-8866-fe33344f9676",
+      "target": "78022f6a-45a8-4a3c-9c4b-f1d600bdbeb1",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e9c1e95a-d0df-4072-8866-fe33344f9676",
+      "target": "776610da-4af1-4e3a-8d3d-3dc317c9a851",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e9c1e95a-d0df-4072-8866-fe33344f9676",
+      "target": "d15e23c1-56b5-4282-b877-7b07230ce496",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e9c1e95a-d0df-4072-8866-fe33344f9676",
+      "target": "f2e3dfaf-e4c0-4c30-87ff-36dcdd83e7e8",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e9c1e95a-d0df-4072-8866-fe33344f9676",
+      "target": "ff028fc0-25a0-457a-bcd2-b5a8b0d675a5",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "e9c1e95a-d0df-4072-8866-fe33344f9676",
+      "target": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f2e3dfaf-e4c0-4c30-87ff-36dcdd83e7e8",
+      "target": "6cad67e1-6ad1-452c-8b1d-9d386d03550d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f2e3dfaf-e4c0-4c30-87ff-36dcdd83e7e8",
+      "target": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f315fead-1a3b-4b2c-8f7c-08c916c19052",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "f693ed4e-44f3-4e97-9b6b-edd6420f1d60",
+      "target": "1ad86e45-82a6-4acf-a533-fa1af16e4632",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ff028fc0-25a0-457a-bcd2-b5a8b0d675a5",
+      "target": "6cad67e1-6ad1-452c-8b1d-9d386d03550d",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ff028fc0-25a0-457a-bcd2-b5a8b0d675a5",
+      "target": "2921d8d4-b7c7-4970-80c3-8bd7be072874",
+      "type": "imports",
+      "weight": 1
+    },
+    {
+      "source": "ff3b66a0-b1c6-4135-b613-89f480d1eb91",
+      "target": "9131694b-7b6f-4f38-933c-4648bf77ffa3",
+      "type": "imports",
+      "weight": 1
+    }
+  ],
+  "metadata": {
+    "total_nodes": 37,
+    "total_edges": 53,
+    "clusters": 2
+  }
+}
