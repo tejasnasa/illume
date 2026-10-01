@@ -25,6 +25,31 @@ BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY = pytest.mark.xfail(
 # pass -- so a marker existing at all means a known, unfixed defect sits behind it. Both
 # of the remaining two trace to the same root cause: nothing ever provisions
 # `repo_number`.
+RENAME_ORPHANS_THE_VACATED_FILE = pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "`compute_delta` runs `git diff --name-status -M` and keeps only the last field of "
+        "each row. For a rename that is the new path, so the vacated path never reaches "
+        "`apply_file_delta` and its File row is never deleted -- it survives with its "
+        "symbols, edges, fan metrics, criticality and embeddings, and is served by the "
+        "graph, the stats and the reading order for good. The test passes once the delta "
+        "carries both sides of a rename."
+    ),
+)
+
+RATIO_ESCALATION_IS_UNREACHABLE = pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "The escalation call site computes `total_files` as `len(diff)` only when the "
+        "delta is NOT a fast-forward, then guards the call with `not fast_forward or "
+        "should_escalate(...)`. Python short-circuits, so the check runs only on the "
+        "branch where the count was already set to zero, and `should_escalate` skips its "
+        "ratio test on a zero. The valve that turns a most-of-the-tree change into a "
+        "rebuild has never been reachable; only the absolute changed-file cap can trip. "
+        "The test passes once the check is given the repository's file count."
+    ),
+)
+
 EMPTY_MIGRATIONS = pytest.mark.xfail(
     strict=True,
     reason=(

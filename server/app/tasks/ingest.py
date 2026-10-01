@@ -134,6 +134,12 @@ def ingest_repository(
             finally:
                 pr_executor.shutdown(wait=True)
 
+            # Every LLM artefact -- glossary, reading order, brief and
+            # embeddings -- was produced from ``actual_sha``, so both
+            # watermarks are stamped here. The sync path short-circuits only
+            # when both match the head, so leaving this NULL makes every
+            # later sync re-run the full LLM work against an unchanged commit.
+            repo.analysis_commit_sha = actual_sha
             repo.status = "ready"
             db.commit()
             publish(

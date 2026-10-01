@@ -83,15 +83,28 @@ export default function AutoUpdateSection({ repo }: Props) {
 
   const isActive = ACTIVE_SYNC_STATUSES.has(repo.sync_status);
   /**
+   * A sync diffs the repository against its recorded baseline commit, so a
+   * repository ingested before that watermark existed has nothing to diff
+   * against and the backend refuses the request outright. Offering the
+   * controls anyway only turns a click into an error, so they are gated off
+   * and the reason is stated in the panel instead.
+   */
+  const needsReingest = !repo.ingested_commit_sha;
+  /**
    * The keyless free tier cannot pay for a sync -- the toggle / interval
    * picker / "Sync now" button are all gated on `repo.sync_available`, which
    * is the backend's derived user-level signal rather than a derived value
    * computed here. Locking all three controls off a single flag is what keeps
    * the gate honest; otherwise one of them would slip through silently and
    * the user would learn from a 402 on submit.
+   *
+   * `locked` is the subset of reasons that are a standing property of the
+   * repository rather than of an in-flight request. It is what greys out the
+   * cadence trigger and its items; `disabled` additionally covers the
+   * transient ones.
    */
-  const disabled =
-    isSubmitting || isSyncing || isActive || !repo.sync_available;
+  const locked = !repo.sync_available || needsReingest;
+  const disabled = isSubmitting || isSyncing || isActive || locked;
 
   const summary = (repo.last_sync_summary ?? null) as SyncSummary | null;
 
@@ -198,11 +211,11 @@ export default function AutoUpdateSection({ repo }: Props) {
               direction="left"
               trigger={
                 <span
-                  aria-disabled={!repo.sync_available}
+                  aria-disabled={locked}
                   className={`inline-flex items-center gap-1.5 text-xs text-(--foreground) bg-(--muted)/40 border border-(--border) rounded-sm px-3 py-1.5 transition-colors ${
-                    repo.sync_available
-                      ? "hover:bg-(--muted)/60"
-                      : "opacity-50 cursor-not-allowed"
+                    locked
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-(--muted)/60"
                   }`}
                 >
                   <ClockIcon size={12} />
@@ -212,7 +225,7 @@ export default function AutoUpdateSection({ repo }: Props) {
               }
               items={INTERVAL_OPTIONS.map((opt) => ({
                 label: opt.label,
-                disabled: isSubmitting || !repo.sync_available,
+                disabled: isSubmitting || locked,
                 onClick: () => handleIntervalChange(opt.hours),
               }))}
             />
@@ -237,20 +250,31 @@ export default function AutoUpdateSection({ repo }: Props) {
         </Button>
       </div>
 
-      {!repo.sync_available && (
+      {needsReingest ? (
         <div className="px-5 py-3 text-xs text-(--muted-foreground) border-t border-(--primary)/10 flex items-start gap-1.5">
-          <KeyIcon size={12} weight="duotone" className="mt-0.5 shrink-0" />
+          <WarningIcon size={12} weight="duotone" className="mt-0.5 shrink-0" />
           <span>
-            Syncing runs on your own API key.{" "}
-            <Link
-              href="/settings"
-              className="text-(--primary) underline-offset-2 hover:underline"
-            >
-              Add one in settings
-            </Link>
-            .
+            This repository was ingested before sync tracking existed, so there
+            is no baseline commit to update from. Re-ingest it to record one and
+            enable auto-update.
           </span>
         </div>
+      ) : (
+        !repo.sync_available && (
+          <div className="px-5 py-3 text-xs text-(--muted-foreground) border-t border-(--primary)/10 flex items-start gap-1.5">
+            <KeyIcon size={12} weight="duotone" className="mt-0.5 shrink-0" />
+            <span>
+              Syncing runs on your own API key.{" "}
+              <Link
+                href="/settings"
+                className="text-(--primary) underline-offset-2 hover:underline"
+              >
+                Add one in settings
+              </Link>
+              .
+            </span>
+          </div>
+        )
       )}
 
       {error && (

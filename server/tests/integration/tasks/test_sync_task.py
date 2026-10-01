@@ -56,10 +56,14 @@ from app.services.scanner import (
     should_escalate,
     summarise,
 )
-from app.tasks.sync import sync_repository
+from app.tasks.sync import _fresh_generation, sync_repository
 from tests.conftest import TEST_SYNC_DB_URL
 from tests.fixtures import openai_stub, sample_repo
-from tests.helpers import committed_repo_number_base
+from tests.helpers import (
+    RATIO_ESCALATION_IS_UNREACHABLE,
+    RENAME_ORPHANS_THE_VACATED_FILE,
+    committed_repo_number_base,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -734,3 +738,285 @@ class TestAnExpiredLeaseIsReclaimable:
         assert result.get() is not None
         assert _sync_status_of(repo.id) == "idle"
         assert _lease_of(repo.id) is None
+
+
+def _success_markers_of(repo_id):
+    """``(analysis_commit_sha, last_synced_at, sync_generation)`` for a row."""
+    engine, Session = sync_session()
+    try:
+        row = Session().query(Repository).filter(Repository.id == repo_id).one()
+        return row.analysis_commit_sha, row.last_synced_at, row.sync_generation
+    finally:
+        Session().close()
+        engine.dispose()
+
+
+class TestACompletedSyncRecordsItself:
+    """A sync that finishes has to say so.
+
+    Nothing asserted this, which is how a task that did all of its work and
+    then threw away the record of it went unnoticed: the release path returns
+    the row to ``idle`` too, so an assertion on ``sync_status`` alone passes
+    whether or not the sync was recorded. The three markers below are the ones
+    only the success path writes.
+    """
+
+    def test_the_analysis_watermark_and_last_synced_are_written(
+        self, cloner_stubbed_to_local, stubbed_openai, sync_repo
+    ):
+        factory, session = sync_repo
+        repo = factory()
+        head = sample_repo.head_sha(cloner_stubbed_to_local)
+
+        # The deterministic watermark already matches the head while the
+        # analysis one is unset, so the short-circuit cannot fire and the LLM
+        # half runs against an unchanged commit -- the shape of the first sync
+        # a freshly ingested repository ever performs.
+        _write_row(
+            session,
+            repo,
+            ingested_commit_sha=head,
+            analysis_commit_sha=None,
+            sync_lease_expires_at=None,
+        )
+
+        result = sync_repository.apply(args=[str(repo.id), None])
+        assert result.successful()
+
+        analysis_sha, last_synced_at, generation = _success_markers_of(repo.id)
+        assert analysis_sha == head, (
+            "the analysis watermark was never written -- the task returned "
+            "before recording its own result"
+        )
+        assert last_synced_at is not None, (
+            "last_synced_at was never stamped -- the sync completed and "
+            "discarded the record of having done so"
+        )
+        assert generation is None, (
+            f"sync_generation was left set ({generation!r}) -- the fingerprint "
+            "of the release path rather than the success path"
+        )
+
+    # The end-to-end "and the next sync is free" property is covered by
+    # ``test_sync_short_circuits_when_head_unchanged``, which stamps both
+    # watermarks directly. Composed with the assertion above, that is the same
+    # guarantee: the watermark this test proves is written is the one the
+    # short-circuit reads. Running the task twice in one test is not possible
+    # here anyway -- the local-clone fixture cannot re-clone into a cache path
+    # it has already populated on Windows.
+
+
+def _rev(repo_root, rev: str) -> str:
+    """The SHA ``rev`` resolves to inside ``repo_root``."""
+    return subprocess.run(
+        ["git", "-C", str(repo_root), "rev-parse", rev],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+class TestTheGenerationReadIsNotTheInstance:
+    """The read that decides whether a sync may record its result.
+
+    Reading ``repo.sync_generation`` off the instance is not the same as
+    reading the column. The status writers update ``Repository.__table__``
+    directly -- a Core statement, which does not synchronise ORM instances --
+    and the session is built with ``expire_on_commit=False``, so a commit does
+    not refresh one either. A check that compared the instance against the
+    generation it had just minted therefore compared a pre-lease value against
+    a new one, was always unequal, and sent every sync home before it recorded
+    anything.
+    """
+
+    def test_a_core_write_is_visible_to_the_read_and_invisible_to_the_instance(self, sync_repo):
+        factory, _fixture_session = sync_repo
+        repo = factory()
+        generation = uuid.uuid4()
+
+        # A session configured the way the worker configures its own. The
+        # fixture's session takes SQLAlchemy's default and expires instances on
+        # commit, which would hide the very staleness this is about.
+        engine = create_engine(TEST_SYNC_DB_URL)
+        Session = sessionmaker(bind=engine, expire_on_commit=False)
+        session = Session()
+        try:
+            held = session.get(Repository, repo.id)
+
+            # Exactly what taking the lease does: a Core UPDATE, then a commit.
+            session.execute(
+                Repository.__table__.update()
+                .where(Repository.id == repo.id)
+                .values(sync_generation=generation)
+            )
+            session.commit()
+
+            # The instance the task holds still shows the old value ...
+            assert held.sync_generation != generation, (
+                "the instance was refreshed, so this no longer exercises the "
+                "staleness the guard exists to avoid"
+            )
+            # ... while the read the guard uses sees the write.
+            assert _fresh_generation(session, repo.id) == generation
+        finally:
+            session.close()
+            engine.dispose()
+
+
+class TestTheIncrementalDeltaIsComplete:
+    """What the delta has to carry for the apply half to be correct."""
+
+    @RENAME_ORPHANS_THE_VACATED_FILE
+    def test_a_rename_deletes_the_row_at_the_vacated_path(self, two_comm_working, sync_repo):
+        """``git diff -M`` reports ``R100<TAB>old<TAB>new``.
+
+        Keeping only the last field preserves the new path and drops the old
+        one, so the apply half never deletes the row being vacated: it survives
+        with its symbols, dependency edges, fan metrics, criticality and
+        embeddings, and is served by the graph, the stats and the reading order
+        from then on. Nothing downstream can notice -- the file simply exists
+        twice.
+        """
+        from app.services.scanner import apply_file_delta
+
+        factory, session = sync_repo
+        user = _make_user(session)
+        repo = _make_repo(session, user)
+        try:
+            for path in (sample_repo.RENAMED_FROM, sample_repo.RENAMED_TO):
+                session.add(FileModel(repository_id=repo.id, path=path, language="python", loc=5))
+            session.commit()
+
+            root = Path(two_comm_working)
+            diff = compute_delta(root, _rev(root, "HEAD~1"), _rev(root, "HEAD"))
+            apply_file_delta(session, repo.id, root, [path for _status, path in diff])
+
+            remaining = {
+                row.path
+                for row in session.query(FileModel).filter(FileModel.repository_id == repo.id)
+            }
+            assert sample_repo.RENAMED_TO in remaining
+            assert sample_repo.RENAMED_FROM not in remaining, (
+                "the rename left a phantom row: the delta carried only the new "
+                "path, so the vacated one was never deleted"
+            )
+        finally:
+            _cleanup(session, [repo])
+
+
+class TestTheEscalationCheckIsGivenARealDenominator:
+    """The ratio cap cannot fire on a zero."""
+
+    @RATIO_ESCALATION_IS_UNREACHABLE
+    def test_the_ratio_branch_receives_the_repository_file_count(
+        self, cloner_stubbed_to_local, stubbed_openai, sync_repo, monkeypatch
+    ):
+        """``should_escalate`` compares the diff against the repository's size.
+
+        The call site short-circuits: it evaluates the check only when the
+        delta is a fast-forward, and in that branch it passed a count of zero,
+        which the ratio test skips. The valve that is supposed to turn a
+        most-of-the-tree change into a rebuild has therefore never been
+        reachable, and the only escalation that can happen is the absolute
+        changed-file cap.
+        """
+        factory, session = sync_repo
+        repo = factory()
+        root = Path(cloner_stubbed_to_local)
+        _write_row(
+            session,
+            repo,
+            ingested_commit_sha=_rev(root, "HEAD~1"),
+            analysis_commit_sha=None,
+            sync_lease_expires_at=None,
+        )
+
+        import app.tasks.sync as sync_module
+
+        seen: dict[str, int] = {}
+
+        def spy(diff, total_files, **_kwargs):
+            seen["changed"] = len(diff)
+            seen["total_files"] = total_files
+            return False
+
+        monkeypatch.setattr(sync_module, "should_escalate", spy)
+
+        result = sync_repository.apply(args=[str(repo.id), None])
+        assert result.successful()
+
+        assert seen.get("changed"), "the sync never took the delta path"
+        assert seen.get("total_files", 0) > 0, (
+            "the ratio cap was handed a count of zero, so it can never trip"
+        )
+
+
+class TestTheGlossaryStaysWithinItsCap:
+    """``MAX_GLOSSARY_ENTRIES`` bounds the glossary, not the query.
+
+    The incremental pass keeps every entry already stored and then asks the
+    LLM for definitions of the highest-ranked symbols that lack one. Asking for
+    a full cap *of those* refills nothing: it appends up to the cap more rows
+    each time the repository is updated, so a glossary that started at the cap
+    doubles on the first sync and keeps climbing.
+    """
+
+    def test_an_update_at_the_cap_defines_nothing_further(self, sync_repo, monkeypatch):
+        from app.models.ast_symbol import AstSymbol
+        from app.models.glossary_entry import GlossaryEntry
+        from app.services.glossary_builder import MAX_GLOSSARY_ENTRIES, build_glossary
+
+        fake = openai_stub.install(monkeypatch)
+        factory, session = sync_repo
+        user = _make_user(session)
+        repo = _make_repo(session, user)
+        try:
+            source = FileModel(repository_id=repo.id, path="src/big.py", language="python", loc=500)
+            session.add(source)
+            session.flush()
+
+            symbols = [
+                AstSymbol(
+                    file_id=source.id,
+                    kind="function",
+                    name=f"func_{i}",
+                    start_line=i,
+                    end_line=i + 1,
+                )
+                for i in range(MAX_GLOSSARY_ENTRIES + 50)
+            ]
+            session.add_all(symbols)
+            session.flush()
+
+            # The glossary is already full: the first cap-many symbols have
+            # entries, leaving fifty with none.
+            session.add_all(
+                [
+                    GlossaryEntry(
+                        repository_id=repo.id,
+                        symbol_id=symbol.id,
+                        name=symbol.name,
+                        definition=f"definition of {symbol.name}",
+                    )
+                    for symbol in symbols[:MAX_GLOSSARY_ENTRIES]
+                ]
+            )
+            session.commit()
+            before = len(fake.calls) if hasattr(fake, "calls") else None
+
+            created = build_glossary(session, repo, mode="incremental")
+
+            stored = (
+                session.query(GlossaryEntry).filter(GlossaryEntry.repository_id == repo.id).count()
+            )
+            assert created == 0, (
+                f"an update against a full glossary created {created} entries; "
+                "the cap bounds the stored total, so the budget for new ones "
+                "was already spent"
+            )
+            assert stored == MAX_GLOSSARY_ENTRIES, (
+                f"the glossary grew to {stored}, past its {MAX_GLOSSARY_ENTRIES} cap"
+            )
+            assert before is None or len(fake.calls) == before
+        finally:
+            _cleanup(session, [repo])

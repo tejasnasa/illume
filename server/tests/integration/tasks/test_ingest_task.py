@@ -161,6 +161,22 @@ class TestHappyPath:
 
         assert status_of(pipeline_repo) == "ready"
 
+    def test_both_watermarks_are_stamped(self, pipeline_repo, stubbed):
+        """
+        The sync path short-circuits only when both watermarks equal the head.
+        Stamping the deterministic one alone leaves the analysis watermark
+        NULL, so every later sync re-runs the whole LLM phase -- glossary,
+        reading order, brief and embeddings -- against an unchanged commit.
+        """
+        run_task(pipeline_repo)
+
+        ingested, analysis = watermarks_of(pipeline_repo)
+        assert ingested, "the deterministic watermark was never stamped"
+        assert analysis == ingested, (
+            f"the analysis watermark was never stamped (got {analysis!r}); "
+            "every later sync will re-run the full LLM work for nothing"
+        )
+
     def test_files_are_indexed(self, pipeline_repo, stubbed):
         run_task(pipeline_repo)
 
@@ -1082,6 +1098,20 @@ def status_of(repo_id) -> str:
     return _query(
         repo_id,
         lambda s, rid: s.query(Repository.status).filter(Repository.id == rid).scalar(),
+    )
+
+
+def watermarks_of(repo_id) -> tuple[str | None, str | None]:
+    """``(ingested_commit_sha, analysis_commit_sha)`` for a repository."""
+    from app.models.repository import Repository
+
+    return _query(
+        repo_id,
+        lambda s, rid: tuple(
+            s.query(Repository.ingested_commit_sha, Repository.analysis_commit_sha)
+            .filter(Repository.id == rid)
+            .one()
+        ),
     )
 
 

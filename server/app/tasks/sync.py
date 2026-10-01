@@ -92,6 +92,19 @@ def _sync_tunables() -> tuple[int, float, int, int, int]:
     )
 
 
+def _fresh_generation(db: Session, repo_id: uuid.UUID) -> uuid.UUID | None:
+    """Read ``sync_generation`` straight from the database.
+
+    Reading it off the ORM instance is not equivalent: the status writers
+    update ``Repository.__table__`` directly, which is a Core statement and
+    leaves any instance already in the identity map holding its pre-update
+    value, and the session is built with ``expire_on_commit=False`` so a
+    commit does not refresh it either. A scalar query bypasses the identity
+    map and cannot go stale.
+    """
+    return db.query(Repository.sync_generation).filter(Repository.id == repo_id).scalar()
+
+
 def _take_lease(db: Session, repo: Repository, now: datetime) -> uuid.UUID | None:
     """Atomically claim the lease for ``repo``; return the new generation, or None.
 
@@ -536,7 +549,7 @@ def _do_sync(
         # Re-verify the generation before stamping the analysis
         # watermark: a concurrent reingest would have replaced the row.
         current = db.get(Repository, repo_id_value)
-        if current is None or current.sync_generation != generation:
+        if current is None or _fresh_generation(db, repo_id_value) != generation:
             db.rollback()
             logger.info(
                 "sync_repository: generation changed for %s -- aborting watermark write",
@@ -617,7 +630,7 @@ def _run_full_sync(
         # part of ``run_full_analysis`` above, so we just need to stamp
         # the analysis watermark under the generation check.
         current = db.get(Repository, repo.id)
-        if current is None or current.sync_generation != generation:
+        if current is None or _fresh_generation(db, repo.id) != generation:
             db.rollback()
             logger.info(
                 "sync_repository(full): generation changed for %s -- aborting watermark",

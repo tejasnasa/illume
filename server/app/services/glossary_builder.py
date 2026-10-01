@@ -21,7 +21,7 @@ from collections.abc import Callable
 from typing import Any, Literal, cast
 
 from openai import OpenAI
-from sqlalchemy import Row, select
+from sqlalchemy import Row, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -173,14 +173,27 @@ def build_glossary(
         db.query(GlossaryEntry).filter(GlossaryEntry.repository_id == repo.id).delete()
         db.commit()
 
-    # Cap the working set at MAX_GLOSSARY_ENTRIES even in incremental
-    # mode: a repo whose top-N shifted (a previously-orphan symbol now
-    # has many callers) needs the new symbol defined, but the symbol
-    # that just dropped out of the top-N keeps its existing entry.
+    # ``MAX_GLOSSARY_ENTRIES`` bounds the glossary, not the query: in
+    # incremental mode the entries already stored stay, so the budget for
+    # new ones is what is left of it. Asking for the full cap while
+    # excluding symbols that already have an entry selects the next N
+    # *undefined* symbols instead, which grows the glossary by up to the cap
+    # on every update rather than refilling the empty slots.
+    if mode == "incremental":
+        stored = (
+            db.query(func.count(GlossaryEntry.id))
+            .filter(GlossaryEntry.repository_id == repo.id)
+            .scalar()
+            or 0
+        )
+        budget = max(0, MAX_GLOSSARY_ENTRIES - stored)
+    else:
+        budget = MAX_GLOSSARY_ENTRIES
+
     pairs = _get_top_symbols(
         db,
         repo.id,
-        limit=MAX_GLOSSARY_ENTRIES,
+        limit=budget,
         exclude_with_entry=(mode == "incremental"),
     )
     if not pairs:

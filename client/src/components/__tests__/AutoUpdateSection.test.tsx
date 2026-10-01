@@ -488,3 +488,54 @@ describe("the status line", () => {
     expect(screen.queryByText(/files changed/i)).not.toBeInTheDocument();
   });
 });
+
+describe("the missing-baseline gate", () => {
+  it("disables the switch when there is no baseline commit", () => {
+    render(
+      <AutoUpdateSection repo={makeRepo({ ingested_commit_sha: null })} />,
+    );
+
+    expect(screen.getByRole("switch")).toBeDisabled();
+  });
+
+  it("disables sync now when there is no baseline commit", () => {
+    render(
+      <AutoUpdateSection repo={makeRepo({ ingested_commit_sha: null })} />,
+    );
+
+    expect(screen.getByRole("button", { name: /Sync now/i })).toBeDisabled();
+  });
+
+  it("explains that a re-ingest is what unblocks it", () => {
+    render(
+      <AutoUpdateSection repo={makeRepo({ ingested_commit_sha: null })} />,
+    );
+
+    expect(
+      screen.getByText(/Re-ingest it to record one and enable auto-update/i),
+    ).toBeInTheDocument();
+  });
+
+  it("prefers the re-ingest note over the key note", () => {
+    // Both reasons can apply at once; the baseline is the one that cannot be
+    // resolved by adding a key, so it is the one the user needs to see.
+    render(
+      <AutoUpdateSection
+        repo={makeRepo({ ingested_commit_sha: null, sync_available: false })}
+      />,
+    );
+
+    expect(screen.getByText(/no baseline commit to update from/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Syncing runs on your own API key/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("stays quiet when a baseline exists", () => {
+    render(<AutoUpdateSection repo={makeRepo()} />);
+
+    expect(
+      screen.queryByText(/no baseline commit to update from/i),
+    ).not.toBeInTheDocument();
+  });
+});

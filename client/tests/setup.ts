@@ -41,6 +41,68 @@ if (typeof window !== "undefined" && window.Animation) {
 }
 
 /**
+ * happy-dom ships a `ResizeObserver` that never reports anything.
+ *
+ * Its `observe`, `unobserve` and `disconnect` are all empty -- `observe` is
+ * literally marked "TODO: Not implemented" -- and there is no layout engine
+ * behind it, so no element is ever given a size and the callback is never
+ * called. That is worse than the constructor being absent: a component that
+ * checks `typeof ResizeObserver` before using it sees the shim, takes the
+ * measurement path, and then waits for a notification that can never arrive.
+ *
+ * `BackgroundGraph` is the component that cares. It sizes its canvas from its
+ * own frame rather than letting the force engine take the window's, and
+ * withholds the render until the measurement is non-zero -- so under the shim
+ * it renders nothing at all, whatever data it is handed. The real canvas is
+ * covered end to end; this exists so the props the app passes down are
+ * assertable.
+ *
+ * A browser reports the current size as soon as `observe` is called, from a
+ * later frame rather than synchronously during it. That is what this
+ * reproduces: one entry carrying a plausible viewport, delivered on a
+ * microtask so the update lands after the commit that registered the observer
+ * rather than in the middle of it.
+ */
+const REPORTED_WIDTH = 1024;
+const REPORTED_HEIGHT = 768;
+
+class TestResizeObserver {
+  private readonly callback: ResizeObserverCallback;
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+  }
+
+  observe(target: Element): void {
+    const entry = {
+      target,
+      contentRect: {
+        width: REPORTED_WIDTH,
+        height: REPORTED_HEIGHT,
+        top: 0,
+        left: 0,
+        right: REPORTED_WIDTH,
+        bottom: REPORTED_HEIGHT,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      },
+    } as unknown as ResizeObserverEntry;
+
+    queueMicrotask(() =>
+      this.callback([entry], this as unknown as ResizeObserver),
+    );
+  }
+
+  unobserve(): void {}
+
+  disconnect(): void {}
+}
+
+globalThis.ResizeObserver =
+  TestResizeObserver as unknown as typeof ResizeObserver;
+
+/**
  * The backend base URL, for every module that builds an absolute request to it.
  *
  * Vitest loads `.env` into `import.meta.env` but only exposes `VITE_`-prefixed names
