@@ -57,4 +57,11 @@ export const serverEnv = {
   // above: the suite must never make a billed call.
   AI_API_KEY: "stub-key-not-a-credential",
   AI_BASE_URL: `${STUB_URL}/v1`,
+  // Contact-form delivery is not exercised in the E2E suite; the placeholders below
+  // exist only to satisfy `Settings`, whose every field is required. The values
+  // mirror `server/tests/conftest.py`. The 503-on-unconfigured path is covered by
+  // the backend tests.
+  RESEND_API_KEY: "re_test_key_not_a_real_credential",
+  CONTACT_TO_EMAIL: "operator@example.com",
+  CONTACT_FROM_EMAIL: "contact@illume.tejasnasa.me",
 };
