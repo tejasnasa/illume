@@ -1,8 +1,7 @@
 /**
- * Root application layout with fonts, metadata, and toast host.
+ * Root application layout with fonts and metadata.
  * @module RootLayout
  */
-import { Toast } from "@/components/ui/Toast";
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
@@ -63,7 +62,7 @@ export const metadata: Metadata = {
 };
 
 /**
- * Root HTML shell: applies the app font, global styles, and toast portal.
+ * Root HTML shell: applies the app font and global styles.
  *
  * @param children - Page content rendered inside the body.
  * @returns HTML document structure with SEO metadata applied.
@@ -77,7 +76,6 @@ export default function RootLayout({
     <html lang="en" className={`${spaceGrotesk.className} antialiased`}>
       <body className="min-h-screen bg-background text-foreground overflow-x-hidden">
         {children}
-        <Toast />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

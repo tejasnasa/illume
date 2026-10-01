@@ -19,18 +19,25 @@ type Props = {
 };
 
 /**
- * Renders the contact form with a single error banner.
+ * Renders the contact form with a single error banner and an inline success notice.
  *
  * @param defaultName - Name from the visitor's session, if any.
  * @param defaultEmail - Email from the visitor's session, if any.
  * @returns The form panel.
  */
 export default function ContactForm({ defaultName, defaultEmail }: Props) {
-  const { register, setCategory, category, firstError, isSubmitting, onSubmit } =
-    useContactForm({
-      name: defaultName,
-      email: defaultEmail,
-    });
+  const {
+    register,
+    setCategory,
+    category,
+    firstError,
+    successMessage,
+    isSubmitting,
+    onSubmit,
+  } = useContactForm({
+    name: defaultName,
+    email: defaultEmail,
+  });
 
   return (
     <form
@@ -52,7 +59,12 @@ export default function ContactForm({ defaultName, defaultEmail }: Props) {
           <label htmlFor="name" className="text-sm">
             Name
           </label>
-          <Input id="name" type="text" placeholder="Tejas Nasa" {...register("name")} />
+          <Input
+            id="name"
+            type="text"
+            placeholder="Tejas Nasa"
+            {...register("name")}
+          />
         </div>
 
         <div className="flex flex-col gap-1">
@@ -101,7 +113,18 @@ export default function ContactForm({ defaultName, defaultEmail }: Props) {
         />
       </div>
 
-      {firstError && <p className="text-(--destructive) text-sm">{firstError}</p>}
+      {firstError && (
+        <p className="text-(--destructive) text-sm">{firstError}</p>
+      )}
+      {successMessage && (
+        <p
+          className="text-(--chart-1) text-sm"
+          role="status"
+          aria-live="polite"
+        >
+          {successMessage}
+        </p>
+      )}
 
       <Button className="w-full" size="md" loading={isSubmitting}>
         Send message

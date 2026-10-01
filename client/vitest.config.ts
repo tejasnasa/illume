@@ -49,8 +49,6 @@ export default defineConfig({
           environment: "happy-dom",
           include: [
             "tests/unit/hooks/**/*.test.{ts,tsx}",
-            // `lib/use-toast` is React state, not pure logic, so it needs a DOM even
-            // though it holds no JSX. Everything else under `unit/` is environment-free.
             "tests/unit/lib/**/*.test.{ts,tsx}",
             "src/**/__tests__/**/*.test.{ts,tsx}",
           ],

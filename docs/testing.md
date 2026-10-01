@@ -89,11 +89,11 @@ against the test stack.
 
 ## Test suites
 
-| Suite | Location | Runner | Docker | Tests | Duration |
-|---|---|---|---|---|---|
-| Backend | `server/tests/` | pytest | Yes | 818 passing, 7 expected failures | 1–2 min |
-| Frontend | `client/tests/`, `client/src/**/__tests__/` | Vitest | No | 522 | ~30 s |
-| End-to-end | `client/e2e/` | Playwright | Yes | 45 | ~7 min |
+| Suite      | Location                                    | Runner     | Docker | Tests                            | Duration |
+| ---------- | ------------------------------------------- | ---------- | ------ | -------------------------------- | -------- |
+| Backend    | `server/tests/`                             | pytest     | Yes    | 818 passing, 7 expected failures | 1–2 min  |
+| Frontend   | `client/tests/`, `client/src/**/__tests__/` | Vitest     | No     | 522                              | ~30 s    |
+| End-to-end | `client/e2e/`                               | Playwright | Yes    | 45                               | ~7 min   |
 
 Timings are from a full parallel run and vary with machine load.
 
@@ -307,21 +307,21 @@ database is disposable.
 
 Defined in `conftest.py` unless noted.
 
-| Fixture | Provides |
-|---|---|
-| `client` | An HTTP client talking to the app in-process. No server is started. |
-| `app` | The FastAPI application with its database dependency pointed at the test session. |
-| `db_session` | An async database session whose work is rolled back. |
-| `engine` | The async engine, for tests that need to bypass the session. |
-| `redis_client` | An async Redis client on the test instance. |
-| `migrated_db` | Session-scoped; brings the test database to head before anything runs. |
+| Fixture        | Provides                                                                          |
+| -------------- | --------------------------------------------------------------------------------- |
+| `client`       | An HTTP client talking to the app in-process. No server is started.               |
+| `app`          | The FastAPI application with its database dependency pointed at the test session. |
+| `db_session`   | An async database session whose work is rolled back.                              |
+| `engine`       | The async engine, for tests that need to bypass the session.                      |
+| `redis_client` | An async Redis client on the test instance.                                       |
+| `migrated_db`  | Session-scoped; brings the test database to head before anything runs.            |
 
 And from `helpers.py`, used as plain functions rather than fixtures:
 
-| Helper | Purpose |
-|---|---|
+| Helper                       | Purpose                                                   |
+| ---------------------------- | --------------------------------------------------------- |
 | `authenticate(client, user)` | Writes a valid session cookie for `user` onto the client. |
-| `random_uuid()` | A UUID guaranteed not to match anything a test created. |
+| `random_uuid()`              | A UUID guaranteed not to match anything a test created.   |
 
 `authenticate` writes the cookie directly rather than going through `/login`. That keeps every other
 suite from depending on the login route, which is what the auth tests exist to check.
@@ -442,10 +442,10 @@ not load — which is why the ingest fixture uses a corrupt `.ipynb`.
 
 `vitest.config.ts` defines two projects, split by environment rather than by directory:
 
-| Project | Environment | Covers |
-|---|---|---|
-| `node` | `node` | API clients, `utils/`, `types/` validators, the auth middleware (`proxy.ts`) |
-| `dom` | `happy-dom` | Hooks, `lib/use-toast`, and every component test |
+| Project | Environment | Covers                                                                       |
+| ------- | ----------- | ---------------------------------------------------------------------------- |
+| `node`  | `node`      | API clients, `utils/`, `types/` validators, the auth middleware (`proxy.ts`) |
+| `dom`   | `happy-dom` | Hooks and every component test                                               |
 
 The DOM environment is noticeably slower, and most of the suite does not need it. The split has one
 consequence worth remembering: importing a component under the `node` environment fails with a
@@ -461,7 +461,7 @@ include list.
   `useRepoForm`, `useSignupForm`.
 - `tests/unit/types/validators.test.ts` — the form schemas.
 - `tests/unit/proxy.test.ts` — the middleware auth gate.
-- `tests/unit/utils/timeAgo.test.ts` and `tests/unit/lib/use-toast.test.ts`.
+- `tests/unit/utils/timeAgo.test.ts`.
 - `src/components/__tests__/` and `src/components/ui/__tests__/` — components, plus two mount tests
   (`graph-client-mount`, `background-graph-mount`) confirming the WebGL components can initialise at
   all. Those mock `react-force-graph-3d`, since there is no WebGL context under `happy-dom`.
@@ -531,11 +531,11 @@ OpenAI.
 Playwright starts these itself and waits for each to answer before continuing. Their `cwd` is
 resolved from the config file's directory rather than your shell's.
 
-| Port | Service |
-|---|---|
+| Port | Service                                                                                     |
+| ---- | ------------------------------------------------------------------------------------------- |
 | 8099 | `server/scripts/openai_stub_server.py` — a real HTTP server speaking the OpenAI wire format |
-| 8000 | The FastAPI app, against the **test** database (5433) and Redis (6380) |
-| 3000 | The Next.js client, served from a production build |
+| 8000 | The FastAPI app, against the **test** database (5433) and Redis (6380)                      |
+| 3000 | The Next.js client, served from a production build                                          |
 
 There is deliberately no Celery worker. Nothing in these specs waits for an ingestion to complete;
 the seeded repository is inserted directly by the seed script, and the pipeline itself is covered by
@@ -569,17 +569,17 @@ seed  →  auth  →  chromium
 
 ### Seeded repositories
 
-| Name | Contract |
-|---|---|
-| `seed-repo` | The repository every browsing spec reads. Nothing mutates it. |
-| `reingest-me` | The repository the re-ingest spec is allowed to destroy. |
+| Name          | Contract                                                      |
+| ------------- | ------------------------------------------------------------- |
+| `seed-repo`   | The repository every browsing spec reads. Nothing mutates it. |
+| `reingest-me` | The repository the re-ingest spec is allowed to destroy.      |
 
 Specs read their identifiers from the seed artifact through `readSeed()` and `repoNamed()` rather
 than hardcoding them, since `repo_number` is assigned by a counter and would otherwise need keeping
 in sync by hand in two languages.
 
 Reading the seed inside `test.beforeEach` rather than at module scope matters. Playwright loads
-every spec file to build the test list *before* any project runs, so a module-scope read of
+every spec file to build the test list _before_ any project runs, so a module-scope read of
 `.auth/seed.json` happens before the `seed` project has created it and fails on a clean checkout —
 while appearing to work locally, where the artifact survives from a previous run. Three specs in
 this suite previously had that shape.
@@ -612,17 +612,17 @@ Set in `e2e/playwright.config.ts` and `e2e/env.ts`.
   would not be sent. The spelling has to match across the browser, the CORS allow-list, and the
   cookie domain; when it does not, the symptom is a login that silently does not persist.
 - **SwiftShader launch flags** (`--use-gl=angle --use-angle=swiftshader
-  --enable-unsafe-swiftshader --disable-gpu-sandbox`) give headless Chromium a software WebGL
+--enable-unsafe-swiftshader --disable-gpu-sandbox`) give headless Chromium a software WebGL
   rasteriser, without which the 3D graph tests fail in a container without a GPU.
 
 ### Artifacts
 
 Two artifact directories, and they resolve by different rules:
 
-| Artifact | Location | Resolved relative to |
-|---|---|---|
-| HTML report | `client/playwright-report/` | the shell's working directory |
-| Traces, screenshots, videos | `client/e2e/test-results/` | the config file |
+| Artifact                    | Location                    | Resolved relative to          |
+| --------------------------- | --------------------------- | ----------------------------- |
+| HTML report                 | `client/playwright-report/` | the shell's working directory |
+| Traces, screenshots, videos | `client/e2e/test-results/`  | the config file               |
 
 Neither is a typo. The config sets `outputDir: "test-results"`, which Playwright resolves against
 the config file at `e2e/playwright.config.ts`, giving `e2e/test-results`. The HTML reporter's
@@ -677,13 +677,13 @@ npx playwright test --config=e2e/playwright.config.ts e2e/specs/chat.spec.ts --v
 
 The accepted values for all three options:
 
-| Value | Behaviour |
-|---|---|
-| `off` | Never record. |
-| `on` | Always record, pass or fail. |
-| `retain-on-failure` | Record always, delete on success. (Traces and video.) |
-| `only-on-failure` | Record only when the test fails. (Screenshots.) |
-| `on-first-retry` | Record only when a test is being retried. A useful middle ground for CI. |
+| Value               | Behaviour                                                                |
+| ------------------- | ------------------------------------------------------------------------ |
+| `off`               | Never record.                                                            |
+| `on`                | Always record, pass or fail.                                             |
+| `retain-on-failure` | Record always, delete on success. (Traces and video.)                    |
+| `only-on-failure`   | Record only when the test fails. (Screenshots.)                          |
+| `on-first-retry`    | Record only when a test is being retried. A useful middle ground for CI. |
 
 When debugging, `--trace=on` tends to be more informative than `--video=on`: video shows that
 something went wrong, while a trace shows which locator resolved to what, the DOM at that moment,
@@ -695,22 +695,22 @@ a properly seeded database.
 
 ### Specs
 
-| Spec | Covers |
-|---|---|
-| `smoke.spec.ts` | The app loads, key routes respond, no console errors on boot. |
-| `auth.spec.ts` | Login, logout, the middleware redirect gate, protected routes. |
+| Spec                    | Covers                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| `smoke.spec.ts`         | The app loads, key routes respond, no console errors on boot.                                    |
+| `auth.spec.ts`          | Login, logout, the middleware redirect gate, protected routes.                                   |
 | `seeded-browse.spec.ts` | Browsing the seeded repository: dashboard, file tree, glossary, graph, ownership, reading order. |
-| `chat.spec.ts` | The RAG chat path end to end, including citations. |
-| `reingest.spec.ts` | Re-ingesting a repository, and that the UI reflects it. |
+| `chat.spec.ts`          | The RAG chat path end to end, including citations.                                               |
+| `reingest.spec.ts`      | Re-ingesting a repository, and that the UI reflects it.                                          |
 
 ## Coverage
 
 Both suites measure coverage and enforce a committed floor.
 
-| Suite | Floor file | Floor | Measured |
-|---|---|---|---|
-| Backend | `server/.coverage-floor` | 80 | 81.61 |
-| Frontend | `client/.coverage-floor` | 62 | — (lines) |
+| Suite    | Floor file               | Floor | Measured  |
+| -------- | ------------------------ | ----- | --------- |
+| Backend  | `server/.coverage-floor` | 80    | 81.61     |
+| Frontend | `client/.coverage-floor` | 62    | — (lines) |
 
 CI fails if measured coverage drops below the floor. When a change raises coverage meaningfully,
 raising the floor in the same commit lets a reviewer see the change as deliberate.
@@ -735,13 +735,13 @@ percentage on its own.
 
 `.github/workflows/ci.yml` defines five jobs.
 
-| Job | Runs on | Blocks a merge |
-|---|---|---|
-| `backend-lint` | every PR and push | Partly — see below |
-| `frontend-lint` | every PR and push | Partly |
-| `backend-tests` | every PR and push | Yes |
-| `frontend-tests` | every PR and push | Yes |
-| `e2e-nightly` | nightly at 03:17 UTC, and on push to `main` | No |
+| Job              | Runs on                                     | Blocks a merge     |
+| ---------------- | ------------------------------------------- | ------------------ |
+| `backend-lint`   | every PR and push                           | Partly — see below |
+| `frontend-lint`  | every PR and push                           | Partly             |
+| `backend-tests`  | every PR and push                           | Yes                |
+| `frontend-tests` | every PR and push                           | Yes                |
+| `e2e-nightly`    | nightly at 03:17 UTC, and on push to `main` | No                 |
 
 ### Lint is split
 
@@ -767,8 +767,7 @@ stay off the PR path.
 When it fails, the report and traces are uploaded as artifacts — on failure only, for the same
 reason the config records nothing on success.
 
-CI's Postgres and Redis are GitHub service containers published on the same offset ports (5433,
-6380) that `docker-compose.test.yml` uses locally, so a machine that can run the suite locally can
+CI's Postgres and Redis are GitHub service containers published on the same offset ports (5433, 6380) that `docker-compose.test.yml` uses locally, so a machine that can run the suite locally can
 run it in CI with no second set of credentials.
 
 ## Known unfixed defects

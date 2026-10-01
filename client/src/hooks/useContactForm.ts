@@ -4,9 +4,9 @@
  */
 
 import apiError from "@/lib/apiError";
-import { toast } from "@/lib/use-toast";
 import { contactSchema } from "@/types/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -50,6 +50,8 @@ export default function useContactForm(defaults?: Defaults) {
     message?.message ||
     root?.message;
 
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
   const onSubmit = form.handleSubmit(async (data) => {
     try {
       // The whole `data` object goes over the wire, honeypot included. Dropping
@@ -71,11 +73,9 @@ export default function useContactForm(defaults?: Defaults) {
         throw await apiError(res, "Something went wrong. Please try again.");
       }
 
-      toast({
-        title: "Message sent",
-        description: "Thanks for getting in touch. We'll reply by email.",
-        variant: "success",
-      });
+      // Inline success feedback. The message box also clears (below), which on its own
+      // would be silent; this banner is the visible "your message went through" signal.
+      setSuccessMessage("Thanks for getting in touch. We'll reply by email.");
 
       // Clear the body but keep their identity filled in, so a second message does not
       // mean retyping it.
@@ -96,6 +96,7 @@ export default function useContactForm(defaults?: Defaults) {
       form.setValue("category", value as Category, { shouldValidate: true }),
     category: (form.watch("category") as string | undefined) ?? "",
     firstError,
+    successMessage,
     isSubmitting: form.formState.isSubmitting,
     onSubmit,
   };

@@ -5,12 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BACKEND_URL } from "../../msw/handlers";
 import { server } from "../../msw/server";
 
-// `vi.hoisted` because the mock factory below is hoisted above this declaration; a plain
-// `const` would still be in its temporal dead zone when the factory runs.
-const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
-
-vi.mock("@/lib/use-toast", () => ({ toast }));
-
 const CONTACT_URL = `${BACKEND_URL}/api/v1/contact`;
 
 /**
@@ -31,7 +25,9 @@ function fill(
   values: Record<string, string>,
 ) {
   for (const [name, value] of Object.entries(values)) {
-    result.current.register(name as never).onChange({ target: { value, name } });
+    result.current
+      .register(name as never)
+      .onChange({ target: { value, name } });
   }
 }
 
@@ -115,7 +111,9 @@ describe("validation gate", () => {
   it("rejects a malformed email", async () => {
     const result = await submitValid({ email: "not-an-email" });
 
-    await waitFor(() => expect(result.current.firstError).toMatch(/valid email/i));
+    await waitFor(() =>
+      expect(result.current.firstError).toMatch(/valid email/i),
+    );
   });
 });
 
@@ -157,25 +155,34 @@ describe("successful submission", () => {
 
   it("sends credentials so a signed-in visitor is attributed", async () => {
     const spy = vi.spyOn(globalThis, "fetch");
-    server.use(http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })));
+    server.use(
+      http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })),
+    );
 
     await submitValid();
 
     expect(spy.mock.calls[0][1]?.credentials).toBe("include");
   });
 
-  it("confirms delivery with a toast", async () => {
-    server.use(http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })));
+  it("confirms delivery with an inline success banner", async () => {
+    server.use(
+      http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })),
+    );
 
-    await submitValid();
+    const result = await submitValid();
 
-    expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({ variant: "success", title: "Message sent" }),
+    // The hook surfaces a success message the form renders; the test reads it back
+    // from the hook rather than the DOM because the test file pairs with a form-level
+    // test that covers the rendered banner.
+    await waitFor(() =>
+      expect(result.current.successMessage).toMatch(/we'll reply by email/i),
     );
   });
 
   it("sets no error", async () => {
-    server.use(http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })));
+    server.use(
+      http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })),
+    );
 
     const result = await submitValid();
 
@@ -198,7 +205,10 @@ describe("identity prefill", () => {
       useContactForm({ name: "Grace Hopper", email: "grace@example.com" }),
     );
     await act(async () => {
-      fill(result, { category: "other", message: "A question about reading order." });
+      fill(result, {
+        category: "other",
+        message: "A question about reading order.",
+      });
     });
     await act(async () => {
       await result.current.onSubmit();
@@ -235,7 +245,9 @@ describe("failed submission", () => {
     server.use(
       http.post(CONTACT_URL, () =>
         HttpResponse.json(
-          { detail: "Could not deliver your message. Please try again shortly." },
+          {
+            detail: "Could not deliver your message. Please try again shortly.",
+          },
           { status: 502 },
         ),
       ),
@@ -251,25 +263,33 @@ describe("failed submission", () => {
   it("does not report success when delivery failed", async () => {
     // The whole point of failing loudly: a swallowed error would tell the visitor their
     // message was sent while it existed nowhere.
-    server.use(http.post(CONTACT_URL, () => new HttpResponse(null, { status: 502 })));
+    server.use(
+      http.post(CONTACT_URL, () => new HttpResponse(null, { status: 502 })),
+    );
 
-    await submitValid();
+    const result = await submitValid();
 
-    expect(toast).not.toHaveBeenCalled();
+    expect(result.current.successMessage).toBeNull();
   });
 
   it("falls back to the generic message when the body carries no reason", async () => {
-    server.use(http.post(CONTACT_URL, () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.post(CONTACT_URL, () => new HttpResponse(null, { status: 500 })),
+    );
 
     const result = await submitValid();
 
     await waitFor(() =>
-      expect(result.current.firstError).toBe("Something went wrong. Please try again."),
+      expect(result.current.firstError).toBe(
+        "Something went wrong. Please try again.",
+      ),
     );
   });
 
   it("clears the submitting flag after a failure", async () => {
-    server.use(http.post(CONTACT_URL, () => new HttpResponse(null, { status: 500 })));
+    server.use(
+      http.post(CONTACT_URL, () => new HttpResponse(null, { status: 500 })),
+    );
 
     const result = await submitValid();
 

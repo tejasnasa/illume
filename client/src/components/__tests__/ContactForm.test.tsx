@@ -40,8 +40,13 @@ async function fillValidForm() {
  * Two clicks rather than `selectOptions`: the control is a button and a list of options,
  * not a `<select>`, so there is no element for the browser to set a value on directly.
  */
-async function chooseCategory(user: ReturnType<typeof userEvent.setup>, label: string) {
-  await user.click(screen.getByRole("combobox", { name: /what is this about/i }));
+async function chooseCategory(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+) {
+  await user.click(
+    screen.getByRole("combobox", { name: /what is this about/i }),
+  );
   await user.click(screen.getByRole("option", { name: label }));
 }
 
@@ -67,9 +72,16 @@ describe("the category control", () => {
     const user = userEvent.setup();
     render(<ContactForm />);
 
-    await user.click(screen.getByRole("combobox", { name: /what is this about/i }));
+    await user.click(
+      screen.getByRole("combobox", { name: /what is this about/i }),
+    );
 
-    for (const label of ["Bug report", "Feature request", "Question", "Other"]) {
+    for (const label of [
+      "Bug report",
+      "Feature request",
+      "Question",
+      "Other",
+    ]) {
       expect(screen.getByRole("option", { name: label })).toBeInTheDocument();
     }
   });
@@ -95,12 +107,13 @@ describe("the category control", () => {
     render(<ContactForm />);
 
     await chooseCategory(user, "Feature request");
-    await user.click(screen.getByRole("combobox", { name: /what is this about/i }));
-
-    expect(screen.getByRole("option", { name: "Feature request" })).toHaveAttribute(
-      "aria-selected",
-      "true",
+    await user.click(
+      screen.getByRole("combobox", { name: /what is this about/i }),
     );
+
+    expect(
+      screen.getByRole("option", { name: "Feature request" }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("option", { name: "Other" })).toHaveAttribute(
       "aria-selected",
       "false",
@@ -111,7 +124,9 @@ describe("the category control", () => {
     const user = userEvent.setup();
     render(<ContactForm />);
 
-    await user.click(screen.getByRole("combobox", { name: /what is this about/i }));
+    await user.click(
+      screen.getByRole("combobox", { name: /what is this about/i }),
+    );
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
@@ -124,7 +139,9 @@ describe("the category control", () => {
     const user = userEvent.setup();
     render(<ContactForm />);
 
-    await user.click(screen.getByRole("combobox", { name: /what is this about/i }));
+    await user.click(
+      screen.getByRole("combobox", { name: /what is this about/i }),
+    );
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
 
     expect(screen.getByRole("combobox")).toHaveTextContent("Feature request");
@@ -134,7 +151,9 @@ describe("the category control", () => {
     const user = userEvent.setup();
     render(<ContactForm />);
 
-    await user.click(screen.getByRole("combobox", { name: /what is this about/i }));
+    await user.click(
+      screen.getByRole("combobox", { name: /what is this about/i }),
+    );
     await user.click(screen.getByRole("button", { name: /send message/i }));
 
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
@@ -143,7 +162,12 @@ describe("the category control", () => {
 
 describe("fields", () => {
   it("prefills the name and email it is given", () => {
-    render(<ContactForm defaultName="Grace Hopper" defaultEmail="grace@example.com" />);
+    render(
+      <ContactForm
+        defaultName="Grace Hopper"
+        defaultEmail="grace@example.com"
+      />,
+    );
 
     expect(screen.getByLabelText(/name/i)).toHaveValue("Grace Hopper");
     expect(screen.getByLabelText(/email/i)).toHaveValue("grace@example.com");
@@ -183,7 +207,9 @@ describe("submission", () => {
 
     await user.click(screen.getByRole("button", { name: /send message/i }));
 
-    await waitFor(() => expect(screen.getByText(/pick a category/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/pick a category/i)).toBeInTheDocument(),
+    );
     expect(called).toBe(false);
   });
 
@@ -194,8 +220,12 @@ describe("submission", () => {
     await user.click(screen.getByRole("button", { name: /send message/i }));
 
     // Category is first in the error order, so it is the single message shown.
-    await waitFor(() => expect(screen.getByText(/pick a category/i)).toBeInTheDocument());
-    expect(screen.queryByText(/at least 2 characters/i)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText(/pick a category/i)).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText(/at least 2 characters/i),
+    ).not.toBeInTheDocument();
   });
 
   it("sends a valid form and reports success", async () => {
@@ -212,21 +242,32 @@ describe("submission", () => {
     await user.click(screen.getByRole("button", { name: /send message/i }));
 
     await waitFor(() =>
-      expect(body.message).toBe("The graph view does not render on a large repository."),
+      expect(body.message).toBe(
+        "The graph view does not render on a large repository.",
+      ),
     );
     expect(body.category).toBe("bug");
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        /we'll reply by email/i,
+      ),
+    );
   });
 
   it("clears the message but keeps the sender's identity afterwards", async () => {
     // A second message should not mean retyping a name and address; leaving the first
     // message in place would invite sending it twice.
-    server.use(http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })));
+    server.use(
+      http.post(CONTACT_URL, () => HttpResponse.json({ message: "ok" })),
+    );
     render(<ContactForm />);
 
     const user = await fillValidForm();
     await user.click(screen.getByRole("button", { name: /send message/i }));
 
-    await waitFor(() => expect(screen.getByLabelText(/message/i)).toHaveValue(""));
+    await waitFor(() =>
+      expect(screen.getByLabelText(/message/i)).toHaveValue(""),
+    );
     expect(screen.getByLabelText(/^name/i)).toHaveValue("Ada Lovelace");
     expect(screen.getByLabelText(/^email/i)).toHaveValue("ada@example.com");
     // The category is read off the trigger's label, since the control holds no value
@@ -238,7 +279,9 @@ describe("submission", () => {
     server.use(
       http.post(CONTACT_URL, () =>
         HttpResponse.json(
-          { detail: "Could not deliver your message. Please try again shortly." },
+          {
+            detail: "Could not deliver your message. Please try again shortly.",
+          },
           { status: 502 },
         ),
       ),
@@ -249,13 +292,17 @@ describe("submission", () => {
     await user.click(screen.getByRole("button", { name: /send message/i }));
 
     await waitFor(() =>
-      expect(screen.getByText(/could not deliver your message/i)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/could not deliver your message/i),
+      ).toBeInTheDocument(),
     );
   });
 
   it("keeps the message in the box when delivery fails", async () => {
     // Losing what the visitor wrote on a delivery failure would make them write it twice.
-    server.use(http.post(CONTACT_URL, () => new HttpResponse(null, { status: 502 })));
+    server.use(
+      http.post(CONTACT_URL, () => new HttpResponse(null, { status: 502 })),
+    );
     render(<ContactForm />);
 
     const user = await fillValidForm();
