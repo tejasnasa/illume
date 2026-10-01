@@ -8,6 +8,7 @@ import avatar from "@/assets/loginart.jpg";
 import { useLogout } from "@/hooks/useLogout";
 import User from "@/types/user";
 import {
+  EnvelopeIcon,
   GearSixIcon,
   SignOutIcon,
   StarFourIcon,
@@ -68,6 +69,11 @@ export default function Navbar({
             label: "Settings",
             icon: <GearSixIcon size={"inherit"} />,
             onClick: () => router.push("/settings"),
+          },
+          {
+            label: "Contact",
+            icon: <EnvelopeIcon size={"inherit"} />,
+            onClick: () => router.push("/contact"),
           },
           {
             label: "Logout",

@@ -33,11 +33,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/api/v1/auth/logout",
             "/api/v1/auth/github",
             "/api/v1/auth/github/callback",
+            "/api/v1/contact",
             "/api/v1/ws",
             "/openapi.json",
         ]
 
         if any(request.url.path.startswith(path) for path in public_paths):
+            # A public route still gets an opportunistic identity when the caller happens
+            # to be signed in. The contact endpoint is reachable either way, but a
+            # submission carrying a session can be attributed to an account -- and the
+            # only place that cookie can be read is here, since it is httpOnly. A missing
+            # or invalid token is ignored rather than rejected, because the route does not
+            # require one; `decode_access_token` returns None instead of raising, which is
+            # what makes ignoring it safe.
+            token = request.cookies.get("access_token")
+            if token:
+                user_id = decode_access_token(token)
+                if user_id:
+                    request.state.user_id = user_id
             return await call_next(request)
 
         token = request.cookies.get("access_token")

@@ -22,6 +22,7 @@ PUBLIC_PREFIXES = [
     "/api/v1/auth/logout",
     "/api/v1/auth/github",
     "/api/v1/auth/github/callback",
+    "/api/v1/contact",
     "/api/v1/ws",
     "/openapi.json",
 ]
@@ -113,6 +114,7 @@ class TestPrefixBypassProbing:
         [
             "/api/v1/auth/loginXXX",
             "/api/v1/auth/register/../me",
+            "/api/v1/contactXXX",
             "/api/v1/wsadmin",
             "/api/v1/ws/ingest/not-a-uuid",
             "/openapi.json.bak",

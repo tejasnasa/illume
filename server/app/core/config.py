@@ -35,6 +35,15 @@ class Settings(BaseSettings):
         GITHUB_CLIENT_ID (str): GitHub OAuth client ID.
         GITHUB_CLIENT_SECRET (str): GitHub OAuth client secret.
         GITHUB_REDIRECT_URL (str): GitHub OAuth redirect URI.
+        RESEND_API_KEY (str): Resend API key used to deliver contact-form submissions.
+            Empty disables the contact endpoint, which answers 503 rather than
+            accepting a message it cannot deliver.
+        CONTACT_TO_EMAIL (str): The inbox contact-form submissions are sent to.
+            Empty disables the endpoint alongside an empty ``RESEND_API_KEY``.
+        CONTACT_FROM_EMAIL (str): The ``From`` address on those submissions. Must be a
+            mailbox on a domain verified in the Resend account, and a bare address --
+            a display name would need the angle brackets and spaces that Docker's
+            ``--env-file`` parser passes through literally.
     """
     DATABASE_URL: str
     SYNC_DATABASE_URL: str
@@ -50,6 +59,9 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_ID: str
     GITHUB_CLIENT_SECRET: str
     GITHUB_REDIRECT_URL: str
+    RESEND_API_KEY: str
+    CONTACT_TO_EMAIL: str
+    CONTACT_FROM_EMAIL: str
     DOMAIN: str
 
     model_config = SettingsConfigDict(env_file=".env")

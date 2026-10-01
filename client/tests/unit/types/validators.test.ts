@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { loginSchema, repoCreateSchema, signupSchema } from "@/types/validators";
+import {
+  contactCategories,
+  contactSchema,
+  loginSchema,
+  repoCreateSchema,
+  signupSchema,
+} from "@/types/validators";
 
 /**
  * These schemas are the client's only gate before a request leaves the browser. Each one
@@ -191,5 +197,96 @@ describe("repoCreateSchema", () => {
     expect(repoCreateSchema.safeParse({ github_url: "http://github.com/a/b" }).success).toBe(
       false,
     );
+  });
+});
+
+describe("contactSchema", () => {
+  const valid = {
+    category: "bug",
+    name: "Ada Lovelace",
+    email: "ada@example.com",
+    message: "The graph view does not render on a large repository.",
+    illume_hp: "",
+  };
+
+  it("accepts a valid payload", () => {
+    expect(contactSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("accepts every category the dropdown offers", () => {
+    // The options are rendered from `contactCategories`, and the schema's enum is built
+    // from the same list -- so a category added to the UI but not the schema would fail
+    // here rather than silently 422-ing against the server.
+    for (const { value } of contactCategories) {
+      expect(contactSchema.safeParse({ ...valid, category: value }).success).toBe(true);
+    }
+  });
+
+  it("rejects an empty category", () => {
+    // An untouched select submits its placeholder value, and that must not be accepted
+    // as though the visitor had chosen something.
+    expect(firstError(contactSchema.safeParse({ ...valid, category: "" }))).toMatch(
+      /pick a category/i,
+    );
+  });
+
+  it("rejects an unknown category", () => {
+    expect(contactSchema.safeParse({ ...valid, category: "urgent" }).success).toBe(false);
+  });
+
+  it("accepts a name of exactly two characters", () => {
+    expect(contactSchema.safeParse({ ...valid, name: "Al" }).success).toBe(true);
+  });
+
+  it("rejects a one-character name", () => {
+    expect(firstError(contactSchema.safeParse({ ...valid, name: "A" }))).toMatch(
+      /at least 2 characters/i,
+    );
+  });
+
+  it("rejects a malformed email", () => {
+    expect(firstError(contactSchema.safeParse({ ...valid, email: "not-an-email" }))).toMatch(
+      /valid email/i,
+    );
+  });
+
+  it("rejects a message below the minimum length", () => {
+    expect(firstError(contactSchema.safeParse({ ...valid, message: "too short" }))).toMatch(
+      /at least 10 characters/i,
+    );
+  });
+
+  it("accepts a multi-line message", () => {
+    // The message field is a textarea; rejecting a line break would refuse the most
+    // ordinary bug report. The server has the same requirement, and this pins the client
+    // half of it.
+    const result = contactSchema.safeParse({
+      ...valid,
+      message: "Steps:\n1. Open the graph\n2. Resize the window",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it("trims surrounding whitespace from the message", () => {
+    const result = contactSchema.safeParse({ ...valid, message: "   padded message   " });
+
+    expect(result.data?.message).toBe("padded message");
+  });
+
+  it("accepts any honeypot value", () => {
+    // The decoy is checked on the server, which discards the submission. Rejecting it
+    // here would both tell a bot which field caught it and lock out a visitor whose
+    // browser autofilled it, so the client must remain indifferent to its contents.
+    expect(contactSchema.safeParse({ ...valid, illume_hp: "anything at all" }).success).toBe(
+      true,
+    );
+  });
+
+  it("declares the honeypot as a field so the form always submits it", () => {
+    // A body built by picking only the visible fields would leave the decoy present in
+    // the markup and absent on the wire, quietly disabling the only abuse control there
+    // is.
+    expect(Object.keys(contactSchema.shape)).toContain("illume_hp");
   });
 });

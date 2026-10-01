@@ -119,6 +119,9 @@ jobs:
       DOMAIN: localhost
       OPENAI_API_KEY: test-openai-key
       AI_MODEL: gpt-4o-mini
+      RESEND_API_KEY: re_test_key_not_a_real_credential
+      CONTACT_TO_EMAIL: operator@example.com
+      CONTACT_FROM_EMAIL: contact@tejasnasa.me
     services:
       postgres:
         image: pgvector/pgvector:pg16

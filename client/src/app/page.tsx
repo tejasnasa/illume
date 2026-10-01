@@ -190,6 +190,12 @@ export default function Home() {
                 {item}
               </a>
             ))}
+            <Link
+              href="/contact"
+              className="hidden sm:block px-4 py-2 text-sm text-(--muted-foreground) hover:text-(--foreground) rounded-lg hover:bg-(--secondary) transition-all duration-200"
+            >
+              Contact
+            </Link>
             {/* <Link
               href="/login"
               className="ml-2 flex items-center gap-2 px-5 py-2 text-sm rounded-full border border-(--primary) text-(--muted-foreground) hover:text-(--foreground) hover:border-(--primary) transition-all duration-200"
@@ -581,28 +587,36 @@ export default function Home() {
               Illume &middot; Built by Tejas Nasa
             </span>
           </div>
-          <div className="flex items-center gap-4 text-2xl text-(--muted-foreground)">
-            <a
-              href="https://github.com/tejasnasa"
-              target="_blank"
-              className="hover:text-(--foreground) transition-colors"
+          <div className="flex items-center gap-5">
+            <Link
+              href="/contact"
+              className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
             >
-              <GithubLogoIcon />
-            </a>
-            <a
-              href="https://www.linkedin.com/in/tejasnasa/"
-              target="_blank"
-              className="hover:text-(--foreground) transition-colors"
-            >
-              <LinkedinLogoIcon weight="fill" />
-            </a>
-            <a
-              href="https://x.com/tejasnasa/"
-              target="_blank"
-              className="hover:text-(--foreground) transition-colors"
-            >
-              <XLogoIcon />
-            </a>
+              Contact
+            </Link>
+            <div className="flex items-center gap-4 text-2xl text-(--muted-foreground)">
+              <a
+                href="https://github.com/tejasnasa"
+                target="_blank"
+                className="hover:text-(--foreground) transition-colors"
+              >
+                <GithubLogoIcon />
+              </a>
+              <a
+                href="https://www.linkedin.com/in/tejasnasa/"
+                target="_blank"
+                className="hover:text-(--foreground) transition-colors"
+              >
+                <LinkedinLogoIcon weight="fill" />
+              </a>
+              <a
+                href="https://x.com/tejasnasa/"
+                target="_blank"
+                className="hover:text-(--foreground) transition-colors"
+              >
+                <XLogoIcon />
+              </a>
+            </div>
           </div>
         </div>
       </footer>

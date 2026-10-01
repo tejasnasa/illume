@@ -40,6 +40,13 @@ os.environ.update(
         # cookie `Domain` attribute, and a scheme or port there is not a valid cookie
         # domain.
         "DOMAIN": "localhost",
+        # Contact-form delivery. The key is a placeholder, never a real credential: the
+        # suite intercepts the outbound call at the transport layer, so no test reaches
+        # Resend. Its only job is to make the endpoint look configured -- the tests that
+        # cover the unconfigured path blank it explicitly.
+        "RESEND_API_KEY": "re_test_key_not_a_real_credential",
+        "CONTACT_TO_EMAIL": "operator@example.com",
+        "CONTACT_FROM_EMAIL": "contact@illume.tejasnasa.me",
     }
 )
 

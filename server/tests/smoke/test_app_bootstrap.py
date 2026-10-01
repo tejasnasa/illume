@@ -21,11 +21,13 @@ pytestmark = pytest.mark.smoke
 # 27 -> 29 with the auto-update PATCH and the sync-now POST under
 # ``/api/v1/repository/{repo_id}/...``.
 # 29 -> 32 with the AI credentials GET/PUT/DELETE under ``/api/v1/auth/me``.
-EXPECTED_API_ROUTE_COUNT = 32
+# 32 -> 33 with the public contact POST under ``/api/v1/contact``.
+EXPECTED_API_ROUTE_COUNT = 33
 
 EXPECTED_TAGS = {
     "auth",
     "chat",
+    "contact",
     "github",
     "glossary",
     "graph",
@@ -41,6 +43,7 @@ REPRESENTATIVE_PATHS = {
     "/healthz",
     "/api/v1/auth/login",
     "/api/v1/auth/me",
+    "/api/v1/contact",
     "/api/v1/github/repos",
     "/api/v1/repository",
     "/api/v1/repository/{repo_id}/graph",

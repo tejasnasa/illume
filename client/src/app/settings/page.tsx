@@ -16,7 +16,7 @@ export default async function Settings() {
   const user = await GetMyData();
 
   return (
-    <div className="min-h-screen">
+    <div>
       <Navbar userData={user} />
 
       <main className="max-w-7xl mx-auto px-6 py-24 flex items-start flex-wrap">

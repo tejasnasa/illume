@@ -23,7 +23,7 @@ export default async function Dashboard() {
   const myData = await GetMyData();
 
   return (
-    <div className="min-h-screen">
+    <div>
       <Navbar userData={myData} />
       <DashboardRefresh repositories={repositories} />
 

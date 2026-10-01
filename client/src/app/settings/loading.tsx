@@ -22,7 +22,7 @@ import Skeleton from "@/components/ui/Skeleton";
  */
 export default function LoadingSettings() {
   return (
-    <div className="min-h-screen">
+    <div>
       <NavbarSkeleton />
       <main className="max-w-7xl mx-auto px-6 py-24 flex items-start flex-wrap">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">

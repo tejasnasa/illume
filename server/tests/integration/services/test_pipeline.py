@@ -533,9 +533,7 @@ class TestStageVocabularyOnTheWire:
         unknown = published - set(Stage)
         assert unknown == set(), f"frames carried stage ids outside Stage: {sorted(unknown)}"
 
-    def test_every_stage_that_starts_also_completes(
-        self, pipeline_repo, clone_root, stubbed_clone
-    ):
+    def test_every_stage_that_starts_also_completes(self, pipeline_repo, clone_root, stubbed_clone):
         """
         The pairing the four LLM stages lacked: a ``started`` with no matching
         ``done`` would leave a node spinning for the rest of the run.

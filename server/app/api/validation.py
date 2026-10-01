@@ -63,6 +63,42 @@ def _no_control_characters(value: str | None) -> str | None:
     return value
 
 
+def _no_control_characters_multiline(value: str | None) -> str | None:
+    """Reject control characters in a value whose line breaks are meaningful.
+
+    The rule above rejects all of C0, which includes the line feed. That is correct for
+    the values it is used on -- a name or a path has no legitimate newline -- but it makes
+    the validator unusable for a message body, where a line feed is the most ordinary
+    character there is. Applied there, the check does not tighten anything; it rejects the
+    input outright, and a multi-line message is precisely the input a textarea exists to
+    collect.
+
+    So this variant permits the three whitespace controls (tab, line feed, carriage
+    return) and rejects the rest of C0 plus ``DEL``. The reasoning behind the original
+    check is unchanged for every other character: they are meaningless in prose and only
+    reach the destination by mistake.
+
+    Args:
+        value: The string to check, or None for an optional field.
+
+    Returns:
+        The value unchanged when it is acceptable.
+
+    Raises:
+        ValueError: If the value contains a control character other than tab, line feed
+            or carriage return.
+    """
+    if value is None:
+        return None
+    if any(
+        (ord(ch) < 32 and ch not in "\t\n\r") or ord(ch) == 127 for ch in value
+    ):
+        raise ValueError(
+            "must not contain control characters other than newlines and tabs"
+        )
+    return value
+
+
 NoControlCharacters = AfterValidator(_no_control_characters)
 """Reusable validator metadata for a free-text value.
 
@@ -83,6 +119,14 @@ itself and keeps the validator.
 
 FreeText = Annotated[str, NoControlCharacters]
 """A ``str`` that cannot contain a control character."""
+
+MultiLineText = Annotated[str, AfterValidator(_no_control_characters_multiline)]
+"""A ``str`` that may contain newlines and tabs, but no other control character.
+
+The type to reach for whenever the value is prose a person typed into a textarea.
+``FreeText`` rejects the line feed, so using it there refuses the input rather than
+sanitising it.
+"""
 
 OptionalFreeText = Annotated[str | None, NoControlCharacters]
 """An optional ``str`` that cannot contain a control character when present."""
