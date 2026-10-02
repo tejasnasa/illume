@@ -43,6 +43,22 @@ async def test_healthz_degrades_to_503_when_a_dependency_is_down(client, monkeyp
     assert body["checks"]["redis"] == "error"
 
 
+def test_probe_database_works_across_event_loops():
+    """Two loops, two calls, both healthy.
+
+    pytest-asyncio gives every test its own event loop, and a pooled asyncpg connection is
+    only usable from the loop that created it. Building the probe on the application's
+    engine therefore reports a perfectly healthy database as unreachable as soon as
+    anything has already used that engine from another loop -- which is exactly how this
+    failed in CI, where an earlier test had left a connection in the app's pool.
+
+    Deliberately synchronous: each ``asyncio.run`` here stands up a fresh loop, so this
+    pins the property the async tests above cannot.
+    """
+    assert asyncio.run(health.probe_database()) == "ok"
+    assert asyncio.run(health.probe_database()) == "ok"
+
+
 async def test_probe_redis_reports_error_instead_of_hanging(monkeypatch):
     """A peer that never answers must not hold the request open.
 
