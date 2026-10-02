@@ -9,13 +9,14 @@ import json
 import logging
 import uuid
 
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.database import get_async_db
 from app.core.redis import get_async_redis
 from app.core.security import decode_access_token
 from app.models.repository import Repository
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
@@ -38,7 +39,7 @@ def _is_terminal(data: str) -> bool:
     """
     try:
         payload = json.loads(data)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return data in _TERMINAL_MARKERS
     if isinstance(payload, dict):
         return payload.get("message") in _TERMINAL_MARKERS
@@ -74,9 +75,7 @@ async def ingest_ws(
         return
 
     result = await db.execute(
-        select(Repository).where(
-            Repository.id == repo_id, Repository.user_id == user_id
-        )
+        select(Repository).where(Repository.id == repo_id, Repository.user_id == user_id)
     )
     repo = result.scalar_one_or_none()
 

@@ -25,8 +25,8 @@ describe("the poller", () => {
     vi.restoreAllMocks();
   });
 
-  it("does not refresh when sync_status is idle", () => {
-    render(<RepoStatusPoller sync_status="idle" />);
+  it("does not refresh when the repo is settled and sync_status is idle", () => {
+    render(<RepoStatusPoller sync_status="idle" status="ready" />);
 
     act(() => {
       vi.advanceTimersByTime(30_000);
@@ -36,7 +36,7 @@ describe("the poller", () => {
   });
 
   it("does not refresh when sync_status is failed", () => {
-    render(<RepoStatusPoller sync_status="failed" />);
+    render(<RepoStatusPoller sync_status="failed" status="ready" />);
 
     act(() => {
       vi.advanceTimersByTime(30_000);
@@ -46,7 +46,7 @@ describe("the poller", () => {
   });
 
   it("refreshes while sync_status is updating", () => {
-    render(<RepoStatusPoller sync_status="updating" />);
+    render(<RepoStatusPoller sync_status="updating" status="ready" />);
 
     act(() => {
       vi.advanceTimersByTime(5_000);
@@ -60,7 +60,7 @@ describe("the poller", () => {
   });
 
   it("refreshes while sync_status is queued", () => {
-    render(<RepoStatusPoller sync_status="queued" />);
+    render(<RepoStatusPoller sync_status="queued" status="ready" />);
 
     act(() => {
       vi.advanceTimersByTime(5_000);
@@ -69,7 +69,7 @@ describe("the poller", () => {
   });
 
   it("refreshes while sync_status is checking", () => {
-    render(<RepoStatusPoller sync_status="checking" />);
+    render(<RepoStatusPoller sync_status="checking" status="ready" />);
 
     act(() => {
       vi.advanceTimersByTime(5_000);
@@ -78,14 +78,68 @@ describe("the poller", () => {
   });
 
   it("stops refreshing once sync_status clears", () => {
-    const { rerender } = render(<RepoStatusPoller sync_status="updating" />);
+    const { rerender } = render(
+      <RepoStatusPoller sync_status="updating" status="ready" />,
+    );
 
     act(() => {
       vi.advanceTimersByTime(5_000);
     });
     expect(refresh).toHaveBeenCalledTimes(1);
 
-    rerender(<RepoStatusPoller sync_status="idle" />);
+    rerender(<RepoStatusPoller sync_status="idle" status="ready" />);
+
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes while the initial ingest is pending so the background graph mounts on ready", () => {
+    render(<RepoStatusPoller sync_status="idle" status="parsing" />);
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops refreshing once the initial ingest settles", () => {
+    const { rerender } = render(
+      <RepoStatusPoller sync_status="idle" status="parsing" />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    rerender(<RepoStatusPoller sync_status="idle" status="ready" />);
+
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops refreshing once the initial ingest fails", () => {
+    const { rerender } = render(
+      <RepoStatusPoller sync_status="idle" status="parsing" />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    rerender(<RepoStatusPoller sync_status="idle" status="failed" />);
 
     act(() => {
       vi.advanceTimersByTime(30_000);

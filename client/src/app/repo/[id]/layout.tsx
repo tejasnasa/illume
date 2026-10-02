@@ -86,7 +86,7 @@ export default async function RootLayout({
       <Suspense fallback={<RepoNavSkel />}>
         <RepoNavbar repo={repo} />
       </Suspense>
-      <RepoStatusPoller sync_status={repo.sync_status} />
+      <RepoStatusPoller sync_status={repo.sync_status} status={repo.status} />
 
       <AnimatedLayout>{children}</AnimatedLayout>
     </main>

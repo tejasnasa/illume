@@ -47,9 +47,9 @@ export interface FlowEdge {
   kind: "main" | "sidecar";
 }
 
-export const NODE_WIDTH = 180;
-export const NODE_HEIGHT = 52;
-export const VIEWBOX = { width: 1180, height: 660 } as const;
+export const NODE_WIDTH = 200;
+export const NODE_HEIGHT = 60;
+export const VIEWBOX = { width: 1180, height: 630 } as const;
 
 /**
  * The pipeline, drawn to match the real execution order.
@@ -60,19 +60,19 @@ export const VIEWBOX = { width: 1180, height: 660 } as const;
  * only joined at the very end, so it can outlive every other stage.
  */
 export const NODES: readonly FlowNode[] = [
-  { id: "clone", label: "Clone", cx: 150, cy: 90 },
+  { id: "clone", label: "Fetch Repo", cx: 150, cy: 90 },
   { id: "parse", label: "Parse files", cx: 150, cy: 170 },
-  { id: "resolve_dependencies", label: "Resolve imports", cx: 150, cy: 250 },
-  { id: "compute_fan_metrics", label: "Fan metrics", cx: 150, cy: 330 },
-  { id: "detect_stack", label: "Detect stack", cx: 150, cy: 410 },
-  { id: "git_history", label: "Git history", cx: 150, cy: 490 },
-  { id: "criticality", label: "Criticality", cx: 150, cy: 570 },
-  { id: "glossary", label: "Glossary", cx: 450, cy: 300 },
-  { id: "reading_order", label: "Reading order", cx: 450, cy: 460 },
-  { id: "generate_embeddings", label: "Embeddings", cx: 750, cy: 300 },
-  { id: "brief", label: "Architecture brief", cx: 750, cy: 460 },
+  { id: "resolve_dependencies", label: "Map Connections", cx: 150, cy: 250 },
+  { id: "compute_fan_metrics", label: "Rank Impact", cx: 150, cy: 330 },
+  { id: "detect_stack", label: "Identify Stack", cx: 150, cy: 410 },
+  { id: "git_history", label: "Mine Git History", cx: 150, cy: 490 },
+  { id: "criticality", label: "Score Risk", cx: 150, cy: 570 },
+  { id: "glossary", label: "Create Glossary", cx: 450, cy: 300 },
+  { id: "reading_order", label: "Create Reading order", cx: 450, cy: 460 },
+  { id: "generate_embeddings", label: "Generate Embeddings", cx: 750, cy: 300 },
+  { id: "brief", label: "Analyze Architecture", cx: 750, cy: 460 },
   { id: "ready", label: "Ready", cx: 1050, cy: 380 },
-  { id: "pr_fetch", label: "Pull requests", cx: 450, cy: 90 },
+  { id: "pr_fetch", label: "Gather PRs", cx: 450, cy: 90 },
 ];
 
 export const NODES_BY_ID: Record<string, FlowNode> = Object.fromEntries(

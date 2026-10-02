@@ -40,7 +40,7 @@ function nodeStroke(state: NodeState): {
     case "done":
       return { stroke: "var(--success)", width: 1.5 };
     case "active":
-      return { stroke: "var(--chart-1)", width: 1.5 };
+      return { stroke: "var(--primary)", width: 1.5 };
     case "failed":
       return { stroke: "var(--destructive)", width: 2, dash: "5 4" };
     default:
@@ -151,9 +151,9 @@ const FlowNodeBox = memo(function FlowNodeBox({
         strokeWidth={width}
         strokeDasharray={dash}
       />
-      <StateGlyph state={state} x={x + 22} y={node.cy} />
+      <StateGlyph state={state} x={x + 20} y={node.cy} />
       <text
-        x={x + 40}
+        x={x + 36}
         y={progress ? node.cy - 4 : node.cy + 4}
         fill={dimmed ? "var(--muted-foreground)" : "var(--foreground)"}
         fontSize={13}

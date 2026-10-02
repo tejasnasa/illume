@@ -235,27 +235,8 @@ export default function IngestFlow({
             : (activeLabel ?? "Starting…");
 
   return (
-    <main className="flex h-[calc(100vh-64px)] flex-col overflow-hidden">
-      <header className="flex h-14 shrink-0 items-center gap-3 border-b border-(--border) px-4 text-sm">
-        <GithubLogoIcon
-          size={18}
-          weight="fill"
-          className="shrink-0 text-(--primary)"
-        />
-        <span className="truncate font-semibold text-(--foreground)">
-          {repoLabel}
-        </span>
-
-        {branch && (
-          <span className="flex shrink-0 items-center gap-1 rounded border border-(--primary)/20 bg-(--primary)/10 px-2 py-0.5 font-mono text-[10px] text-(--primary)">
-            <GitBranchIcon size={11} />
-            {branch}
-            {commitSha && (
-              <span className="opacity-75">@{commitSha.substring(0, 7)}</span>
-            )}
-          </span>
-        )}
-
+    <main className="flex h-[calc(100vh-64px)] flex-col overflow-hidden relative">
+      <header className="flex h-14 shrink-0 items-center gap-3 px-4 text-sm absolute top-0 right-0">
         <span
           className={`ml-auto flex shrink-0 items-center gap-2 font-semibold uppercase tracking-wide ${
             failed

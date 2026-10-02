@@ -1,8 +1,13 @@
 /**
- * Polls while a background sync is running, so the repo page repaints when
- * `sync_status` clears. Mirrors `DashboardRefresh.tsx`, but on a different
- * predicate: the sync keeps `status='ready'`, so the dashboard component will
- * not notice it.
+ * Polls while a background sync is running or the initial ingest has not
+ * settled, so the repo page repaints when state changes. Mirrors
+ * `DashboardRefresh.tsx`, but on a different predicate: the sync keeps
+ * `status='ready'`, so the dashboard component will not notice it.
+ *
+ * Polling during the initial ingest is what causes the background graph to
+ * mount the moment the graph endpoint is callable -- the layout only fetches
+ * the graph when `status='ready'`, so without a refresh at that flip the
+ * graph would not appear until the next manual reload.
  * @module RepoStatusPoller
  */
 "use client";
@@ -33,22 +38,35 @@ const MAX_POLL_MS = 65 * 60 * 1000;
 const ACTIVE_SYNC_STATUSES = new Set(["queued", "checking", "updating"]);
 
 /**
- * Triggers a server refresh every 5s while `sync_status` indicates activity,
- * stopping after `MAX_POLL_MS` so a status that never clears cannot poll
- * indefinitely.
+ * Statuses that mean "the layout has something to show". Both terminal.
+ */
+const TERMINAL_STATUSES = new Set(["ready", "failed"]);
+
+/**
+ * Triggers a server refresh every 5s while either `sync_status` indicates
+ * activity or the initial ingest has not settled, stopping after `MAX_POLL_MS`
+ * so a status that never clears cannot poll indefinitely.
  *
  * @param sync_status - Current value of the repository's `sync_status` field.
+ * @param status - Current value of the repository's `status` field. Used to
+ *   poll during the initial ingest so the background graph mounts as soon as
+ *   `status` flips to `"ready"`.
  * @returns Null; only side-effects via router refresh.
  */
 export default function RepoStatusPoller({
   sync_status,
+  status,
 }: {
   sync_status: string;
+  status: string;
 }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!ACTIVE_SYNC_STATUSES.has(sync_status)) return;
+    const syncActive = ACTIVE_SYNC_STATUSES.has(sync_status);
+    const ingestPending = !TERMINAL_STATUSES.has(status);
+
+    if (!syncActive && !ingestPending) return;
 
     const startedAt = Date.now();
     const interval = setInterval(() => {
@@ -60,7 +78,7 @@ export default function RepoStatusPoller({
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(interval);
-  }, [sync_status, router]);
+  }, [sync_status, status, router]);
 
   return null;
 }

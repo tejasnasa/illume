@@ -7,14 +7,22 @@
  */
 
 import IngestFlow from "@/components/IngestFlow";
-import { installFakeWebSocket, lastSocket } from "../../../tests/mocks/fakeWebSocket";
-import { act, render, screen } from "@testing-library/react";
+import {
+  installFakeWebSocket,
+  lastSocket,
+} from "../../../tests/mocks/fakeWebSocket";
+import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const refresh = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh, back: vi.fn() }),
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    refresh,
+    back: vi.fn(),
+  }),
 }));
 
 // Mutable so a single test can turn reduced motion on without a second module
@@ -71,16 +79,23 @@ afterEach(() => {
 });
 
 describe("the header", () => {
-  it("names the repository being ingested", () => {
+  it("names the active stage while running", () => {
     mount();
 
-    expect(screen.getByText("example/sample-project")).toBeInTheDocument();
+    // `repoLabel` is no longer rendered in the header; the headline reflects
+    // the currently-running stage instead. Scoped to <header> so the SVG text
+    // node with the same label (it's the canvas) doesn't satisfy the query.
+    expect(
+      within(screen.getByRole("banner")).getByText("Fetch Repo"),
+    ).toBeInTheDocument();
   });
 
   it("says it is queued rather than pretending a stage is running", () => {
     mount({ status: "pending" });
 
-    expect(screen.getByText(/Queued — waiting for a worker/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Queued — waiting for a worker/),
+    ).toBeInTheDocument();
   });
 });
 
@@ -90,7 +105,12 @@ describe("node states", () => {
 
     expect(nodeState("Parse files")).toBe("pending");
 
-    send({ event: "parsing_started", message: "Starting file analysis...", stage: "parse", phase: "started" });
+    send({
+      event: "parsing_started",
+      message: "Starting file analysis...",
+      stage: "parse",
+      phase: "started",
+    });
 
     expect(nodeState("Parse files")).toBe("active");
   });
@@ -115,18 +135,18 @@ describe("node states", () => {
     // proves everything before the embedding phase already finished.
     mount({ status: "embedding" });
 
-    expect(nodeState("Clone")).toBe("done");
-    expect(nodeState("Git history")).toBe("done");
-    expect(nodeState("Reading order")).toBe("done");
-    expect(nodeState("Embeddings")).toBe("active");
+    expect(nodeState("Fetch Repo")).toBe("done");
+    expect(nodeState("Mine Git History")).toBe("done");
+    expect(nodeState("Create Reading order")).toBe("done");
+    expect(nodeState("Generate Embeddings")).toBe("active");
   });
 
   it("keeps the information when reduced motion is requested", () => {
     motion.reduced = true;
     mount({ status: "embedding" });
 
-    expect(nodeState("Clone")).toBe("done");
-    expect(nodeState("Embeddings")).toBe("active");
+    expect(nodeState("Fetch Repo")).toBe("done");
+    expect(nodeState("Generate Embeddings")).toBe("active");
     expect(nodeState("Ready")).toBe("pending");
   });
 });
@@ -136,8 +156,19 @@ describe("the refresh policy", () => {
     mount();
 
     act(() => {
-      lastSocket().emitFrame({ event: "status_update", message: "Ingestion complete!", status: "ready", stage: "ready", phase: "done" });
-      lastSocket().emitFrame({ event: "done", message: "DONE", stage: "ready", phase: "done" });
+      lastSocket().emitFrame({
+        event: "status_update",
+        message: "Ingestion complete!",
+        status: "ready",
+        stage: "ready",
+        phase: "done",
+      });
+      lastSocket().emitFrame({
+        event: "done",
+        message: "DONE",
+        stage: "ready",
+        phase: "done",
+      });
     });
 
     // Both terminal frames arrive, and neither may fire before the settle.
@@ -154,8 +185,16 @@ describe("the refresh policy", () => {
     mount();
 
     act(() => {
-      lastSocket().emitFrame({ event: "status_update", message: "Status changed to parsing", status: "parsing" });
-      lastSocket().emitFrame({ event: "status_update", message: "Status changed to embedding", status: "embedding" });
+      lastSocket().emitFrame({
+        event: "status_update",
+        message: "Status changed to parsing",
+        status: "parsing",
+      });
+      lastSocket().emitFrame({
+        event: "status_update",
+        message: "Status changed to embedding",
+        status: "embedding",
+      });
     });
 
     act(() => vi.advanceTimersByTime(5000));
@@ -167,7 +206,11 @@ describe("the refresh policy", () => {
     mount();
 
     act(() =>
-      lastSocket().emitFrame({ event: "error", message: "ERROR", phase: "failed" }),
+      lastSocket().emitFrame({
+        event: "error",
+        message: "ERROR",
+        phase: "failed",
+      }),
     );
 
     act(() => vi.advanceTimersByTime(1000));
@@ -182,11 +225,21 @@ describe("failure and retry", () => {
   it("fails only the stage that was running", () => {
     mount();
 
-    send({ event: "clone_complete", message: "Clone complete.", stage: "clone", phase: "done" });
-    send({ event: "parsing_started", message: "Starting file analysis...", stage: "parse", phase: "started" });
+    send({
+      event: "clone_complete",
+      message: "Clone complete.",
+      stage: "clone",
+      phase: "done",
+    });
+    send({
+      event: "parsing_started",
+      message: "Starting file analysis...",
+      stage: "parse",
+      phase: "started",
+    });
     send({ event: "error", message: "ERROR", phase: "failed" });
 
-    expect(nodeState("Clone")).toBe("done");
+    expect(nodeState("Fetch Repo")).toBe("done");
     expect(nodeState("Parse files")).toBe("failed");
     expect(nodeState("Ready")).toBe("pending");
   });
@@ -194,14 +247,24 @@ describe("failure and retry", () => {
   it("clears the failure when the task retries from the clone", () => {
     mount();
 
-    send({ event: "parsing_started", message: "Starting file analysis...", stage: "parse", phase: "started" });
+    send({
+      event: "parsing_started",
+      message: "Starting file analysis...",
+      stage: "parse",
+      phase: "started",
+    });
     send({ event: "error", message: "ERROR", phase: "failed" });
     expect(nodeState("Parse files")).toBe("failed");
 
-    send({ event: "clone_started", message: "Cloning repository...", stage: "clone", phase: "started" });
+    send({
+      event: "clone_started",
+      message: "Cloning repository...",
+      stage: "clone",
+      phase: "started",
+    });
 
     expect(nodeState("Parse files")).toBe("pending");
-    expect(nodeState("Clone")).toBe("active");
+    expect(nodeState("Fetch Repo")).toBe("active");
   });
 });
 
