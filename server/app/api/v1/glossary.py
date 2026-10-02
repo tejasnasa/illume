@@ -81,7 +81,13 @@ async def browse_glossary(
 
     await get_repo_for_user(repo_id, user_id, db)
 
-    base_query = select(GlossaryEntry).where(GlossaryEntry.repository_id == repo_id)
+    # Rows named after the parser's fallback predate the builder filter and can
+    # still be in the table; excluding them here keeps them out of both the page
+    # and the count that drives pagination.
+    base_query = select(GlossaryEntry).where(
+        GlossaryEntry.repository_id == repo_id,
+        GlossaryEntry.name != "<anonymous>",
+    )
 
     if file_path is not None:
         base_query = base_query.where(GlossaryEntry.file_path == file_path)
@@ -150,6 +156,7 @@ async def search_glossary(
 
     base_query = select(GlossaryEntry).where(
         GlossaryEntry.repository_id == repo_id,
+        GlossaryEntry.name != "<anonymous>",
         or_(
             GlossaryEntry.name.ilike(pattern, escape="\\"),
             GlossaryEntry.definition.ilike(pattern, escape="\\"),

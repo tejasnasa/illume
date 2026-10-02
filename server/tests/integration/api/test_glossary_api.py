@@ -211,6 +211,54 @@ class TestSearch:
         assert {e["name"] for e in body["entries"]} == {"__init__"}
 
 
+class TestPlaceholderEntries:
+    """A row named after the parser's fallback is hidden, count and all.
+
+    The builder no longer writes these, but rows predating that still sit in the
+    table until the repository is re-ingested, so both endpoints have to keep
+    them out of the response *and* out of `total` -- `total` is what the pager
+    divides by, and hiding a row only in the renderer is what makes the last
+    page come up short.
+    """
+
+    async def test_an_unattributable_entry_is_not_browsable(self, client, db_session, glossary):
+        _, repo = glossary
+        await make_glossary_entry(db_session, repo, name="<anonymous>")
+
+        body = (await client.get(browse_url(repo))).json()
+
+        assert "<anonymous>" not in {e["name"] for e in body["entries"]}
+        assert body["total"] == 4
+
+    async def test_an_unattributable_entry_is_not_searchable(self, client, db_session, glossary):
+        """Matched on its definition, so only the name filter can exclude it."""
+        _, repo = glossary
+        await make_glossary_entry(
+            db_session,
+            repo,
+            name="<anonymous>",
+            definition="A term with no resolvable subject.",
+        )
+
+        body = (await client.get(f"{search_url(repo)}?q=resolvable")).json()
+
+        assert body["entries"] == []
+        assert body["total"] == 0
+
+    async def test_hidden_entries_add_no_page(self, client, db_session, glossary):
+        """Four visible terms at two per page is two pages, not five."""
+        _, repo = glossary
+        for _ in range(6):
+            await make_glossary_entry(db_session, repo, name="<anonymous>")
+
+        first = (await client.get(f"{browse_url(repo)}?page_size=2&page=1")).json()
+        last = (await client.get(f"{browse_url(repo)}?page_size=2&page=3")).json()
+
+        assert first["total"] == 4
+        assert len(first["entries"]) == 2
+        assert last["entries"] == []
+
+
 class TestGuards:
     async def test_browsing_another_users_repository_is_not_found(self, client, db_session):
         mine = await make_user(db_session)

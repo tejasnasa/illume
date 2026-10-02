@@ -230,6 +230,28 @@ def _glossary_defs(repo_id: uuid.UUID) -> dict[str, str]:
         engine.dispose()
 
 
+def _glossary_names(repo_id: uuid.UUID) -> list[str]:
+    """Every glossary row's name, duplicates included.
+
+    ``_glossary_defs`` keys by name, so two rows sharing a name collapse into one
+    dict entry and the duplicate is invisible to any assertion made against it.
+    This returns one element per row, which is what lets a test see one.
+    """
+    engine, Session = _sync_session_factory()
+    try:
+        session = Session()
+        try:
+            return list(
+                session.execute(
+                    select(GlossaryEntry.name).where(GlossaryEntry.repository_id == repo_id)
+                ).scalars()
+            )
+        finally:
+            session.close()
+    finally:
+        engine.dispose()
+
+
 def _annotations_by_path(repo_id: uuid.UUID) -> dict[str, str]:
     """Return ``{path: annotation}`` from the stored onboarding guide."""
     engine, Session = _sync_session_factory()
@@ -332,6 +354,7 @@ class TestIncrementalGlossary:
         session.commit()
 
         before = _glossary_defs(repo.id)
+        before_names = _glossary_names(repo.id)
         # Stamp the watermarks the way a real ingest would, so the sync
         # task treats this row as fully-current and only re-runs the
         # LLM phase for new symbols.
@@ -361,6 +384,7 @@ class TestIncrementalGlossary:
         assert result.successful()
 
         after = _glossary_defs(repo.id)
+        after_names = _glossary_names(repo.id)
         # Exactly two new entries.
         new_keys = set(after.keys()) - set(before.keys())
         assert new_keys == {"alpha", "gamma"}, f"unexpected new entries: {new_keys}"
@@ -368,8 +392,13 @@ class TestIncrementalGlossary:
         for name in before:
             assert name in after, f"missing entry: {name}"
             assert after[name] == before[name], f"definition changed for {name}"
+        # Row counts, not the name-keyed dict above: that dict collapses two rows
+        # sharing a name into one key, so it cannot see a duplicate at all.
+        assert len(after_names) == len(set(after_names)), (
+            f"duplicate glossary names: {sorted(after_names)}"
+        )
         # Total entry count grew by exactly two.
-        assert len(after) == len(before) + 2
+        assert len(after_names) == len(before_names) + 2
 
 
 class TestIncrementalReadingOrder:

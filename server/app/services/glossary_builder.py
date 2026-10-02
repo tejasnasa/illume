@@ -5,6 +5,10 @@ batches to write 1-2 sentence definitions from each symbol's docstring and
 source, parses the JSON responses, and replaces the repository's stored
 `GlossaryEntry` rows with the results.
 
+The glossary holds one entry per distinct symbol name -- the highest fan-in
+definition site wins -- and symbols the parser could not name are never
+selected.
+
 Concurrency shape: the LLM batches are submitted in parallel
 through :func:`app.services._concurrency.gather_in_order`. Worker threads
 do the network call only; the parent thread collects responses in input
@@ -21,7 +25,7 @@ from collections.abc import Callable
 from typing import Any, Literal, cast
 
 from openai import OpenAI
-from sqlalchemy import Row, func, select
+from sqlalchemy import Row, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -33,6 +37,11 @@ logger = logging.getLogger(__name__)
 
 # Symbols per LLM request; keeps prompts and JSON responses well under limits.
 BATCH_SIZE = 25
+
+# How many ranked symbols to fetch per entry the glossary may store. The
+# one-row-per-name trim discards same-named duplicates, so fetching exactly
+# ``limit`` would under-fill whenever the top of the ranking repeats a name.
+CANDIDATE_MULTIPLIER = 5
 
 # The repository's glossary is bounded to this many entries. ``full`` mode
 # fills the budget; ``incremental`` mode refills any empty slots in the
@@ -49,26 +58,46 @@ def _get_top_symbols(
 ) -> list[Row[tuple[AstSymbol, File]]]:
     """Fetches the top symbols by file fan-in, joined with their files.
 
+    Returns at most ``limit`` rows and at most one row per distinct symbol
+    name: the highest fan-in symbol wins, so the glossary holds one entry per
+    term rather than one per definition site. Symbols the parser could not
+    name (``"<anonymous>"``) are never returned.
+
     ``exclude_with_entry=True`` returns only symbols without a
     ``GlossaryEntry`` for the repo -- the incremental mode's working set:
-    symbols that need a definition written for them. The ``NOT EXISTS``
-    subquery is what makes this cheap on the existing
-    ``ix_glossary_entries_symbol_id`` index.
+    symbols that need a definition written for them. An entry counts as
+    already written when it matches either the symbol's ``symbol_id`` or its
+    name, so a same-named symbol in a newly-changed file is not defined a
+    second time.
     """
     stmt = (
         select(AstSymbol, File)
         .join(File, AstSymbol.file_id == File.id)
         .where(File.repository_id == repository_id)
         .where(AstSymbol.kind.in_(["function", "class", "method", "variable"]))
+        .where(AstSymbol.name != "<anonymous>")
     )
     if exclude_with_entry:
         stmt = stmt.where(
             ~select(GlossaryEntry.id)
             .where(GlossaryEntry.repository_id == repository_id)
-            .where(GlossaryEntry.symbol_id == AstSymbol.id)
+            .where(
+                or_(
+                    GlossaryEntry.symbol_id == AstSymbol.id,
+                    func.lower(GlossaryEntry.name) == func.lower(AstSymbol.name),
+                )
+            )
             .exists()
         )
-    return list(db.execute(stmt.order_by(File.fan_in.desc()).limit(limit)).all())
+
+    rows = db.execute(stmt.order_by(File.fan_in.desc()).limit(limit * CANDIDATE_MULTIPLIER)).all()
+
+    # Rows arrive fan-in descending, so the first sighting of a name is its
+    # most-referenced definition site.
+    best: dict[str, Row[tuple[AstSymbol, File]]] = {}
+    for row in rows:
+        best.setdefault(row[0].name.lower(), row)
+    return list(best.values())[:limit]
 
 
 def _build_prompt(pairs: list[Row[tuple[AstSymbol, File]]]) -> str:
