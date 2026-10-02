@@ -37,7 +37,6 @@ the regression.
 from __future__ import annotations
 
 import gc
-import itertools
 import tracemalloc
 import uuid
 
@@ -52,13 +51,6 @@ pytestmark = pytest.mark.integration
 
 from tests.conftest import TEST_SYNC_DB_URL  # noqa: E402
 from tests.fixtures import openai_stub  # noqa: E402
-from tests.helpers import committed_repo_number_base  # noqa: E402
-
-# Same band strategy as test_memory.py and test_ingest_task.py: committing
-# tests share the database across xdist workers, so each worker takes its
-# own offset. The 800_000 band sits clear of the 700_000 (test_memory.py),
-# 900_000 (factories.py) and 950_000 (test_ingest_task.py) bands.
-_repo_numbers = itertools.count(committed_repo_number_base(800_000))
 
 
 def _sync_session_factory():
@@ -88,7 +80,6 @@ def _make_user_repo(session_factory) -> tuple[uuid.UUID, uuid.UUID]:
             name=f"scale-test-{uuid.uuid4().hex[:8]}",
             status="pending",
             default_branch="main",
-            repo_number=next(_repo_numbers),
         )
         session.add(repo)
         session.commit()

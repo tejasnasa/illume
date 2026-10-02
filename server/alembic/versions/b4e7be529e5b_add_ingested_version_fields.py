@@ -1,7 +1,7 @@
 """add_ingested_version_fields
 
 Revision ID: b4e7be529e5b
-Revises: 1882dcee3456
+Revises: 4a3abf082a58
 Create Date: 2026-06-23 07:01:51.126856
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'b4e7be529e5b'
-down_revision: Union[str, Sequence[str], None] = '1882dcee3456'
+down_revision: Union[str, Sequence[str], None] = '4a3abf082a58'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

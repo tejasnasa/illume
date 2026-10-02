@@ -1,7 +1,7 @@
 """add unique constraints
 
 Revision ID: e5f221c31fc2
-Revises: 1bae111890c6
+Revises: aff92caa271e
 Create Date: 2026-04-15 18:42:53.640130
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'e5f221c31fc2'
-down_revision: Union[str, Sequence[str], None] = '1bae111890c6'
+down_revision: Union[str, Sequence[str], None] = 'aff92caa271e'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

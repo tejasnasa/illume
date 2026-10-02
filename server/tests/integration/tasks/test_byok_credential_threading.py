@@ -30,7 +30,6 @@ to ``settings.OPENAI_API_KEY`` and an OpenAI-SDK-default base URL.
 
 from __future__ import annotations
 
-import itertools
 import uuid
 
 import pytest
@@ -45,14 +44,8 @@ from app.services.llm_config import LLMConfig
 from app.services.llm_providers import PROVIDERS
 from tests.conftest import TEST_SYNC_DB_URL
 from tests.fixtures import openai_stub, sample_repo
-from tests.helpers import committed_repo_number_base
 
 pytestmark = pytest.mark.integration
-
-# Same numbering strategy as the rest of the integration suite -- rows are
-# committed and outlive the test's transaction, so each xdist worker needs
-# its own counter and the values must be well clear of any real row.
-_repo_numbers = itertools.count(committed_repo_number_base(990_000))
 
 # BYOK fixture parameters used in multiple tests. The base URL is the
 # ``openai`` preset so the assertion can verify the registry lookup did
@@ -98,7 +91,6 @@ def _make_repo(session, user: User, *, status: str = "ready") -> Repository:
         status=status,
         ingested_branch="main",
         ingested_commit_sha="a" * 40,
-        repo_number=next(_repo_numbers),
     )
     session.add(repo)
     session.flush()

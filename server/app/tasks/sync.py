@@ -56,6 +56,7 @@ from app.services.scanner import (
     is_fast_forward,
     should_escalate,
     summarise,
+    walk_source_files,
 )
 from app.services.stack_detector import detect_entry_points, detect_stack
 
@@ -489,27 +490,26 @@ def _do_sync(
 
         # Force-push / branch switch / rebase / non-branch ingest: the
         # ancestor check fails, escalate to a full rebuild so the result
-        # is correct rather than approximate.
+        # is correct rather than approximate. The delta cannot express
+        # the change, so it is not worth reading.
         old_sha = repo.ingested_commit_sha
         fast_forward = is_fast_forward(old_sha, new_sha, repo_root) if old_sha else False
+        if not fast_forward:
+            # The full path is identical to a fresh ingest -- it deletes
+            # every ``File`` row, re-parses, re-resolves, re-scores.
+            # ``manage_status=False`` keeps ``status='ready'`` throughout.
+            return _run_full_sync(db, repo, repo_root, new_sha, generation, now, llm_config)
 
         diff = compute_delta(repo_root, old_sha, new_sha)
-        # ``scanner.walk_source_files`` gives the count of *current*
-        # files; the ratio cap needs the repository's size at the
-        # prior ingest, which we approximate as the post-diff count
-        # (the worst case is "diff is most of the tree", which a
-        # newly-rebuilt count also captures).
-        total_files = len(diff) if not fast_forward else 0
-        if not fast_forward or should_escalate(
-            diff,
-            total_files,
-            max_files=max_files,
-            max_ratio=max_ratio,
-        ):
-            # Escalate. The full path is identical to a fresh ingest
-            # -- it deletes every ``File`` row, re-parses, re-resolves,
-            # re-scores. ``manage_status=False`` keeps ``status='ready'``
-            # throughout.
+        # The ratio cap compares the diff against the repository's size, so
+        # the denominator is the working tree's source-file count --
+        # ``len(diff)`` counts only the files that *changed*. Read here, on
+        # the branch that needs it, so a non-fast-forward escalation does not
+        # pay for a second walk. ``walk_source_files`` is the same predicate
+        # the full ingest uses, so the two paths cannot disagree about what
+        # counts as a source file.
+        total_files = len(walk_source_files(repo_root))
+        if should_escalate(diff, total_files, max_files=max_files, max_ratio=max_ratio):
             return _run_full_sync(db, repo, repo_root, new_sha, generation, now, llm_config)
 
         upserted, deleted, changed_file_ids = _run_step_a(db, repo, repo_root, diff)

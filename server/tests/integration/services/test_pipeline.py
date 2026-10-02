@@ -41,15 +41,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.services._stages import Stage
 from tests.fixtures import openai_stub, sample_repo
-from tests.helpers import committed_repo_number_base
 
 pytestmark = pytest.mark.integration
-
-
-# Same numbering band strategy as ``test_ingest_task.py`` -- rows are
-# committed and outlive the test's transaction, so each xdist worker needs
-# its own counter and the values must be well clear of any real row.
-_repo_numbers = itertools.count(committed_repo_number_base(960_000))
 
 
 def _sync_session_factory():
@@ -83,7 +76,6 @@ def _make_repo(session_factory) -> tuple[uuid.UUID, uuid.UUID]:
             name="pipeline-extraction-test",
             status="pending",
             default_branch="main",
-            repo_number=next(_repo_numbers),
         )
         session.add(repo)
         session.commit()

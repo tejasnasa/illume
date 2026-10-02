@@ -24,7 +24,6 @@ ingestion test does.
 from __future__ import annotations
 
 import gc
-import itertools
 import tracemalloc
 import uuid
 from pathlib import Path
@@ -39,12 +38,6 @@ from app.services.scanner import process_repository_files
 pytestmark = pytest.mark.integration
 
 from tests.conftest import TEST_SYNC_DB_URL  # noqa: E402
-from tests.helpers import committed_repo_number_base  # noqa: E402
-
-# Same shape as test_ingest_task.py: rows are committed, not rolled back, so
-# every test needs a unique repo_number well clear of anything a factory or
-# a real commit might use.
-_repo_numbers = itertools.count(committed_repo_number_base(700_000))
 
 
 def _sync_session_factory():
@@ -79,10 +72,6 @@ def _make_repo(session_factory) -> tuple[uuid.UUID, uuid.UUID]:
             name=f"memory-test-{uuid.uuid4().hex[:8]}",
             status="pending",
             default_branch="main",
-            # ``repo_number`` has no database identity (see
-            # ``tests/helpers.py::BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY``);
-            # supply one explicitly.
-            repo_number=next(_repo_numbers),
         )
         session.add(repo)
         session.commit()

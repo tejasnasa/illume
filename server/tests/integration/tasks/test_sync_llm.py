@@ -25,7 +25,6 @@ exact rather than approximate.
 
 from __future__ import annotations
 
-import itertools
 import shutil
 import subprocess
 import uuid
@@ -44,11 +43,8 @@ from app.models.user import User
 from app.tasks.sync import sync_repository
 from tests.conftest import TEST_SYNC_DB_URL
 from tests.fixtures import openai_stub, sample_repo
-from tests.helpers import committed_repo_number_base
 
 pytestmark = pytest.mark.integration
-
-_repo_numbers = itertools.count(committed_repo_number_base(980_000))
 
 
 def _sync_session_factory():
@@ -103,7 +99,6 @@ def _make_repo(
         ingested_branch=ingested_branch,
         ingested_commit_sha=ingested_commit_sha,
         analysis_commit_sha=analysis_commit_sha,
-        repo_number=next(_repo_numbers),
     )
     session.add(repo)
     session.commit()

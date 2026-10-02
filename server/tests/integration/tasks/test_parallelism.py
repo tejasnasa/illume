@@ -32,7 +32,6 @@ stubbed; the rest of the ingest pipeline is real.
 
 from __future__ import annotations
 
-import itertools
 import threading
 import time
 import uuid
@@ -54,11 +53,6 @@ pytestmark = pytest.mark.integration
 
 from tests.conftest import TEST_SYNC_DB_URL  # noqa: E402
 from tests.fixtures import openai_stub  # noqa: E402
-from tests.helpers import committed_repo_number_base  # noqa: E402
-
-# Same band strategy as the other integration tests in this repo --
-# committing tests share the database across xdist workers.
-_repo_numbers = itertools.count(committed_repo_number_base(750_000))
 
 # Tests below set ``FakeOpenAI.delay_s`` so the bounded pool has
 # observable overlap. 50ms is long enough to keep two threads in
@@ -94,7 +88,6 @@ def _make_user_repo(session_factory) -> tuple[uuid.UUID, uuid.UUID]:
             name=f"parallel-test-{uuid.uuid4().hex[:8]}",
             status="pending",
             default_branch="main",
-            repo_number=next(_repo_numbers),
         )
         session.add(repo)
         session.commit()

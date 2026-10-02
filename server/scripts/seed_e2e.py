@@ -56,16 +56,15 @@ OUTPUT = Path(os.environ.get("E2E_SEED_OUTPUT", "e2e-seed.json"))
 PRIMARY_NAME = "seed-repo"
 REINGEST_NAME = "reingest-me"
 
-# The E2E stack shares the backend suite's database, and that suite draws explicit
-# `repo_number` values from bands spanning 700_000 to 990_000 -- one per module, each
-# widened by `REPO_NUMBER_BAND` on every xdist worker. This seed leaves its rows behind
-# on purpose, so it allocates above all of them.
+# The E2E stack shares the backend suite's database, and this seed leaves its rows behind
+# on purpose. `repo_number` is a database identity starting at 1, so the backend suite
+# consumes the low numbers; allocating here well above anything a test run can reach keeps
+# the two apart.
 #
-# It previously used 800_000, which is the band `test_reading_order_scale.py` owns. An
-# overlap does not just break one run: because the seeded rows are never removed, the
-# collision reappears on every backend run after the first, as a `UniqueViolationError`
-# on `repositories_repo_number_key` several minutes in, in a file that has nothing to do
-# with seeding.
+# An overlap does not just break one run: because the seeded rows are never removed, the
+# collision reappears on every backend run after the first, as a `UniqueViolationError` on
+# `repositories_repo_number_key` several minutes in, in a file that has nothing to do with
+# seeding.
 REPO_NUMBER_BASE = 1_100_000
 
 READY_TIMEOUT_SECONDS = 60

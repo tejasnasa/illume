@@ -60,9 +60,6 @@ def _make_repo(db, *, user_id, name: str) -> Repository:
         default_branch="main",
         ingested_branch="main",
         ingested_commit_sha="0" * 40,
-        # `repo_number` has `Identity()` in the model but no DB sequence backs
-        # the column, so a direct insert has to supply one.
-        repo_number=uuid.uuid4().int % 10_000_000,
     )
     db.add(repo)
     db.flush()

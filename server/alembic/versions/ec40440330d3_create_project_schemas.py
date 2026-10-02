@@ -1,7 +1,7 @@
 """create_project_schemas
 
 Revision ID: ec40440330d3
-Revises: 95fdf3002015
+Revises:
 Create Date: 2026-04-08 18:32:05.266497
 
 """
@@ -14,7 +14,7 @@ from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision: str = "ec40440330d3"
-down_revision: Union[str, Sequence[str], None] = "95fdf3002015"
+down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

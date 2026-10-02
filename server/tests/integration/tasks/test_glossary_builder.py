@@ -12,7 +12,6 @@ builds it, because the builder takes a sync ``Session`` and the async
 
 from __future__ import annotations
 
-import itertools
 import uuid
 
 import pytest
@@ -27,11 +26,8 @@ from app.models.user import User
 from app.services.glossary_builder import build_glossary
 from tests.conftest import TEST_SYNC_DB_URL
 from tests.fixtures import openai_stub
-from tests.helpers import committed_repo_number_base
 
 pytestmark = pytest.mark.integration
-
-_repo_numbers = itertools.count(committed_repo_number_base(985_000))
 
 
 @pytest.fixture
@@ -64,7 +60,6 @@ def glossary_db(migrated_db):
             status="ready",
             ingested_branch="main",
             ingested_commit_sha="0" * 40,
-            repo_number=next(_repo_numbers),
         )
         session.add(repo)
         session.commit()

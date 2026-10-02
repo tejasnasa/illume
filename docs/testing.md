@@ -15,7 +15,6 @@ and the conventions to follow when adding tests.
 - [End-to-end suite](#end-to-end-suite)
 - [Coverage](#coverage)
 - [Continuous integration](#continuous-integration)
-- [Known unfixed defects](#known-unfixed-defects)
 - [Writing tests](#writing-tests)
 - [Troubleshooting](#troubleshooting)
 
@@ -91,9 +90,9 @@ against the test stack.
 
 | Suite      | Location                                    | Runner     | Docker | Tests                            | Duration |
 | ---------- | ------------------------------------------- | ---------- | ------ | -------------------------------- | -------- |
-| Backend    | `server/tests/`                             | pytest     | Yes    | 818 passing, 7 expected failures | 1–2 min  |
-| Frontend   | `client/tests/`, `client/src/**/__tests__/` | Vitest     | No     | 522                              | ~30 s    |
-| End-to-end | `client/e2e/`                               | Playwright | Yes    | 45                               | ~7 min   |
+| Backend    | `server/tests/`                             | pytest     | Yes    | 1128 passing                     | 1–2 min  |
+| Frontend   | `client/tests/`, `client/src/**/__tests__/` | Vitest     | No     | 676                              | ~30 s    |
+| End-to-end | `client/e2e/`                               | Playwright | Yes    | 48                               | ~7 min   |
 
 Timings are from a full parallel run and vary with machine load.
 
@@ -151,11 +150,10 @@ uv run pytest --cov=app --cov-report=term-missing -n auto   # with coverage
 
 Available markers: `smoke`, `unit`, `integration`, `security`, `migration`, `slow`.
 
-Two of these are registered but not currently used by any test. `slow` exists so that a slow test
-can be added later without changing the default command everywhere, and `xfail_leak` was declared
-for a credential-leak test that was ultimately fixed outright rather than left failing. Since
-`addopts` includes `--strict-markers`, an unknown marker name is an error rather than a silent
-no-op, so neither can be mistyped into existence.
+`slow` is registered but not currently used by any test: it exists so that a slow test can be added
+later without changing the default command everywhere. Since `addopts` includes
+`--strict-markers`, an unknown marker name is an error rather than a silent no-op, so it cannot be
+mistyped into existence.
 
 ### Frontend
 
@@ -225,7 +223,7 @@ Directories map to markers, so the layout doubles as the test taxonomy:
 tests/
 ├── conftest.py                    # environment bootstrap, shared fixtures
 ├── factories.py                   # helpers that build rows (users, repos, files)
-├── helpers.py                     # pure functions: authenticate(), xfail markers
+├── helpers.py                     # pure functions: authenticate(), make_two_users()
 ├── fixtures/
 │   ├── sample_repo.py             # an in-memory repo used by the ingest tests
 │   ├── openai_stub.py             # the deterministic OpenAI fake
@@ -417,8 +415,11 @@ here:
    anything — fixing the bug means removing the marker.
 
 Shared markers live in `helpers.py` so that every test blocked by the same defect carries the same
-explanation. The marker names describe the cause — see
-[Known unfixed defects](#known-unfixed-defects).
+explanation. **No test currently carries one.** The last eleven — eight blocked by `repo_number`
+having no generator, one by three empty migration revisions, one by renames orphaning the vacated
+file, and one by an unreachable escalation guard — were retired when the underlying defects were
+fixed. The mechanism is documented here because it is the right way to record the next one: mark
+the test `strict=True`, name the cause, and delete the marker in the same change as the fix.
 
 ### Two traps worth knowing
 
@@ -772,49 +773,12 @@ run it in CI with no second set of credentials.
 
 ## Known unfixed defects
 
-There is currently one known unfixed defect, recorded in the suite rather than in a separate
-document so it cannot be forgotten.
-
-### `repo_number` is never provisioned
-
-Creating a repository is the first thing every user does, and it fails against any database built
-from this repository's migrations.
-
-The model declares `repo_number` as a database-generated identity
-(`server/app/models/repository.py`):
-
-```python
-repo_number: Mapped[int] = mapped_column(Integer, Identity(), unique=True, nullable=False)
-```
-
-Because `Identity()` tells SQLAlchemy the database will supply the value, the ORM omits the column
-from its INSERT. The database, however, has no identity and no default on that column: it is
-`NOT NULL` with nothing to fill it. The migration that was meant to make that conversion,
-`server/alembic/versions/1bae111890c6_modify_repo_number.py`, is empty — `pass` in both `upgrade()`
-and `downgrade()`, with no `op.` calls.
-
-Every INSERT that omits the column therefore fails:
-
-```
-IntegrityError: null value in column "repo_number" of relation "repositories"
-                violates not-null constraint
-```
-
-So `POST /api/v1/repository` returns 500, and `PUT /{repo_id}/reingest` fails the same way, since it
-re-inserts the row carrying a `repo_number` that is only ever `NULL`.
-
-Two other revisions (`95fdf3002015`, `1882dcee3456`) are empty no-ops in the same way.
-
-**How the suite accommodates it.** `make_repo` supplies `repo_number` explicitly, so the read,
-update, and delete routes stay fully testable. Creation is different: six tests in
-`tests/integration/api/test_repository_api.py` carry the `BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY`
-marker, and one test in `tests/migrations/test_migrate.py` carries `EMPTY_MIGRATIONS`. All seven are
-`xfail(strict=True)`.
-
-**Fixing it** means a migration converting `repo_number` into a real identity, with a backfill for
-any table where the column is already populated. Once that lands, those seven tests report
-`XPASS(strict)`, which is a failure by design — the suite is indicating that the markers can now be
-removed and the tests allowed to assert normally.
+**None.** Every defect the suite once pinned this way has been fixed, and its marker removed. The
+last to go was `repo_number` never being provisioned: the model declared it `Identity()`, no
+migration created a generator, and `POST /api/v1/repository` returned 500 against any database
+built from these migrations — while production kept working only because it had been patched by
+hand. `d4e5f6a7b8c9_give_repo_number_an_identity` gives the column a real identity, guarded so a
+database that already has a default is left alone.
 
 ```bash
 cd server

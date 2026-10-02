@@ -26,7 +26,6 @@ from app.models.onboarding_guide import OnboardingGuide
 from app.models.repository import Repository
 from app.models.user import User
 from tests.fixtures.openai_stub import RETRIEVABLE_VECTOR
-from tests.helpers import committed_repo_number_base
 
 _counter = itertools.count(1)
 
@@ -34,17 +33,6 @@ _counter = itertools.count(1)
 # NULL". A `None` default cannot express both, and several columns here are nullable in
 # ways the endpoints have to handle.
 UNSET: Any = object()
-
-# Separate counter for repo_number. Starts high so a value never collides with a real
-# row in a developer's database if the suite is ever pointed at one by mistake, and
-# offset per xdist worker so two workers cannot allocate the same number -- see
-# `committed_repo_number_base`.
-#
-# The E2E seed shares this database (both suites point at `illume_test`) and leaves its
-# rows behind on purpose, so the two ranges must not overlap: the seed uses 800_000+ and
-# passes an explicit number. A collision here surfaces as a `UniqueViolationError` in an
-# unrelated test, several minutes into a run.
-_repo_number = itertools.count(committed_repo_number_base(900_000))
 
 
 def unique_email(prefix: str = "user") -> str:
@@ -114,14 +102,9 @@ async def make_repo(
     """
     Insert a repository owned by `user`.
 
-    `repo_number` is supplied explicitly. The model declares it as `Identity()`, so the
-    ORM omits it and expects the database to generate one -- but no migration ever
-    created a generator for the column, so omitting it violates NOT NULL. That defect is
-    deliberately being left alone; supplying the value keeps direct inserts working so the
-    read/update/delete routes can still be tested.
-
-    Pass `repo_number` explicitly to control the value -- the E2E seed does, to stay out of
-    the counter's range.
+    `repo_number` is left to the database identity unless the caller passes one. Only the
+    E2E seed does: it shares this database and leaves its rows behind on purpose, so it
+    allocates in its own high band, clear of the generator.
     """
     repo = Repository(
         user_id=user.id,
@@ -132,8 +115,9 @@ async def make_repo(
         default_branch=default_branch,
         ingested_branch=default_branch,
         ingested_commit_sha="0" * 40,
-        repo_number=repo_number if repo_number is not None else next(_repo_number),
     )
+    if repo_number is not None:
+        repo.repo_number = repo_number
     db.add(repo)
     await db.flush()
     await db.refresh(repo)

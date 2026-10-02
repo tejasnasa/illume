@@ -36,7 +36,6 @@ unit suite covers the pure pieces.
 
 from __future__ import annotations
 
-import itertools
 import shutil
 import subprocess
 import uuid
@@ -59,15 +58,8 @@ from app.services.scanner import (
 from app.tasks.sync import _fresh_generation, sync_repository
 from tests.conftest import TEST_SYNC_DB_URL
 from tests.fixtures import openai_stub, sample_repo
-from tests.helpers import (
-    RATIO_ESCALATION_IS_UNREACHABLE,
-    RENAME_ORPHANS_THE_VACATED_FILE,
-    committed_repo_number_base,
-)
 
 pytestmark = pytest.mark.integration
-
-_repo_numbers = itertools.count(committed_repo_number_base(970_000))
 
 
 def sync_session():
@@ -127,7 +119,6 @@ def _make_repo(
         ingested_branch=ingested_branch,
         ingested_commit_sha=ingested_commit_sha,
         analysis_commit_sha=analysis_commit_sha,
-        repo_number=next(_repo_numbers),
     )
     session.add(repo)
     session.commit()
@@ -866,7 +857,6 @@ class TestTheGenerationReadIsNotTheInstance:
 class TestTheIncrementalDeltaIsComplete:
     """What the delta has to carry for the apply half to be correct."""
 
-    @RENAME_ORPHANS_THE_VACATED_FILE
     def test_a_rename_deletes_the_row_at_the_vacated_path(self, two_comm_working, sync_repo):
         """``git diff -M`` reports ``R100<TAB>old<TAB>new``.
 
@@ -907,7 +897,6 @@ class TestTheIncrementalDeltaIsComplete:
 class TestTheEscalationCheckIsGivenARealDenominator:
     """The ratio cap cannot fire on a zero."""
 
-    @RATIO_ESCALATION_IS_UNREACHABLE
     def test_the_ratio_branch_receives_the_repository_file_count(
         self, cloner_stubbed_to_local, stubbed_openai, sync_repo, monkeypatch
     ):

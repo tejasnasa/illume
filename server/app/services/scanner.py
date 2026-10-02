@@ -381,10 +381,10 @@ def apply_file_delta(
     """Apply one git diff's worth of file changes to the database.
 
     The unit of incremental work: one call per sync. ``paths`` is the set
-    of repo-relative paths ``git diff --name-status -M`` produced (after
-    renames have been normalised to their post-rename target). For each
-    path the caller has already classified as one of ``{"A", "M", "R"}``
-    or ``"D"``, the function either upserts the row or deletes it.
+    of repo-relative paths ``git diff --name-status -M`` produced -- a
+    rename contributing both its vacated and its new path. For each path
+    the caller has already classified as one of ``{"A", "M", "R"}`` or
+    ``"D"``, the function either upserts the row or deletes it.
 
     Insertion (A/M/R): the row is upserted by ``(repository_id, path)``
     on the ``uq_file_repo_path`` unique constraint. Every derived column
@@ -529,6 +529,11 @@ def compute_delta(
     when the two SHAs agree, which the caller turns into the
     short-circuit path (no DB writes, no LLM calls).
 
+    A rename contributes **two** entries -- a ``D`` for the vacated path
+    and an ``R`` for the new one -- because both are file-level changes:
+    the old row has to go and the new row has to be written. Emitting
+    only the target would orphan the vacated row.
+
     The function does not filter on ``SKIP_DIRS`` -- it returns the full
     diff. ``is_scannable`` is consulted by :func:`apply_file_delta` and
     the resolver, so a non-source change (``.png``, ``alembic/``) is a
@@ -575,10 +580,21 @@ def compute_delta(
         if len(parts) < 2:
             continue
         status = parts[0][0]  # ``R100`` -> ``R``
-        # ``R`` rows carry three fields: ``R100``, ``old``, ``new``. We
-        # want the post-rename target -- the resolver keys on it.
-        path = parts[-1]
-        diff.append((status, path.replace("\\", "/")))
+        if status == "R" and len(parts) == 3:
+            # ``R100<TAB>old<TAB>new``: the rename vacates ``old``. Emit the
+            # vacated path as its own deletion so ``apply_file_delta`` removes
+            # the orphan row -- the cascade clears its symbols, dependency
+            # edges, fan metrics, criticality and embeddings. Then the new path
+            # as the upsert. Emitting only the target would leave the old row
+            # alive for good, served by the graph, the stats and the reading
+            # order as a file that exists twice.
+            diff.append(("D", parts[1].replace("\\", "/")))
+            diff.append(("R", parts[2].replace("\\", "/")))
+        else:
+            # ``A``/``M``/``D`` carry one path. A ``C`` row also carries three
+            # fields, but a copy does not vacate its source, so it stays a
+            # single upsert of the new path.
+            diff.append((status, parts[-1].replace("\\", "/")))
     return diff
 
 
@@ -636,8 +652,9 @@ def should_escalate(
 
     The function reads ``total_files`` rather than recomputing it so the
     caller can decide which count to use (e.g. exclude ``SKIP_DIRS``-only
-    paths the walk would have skipped). Today the caller passes the raw
-    repository file count from the prior ingest.
+    paths the walk would have skipped). The caller passes the working
+    tree's source-file count -- ``len(diff)`` would count only the files
+    that *changed*, which is the numerator, not the denominator.
     """
     changed = len(diff)
     if changed > max_files:

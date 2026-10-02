@@ -249,15 +249,6 @@ async def _user_counter(db_session, user_id: uuid.UUID) -> int:
 class TestCreateRepository:
     """``POST /api/v1/repository`` -- the one route that admits keyless users."""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "The Repository model declares repo_number as an Identity, but no migration "
-            "provisions the column. POSTing therefore raises NOT NULL, and these tests "
-            "exercise the new gate's claim + insert path, so they pass only when the "
-            "identity defect is resolved."
-        ),
-    )
     async def test_byok_user_admitted(self, client, db_session, dispatched):
         """A user with a stored key is admitted immediately; no allowance consumed."""
         user = await _make_byok_user(db_session)
@@ -270,13 +261,6 @@ class TestCreateRepository:
         stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
         assert stored.free_ingest_used is False
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "The Repository model declares repo_number as an Identity, but no migration "
-            "provisions the column. POSTing therefore raises NOT NULL."
-        ),
-    )
     async def test_keyless_user_admitted_when_allowance_remains(
         self, client, db_session, dispatched
     ):
@@ -452,7 +436,6 @@ class TestSyncRepositoryBackstop:
                 auto_update_interval_hours=6,
                 ingested_branch="main",
                 ingested_commit_sha="a" * 40,
-                repo_number=980_000,
             )
             sync.add(repo)
             sync.commit()

@@ -6,7 +6,7 @@ import pytest
 
 from tests.factories import make_ingested_repo, make_repo, make_user
 from tests.fixtures.golden import assert_matches_golden
-from tests.helpers import BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY, authenticate
+from tests.helpers import authenticate
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +42,6 @@ async def owner(client, db_session):
 
 
 class TestCreate:
-    @BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY
     async def test_returns_202_with_ids(self, client, db_session, owner, dispatched):
         response = await client.post(COLLECTION, json={"github_url": GITHUB_URL})
 
@@ -51,7 +50,6 @@ class TestCreate:
         assert uuid.UUID(body["repo_id"])
         assert isinstance(body["repo_num"], int)
 
-    @BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY
     async def test_persists_the_repository(self, client, db_session, owner, dispatched):
         from sqlalchemy import select
 
@@ -63,7 +61,6 @@ class TestCreate:
         result = await db_session.execute(select(Repository).where(Repository.id == repo_id))
         assert result.scalar_one_or_none() is not None
 
-    @BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY
     async def test_derives_the_name_from_the_url(self, client, db_session, owner, dispatched):
         from sqlalchemy import select
 
@@ -75,20 +72,17 @@ class TestCreate:
         result = await db_session.execute(select(Repository).where(Repository.id == repo_id))
         assert result.scalar_one().name == "cool-project"
 
-    @BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY
     async def test_queues_ingestion(self, client, db_session, owner, dispatched):
         response = await client.post(COLLECTION, json={"github_url": GITHUB_URL})
 
         assert len(dispatched) == 1
         assert dispatched[0][0] == response.json()["repo_id"]
 
-    @BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY
     async def test_forwards_the_branch(self, client, db_session, owner, dispatched):
         await client.post(COLLECTION, json={"github_url": GITHUB_URL, "branch": "develop"})
 
         assert dispatched[0][2]["branch"] == "develop"
 
-    @BLOCKED_BY_MISSING_REPO_NUMBER_IDENTITY
     async def test_starts_in_a_non_ready_state(self, client, db_session, owner, dispatched):
         """A fresh repository must not report itself as ready before ingestion runs."""
         from sqlalchemy import select

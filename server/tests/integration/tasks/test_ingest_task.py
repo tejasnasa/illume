@@ -24,14 +24,8 @@ from datetime import UTC, datetime
 import pytest
 
 from tests.fixtures import openai_stub, sample_repo
-from tests.helpers import committed_repo_number_base
 
 pytestmark = pytest.mark.integration
-
-# Well clear of both the factory counter and any real row, since these rows are committed
-# rather than rolled back. Offset per xdist worker: this module is imported separately in
-# every worker, so a bare constant has all of them allocating the same numbers.
-_repo_numbers = itertools.count(committed_repo_number_base(950_000))
 
 
 def sync_session():
@@ -51,9 +45,8 @@ def pipeline_repo():
     A committed repository row the eager task can pick up.
 
     Committed on purpose: the task opens its own session, so a row left in the test's
-    transaction would be invisible to it. `repo_number` is supplied explicitly because
-    the column has no database-side generator. Teardown deletes the row and lets the
-    cascade take the children.
+    transaction would be invisible to it. Teardown deletes the row and lets the cascade
+    take the children.
     """
     engine, Session = sync_session()
     session = Session()
@@ -76,7 +69,6 @@ def pipeline_repo():
         name="sample-project",
         status="pending",
         default_branch="main",
-        repo_number=next(_repo_numbers),
     )
     session.add(repo)
     session.commit()
@@ -1036,7 +1028,6 @@ class TestFileInsertIdempotence:
                 default_branch="main",
                 ingested_branch="main",
                 ingested_commit_sha="0" * 40,
-                repo_number=_uuid.uuid4().int % 10_000_000,
             )
             session.add(repo)
             session.flush()

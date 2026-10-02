@@ -34,7 +34,6 @@ Edge cases the matrix does not cover:
 
 from __future__ import annotations
 
-import itertools
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
@@ -53,7 +52,6 @@ from app.tasks.autoupdate import (
     sweep_due_repositories,
 )
 from tests.conftest import TEST_SYNC_DB_URL
-from tests.helpers import committed_repo_number_base
 
 pytestmark = pytest.mark.integration
 
@@ -61,7 +59,6 @@ pytestmark = pytest.mark.integration
 # 965_000 rather than 960_000: bases must be pairwise distinct across modules, and
 # ``services/test_pipeline.py`` already starts at 960_000. Two modules sharing a base is a
 # guaranteed collision on any shared worker.
-_repo_numbers = itertools.count(committed_repo_number_base(965_000))
 
 
 def sync_session():
@@ -100,11 +97,9 @@ def _make_repo(
 ) -> Repository:
     """A repository row reflecting exactly the inputs -- the matrix fixture.
 
-    ``repo_number`` is supplied explicitly because the column has no
-    database-side generator -- bypassing it would surface as a NOT NULL
-    violation. ``factories.py`` documents the same workaround; we
-    duplicate the pattern here to avoid sharing ORM instances with the
-    factory's async session.
+    Built here rather than through ``factories.py`` to avoid sharing ORM
+    instances with the factory's async session. ``repo_number`` comes from the
+    database identity.
     """
     repo = Repository(
         id=uuid.uuid4(),
@@ -116,7 +111,6 @@ def _make_repo(
         auto_update_interval_hours=interval_hours,
         next_sync_at=next_sync_at,
         sync_lease_expires_at=sync_lease_expires_at,
-        repo_number=next(_repo_numbers),
     )
     session.add(repo)
     session.commit()

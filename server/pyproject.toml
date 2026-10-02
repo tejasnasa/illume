@@ -53,7 +53,6 @@ markers = [
     "security: auth bypass, IDOR, injection, token leakage",
     "migration: Alembic upgrade and round-trip correctness",
     "slow: excluded from the default PR run",
-    "xfail_leak: asserts a known credential leak is absent; expected to fail until fixed",
 ]
 
 [tool.coverage.run]
