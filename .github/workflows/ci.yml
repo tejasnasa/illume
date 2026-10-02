@@ -83,7 +83,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: ESLint (tests, blocking)
-        run: npx eslint tests/ e2e/ vitest.config.ts
+        run: npx eslint tests/ e2e/ e2e-prod/ vitest.config.ts
 
       # src/ carries pre-existing react-hooks errors; report them without failing the
       # build, so a regression is visible but not confused with the standing debt.

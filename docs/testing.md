@@ -703,6 +703,86 @@ a properly seeded database.
 | `seeded-browse.spec.ts` | Browsing the seeded repository: dashboard, file tree, glossary, graph, ownership, reading order. |
 | `chat.spec.ts`          | The RAG chat path end to end, including citations.                                               |
 | `reingest.spec.ts`      | Re-ingesting a repository, and that the UI reflects it.                                          |
+| `free-tier-chat.spec.ts` | The keyless free tier: the `/auth/me` envelope, and that an unowned repository 404s, not 402s.  |
+
+## Production smoke suite
+
+`client/e2e-prod/` is a second Playwright suite that drives the **deployed** site. Everything above
+runs against a stack the job boots itself; this one talks to the real origins, as a real account, and
+therefore has different rules.
+
+```bash
+make test-e2e-prod          # or: cd client && npm run test:e2e-prod
+```
+
+It needs no Docker, no database, and no local server: only an untracked `client/.env.smoke` holding
+the smoke account's credentials (copy the shape from `client/.env.smoke.example`). In CI the same
+values arrive as environment variables.
+
+### Safety
+
+The suite writes to production, so the guard rails are the feature:
+
+- **No `webServer` and no `globalSetup`.** The config cannot boot a local stack, and cannot reach the
+  local suite's seeding, which truncates the database it runs against. Its own `.auth/`, `test-results/`
+  and `playwright-report/` live under `e2e-prod/`, so nothing is shared with `e2e/`.
+- **It refuses to start unless both origins are `https:` and their hostnames exactly match an
+  allow-list** (`illume.tejasnasa.me` and `illume-api.tejasnasa.me`). Matching is exact, not a
+  substring, so `illume.tejasnasa.me.attacker.tld` is refused. Localhost and bare IPs are refused
+  outright, and the two hosts must share a registrable domain, because the session cookie is
+  `SameSite=Lax` and would not ride along on a cross-site request.
+- The required variables are checked together, so a missing credential names all of them at once.
+- The workflow has no `pull_request` trigger, and its concurrency group never cancels a run in flight.
+
+### Signing in
+
+There is no password form in the UI and no `/signup` route, so the suite cannot sign in the way a user
+would. It calls `POST /api/v1/auth/login` — the real endpoint, producing the same cookie an OAuth round
+trip would — and injects the resulting cookie into the browser via `storageState`.
+
+That makes the **cookie's `Domain` attribute the single most valuable assertion in the suite**. It must
+be scoped to the registrable domain, or the Next proxy never sees it on the web origin and every
+protected route redirects to `/login` forever. The setup project asserts the raw `Set-Cookie` header
+*and* the stored cookie, and fails with a message naming `DOMAIN` on the droplet rather than letting it
+surface as a navigation timeout later.
+
+### What it covers, and what it does not
+
+The `public` project runs anonymously and has no dependencies, so it still reports whether the site is
+up when signing in is what broke. It checks the homepage, the 404 route, the contact form (rendered,
+never submitted), the middleware redirect, and — from inside the page, where CORS actually applies — a
+cross-origin `fetch` to the API.
+
+The `authenticated` project browses the dashboard, the repository overview, the explorer, the glossary,
+the 3D graph and `/settings`, strictly read-only.
+
+The `journey` project is the only one that writes anything: one chat turn, deleted again in a teardown
+that runs on failure too. Setup clears the same history before every run, which is what makes a janitor
+unnecessary — a run killed before its teardown is cleaned up by the next one. That turn is also the
+only billed call, which is why there are no retries and the whole journey is a single test.
+
+Deliberately **not** covered: the GitHub OAuth round trip, real ingestion (the smoke repository is
+ingested once, by hand), the WebSocket ingest log, Celery and beat, Resend delivery, and the graph's
+reading-order pager, whose presence depends on a model-generated guide. Ingestion is covered by the
+backend eager-Celery tests; the reading order by the local suite.
+
+Two probes are honest about their strength: the cookie `Domain` assertion and the `/settings` key
+state prove the *configuration* is right, not that the provider still accepts the key. Only the chat
+turn proves that.
+
+### `/healthz`
+
+`GET /healthz` reports a per-dependency verdict and degrades to **503** when one is down:
+
+```json
+{ "status": "ok", "checks": { "database": "ok", "redis": "ok" } }
+```
+
+Each probe runs under a real deadline, because neither the Redis client nor asyncpg has a connection
+timeout configured here and a peer that accepts nothing would otherwise hang the endpoint instead of
+reporting it unhealthy. The 503 matters for anything that treats the endpoint as a readiness check —
+including the local suite's `webServer` poll, which now times out with a vaguer message if you run it
+without `make test-infra`.
 
 ## Coverage
 

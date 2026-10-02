@@ -34,7 +34,10 @@ test.describe("the API", () => {
     const response = await request.get(`${seed.base_url}/healthz`);
 
     expect(response.status()).toBe(200);
-    expect(await response.json()).toEqual({ status: "ok" });
+    // Deliberately a partial match: the endpoint also reports a per-dependency `checks`
+    // object, and asserting the whole body here would fail every time a check is added
+    // for a reason that has nothing to do with this suite.
+    expect(await response.json()).toMatchObject({ status: "ok" });
   });
 });
 

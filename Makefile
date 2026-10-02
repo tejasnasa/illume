@@ -6,7 +6,7 @@
 
 SHELL := /bin/bash
 
-.PHONY: help test-infra test-infra-down test test-be test-fe test-e2e lint lint-be lint-fe
+.PHONY: help test-infra test-infra-down test test-be test-fe test-e2e test-e2e-prod lint lint-be lint-fe
 
 COMPOSE := docker compose -f docker-compose.test.yml
 
@@ -17,6 +17,7 @@ help:
 	@echo "make test-be          backend tests (needs test-infra)"
 	@echo "make test-fe          frontend tests"
 	@echo "make test-e2e         Playwright against a real stack (needs test-infra)"
+	@echo "make test-e2e-prod    Playwright against the deployed site (needs client/.env.smoke)"
 	@echo "make lint             lint and typecheck both projects"
 
 test-infra:
@@ -38,6 +39,12 @@ test-fe:
 test-e2e:
 	cd client && npm run test:e2e
 
+# Runs against the deployed site, so it starts nothing and needs no infrastructure -- only
+# `client/.env.smoke` with the smoke account's credentials. It writes one chat turn to
+# production and deletes it again.
+test-e2e-prod:
+	cd client && npm run test:e2e:prod
+
 lint: lint-be lint-fe
 
 lint-be:
@@ -46,4 +53,4 @@ lint-be:
 # `next typegen` first: `next-env.d.ts` is gitignored, so on a fresh checkout `tsc` has
 # none of the Next.js global types and fails on every asset import. CI does the same.
 lint-fe:
-	cd client && npx next typegen && npx tsc --noEmit && npx eslint tests/ e2e/ vitest.config.ts
+	cd client && npx next typegen && npx tsc --noEmit && npx eslint tests/ e2e/ e2e-prod/ vitest.config.ts

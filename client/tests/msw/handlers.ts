@@ -20,6 +20,6 @@ export const BACKEND_URL =
  */
 export const handlers = [
   http.get(`${BACKEND_URL}/healthz`, () =>
-    HttpResponse.json({ status: "ok" }),
+    HttpResponse.json({ status: "ok", checks: { database: "ok", redis: "ok" } }),
   ),
 ];

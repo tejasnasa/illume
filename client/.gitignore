@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env
+# Credentials for the production smoke suite, which drives the deployed site with a real
+# account. Listed by exact name like `.env` above, so it has to be named here too or the
+# production password would be tracked.
+.env.smoke
 
 # vercel
 .vercel
@@ -49,3 +53,9 @@ next-env.d.ts
 # reporter's default resolves against the working directory (`client/`), so the two
 # land in different places and both need naming.
 /e2e/test-results/
+
+# The production smoke suite names its report folder explicitly so it cannot overwrite
+# the local suite's, and writes its session state and traces under its own directory.
+/e2e-prod/.auth/
+/e2e-prod/test-results/
+/e2e-prod/playwright-report/

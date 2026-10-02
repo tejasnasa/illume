@@ -13,6 +13,7 @@
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test:e2e": "playwright test --config=e2e/playwright.config.ts",
+    "test:e2e:prod": "playwright test --config=e2e-prod/playwright.config.ts",
     "test:e2e:report": "playwright show-report playwright-report"
   },
   "dependencies": {

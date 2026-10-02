@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
     auth,
@@ -22,6 +23,7 @@ from app.api.v1 import (
     ws,
 )
 from app.core.config import settings
+from app.core.health import probe_dependencies
 from app.middleware.auth import AuthMiddleware
 
 
@@ -57,4 +59,16 @@ app.include_router(contact.router)
 
 @app.get("/healthz")
 async def healthz():
-    return {"status": "ok"}
+    """Report liveness together with whether each dependency answers.
+
+    Degrades to 503 rather than staying 200: a poller that only looks at the status
+    code then treats an instance with no database or no Redis as not ready, which is
+    the contract every such probe expects. The body still names which check failed, so
+    a 503 is diagnosable without container logs.
+    """
+    checks = await probe_dependencies()
+    healthy = all(value == "ok" for value in checks.values())
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={"status": "ok" if healthy else "degraded", "checks": checks},
+    )

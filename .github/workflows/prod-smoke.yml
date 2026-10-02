@@ -1,0 +1,84 @@
+# Drives the deployed site as a real signed-in account and checks the critical path.
+#
+# Deliberately separate from `ci.yml`, and not a name that workflow or `deploy.yml` watches.
+# Everything in `ci.yml` runs against a stack the job boots itself; this one talks to
+# production, writes to it (one chat turn, cleaned up), and must never be triggerable from a
+# pull request.
+name: Production Smoke
+
+on:
+  schedule:
+    # Nightly, off the hour and clear of the local E2E job's 03:17 so the two do not queue
+    # for the same runner minute.
+    - cron: "43 4 * * *"
+  # Manual runs only, for a re-check after a deploy or while debugging. No `pull_request`
+  # trigger, now or later.
+  workflow_dispatch:
+
+# A manual run and the nightly must not overlap, and cancelling one mid-flight can leave the
+# account in a half-asserted state, so in-progress runs are never cancelled.
+concurrency:
+  group: prod-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prod-smoke:
+    name: Production smoke (Playwright)
+    runs-on: ubuntu-latest
+    # Without this a hung run holds a non-cancelling concurrency group for up to the 6h
+    # default, blocking the next night's run too.
+    timeout-minutes: 20
+
+    env:
+      # Origins and the target repository name are not secret, so they live as repository
+      # variables and stay readable in the log.
+      SMOKE_BASE_URL: ${{ vars.SMOKE_BASE_URL }}
+      SMOKE_API_URL: ${{ vars.SMOKE_API_URL }}
+      SMOKE_REPO_NAME: ${{ vars.SMOKE_REPO_NAME }}
+      SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+      SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: client
+        run: npx playwright install --with-deps chromium
+
+      # No service containers, no migrations, no database. The suite is aimed at the
+      # deployed origins and refuses to start if they are not the allow-listed ones.
+      - name: Run the production smoke suite
+        working-directory: client
+        run: npm run test:e2e:prod
+
+      - name: Upload the Playwright report
+        # On failure only: a green run's report is a large artifact nobody opens.
+        #
+        # The report folder is named explicitly in the config, because the HTML reporter
+        # resolves it against the shell's working directory (`client/`) while `outputDir`
+        # resolves against the config file (`e2e-prod/`). That also keeps it clear of the
+        # local suite's `client/playwright-report`.
+        #
+        # `test-results/` is deliberately not uploaded: traces and video are off in this
+        # config, because a trace records the values typed into fields and these artifacts
+        # are readable by anyone with repository access.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-smoke-report
+          path: client/e2e-prod/playwright-report
+          retention-days: 14
+          if-no-files-found: ignore
