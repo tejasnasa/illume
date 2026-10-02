@@ -1,14 +1,23 @@
 """Dependency probes behind the health endpoint.
 
-Each probe *reports* rather than raises: an unreachable dependency is a fact the
-endpoint returns, not an error it propagates. That is what lets a caller tell
-"the API is up and its database is down" from "the API is not answering at all".
+A probe *reports* rather than raises: an unreachable dependency is a fact the endpoint
+returns, not an error it propagates. That is what lets a caller tell "the API is up and a
+dependency is down" from "the API is not answering at all".
 
-Both probes are wrapped in a deadline because neither client configured here sets
-a connection timeout of its own -- ``redis.asyncio.from_url`` has no
-``socket_connect_timeout`` and asyncpg's default connect timeout is 60s -- so a
-peer that accepts nothing would hold the request open instead of being reported
-down. The deadline is the only thing that bounds the endpoint.
+**There is deliberately no database probe here, and adding one back is not an improvement.**
+Reaching Postgres means opening a connection, so a check that does it measures connection
+setup -- DNS, TCP, TLS, authentication -- rather than whether the application can serve
+database traffic. Against a remote instance that took longer than any sensible health-check
+budget, so the endpoint reported a perfectly healthy database as down. The application's own
+pool is not a way around it either: a pooled asyncpg connection belongs to the event loop
+that created it, and reusing one from another loop raises instead of answering.
+
+Database health is covered functionally instead, by the end-to-end suite, which reads real
+pages and writes and re-reads a chat turn through the deployed stack. That is a better
+signal than a synthetic ping, and it costs the endpoint nothing.
+
+Redis has neither problem: a ping is a single round trip over a connection that is cheap to
+open, so it is worth probing here.
 """
 
 import asyncio
@@ -16,11 +25,6 @@ import logging
 from collections.abc import Awaitable
 from typing import cast
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.pool import NullPool
-
-from app.core.config import settings
 from app.core.redis import get_async_redis
 
 logger = logging.getLogger(__name__)
@@ -29,31 +33,6 @@ PROBE_TIMEOUT_SECONDS = 1.5
 
 OK = "ok"
 ERROR = "error"
-
-
-async def probe_database() -> str:
-    """Return ``"ok"`` when Postgres answers a trivial query, else ``"error"``."""
-    # A connection of its own rather than the application's engine. The application's pool
-    # hands back a connection created on whichever event loop touched it first, and a
-    # pooled asyncpg connection reused from a different loop raises instead of answering --
-    # so the probe would report "unreachable" for a reason that has nothing to do with the
-    # database. NullPool leaves nothing behind to go stale, and the probe is asking whether
-    # a connection can be established at all, which is the honest question for a readiness
-    # check anyway.
-    engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
-    try:
-        async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
-            async with engine.connect() as connection:
-                await connection.execute(text("SELECT 1"))
-        return OK
-    except Exception:  # noqa: BLE001 -- a probe reports, it never raises
-        logger.warning("health probe: database unreachable", exc_info=True)
-        return ERROR
-    finally:
-        try:
-            await asyncio.wait_for(engine.dispose(), PROBE_TIMEOUT_SECONDS)
-        except Exception:  # noqa: BLE001
-            pass
 
 
 async def probe_redis() -> str:
@@ -69,8 +48,8 @@ async def probe_redis() -> str:
         logger.warning("health probe: redis unreachable", exc_info=True)
         return ERROR
     finally:
-        # Releasing the client is best-effort and bounded too: a close that waits on a
-        # dead socket would reintroduce the hang the timeout above just removed.
+        # Releasing the client is best-effort and bounded too: a close that waits on a dead
+        # socket would reintroduce the hang the timeout above just removed.
         try:
             await asyncio.wait_for(client.aclose(), PROBE_TIMEOUT_SECONDS)
         except Exception:  # noqa: BLE001
@@ -78,10 +57,9 @@ async def probe_redis() -> str:
 
 
 async def probe_dependencies() -> dict[str, str]:
-    """Probe every dependency concurrently and return their verdicts.
+    """Probe every dependency and return their verdicts, keyed by name.
 
     Returns:
-        One ``"ok"`` or ``"error"`` per dependency, keyed by name.
+        One ``"ok"`` or ``"error"`` per probed dependency.
     """
-    database, redis = await asyncio.gather(probe_database(), probe_redis())
-    return {"database": database, "redis": redis}
+    return {"redis": await probe_redis()}

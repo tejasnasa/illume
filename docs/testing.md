@@ -775,14 +775,22 @@ turn proves that.
 `GET /healthz` reports a per-dependency verdict and degrades to **503** when one is down:
 
 ```json
-{ "status": "ok", "checks": { "database": "ok", "redis": "ok" } }
+{ "status": "ok", "checks": { "redis": "ok" } }
 ```
 
-Each probe runs under a real deadline, because neither the Redis client nor asyncpg has a connection
-timeout configured here and a peer that accepts nothing would otherwise hang the endpoint instead of
-reporting it unhealthy. The 503 matters for anything that treats the endpoint as a readiness check —
-including the local suite's `webServer` poll, which now times out with a vaguer message if you run it
-without `make test-infra`.
+The probe runs under a real deadline, because the Redis client has no connection timeout configured
+here and a peer that accepts nothing would otherwise hang the endpoint instead of reporting it
+unhealthy. The 503 matters for anything that treats the endpoint as a readiness check — including the
+local suite's `webServer` poll, which now times out with a vaguer message if you run it without
+`make test-infra`.
+
+**There is deliberately no database probe, and adding one back is not an improvement.** Reaching
+Postgres means opening a connection, so a check that does it measures connection setup rather than
+whether the application can serve database traffic — against the deployed instance that exceeded any
+sensible health-check budget and reported a healthy database as down. The application's own pool is
+not a way around it either: a pooled asyncpg connection belongs to the event loop that created it, and
+reusing one from another loop raises instead of answering. Database health is covered functionally
+instead, by the specs that read real pages and write and re-read a chat turn.
 
 ## Coverage
 

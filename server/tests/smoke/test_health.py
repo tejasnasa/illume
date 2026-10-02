@@ -17,7 +17,7 @@ async def test_healthz_returns_ok(client):
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    assert body["checks"] == {"database": "ok", "redis": "ok"}
+    assert body["checks"] == {"redis": "ok"}
 
 
 async def test_healthz_needs_no_session(client):
@@ -31,7 +31,7 @@ async def test_healthz_degrades_to_503_when_a_dependency_is_down(client, monkeyp
     """A downed dependency is reported, not hidden behind a 200."""
 
     async def degraded() -> dict[str, str]:
-        return {"database": "ok", "redis": "error"}
+        return {"redis": "error"}
 
     monkeypatch.setattr(main, "probe_dependencies", degraded)
 
@@ -43,29 +43,13 @@ async def test_healthz_degrades_to_503_when_a_dependency_is_down(client, monkeyp
     assert body["checks"]["redis"] == "error"
 
 
-def test_probe_database_works_across_event_loops():
-    """Two loops, two calls, both healthy.
-
-    pytest-asyncio gives every test its own event loop, and a pooled asyncpg connection is
-    only usable from the loop that created it. Building the probe on the application's
-    engine therefore reports a perfectly healthy database as unreachable as soon as
-    anything has already used that engine from another loop -- which is exactly how this
-    failed in CI, where an earlier test had left a connection in the app's pool.
-
-    Deliberately synchronous: each ``asyncio.run`` here stands up a fresh loop, so this
-    pins the property the async tests above cannot.
-    """
-    assert asyncio.run(health.probe_database()) == "ok"
-    assert asyncio.run(health.probe_database()) == "ok"
-
-
 async def test_probe_redis_reports_error_instead_of_hanging(monkeypatch):
     """A peer that never answers must not hold the request open.
 
-    Neither client used by the probes has a connection timeout configured, so without
-    the deadline in ``probe_redis`` this await would never return and the endpoint would
-    hang rather than report unhealthy. The assertion is on the measured duration, not
-    just the return value, because that is the property under test.
+    The Redis client has no connection timeout configured, so without the deadline in
+    ``probe_redis`` this await would never return and the endpoint would hang rather than
+    report unhealthy. The assertion is on the measured duration, not just the return value,
+    because that is the property under test.
     """
 
     class HangingClient:

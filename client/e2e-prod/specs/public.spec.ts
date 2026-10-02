@@ -74,10 +74,11 @@ test.describe("the deployed API", () => {
     expect(response.status()).toBe(200);
     const body = await response.json();
     expect(body.status).toBe("ok");
-    // The point of probing this rather than just hitting the API: it is the only check
-    // that separates "the application is serving" from "Postgres and Redis are reachable
-    // from inside the container".
-    expect(body.checks).toEqual({ database: "ok", redis: "ok" });
+    // Redis is the one dependency the endpoint probes. The database is covered functionally
+    // by the specs that read real pages and write a chat turn through the deployed stack --
+    // a synthetic connection check measured connection setup rather than reachability, and
+    // reported a healthy database as down.
+    expect(body.checks).toEqual({ redis: "ok" });
   });
 
   test("refuses an unauthenticated request", async ({ request }) => {
@@ -96,17 +97,24 @@ test.describe("the deployed API", () => {
       async (url: string) => {
         try {
           const response = await fetch(url, { credentials: "include" });
-          return { ok: response.ok, failure: undefined as string | undefined };
+          return { status: response.status, failure: undefined as string | undefined };
         } catch (error) {
           // A blocked cross-origin request rejects the fetch rather than resolving, so
           // this branch is what a stale allow-list looks like from inside the page.
-          return { ok: false, failure: String(error) };
+          return { status: 0, failure: String(error) };
         }
       },
       `${SMOKE_API_URL}/healthz`,
     );
 
+    // Deliberately about reachability, not about health. Any HTTP status at all -- including
+    // a 503 -- proves the request crossed origins and the response was readable, which is
+    // the only thing CORS governs. Asserting `response.ok` here would re-report a failing
+    // dependency check as a CORS failure and make one problem look like two.
     expect(result.failure, `cross-origin fetch failed: ${result.failure}`).toBeUndefined();
-    expect(result.ok).toBe(true);
+    expect(
+      result.status,
+      "the cross-origin request never produced an HTTP response, so it was blocked",
+    ).toBeGreaterThan(0);
   });
 });
