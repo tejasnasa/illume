@@ -7,17 +7,16 @@
 An enterprise-grade codebase intelligence and developer velocity platform. Illume parses multi-language syntax trees, builds relational dependency graphs, digests git history, and applies LLM reasoning to compile static repositories into living, interactive onboarding guides.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
-[![Python: 3.12+](https://img.shields.io/badge/Python-3.12%2B-blue.svg?logo=python&logoColor=white&style=flat-square)](https://www.python.org)
+[![Python: 3.14+](https://img.shields.io/badge/Python-3.14%2B-blue.svg?logo=python&logoColor=white&style=flat-square)](https://www.python.org)
 [![Next.js: 16+](https://img.shields.io/badge/Next.js-16%2B-black.svg?logo=nextdotjs&logoColor=white&style=flat-square)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135%2B-009688.svg?logo=fastapi&logoColor=white&style=flat-square)](https://fastapi.tiangolo.com)
-[![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg?logo=docker&logoColor=white&style=flat-square)](https://www.docker.com)
 [![Celery](https://img.shields.io/badge/Celery-5.6%2B-37814A.svg?logo=celery&logoColor=white&style=flat-square)](https://docs.celeryq.dev)
 
 [![CI](https://github.com/tejasnasa/illume/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tejasnasa/illume/actions/workflows/ci.yml)
-[![Backend coverage](https://img.shields.io/badge/backend%20coverage-80%25-brightgreen?style=flat-square)](#-running-tests)
-[![Frontend coverage](https://img.shields.io/badge/frontend%20coverage-62%25-brightgreen?style=flat-square)](#-running-tests)
+[![Backend coverage](https://img.shields.io/badge/backend%20coverage-80%25-brightgreen?style=flat-square)](#running-tests)
+[![Frontend coverage](https://img.shields.io/badge/frontend%20coverage-62%25-brightgreen?style=flat-square)](#running-tests)
 
-[Live Demo](https://illume.tejasnasa.me) · [Architecture Deep-Dive](#-system-architecture) · [Key Features](#-core-capabilities) · [Getting Started](#-installation--getting-started)
+[Live Demo](https://illume.tejasnasa.me) · [Documentation](docs/README.md) · [Architecture](docs/architecture.md) · [Key Features](#-core-capabilities) · [Getting Started](#-installation--getting-started)
 
 </div>
 
@@ -25,7 +24,7 @@ An enterprise-grade codebase intelligence and developer velocity platform. Illum
 
 ## 📖 Introduction & Philosophy
 
-Codebases grow in complexity far faster than engineering teams can scale. When a new engineer joins a team, they face a massive cognitive load: thousands of lines of code, complex module connections, outdated wikis, and hidden tribal knowledge about who owns what. Traditional static documentations get stale immediately, and senior engineers spend valuable hours manually walking new hires through the architecture.
+Codebases grow in complexity far faster than engineering teams can scale. When a new engineer joins a team, they face a massive cognitive load: thousands of lines of code, complex module connections, outdated wikis, and hidden tribal knowledge about who owns what. Traditional static documentation goes stale immediately, and senior engineers spend valuable hours manually walking new hires through the architecture.
 
 **Illume** is built on the philosophy that **the codebase itself is the single source of truth**. By combining:
 
@@ -60,16 +59,27 @@ Illume mines up to `500` historical git commits using `git log --numstat` parsin
 
 Files are automatically grouped into three distinct priority levels based on mathematical thresholds:
 
-- 🔴 **Critical**: Core plumbing and highly volatile infrastructure. Identified by high code **fan-in** (imported by $\ge 10$ files), alignment with sensitive path patterns (e.g., `database.py`, `auth.py`, `middleware/`), or lack of test coverage despite high change frequency.
-- 🟡 **Caution**: Moderate architectural importance (imported by 5–9 files).
-- 🟢 **Safe to Explore**: Low risk, decoupled modules, perfect for new hires to start writing PRs.
+Each file accumulates a score, and the score maps to a tier. The points are:
+
+- **+3** if the file is imported by 10 or more files (high fan-in), or **+1** if 5–9 files import it.
+- **+2** if the path matches a sensitive pattern such as `database.py`, `auth.py`, or `middleware/`.
+- **+1** if the file has not been modified for more than 180 days.
+- **+1** if the file has no test while the repository does have tests.
+
+The tiers are:
+
+- 🔴 **Critical** — a score of **4 or more**.
+- 🟡 **Caution** — a score of **2 or 3**.
+- 🟢 **Safe to Explore** — below 2. Low risk, decoupled modules, perfect for new hires to start writing PRs.
 
 ### 🌐 Interactive 3D WebGL Dependency Graph
 
 Renders module imports dynamically inside the browser utilizing WebGL and `react-force-graph-3d` (powered by Three.js).
 
-- **Visual Semantics**: Nodes represent files, sized relative to their **architectural weight** (sum of fan-in & fan-out) and colored according to their traffic-light criticality.
-- **Focus States**: Highlighting a node reveals its immediate upstream importers and downstream dependencies, entirely removing the obscurity of microservice architectures.
+- **Visual Semantics**: Nodes represent files, sized by lines of code and colored according to their traffic-light criticality.
+- **Two Levels**: Switch between the file graph and a symbol-level graph of functions and classes.
+- **Reading-Order Tour**: Step through the generated reading path directly on the graph.
+- **Search**: Matching nodes are highlighted with animated halo rings.
 
 ### 🔍 Unified Semantic RAG Chat & Glossary
 
@@ -79,6 +89,8 @@ Renders module imports dynamically inside the browser utilizing WebGL and `react
 ### 🔄 Background Auto-Update
 
 A per-repository switch keeps an ingested analysis current without a manual `reingest`. A Celery beat process claims repos whose `next_sync_at` is due, probes the head SHA cheaply, and dispatches a worker that updates only the files that actually changed. The deterministic graph rebuild and the LLM/glossary/embed phase are both reused from the ingest path — work scales with the diff, not the repository size, while the graph stays live (`status='ready'`) the whole time.
+
+Two commit watermarks let a partially failed update resume: deterministic data and LLM artefacts track the commit they reflect independently, so an LLM outage does not force a full re-parse on the next run. Repeated failures back off exponentially and eventually disable the switch rather than retrying forever.
 
 ### 🔑 Bring-Your-Own API Key (BYOK) & One-Ingestion Free Tier
 
@@ -90,16 +102,22 @@ A new user can ingest **one** repository and ask **five** chat questions on the 
 - **Stored key always wins** — once a user has a key, the gate is open regardless of counters. Removing the key does not restore the allowance.
 - **Plaintext at rest** — keys are stored as plaintext to match `github_access_token`. A user's OpenAI key carries billing, so treat your account credentials accordingly; never share a session cookie, and rotate a key at the provider the moment it has been exposed.
 
+### 📡 Live Analysis Progress
+
+Ingestion streams its progress to the browser over a Redis pub/sub channel relayed by a WebSocket. Every frame carries a `stage` and a `phase`, so the UI renders the pipeline as a live diagram — which stage is running, which have finished, and how far through parsing and embedding the run is. Failed runs show the retry attempt count, since a failed ingest is retried up to three times.
+
+### 📦 Portable Analysis Export
+
+Any analysed repository can be downloaded as a single compact text document (`.illume`). It holds the repository's metadata, architecture summary, dependency edges, symbol listing, and criticality hotspots. It is sized to fit in an LLM context window, and ordered so the most structurally important files survive truncation.
+
 ---
 
 ## 🛠 Tech Stack
 
-Illume leverages a modern, robust tech stack designed for architectural scanning, distributed ingestion, and high-performance visual graphing.
-
 | Layer                  | Technology                    | Description                                                                  |
 | ---------------------- | ----------------------------- | ---------------------------------------------------------------------------- |
 | **Frontend Framework** | Next.js 16 (App Router)       | Dynamic React framework for production-grade web applications.               |
-| **Backend Framework**  | FastAPI (Python 3.12+, Async) | High-performance web framework for APIs and WebSocket logic.                 |
+| **Backend Framework**  | FastAPI (Python 3.14, Async)  | High-performance web framework for APIs and WebSocket logic.                 |
 | **Syntax Parsing**     | Tree-sitter                   | Deterministic multi-language Abstract Syntax Tree (AST) scanning.            |
 | **Task Queue**         | Celery + Redis                | Distributed asynchronous queue pipeline for heavy clone and scan operations. |
 | **Database & ORM**     | PostgreSQL + SQLAlchemy 2.0   | Scalable relational storage for file graphs, AST symbols, and git logs.      |
@@ -114,40 +132,37 @@ Illume leverages a modern, robust tech stack designed for architectural scanning
 
 ```
 illume/
+├── docs/                       # Full documentation — start at docs/README.md
+│
 ├── client/                     # Next.js Frontend Application
+│   ├── e2e/                    # Playwright end-to-end suite
+│   ├── e2e-prod/               # Production smoke suite
 │   ├── src/
-│   │   ├── app/                # Next.js App Router Page Layouts
-│   │   │   ├── dashboard/      # User repository workspace dashboard
-│   │   │   ├── login/          # User Authentication forms
-│   │   │   ├── repo/[id]/      # Deep Repository intelligence views
-│   │   │   │   ├── explorer/   # File tree explorer & RAG workspace
-│   │   │   │   ├── glossary/   # AI glossary search engine
-│   │   │   │   └── graph/      # WebGL 3D Force-Graph canvas
-│   │   │   └── globals.css     # Tailwind CSS 4 Design System Tokens
-│   │   ├── components/         # High-Fidelity UI Components
-│   │   │   ├── Chat.tsx        # Floating AI RAG chat system
-│   │   │   ├── GraphClient.tsx # 3D force-graph wrapper
-│   │   │   └── IngestFlow.tsx  # Live pipeline progress over the ingest WebSocket
-│   │   └── hooks/              # Custom React logic hooks (useChat, etc.)
-│   └── package.json            # Frontend dependency specifications
+│   │   ├── app/                # App Router routes
+│   │   │   ├── dashboard/      # Repository workspace
+│   │   │   ├── settings/       # BYOK credential management
+│   │   │   ├── contact/        # Public contact form
+│   │   │   └── repo/[id]/      # explorer · glossary · graph sub-routes
+│   │   ├── actions/            # Server actions (mutations)
+│   │   ├── api/                # Server-side API clients (cookie-forwarding)
+│   │   ├── components/         # UI components (+ ui/ primitives)
+│   │   ├── hooks/              # Client hooks (useChat, useIngestStream, …)
+│   │   ├── types/              # Domain types and zod validators
+│   │   └── proxy.ts            # Middleware auth gate
+│   └── tests/                  # Vitest suite
 │
 └── server/                     # FastAPI Backend Application
     ├── app/
-    │   ├── api/                # FastAPI Routers
-    │   │   ├── deps.py         # SQLAlchemy Session & Current User injections
-    │   │   └── v1/             # API v1 Versioned endpoints
-    │   ├── core/               # App configuration, security, database setups
-    │   ├── models/             # SQLAlchemy ORM Database Schemas
-    │   ├── services/           # Decoupled Core Domain Engines
-    │   │   ├── parser.py       # Tree-sitter AST symbol extractor
-    │   │   ├── import_resolver.py# Path aliases & package exports resolver
-    │   │   ├── git_analyzer.py # git log --numstat history scraper
-    │   │   ├── reading_order.py# Topological sorting & annotation logic
-    │   │   ├── brief_generator.py# LLM executive architecture brief synthesiser
-    │   │   └── embedder.py     # pgvector chunking & indexing engine
-    │   └── tasks/              # Celery distributed tasks (ingestion workflow)
-    ├── alembic/                # Relational DB Migration scripts
-    └── pyproject.toml          # Python UV Package specification
+    │   ├── api/v1/             # 11 routers, mounted under /api/v1
+    │   ├── core/               # Config, database engines, security, Celery, Redis
+    │   ├── middleware/         # AuthMiddleware — the JWT cookie gate
+    │   ├── models/             # 12 SQLAlchemy models
+    │   ├── services/           # Domain logic (parser, graph, embedder, rag, …)
+    │   └── tasks/              # Celery tasks: ingestion, sync, auto-update sweep
+    ├── alembic/                # Database migrations
+    ├── scripts/                # Standalone utilities
+    ├── tests/                  # pytest suite
+    └── Dockerfile              # Production image
 ```
 
 ---
@@ -156,71 +171,67 @@ illume/
 
 ### 📋 Prerequisites
 
-- **Python 3.12+** (configured via [uv](https://github.com/astral-sh/uv) package manager)
+- **Python 3.14+** (managed via [uv](https://github.com/astral-sh/uv))
 - **Node.js 18+** & **npm**
-- **Docker & Docker Compose** (for PostgreSQL and Redis microservices)
-- **OpenAI API Key** (for RAG and glossary building)
-- **GitHub OAuth app credentials** (Optional, for scanning private repositories)
+- **PostgreSQL 16+ with the [`pgvector`](https://github.com/pgvector/pgvector) extension**
+- **Redis**
+- **OpenAI API Key** (for embeddings)
+- **GitHub OAuth app credentials** (for private repositories)
+
+> **There is no development `docker-compose.yml` in this repository.** `docker-compose.test.yml` is the only committed compose file, and it publishes its services on **5433** and **6380** — offset so the test stack never collides with a development stack. You need to supply Postgres (with pgvector) and Redis yourself — Step 1 below starts both.
 
 ---
 
-### 📦 Step 1: Start PostgreSQL and Redis Infrastructure
+### 📦 Step 1: Start PostgreSQL and Redis
 
-Illume uses a pre-configured Docker Compose cluster. PostgreSQL includes the `pgvector` extension by default.
-
-Verify that your `.env` is configured correctly, then run:
+Run a Postgres image with pgvector, for example:
 
 ```bash
-# Spin up the cluster in the background
-docker compose up -d
+docker run -d --name illume-postgres \
+  -e POSTGRES_USER=illume -e POSTGRES_PASSWORD=illume -e POSTGRES_DB=illume \
+  -p 5432:5432 pgvector/pgvector:pg16
+
+docker run -d --name illume-redis -p 6379:6379 redis:7
 ```
 
-Verify that PostgreSQL and Redis are running:
-
-```bash
-docker compose ps
-```
+The `vector` extension is created by the first migration, so no init script is needed.
 
 ---
 
 ### 🐍 Step 2: Configure the FastAPI Backend Server
-
-Navigate to the `server/` directory, set up your `.env` from `.env.example`, sync dependencies, and perform database migrations.
 
 ```bash
 cd server
 cp .env.example .env
 ```
 
-#### Synchronize Python Package Manager (UV)
+`server/.env.example` documents every variable inline. Fill in at least the database URLs, Redis URL, `SECRET_KEY`, `DOMAIN`, and your `OPENAI_API_KEY`.
 
 ```bash
-# Sync dependency packages
-uv sync
-
-# Run database migrations using Alembic
-uv run alembic upgrade head
-
-# Spin up the FastAPI Web Server (port 8000)
-uv run fastapi dev
+uv sync                            # install dependencies
+uv run alembic upgrade head        # apply migrations
+uv run fastapi dev                 # API on :8000
 ```
+
+> **`alembic upgrade head` targets whatever `SYNC_DATABASE_URL` points at**, which in a configured checkout may be production. See [data-model.md](docs/data-model.md#migrations).
 
 ---
 
-### 🌾 Step 3: Run the Celery Worker Pipeline
+### 🌾 Step 3: Run the Celery Worker
 
-Celery handles long-running, multi-layered repository ingestion tasks. Start a worker pointing to Redis.
+Celery handles long-running repository ingestion. The worker and the scheduler are **two separate processes**:
 
 ```bash
 cd server
-uv run celery -A app.core.celery worker --loglevel=info -P threads
+uv run celery -A app.core.celery worker --loglevel=info --pool=solo   # ingestion worker
+uv run celery -A app.core.celery beat                                 # auto-update scheduler
 ```
+
+On Windows, the `prefork` pool is unavailable — use `--pool=solo` or `-P threads`. On Linux, prefer `--pool=prefork --concurrency=1`, which is the production configuration: each ingestion peaks at several hundred MB, and the default pool sizes itself from the container's CPU count rather than the VM's.
 
 ---
 
 ### 💻 Step 4: Boot the Next.js Web Client
-
-Navigate to the `client/` directory, install packages, and boot the frontend dev server.
 
 ```bash
 cd ../client
@@ -229,19 +240,15 @@ npm install
 npm run dev
 ```
 
-The Web Interface is now accessible at **`http://localhost:3000`**. You can sign up locally, create a user workspace, submit any public or private GitHub repository, and watch the ingestion pipeline run in real-time!
+The web interface is now at **`http://localhost:3000`**. Sign in with GitHub, submit any public or private repository, and watch the analysis run in real time.
 
 ---
 
 ## 🧪 Running Tests
 
-> **📖 Full guide: [`docs/testing.md`](docs/testing.md).** It covers all three suites in
-> depth — what each layer is for, every command and flag, how the fixtures and mocks work,
-> the coverage gates, and how to write a new test. What follows here is the quick version.
+> **📖 Full guide: [`docs/testing.md`](docs/testing.md).** It covers all three suites in depth — what each layer is for, every command and flag, how the fixtures and mocks work, the coverage gates, and how to write a new test. What follows here is the quick version.
 
-The backend suite needs a real PostgreSQL (with `pgvector`) and Redis. A compose file is
-committed for exactly this, on ports **5433** and **6380** so it never collides with the
-dev stack on 5432 and 6379.
+The backend suite needs a real PostgreSQL (with `pgvector`) and Redis. A compose file is committed for exactly this, on ports **5433** and **6380** so it never collides with the dev stack on 5432 and 6379.
 
 ```bash
 docker compose -f docker-compose.test.yml up -d      # test infra (or: make test-infra)
@@ -267,8 +274,7 @@ npm run test:coverage       # with coverage
 npm run lint && npx tsc --noEmit
 ```
 
-**End-to-end** (`client/e2e/`, Playwright) — the same test infrastructure, plus a real
-browser against a real API and a production build:
+**End-to-end** (`client/e2e/`, Playwright) — the same test infrastructure, plus a real browser against a real API and a production build:
 
 ```bash
 docker compose -f docker-compose.test.yml up -d
@@ -276,34 +282,66 @@ cd client
 npm run test:e2e            # or: npm run test:e2e -- --ui
 ```
 
-The suite starts the API, a stub OpenAI server, and a Next production build itself, and
-seeds a user and two ingested repositories directly. It never calls GitHub or OpenAI, and
-it needs no Celery worker. `E2E_API_PORT` and `E2E_CLIENT_PORT` move it off the default
-ports when a dev stack is already running. It runs nightly and on `main` rather than on
-every PR — see `.github/workflows/ci.yml`.
+The suite starts the API, a stub OpenAI server, and a Next production build itself, and seeds a user and two ingested repositories directly. It never calls GitHub or OpenAI, and it needs no Celery worker. `E2E_API_PORT` and `E2E_CLIENT_PORT` move it off the default ports when a dev stack is already running. It runs nightly and on `main` rather than on every PR — see `.github/workflows/ci.yml`.
+
+**Production smoke** (`client/e2e-prod/`) — a black-box suite that runs nightly against the deployed instance, signing in and checking that the live site and its dependencies are healthy:
+
+```bash
+cd client
+npm run test:e2e:prod
+```
 
 ### Coverage ratchet
 
-Both suites enforce a floor, recorded in a committed `.coverage-floor` file
-(`server/.coverage-floor`, `client/.coverage-floor`). CI fails if measured coverage drops
-below it. There is no absolute target: the floor only moves up, and a PR that raises
-coverage is expected to raise the file in the same commit so the reviewer sees the bump.
-The shields at the top of this file carry the floor values, not a last-measured number, so
-they stay true between runs — update them in the same commit that moves a floor.
+Both suites enforce a floor, recorded in a committed `.coverage-floor` file (`server/.coverage-floor`, `client/.coverage-floor`). CI fails if measured coverage drops below it. There is no absolute target: the floor only moves up, and a PR that raises coverage is expected to raise the file in the same commit so the reviewer sees the bump. The shields at the top of this file carry the floor values, not a last-measured number, so they stay true between runs — update them in the same commit that moves a floor.
 
-`make test` runs both suites; `make lint` runs both linters. Test markers: `smoke`,
-`unit`, `integration`, `security`, `migration`, `slow`.
+`make test` runs both suites; `make lint` runs both linters. Test markers: `smoke`, `unit`, `integration`, `security`, `migration`, `slow`.
 
-> **Note:** `tests/conftest.py` points the app at the test database by setting environment
-> variables _before_ importing anything under `app`. Settings and both database engines are
-> constructed at import time, so this ordering is required — see the module docstring before
-> moving those imports.
+> **Note:** `tests/conftest.py` points the app at the test database by setting environment variables _before_ importing anything under `app`. Settings and both database engines are constructed at import time, so this ordering is required — see the module docstring before moving those imports.
+
+---
+
+## 🏗 Architecture at a Glance
+
+Two applications in one repository, deployed separately:
+
+- **`server/`** — a FastAPI API, a Celery worker, and a Celery beat scheduler. Ingestion clones a repository, parses it with tree-sitter, resolves imports into a dependency graph, mines git history, scores criticality, and runs the LLM phase.
+- **`client/`** — a Next.js 16 App Router application. Server components fetch with the user's cookie forwarded; client components call the API directly.
+
+Three design decisions shape most of the code, and each is explained in
+[architecture.md](docs/architecture.md#design-decisions-and-trade-offs):
+
+- **Async and sync are split by caller, not by layer** — routes use asyncpg, Celery and Alembic use psycopg2.
+- **Overlapped pipeline stages share no database session** — every concurrent stage receives only scalars and opens its own connection.
+- **Idempotency is enforced by database constraints**, not application locking, so concurrent work on the same repository inserts once rather than duplicating.
+
+---
+
+## 📚 Documentation
+
+The full documentation lives in [`docs/`](docs/README.md). It is written to be read start to finish by someone who has never seen the repository.
+
+| Document | Covers |
+| --- | --- |
+| [architecture.md](docs/architecture.md) | The system end to end, plus the design decisions and their trade-offs |
+| [pipeline/ingestion.md](docs/pipeline/ingestion.md) | The analysis pipeline: stages, concurrency, ordering, retries |
+| [pipeline/sync.md](docs/pipeline/sync.md) | Background auto-update: leases, watermarks, backoff, clone cache |
+| [pipeline/generation.md](docs/pipeline/generation.md) | The LLM artefacts, provider abstraction, and BYOK credentials |
+| [pipeline/retrieval.md](docs/pipeline/retrieval.md) | Embedding, vector search, and the RAG chat |
+| [pipeline/graph.md](docs/pipeline/graph.md) | The dependency graph and its 3D rendering |
+| [api.md](docs/api.md) · [websockets.md](docs/websockets.md) | The HTTP API and the live progress stream |
+| [data-model.md](docs/data-model.md) · [auth.md](docs/auth.md) | Schema and migrations; authentication and authorisation |
+| [pipeline/git-intelligence.md](docs/pipeline/git-intelligence.md) · [frontend.md](docs/frontend.md) | Ownership and criticality; the Next.js application |
+| [deployment.md](docs/deployment.md) · [exports.md](docs/exports.md) | Containers, CI/CD and the production env file; the `.illume` text export |
+| [testing.md](docs/testing.md) | All three test suites, in depth |
 
 ---
 
 ## 🛡 Security
 
 If you discover a security vulnerability within Illume, please send an e-mail to tejasnasa1908@gmail.com. All security vulnerabilities will be promptly addressed.
+
+Known limitations are documented rather than hidden — see the end of [api.md](docs/api.md#design-decisions-and-trade-offs) and [auth.md](docs/auth.md#the-threat-model).
 
 ---
 

@@ -219,7 +219,7 @@ export default function Home() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 1, delay: 0.2 }}
-            className="relative mb-16 lg:mb-0 h-[8rem] sm:h-[20rem] lg:h-[48rem] w-full lg:w-4/10"
+            className="relative mb-16 lg:mb-0 h-40 sm:h-80 lg:h-192 w-full lg:w-4/10"
           >
             {/* Layout tuning lives here; see BackgroundGraph's props for what
                 each value does. The camera is fitted, so the graph fills this

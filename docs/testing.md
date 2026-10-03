@@ -55,7 +55,7 @@ keeps the migration tests meaningful: they have to build the schema from nothing
 
 The first migration runs `CREATE EXTENSION IF NOT EXISTS vector`, and the `Embedding` model declares
 a `Vector(1536)` column. Against a plain Postgres image the migration chain stops at revision
-`ec40440330c3`. The compose file uses `pgvector/pgvector:pg16`, and CI uses the same image.
+`ec40440330d3`. The compose file uses `pgvector/pgvector:pg16`, and CI uses the same image.
 
 ### Checking that infrastructure is up
 
@@ -90,9 +90,9 @@ against the test stack.
 
 | Suite      | Location                                    | Runner     | Docker | Tests                            | Duration |
 | ---------- | ------------------------------------------- | ---------- | ------ | -------------------------------- | -------- |
-| Backend    | `server/tests/`                             | pytest     | Yes    | 1128 passing                     | 1–2 min  |
-| Frontend   | `client/tests/`, `client/src/**/__tests__/` | Vitest     | No     | 676                              | ~30 s    |
-| End-to-end | `client/e2e/`                               | Playwright | Yes    | 48                               | ~7 min   |
+| Backend    | `server/tests/`                             | pytest     | Yes    | 1130 collected                   | 1–2 min  |
+| Frontend   | `client/tests/`, `client/src/**/__tests__/` | Vitest     | No     | 654                              | ~30 s    |
+| End-to-end | `client/e2e/`                               | Playwright | Yes    | 46                               | ~7 min   |
 
 Timings are from a full parallel run and vary with machine load.
 
@@ -199,7 +199,7 @@ individual commands are:
 
 ```bash
 cd server && uv run ruff check tests/ && uv run ruff format --check tests/ && uv run mypy tests/ --follow-imports=silent
-cd client && npx next typegen && npx tsc --noEmit && npx eslint tests/ e2e/ vitest.config.ts
+cd client && npx next typegen && npx tsc --noEmit && npx eslint tests/ e2e/ e2e-prod/ vitest.config.ts
 ```
 
 `next typegen` runs first on the client because `next-env.d.ts` is gitignored. It carries
@@ -337,10 +337,9 @@ which shuffles test order on every run, this surfaces tests that have come to de
 before them.
 
 A few tests genuinely need rows that outlive their own session — the ones that shell out to a
-separate process. Those commit for real, and they are why `helpers.py` provides
-`committed_repo_number_base`: committing tests share the database across processes, so each xdist
-worker takes its own band of values to avoid a `UniqueViolation` that would otherwise appear only
-when two workers happened to be scheduled at the same moment.
+separate process. Those commit for real. They no longer need to coordinate `repo_number` values
+between workers: the column is a database identity, so unique values are assigned by PostgreSQL and
+a per-worker banding scheme is no longer necessary.
 
 ### Factories
 
@@ -415,10 +414,12 @@ here:
    anything — fixing the bug means removing the marker.
 
 Shared markers live in `helpers.py` so that every test blocked by the same defect carries the same
-explanation. **No test currently carries one.** The last eleven — eight blocked by `repo_number`
-having no generator, one by three empty migration revisions, one by renames orphaning the vacated
-file, and one by an unreachable escalation guard — were retired when the underlying defects were
-fixed. The mechanism is documented here because it is the right way to record the next one: mark
+explanation. **No test currently carries one.** Eleven markers were retired once their defects were fixed:
+
+- eight blocked by `repo_number` having no generator
+- one by three empty migration revisions
+- one by renames orphaning the vacated file
+- one by an unreachable escalation guard The mechanism is documented here because it is the right way to record the next one: mark
 the test `strict=True`, name the cause, and delete the marker in the same change as the fix.
 
 ### Two traps worth knowing
@@ -546,11 +547,7 @@ The OpenAI seam is the `OPENAI_BASE_URL` environment variable, which the SDK rea
 the stub redirects every LLM call the API makes, with no code change, so an end-to-end run never
 makes a billed call.
 
-The stub returns one shared constant vector for every embedding. Retrieval filters candidates on
-`cosine_distance < 0.7`, and two unrelated 1536-dimension vectors are near-orthogonal, so a
-text-derived query vector would sit at distance ~1.0 from every seeded chunk — nothing would survive
-the filter, `answer_question` would return its canned "no relevant code" answer without calling the
-model, and the chat path would be unreachable. One shared value gives distance 0.
+The stub returns one shared constant vector for every embedding. Retrieval filters candidates on `cosine_distance < 0.7`. Two unrelated 1536-dimension vectors are near-orthogonal, so a text-derived query vector would sit at distance ~1.0 from every seeded chunk. Nothing would survive the filter, `answer_question` would return its canned "no relevant code" answer without calling the model, and the chat path would be unreachable. One shared value gives distance 0.
 
 ### Project dependencies
 
@@ -579,10 +576,7 @@ Specs read their identifiers from the seed artifact through `readSeed()` and `re
 than hardcoding them, since `repo_number` is assigned by a counter and would otherwise need keeping
 in sync by hand in two languages.
 
-Reading the seed inside `test.beforeEach` rather than at module scope matters. Playwright loads
-every spec file to build the test list _before_ any project runs, so a module-scope read of
-`.auth/seed.json` happens before the `seed` project has created it and fails on a clean checkout —
-while appearing to work locally, where the artifact survives from a previous run. Three specs in
+Reading the seed inside `test.beforeEach` rather than at module scope matters. Playwright loads every spec file to build the test list _before_ any project runs. A module-scope read of `.auth/seed.json` therefore happens before the `seed` project has created it, and fails on a clean checkout. It appears to work locally, where the artifact survives from a previous run. Three specs in
 this suite previously had that shape.
 
 ```ts
@@ -785,9 +779,7 @@ local suite's `webServer` poll, which now times out with a vaguer message if you
 `make test-infra`.
 
 **There is deliberately no database probe, and adding one back is not an improvement.** Reaching
-Postgres means opening a connection, so a check that does it measures connection setup rather than
-whether the application can serve database traffic — against the deployed instance that exceeded any
-sensible health-check budget and reported a healthy database as down. The application's own pool is
+Postgres means opening a connection, so a check that does it measures connection setup rather than whether the application can serve database traffic. Against the deployed instance, that exceeded any sensible health-check budget and reported a healthy database as down. The application's own pool is
 not a way around it either: a pooled asyncpg connection belongs to the event loop that created it, and
 reusing one from another loop raises instead of answering. Database health is covered functionally
 instead, by the specs that read real pages and write and re-read a chat turn.
@@ -798,15 +790,13 @@ Both suites measure coverage and enforce a committed floor.
 
 | Suite    | Floor file               | Floor | Measured  |
 | -------- | ------------------------ | ----- | --------- |
-| Backend  | `server/.coverage-floor` | 80    | 81.61     |
+| Backend  | `server/.coverage-floor` | 80    | 84.28     |
 | Frontend | `client/.coverage-floor` | 62    | — (lines) |
 
 CI fails if measured coverage drops below the floor. When a change raises coverage meaningfully,
 raising the floor in the same commit lets a reviewer see the change as deliberate.
 
-There is no absolute target. The floor only moves up, and it moves once someone has earned the right
-to move it — coverage measures which lines ran, not whether the behaviour was actually checked, so
-raising it through tests that assert little is not usually worth the effort.
+There is no absolute target. The floor only moves up, and it moves once someone has earned the right to move it. Coverage measures which lines ran, not whether the behaviour was actually checked — so raising it through tests that assert little is not usually worth the effort.
 
 The backend measures statement coverage over `app/`, excluding `alembic/`. The frontend measures
 line coverage over `src/**/*.{ts,tsx}`, excluding type declarations, the test files themselves, and
@@ -856,8 +846,7 @@ stay off the PR path.
 When it fails, the report and traces are uploaded as artifacts — on failure only, for the same
 reason the config records nothing on success.
 
-CI's Postgres and Redis are GitHub service containers published on the same offset ports (5433, 6380) that `docker-compose.test.yml` uses locally, so a machine that can run the suite locally can
-run it in CI with no second set of credentials.
+CI's Postgres and Redis are GitHub service containers published on the same offset ports (5433, 6380) that `docker-compose.test.yml` uses locally. A machine that can run the suite locally can therefore run it in CI with no second set of credentials.
 
 ## Known unfixed defects
 
