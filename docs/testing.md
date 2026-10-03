@@ -119,15 +119,24 @@ make help              # list every target
 make test-infra        # start Postgres + Redis on the test ports
 make test-infra-down   # stop them
 make test              # backend + frontend suites
-make test-be           # backend only
+make test-be           # backend only, excluding slow
+make test-be-all       # backend, including slow
+make test-be-one f=tests/unit/services/test_rag.py   # one path or test id
 make test-fe           # frontend only
+make test-fe-ui        # frontend, in the watch UI
 make test-e2e          # Playwright, against a real stack
+make test-e2e-prod     # Playwright, against the deployed site
+make test-e2e-report   # open the last Playwright report
+make cov               # both suites with coverage
 make lint              # lint and typecheck both projects
 make lint-be           # backend only
 make lint-fe           # frontend only
 ```
 
 `make test` does not include the end-to-end suite, which needs Docker and takes several minutes.
+
+The Makefile covers more than tests — the dev servers, migrations, and the standalone scripts
+under `server/scripts/` all have targets. `make help` is the full list.
 
 ### Backend
 

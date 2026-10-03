@@ -277,20 +277,27 @@ migration creates the `vector` extension.
 
 ## The Makefile
 
-| Target            | Does                                       |
-| ----------------- | ------------------------------------------ |
-| `test-infra`      | Start the test stack and wait for health    |
-| `test-infra-down` | Stop it                                     |
-| `test`            | Backend and frontend suites                 |
-| `test-be`         | pytest, excluding slow marks                |
-| `test-fe`         | Vitest, single pass                         |
-| `test-e2e`        | Playwright end-to-end                       |
-| `test-e2e-prod`   | Playwright against the deployed site        |
-| `lint`            | Both linters                                |
-| `lint-be`         | ruff check, ruff format check, mypy         |
-| `lint-fe`         | `next typegen`, `tsc`, eslint               |
+`make help` lists every target. The ones this document's workflows depend on:
 
-See [testing.md](testing.md) for what each suite covers.
+| Group       | Targets                                                                         |
+| ----------- | ------------------------------------------------------------------------------- |
+| Infra       | `test-infra`, `test-infra-down`, `dev-infra`, `dev-infra-down`                  |
+| Tests       | `test`, `test-be`, `test-be-all`, `test-fe`, `test-e2e`, `test-e2e-prod`, `cov` |
+| Lint        | `lint`, `lint-be`, `lint-be-app`, `lint-fe`                                     |
+| Database    | `migrate`, `migrate-test`, `migration`, `downgrade`, `db-truncate`              |
+| Dev servers | `api`, `worker`, `beat`, `web`, `stub`                                          |
+| Build       | `build-fe`, `docker-build`                                                      |
+| Bootstrap   | `install`, `env`, `setup`, `seed-e2e`, `probe-ai`, `clean`                      |
+
+Two of these carry a warning worth repeating:
+
+- **`migrate` follows `SYNC_DATABASE_URL` from `server/.env`**, which in a configured checkout may be
+  production. Use `migrate-test` when you mean the test database.
+- **`db-truncate` empties every table** in whatever database that URL points at. Against a development
+  database it destroys every ingested repository, chat turn, and stored key.
+
+`make lint-be` checks `tests/` and blocks; `make lint-be-app` checks `app/` and does not, matching the
+CI split exactly. See [testing.md](testing.md) for what each suite covers.
 
 ## Troubleshooting
 

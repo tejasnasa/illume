@@ -242,6 +242,8 @@ npm run dev
 
 The web interface is now at **`http://localhost:3000`**. Sign in with GitHub, submit any public or private repository, and watch the analysis run in real time.
 
+> Every step above has a `make` target — `make setup` does dependency install, the env files and the migrations in one go, and `make api` / `make worker` / `make beat` / `make web` run the four processes. **`make help`** lists them all.
+
 ---
 
 ## 🧪 Running Tests
@@ -295,7 +297,7 @@ npm run test:e2e:prod
 
 Both suites enforce a floor, recorded in a committed `.coverage-floor` file (`server/.coverage-floor`, `client/.coverage-floor`). CI fails if measured coverage drops below it. There is no absolute target: the floor only moves up, and a PR that raises coverage is expected to raise the file in the same commit so the reviewer sees the bump. The shields at the top of this file carry the floor values, not a last-measured number, so they stay true between runs — update them in the same commit that moves a floor.
 
-`make test` runs both suites; `make lint` runs both linters. Test markers: `smoke`, `unit`, `integration`, `security`, `migration`, `slow`.
+`make test` runs both suites; `make lint` runs both linters. Test markers: `smoke`, `unit`, `integration`, `security`, `migration`, `slow`. The Makefile also carries the dev servers, the migrations, and the standalone scripts — `make help` lists everything.
 
 > **Note:** `tests/conftest.py` points the app at the test database by setting environment variables _before_ importing anything under `app`. Settings and both database engines are constructed at import time, so this ordering is required — see the module docstring before moving those imports.
 
