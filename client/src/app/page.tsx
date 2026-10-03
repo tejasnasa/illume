@@ -213,17 +213,18 @@ export default function Home() {
         </div>
       </nav>
 
-      <section className="relative max-w-6xl mx-auto min-h-screen flex items-center py-20 overflow-hidden">
-        <div className="w-full flex items-center">
+      <section className="relative max-w-6xl mx-auto min-h-screen flex items-center py-20 px-6 lg:px-0 overflow-hidden">
+        <div className="w-full flex flex-col lg:flex-row items-center">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 1, delay: 0.2 }}
-            className="relative h-[20rem] sm:h-[26rem] lg:h-[48rem] w-4/10"
+            className="relative mb-16 lg:mb-0 h-[8rem] sm:h-[20rem] lg:h-[48rem] w-full lg:w-4/10"
           >
             {/* Layout tuning lives here; see BackgroundGraph's props for what
-                each value does. Lower linkDistance = larger-looking graph;
-                cooldownTicks is what decides how long the hero takes to appear. */}
+                each value does. The camera is fitted, so the graph fills this
+                frame at any linkDistance; cooldownTicks decides how long the
+                layout keeps moving, not when the hero appears. */}
             <BackgroundGraph
               variant="contained"
               graph={graphData}
@@ -241,13 +242,13 @@ export default function Home() {
             initial="hidden"
             animate="visible"
             variants={stagger}
-            className="flex flex-col text-center lg:text-right w-6/10"
+            className="flex flex-col text-center lg:text-right w-full lg:w-6/10"
           >
             <motion.h1 variants={fadeUp} custom={1}>
-              <span className="block text-[clamp(2.5rem,6vw,4.65rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
+              <span className="block text-[clamp(2.8rem,6vw,4.65rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
                 Onboard engineers
               </span>
-              <span className="block text-[clamp(2.5rem,6vw,4.65rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
+              <span className="block text-[clamp(2.8rem,6vw,4.65rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
                 in days, not weeks
               </span>
             </motion.h1>

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +34,11 @@ vi.mock("react-force-graph-3d", async () => {
     /** Returns a chainable force, matching the `d3Force(...).strength(...)` call. */
     d3Force() {
       return { strength: () => {}, distance: () => {} };
+    }
+
+    /** Returns the perspective camera the fit reads `fov` and `aspect` from. */
+    camera() {
+      return { fov: 50, aspect: 1 };
     }
 
     d3ReheatSimulation() {}
@@ -138,13 +143,43 @@ describe("mounting", () => {
     // that as "not loaded" and crash on undefined.
     render(
       <BackgroundGraph
-        graph={{ nodes: [], links: [], metadata: { total_nodes: 0, total_edges: 0, clusters: 0 } }}
+        graph={{
+          nodes: [],
+          links: [],
+          metadata: { total_nodes: 0, total_edges: 0, clusters: 0 },
+        }}
       />,
     );
 
     await settle();
 
     expect(screen.getByTestId("force-graph")).toBeInTheDocument();
+  });
+});
+
+describe("contained graphs", () => {
+  it("reveals on the first simulation tick rather than when the engine stops", async () => {
+    // Waiting for the engine to cool held the hero blank for seconds. The frame
+    // is transparent until the camera has been fitted, so the reveal is what
+    // decides how long the page looks like it is still loading.
+    const positioned = {
+      ...GRAPH,
+      nodes: GRAPH.nodes.map((node, i) => ({ ...node, x: i * 10, y: 0, z: 0 })),
+    };
+
+    const { container } = render(
+      <BackgroundGraph variant="contained" graph={positioned} />,
+    );
+    await settle();
+
+    const frame = container.firstElementChild as HTMLElement;
+    expect(frame.className).toContain("opacity-0");
+
+    act(() => {
+      (mockReceived.at(-1)?.onEngineTick as () => void)();
+    });
+
+    expect(frame.className).toContain("opacity-100");
   });
 });
 
