@@ -37,14 +37,19 @@ function synthetic(message: string, event = "info"): IngestFrame {
  *
  * @param repoId - Repository whose log channel to subscribe to.
  * @param token - Auth token passed as a WebSocket query parameter.
+ * @param enabled - When false, no socket is opened and the stream stays
+ *   empty. For callers that supply their own frames and must not also open a
+ *   connection to a repository that may not exist.
  * @returns The frame stream and its connection state.
  */
 export function useIngestStream({
   repoId,
   token,
+  enabled = true,
 }: {
   repoId: string;
   token: string;
+  enabled?: boolean;
 }): IngestStream {
   const [frames, setFrames] = useState<IngestFrame[]>([]);
   const [connected, setConnected] = useState(false);
@@ -54,6 +59,8 @@ export function useIngestStream({
   const reconnect = useCallback(() => setGeneration((value) => value + 1), []);
 
   useEffect(() => {
+    if (!enabled) return;
+
     const wsUrl =
       process.env.NEXT_PUBLIC_BACKEND_URL!.replace(/^http/, "ws") +
       `/api/v1/ws/ingest/${repoId}?token=${token}`;
@@ -115,7 +122,7 @@ export function useIngestStream({
       cancelled = true;
       ws.close();
     };
-  }, [repoId, token, generation]);
+  }, [repoId, token, generation, enabled]);
 
   return { frames, connected, closed, reconnect };
 }

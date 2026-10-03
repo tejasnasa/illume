@@ -210,6 +210,61 @@ html {
   animation: flow-ring 1.6s linear infinite;
 }
 
+/* Particles drifting along an edge whose downstream stage is still to run.
+   The dash period is 16 units and the offset travels exactly one period, so
+   the loop is seamless -- there is no visible reset. */
+@keyframes flow-stream {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+.flow-stream {
+  stroke-dasharray: 4 12;
+  animation: flow-stream 1.1s linear infinite;
+}
+
+/* The halo behind the working node. Breathing rather than spinning, so the
+   eye reads "running" without the agitation of a spinner. */
+@keyframes flow-halo {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.06);
+  }
+}
+
+.flow-halo {
+  animation: flow-halo 2.4s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/* The end-of-run sweep: one pass of brightness travelling the graph, then
+   settled. One-shot by design -- a lit graph should not keep throbbing. */
+@keyframes flow-surge {
+  0% {
+    opacity: 0.55;
+    stroke-width: 2;
+  }
+  40% {
+    opacity: 1;
+    stroke-width: 3.5;
+  }
+  100% {
+    opacity: 1;
+    stroke-width: 1.8;
+  }
+}
+
+.flow-surge {
+  animation: flow-surge 0.7s ease-out 1 both;
+}
+
 /* ── Reduced motion ──
    Everything above is decorative; none of it carries information that is not
    also present as text or colour. Switching the whole set off leaves the
@@ -218,7 +273,10 @@ html {
   .animate-shimmer,
   .gradient-text,
   .animate-fade-in,
-  .flow-node-ring {
+  .flow-node-ring,
+  .flow-stream,
+  .flow-halo,
+  .flow-surge {
     animation: none;
   }
 

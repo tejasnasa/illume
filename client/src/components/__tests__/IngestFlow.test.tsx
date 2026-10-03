@@ -34,12 +34,17 @@ vi.mock("motion/react", async (importOriginal) => {
   return { ...actual, useReducedMotion: () => motion.reduced };
 });
 
-/** Read a stage's state back out of the screen-reader summary. */
-function nodeState(label: string): string {
+/** Read a stage's line back out of the screen-reader summary. */
+function nodeDetail(label: string): string {
   const item = screen
     .getAllByRole("listitem")
     .find((element) => element.textContent?.startsWith(`${label}:`));
   return item?.textContent?.slice(label.length + 2) ?? "missing";
+}
+
+/** Read just the state, discarding any stats that follow it. */
+function nodeState(label: string): string {
+  return nodeDetail(label).split(" (")[0];
 }
 
 /** Send a frame from the fake server. */
@@ -137,7 +142,7 @@ describe("node states", () => {
 
     expect(nodeState("Fetch Repo")).toBe("done");
     expect(nodeState("Mine Git History")).toBe("done");
-    expect(nodeState("Create Reading order")).toBe("done");
+    expect(nodeState("Create Reading Order")).toBe("done");
     expect(nodeState("Generate Embeddings")).toBe("active");
   });
 
@@ -148,6 +153,83 @@ describe("node states", () => {
     expect(nodeState("Fetch Repo")).toBe("done");
     expect(nodeState("Generate Embeddings")).toBe("active");
     expect(nodeState("Ready")).toBe("pending");
+  });
+});
+
+describe("what a stage reports", () => {
+  it("says what a finished stage produced", () => {
+    mount();
+
+    send({
+      event: "deps_resolved",
+      message: "Resolved 2871 dependencies.",
+      stage: "resolve_dependencies",
+      phase: "done",
+      count: 2871,
+    });
+
+    expect(nodeDetail("Map Connections")).toBe("done (2,871 dependencies)");
+    // And on the node itself, where the number is the point of it.
+    expect(screen.getByText("2,871 dependencies")).toBeInTheDocument();
+  });
+
+  it("carries the total through to a stage that publishes twice", () => {
+    mount();
+
+    send({
+      event: "commits_parsed",
+      message: "Parsed 500 commits from git log",
+      stage: "git_history",
+      phase: "progress",
+      count: 500,
+    });
+    send({
+      event: "ownership_written",
+      message: "Code ownership records written for 1024 files",
+      stage: "git_history",
+      phase: "done",
+      count: 1024,
+    });
+
+    expect(nodeDetail("Mine Git History")).toBe("done (1,024 files)");
+  });
+
+  it("draws no number for a stage that publishes none", () => {
+    mount();
+
+    send({
+      event: "stack_detected",
+      message: "Stack detected: ['Python']",
+      stage: "detect_stack",
+      phase: "done",
+    });
+
+    expect(nodeDetail("Identify Stack")).toBe("done");
+  });
+
+  it("claims no total for a stage it only knows finished", () => {
+    // Seeded from the repository status, so the board knows the stage ended
+    // without ever having been told what it produced.
+    mount({ status: "embedding" });
+
+    expect(nodeDetail("Mine Git History")).toBe("done");
+  });
+
+  it("keeps the parse counter out of the summary it announces", () => {
+    mount();
+
+    send({
+      event: "file_processed",
+      message: "512/1024 files indexed",
+      stage: "parse",
+      phase: "progress",
+      processed: 512,
+      total: 1024,
+    });
+
+    // Deliberately absent: a progress tick would otherwise announce itself on
+    // every batch of a ten-thousand-file repository.
+    expect(nodeDetail("Parse files")).toBe("active");
   });
 });
 

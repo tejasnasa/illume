@@ -11,7 +11,7 @@
 
 import IngestFlowCanvas from "@/components/IngestFlowCanvas";
 import IngestLogDrawer from "@/components/IngestLogDrawer";
-import { useIngestStream } from "@/hooks/useIngestStream";
+import { useIngestStream, type IngestStream } from "@/hooks/useIngestStream";
 import type { IngestFrame, StageStateMap } from "@/types/ingest";
 import {
   NODES_BY_ID,
@@ -24,8 +24,6 @@ import {
 import {
   CheckCircleIcon,
   ClockIcon,
-  GitBranchIcon,
-  GithubLogoIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react/dist/ssr";
 import { useRouter } from "next/navigation";
@@ -91,6 +89,9 @@ function formatElapsed(ms: number): string {
  * @param branch - Branch being ingested, if known.
  * @param commitSha - Commit being ingested, if known.
  * @param status - The repository status as the server rendered it.
+ * @param stream - Pre-built frame source. Supplying one suppresses the
+ *   socket and the route refresh, because a caller that owns the frames also
+ *   owns the lifecycle they describe.
  * @returns The header, the flow canvas, and the raw-log drawer.
  */
 export default function IngestFlow({
@@ -100,6 +101,8 @@ export default function IngestFlow({
   branch,
   commitSha,
   status,
+  stream: injected,
+  idleMs = IDLE_MS,
 }: {
   repoId: string;
   token: string;
@@ -107,9 +110,13 @@ export default function IngestFlow({
   branch: string | null;
   commitSha: string | null;
   status: string;
+  stream?: IngestStream;
+  /** Override for the stall threshold; exposed so it can be exercised. */
+  idleMs?: number;
 }) {
   const router = useRouter();
-  const { frames, closed, reconnect } = useIngestStream({ repoId, token });
+  const own = useIngestStream({ repoId, token, enabled: !injected });
+  const { frames, closed, reconnect } = injected ?? own;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -150,18 +157,22 @@ export default function IngestFlow({
   const startedAt = useRef(0);
   const lastFrameAt = useRef(0);
 
+  // Stamped on mount only. Folding this into the ticking effect below would
+  // restart the elapsed clock whenever the stall threshold changed.
   useEffect(() => {
     const now = Date.now();
     startedAt.current = now;
     lastFrameAt.current = now;
+  }, []);
 
+  useEffect(() => {
     const timer = setInterval(() => {
       const tick = Date.now();
       setElapsed(tick - startedAt.current);
-      setStalled(tick - lastFrameAt.current > IDLE_MS);
+      setStalled(tick - lastFrameAt.current > idleMs);
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [idleMs]);
 
   useEffect(() => {
     lastFrameAt.current = Date.now();
@@ -174,6 +185,10 @@ export default function IngestFlow({
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // An injected stream means the caller supplied the frames, so there is no
+    // server render behind them for a refresh to pick up.
+    if (injected) return;
+
     const outcome = failed ? "failed" : complete ? "complete" : null;
     if (!outcome || fired.current.has(outcome)) return;
     fired.current.add(outcome);
@@ -181,7 +196,7 @@ export default function IngestFlow({
       () => router.refresh(),
       outcome === "failed" ? FAILURE_REFRESH_MS : COMPLETE_REFRESH_MS,
     );
-  }, [complete, failed, router]);
+  }, [complete, failed, router, injected]);
 
   // Cleared only on unmount: dep-driven cleanup would cancel a pending
   // refresh the moment the other outcome flipped.
@@ -268,7 +283,7 @@ export default function IngestFlow({
       </header>
 
       <div className="min-h-0 flex-1 p-2">
-        <IngestFlowCanvas states={states} />
+        <IngestFlowCanvas states={states} live={!stalled} attempt={attempt} />
       </div>
 
       <IngestLogDrawer

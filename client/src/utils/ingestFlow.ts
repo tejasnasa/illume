@@ -31,6 +31,12 @@ export interface FlowNode {
   /** Centre of the box. */
   cx: number;
   cy: number;
+  /**
+   * Singular and plural noun for the total this stage publishes. Absent where
+   * the stage publishes no total, which is most of them -- a bare number on a
+   * node says nothing.
+   */
+  unit?: readonly [string, string];
 }
 
 /** One edge between stages, with authored geometry. */
@@ -45,11 +51,19 @@ export interface FlowEdge {
   points: readonly Point[];
   /** `sidecar` marks work that runs alongside the spine rather than in it. */
   kind: "main" | "sidecar";
+  /**
+   * The stages that must *all* be done for this edge to light.
+   *
+   * An edge leaving a junction cannot key off its own source -- a junction is
+   * not a stage and never completes -- so it names the stages it actually
+   * waited for instead. Defaults to "the source is done".
+   */
+  requires?: readonly string[];
 }
 
 export const NODE_WIDTH = 200;
 export const NODE_HEIGHT = 60;
-export const VIEWBOX = { width: 1180, height: 630 } as const;
+export const VIEWBOX = { width: 1210, height: 580 } as const;
 
 /**
  * The pipeline, drawn to match the real execution order.
@@ -60,19 +74,43 @@ export const VIEWBOX = { width: 1180, height: 630 } as const;
  * only joined at the very end, so it can outlive every other stage.
  */
 export const NODES: readonly FlowNode[] = [
-  { id: "clone", label: "Fetch Repo", cx: 150, cy: 90 },
-  { id: "parse", label: "Parse files", cx: 150, cy: 170 },
-  { id: "resolve_dependencies", label: "Map Connections", cx: 150, cy: 250 },
-  { id: "compute_fan_metrics", label: "Rank Impact", cx: 150, cy: 330 },
-  { id: "detect_stack", label: "Identify Stack", cx: 150, cy: 410 },
-  { id: "git_history", label: "Mine Git History", cx: 150, cy: 490 },
-  { id: "criticality", label: "Score Risk", cx: 150, cy: 570 },
-  { id: "glossary", label: "Create Glossary", cx: 450, cy: 300 },
-  { id: "reading_order", label: "Create Reading order", cx: 450, cy: 460 },
-  { id: "generate_embeddings", label: "Generate Embeddings", cx: 750, cy: 300 },
-  { id: "brief", label: "Analyze Architecture", cx: 750, cy: 460 },
-  { id: "ready", label: "Ready", cx: 1050, cy: 380 },
-  { id: "pr_fetch", label: "Gather PRs", cx: 450, cy: 90 },
+  { id: "clone", label: "Fetch Repo", cx: 150, cy: 70 },
+  { id: "parse", label: "Parse files", cx: 150, cy: 146 },
+  {
+    id: "resolve_dependencies",
+    label: "Map Connections",
+    cx: 150,
+    cy: 222,
+    unit: ["dependency", "dependencies"],
+  },
+  { id: "compute_fan_metrics", label: "Rank Impact", cx: 150, cy: 298 },
+  { id: "detect_stack", label: "Identify Stack", cx: 150, cy: 374 },
+  {
+    id: "git_history",
+    label: "Mine Git History",
+    cx: 150,
+    cy: 450,
+    unit: ["file", "files"],
+  },
+  { id: "criticality", label: "Score Risk", cx: 150, cy: 526 },
+  { id: "glossary", label: "Create Glossary", cx: 470, cy: 390 },
+  { id: "reading_order", label: "Create Reading Order", cx: 470, cy: 526 },
+  {
+    id: "generate_embeddings",
+    label: "Generate Embeddings",
+    cx: 790,
+    cy: 390,
+    unit: ["vector", "vectors"],
+  },
+  { id: "brief", label: "Analyze Architecture", cx: 790, cy: 526 },
+  { id: "ready", label: "Ready", cx: 1080, cy: 298 },
+  {
+    id: "pr_fetch",
+    label: "Gather PRs",
+    cx: 470,
+    cy: 70,
+    unit: ["PR", "PRs"],
+  },
 ];
 
 export const NODES_BY_ID: Record<string, FlowNode> = Object.fromEntries(
@@ -88,8 +126,8 @@ export const EDGES: readonly FlowEdge[] = [
     from: "clone",
     to: "parse",
     points: [
+      [150, 100],
       [150, 116],
-      [150, 144],
     ],
     kind: "main",
   },
@@ -97,8 +135,8 @@ export const EDGES: readonly FlowEdge[] = [
     from: "parse",
     to: "resolve_dependencies",
     points: [
-      [150, 196],
-      [150, 224],
+      [150, 176],
+      [150, 192],
     ],
     kind: "main",
   },
@@ -106,8 +144,8 @@ export const EDGES: readonly FlowEdge[] = [
     from: "resolve_dependencies",
     to: "compute_fan_metrics",
     points: [
-      [150, 276],
-      [150, 304],
+      [150, 252],
+      [150, 268],
     ],
     kind: "main",
   },
@@ -115,8 +153,8 @@ export const EDGES: readonly FlowEdge[] = [
     from: "compute_fan_metrics",
     to: "detect_stack",
     points: [
-      [150, 356],
-      [150, 384],
+      [150, 328],
+      [150, 344],
     ],
     kind: "main",
   },
@@ -124,8 +162,8 @@ export const EDGES: readonly FlowEdge[] = [
     from: "detect_stack",
     to: "git_history",
     points: [
-      [150, 436],
-      [150, 464],
+      [150, 404],
+      [150, 420],
     ],
     kind: "main",
   },
@@ -133,19 +171,17 @@ export const EDGES: readonly FlowEdge[] = [
     from: "git_history",
     to: "criticality",
     points: [
-      [150, 516],
-      [150, 544],
+      [150, 480],
+      [150, 496],
     ],
     kind: "main",
   },
-
-  // The sidecar branch: dispatched alongside the spine, joined last.
   {
     from: "clone",
     to: "pr_fetch",
     points: [
-      [240, 90],
-      [360, 90],
+      [250, 70],
+      [370, 70],
     ],
     kind: "sidecar",
   },
@@ -153,104 +189,123 @@ export const EDGES: readonly FlowEdge[] = [
     from: "pr_fetch",
     to: "ready",
     points: [
-      [540, 90],
-      [1050, 90],
-      [1050, 354],
+      [570, 70],
+      [1080, 70],
+      [1080, 268],
     ],
     kind: "sidecar",
   },
-
-  // Fork: two LLM stages run side by side.
   {
     from: "criticality",
+    to: "fork_risk",
+    points: [
+      [250, 526],
+      [290, 526],
+      [290, 458],
+      [330, 458],
+    ],
+    kind: "main",
+  },
+  {
+    from: "fork_risk",
     to: "glossary",
     points: [
-      [240, 558],
-      [290, 558],
-      [290, 300],
-      [360, 300],
+      [330, 458],
+      [330, 390],
+      [370, 390],
     ],
     kind: "main",
+    requires: ["criticality"],
   },
   {
-    from: "criticality",
+    from: "fork_risk",
     to: "reading_order",
     points: [
-      [240, 582],
-      [320, 582],
-      [320, 460],
-      [360, 460],
+      [330, 458],
+      [330, 526],
+      [370, 526],
     ],
     kind: "main",
+    requires: ["criticality"],
   },
-
-  // Join: both of the pair must finish before either of the next starts,
-  // which is why this is four edges and not two.
   {
     from: "glossary",
-    to: "generate_embeddings",
+    to: "join_llm",
     points: [
-      [540, 300],
-      [660, 300],
+      [570, 390],
+      [610, 390],
+      [610, 458],
+      [620, 458],
     ],
     kind: "main",
   },
   {
     from: "reading_order",
-    to: "brief",
+    to: "join_llm",
     points: [
-      [540, 460],
-      [660, 460],
+      [570, 526],
+      [610, 526],
+      [610, 458],
+      [620, 458],
     ],
     kind: "main",
   },
   {
-    from: "glossary",
-    to: "brief",
-    points: [
-      [540, 314],
-      [615, 314],
-      [615, 510],
-      [750, 510],
-      [750, 486],
-    ],
-    kind: "main",
-  },
-  {
-    from: "reading_order",
+    from: "join_llm",
     to: "generate_embeddings",
     points: [
-      [360, 446],
-      [330, 446],
-      [330, 250],
-      [700, 250],
-      [700, 274],
+      [620, 458],
+      [650, 458],
+      [650, 390],
+      [690, 390],
     ],
     kind: "main",
+    requires: ["glossary", "reading_order"],
   },
-
-  // Converge.
+  {
+    from: "join_llm",
+    to: "brief",
+    points: [
+      [620, 458],
+      [650, 458],
+      [650, 526],
+      [690, 526],
+    ],
+    kind: "main",
+    requires: ["glossary", "reading_order"],
+  },
   {
     from: "generate_embeddings",
-    to: "ready",
+    to: "join_final",
     points: [
-      [840, 300],
-      [915, 300],
-      [915, 380],
-      [960, 380],
+      [890, 390],
+      [930, 390],
+      [930, 458],
+      [940, 458],
     ],
     kind: "main",
   },
   {
     from: "brief",
-    to: "ready",
+    to: "join_final",
     points: [
-      [840, 460],
-      [925, 460],
-      [925, 380],
-      [960, 380],
+      [890, 526],
+      [930, 526],
+      [930, 458],
+      [940, 458],
     ],
     kind: "main",
+  },
+  {
+    from: "join_final",
+    to: "ready",
+    points: [
+      [940, 458],
+      [1080, 458],
+      [1080, 328],
+    ],
+    kind: "main",
+    requires: ["generate_embeddings", "brief"],
   },
 ];
 
@@ -433,16 +488,21 @@ export function reduceFrame(
     ? { processed: frame.processed as number, total: frame.total as number }
     : current.progress;
 
+  // Zero is a real total -- an empty history, a repository with no pull
+  // requests -- so this tests for presence, not truthiness.
+  const count = typeof frame.count === "number" ? frame.count : current.count;
+
   const unchanged =
     nextState === current.state &&
     progress === current.progress &&
+    count === current.count &&
     frame.message === current.detail;
 
   if (unchanged) return state;
 
   return {
     ...state,
-    [stage]: { state: nextState, progress, detail: frame.message },
+    [stage]: { state: nextState, progress, count, detail: frame.message },
   };
 }
 
@@ -468,6 +528,39 @@ export function pathFromPoints(points: readonly Point[]): string {
 }
 
 /**
+ * Cumulative arc length at each waypoint, starting at 0.
+ *
+ * @param points - Waypoints in canvas space.
+ * @returns One running total per waypoint.
+ */
+function cumulativeLengths(points: readonly Point[]): number[] {
+  const lengths: number[] = [0];
+  let total = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const [x0, y0] = points[i - 1];
+    const [x1, y1] = points[i];
+    total += Math.hypot(x1 - x0, y1 - y0);
+    lengths.push(total);
+  }
+  return lengths;
+}
+
+/**
+ * Total arc length of an edge.
+ *
+ * The travelling comet is drawn as a dash on the edge's own path, so it needs
+ * the path's length in the same units the geometry was authored in -- no
+ * `getTotalLength()`, and therefore no layout read.
+ *
+ * @param points - Waypoints in canvas space.
+ * @returns The summed segment length, or 0 for a degenerate edge.
+ */
+export function pathLengthOf(points: readonly Point[]): number {
+  const lengths = cumulativeLengths(points);
+  return lengths[lengths.length - 1] ?? 0;
+}
+
+/**
  * Progress fractions (0..1) for each waypoint, by cumulative arc length.
  *
  * Keyframing a pulse by vertex index would make a four-point edge move at a
@@ -480,20 +573,65 @@ export function pathFromPoints(points: readonly Point[]): string {
 export function normaliseTimes(points: readonly Point[]): number[] {
   if (points.length < 2) return points.map(() => 0);
 
-  const cumulative: number[] = [0];
-  let total = 0;
-  for (let i = 1; i < points.length; i += 1) {
-    const [x0, y0] = points[i - 1];
-    const [x1, y1] = points[i];
-    total += Math.hypot(x1 - x0, y1 - y0);
-    cumulative.push(total);
-  }
+  const cumulative = cumulativeLengths(points);
+  const total = cumulative[cumulative.length - 1];
 
   // A degenerate edge (all waypoints identical) would divide by zero and
   // hand motion a NaN keyframe, so fall back to an even split.
   if (total === 0) return points.map((_, i) => i / (points.length - 1));
 
   return cumulative.map((length) => length / total);
+}
+
+/** Whether a stage has stopped changing. */
+function hasSettled(state: NodeState | undefined): boolean {
+  return state === "done" || state === "failed";
+}
+
+/**
+ * Whether an edge should be drawn as lit.
+ *
+ * An edge leaving a barrier names the stages it waited for rather than
+ * carrying a source that can complete -- a barrier is not a stage and never
+ * finishes -- so `requires` is checked first.
+ */
+export function isLit(edge: FlowEdge, states: StageStateMap): boolean {
+  if (edge.requires) {
+    return edge.requires.every((id) => states[id]?.state === "done");
+  }
+  return states[edge.from]?.state === "done";
+}
+
+/**
+ * Whether an edge's far end has stopped changing.
+ *
+ * An edge into a barrier has no stage of its own to consult. Looking its
+ * target up in the state map returns `undefined`, which is never `done`, so
+ * a finished run kept its particles flowing forever. The stages the barrier
+ * feeds stand in for it instead.
+ */
+function downstreamSettled(edge: FlowEdge, states: StageStateMap): boolean {
+  if (!(edge.to in NODES_BY_ID)) {
+    return EDGES.filter((candidate) => candidate.from === edge.to).every(
+      (candidate) => hasSettled(states[candidate.to]?.state),
+    );
+  }
+  return hasSettled(states[edge.to]?.state);
+}
+
+/**
+ * Whether an edge should show particles in transit.
+ *
+ * True while it is lit and whatever it leads to has not settled. Note this
+ * is not the same question as `isLit`: an edge stays lit once its source is
+ * done, but particles belong only to work still in flight.
+ *
+ * @param edge - The edge to test.
+ * @param states - Current state of every stage.
+ * @returns True when particles should be drawn along this edge.
+ */
+export function isFlowing(edge: FlowEdge, states: StageStateMap): boolean {
+  return isLit(edge, states) && !downstreamSettled(edge, states);
 }
 
 /**

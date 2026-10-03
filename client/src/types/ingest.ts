@@ -32,6 +32,11 @@ export interface StageState {
   state: NodeState;
   /** Only the parse stage reports this; nothing else has a real counter. */
   progress?: { processed: number; total: number };
+  /**
+   * The structured total a stage published. Most stages report one of these
+   * once, as a result rather than as a running count.
+   */
+  count?: number;
   /** The most recent human-readable line for this stage. */
   detail?: string;
 }

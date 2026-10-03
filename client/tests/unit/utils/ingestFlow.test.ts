@@ -9,11 +9,14 @@
 
 import type { IngestFrame, StageStateMap } from "@/types/ingest";
 import {
+  EDGES,
   STAGE_IDS,
   emptyStateMap,
   hasFailed,
   isComplete,
+  isFlowing,
   normaliseTimes,
+  pathLengthOf,
   reduceFrame,
   reduceFrames,
   seedFromStatus,
@@ -39,7 +42,9 @@ describe("seedFromStatus", () => {
   it("marks nothing as done while the job is still pending", () => {
     const seeded = seedFromStatus("pending");
 
-    expect(Object.values(seeded).every((entry) => entry.state === "pending")).toBe(true);
+    expect(
+      Object.values(seeded).every((entry) => entry.state === "pending"),
+    ).toBe(true);
   });
 
   it("puts the clone in flight while cloning", () => {
@@ -85,26 +90,36 @@ describe("seedFromStatus", () => {
     // be running even once everything else has finished. This is the
     // assertion a future refactor is most likely to break.
     for (const status of ["pending", "cloning", "parsing", "embedding"]) {
-      expect(stateOf(seedFromStatus(status), "pr_fetch"), status).not.toBe("done");
+      expect(stateOf(seedFromStatus(status), "pr_fetch"), status).not.toBe(
+        "done",
+      );
     }
   });
 
   it("treats an unknown status as nothing having started", () => {
     const seeded = seedFromStatus("something-new");
 
-    expect(Object.values(seeded).every((entry) => entry.state === "pending")).toBe(true);
+    expect(
+      Object.values(seeded).every((entry) => entry.state === "pending"),
+    ).toBe(true);
   });
 });
 
 describe("reduceFrame", () => {
   it("activates a stage on a started frame", () => {
-    const next = reduceFrame(emptyStateMap(), frame({ stage: "parse", phase: "started" }));
+    const next = reduceFrame(
+      emptyStateMap(),
+      frame({ stage: "parse", phase: "started" }),
+    );
 
     expect(stateOf(next, "parse")).toBe("active");
   });
 
   it("completes a stage on a done frame", () => {
-    const next = reduceFrame(emptyStateMap(), frame({ stage: "parse", phase: "done" }));
+    const next = reduceFrame(
+      emptyStateMap(),
+      frame({ stage: "parse", phase: "done" }),
+    );
 
     expect(stateOf(next, "parse")).toBe("done");
   });
@@ -113,8 +128,14 @@ describe("reduceFrame", () => {
     // The pipeline publishes embedding_started before an earlier stage's
     // status frame, so a late `started` after a `done` is a real ordering the
     // reducer has to absorb rather than a hypothetical.
-    const done = reduceFrame(emptyStateMap(), frame({ stage: "parse", phase: "done" }));
-    const replayed = reduceFrame(done, frame({ stage: "parse", phase: "started" }));
+    const done = reduceFrame(
+      emptyStateMap(),
+      frame({ stage: "parse", phase: "done" }),
+    );
+    const replayed = reduceFrame(
+      done,
+      frame({ stage: "parse", phase: "started" }),
+    );
 
     expect(stateOf(replayed, "parse")).toBe("done");
   });
@@ -122,7 +143,11 @@ describe("reduceFrame", () => {
   it("is idempotent for the duplicated embedding_started frame", () => {
     const once = reduceFrame(
       emptyStateMap(),
-      frame({ stage: "generate_embeddings", phase: "started", message: "Generating embeddings..." }),
+      frame({
+        stage: "generate_embeddings",
+        phase: "started",
+        message: "Generating embeddings...",
+      }),
     );
     const twice = reduceFrame(
       once,
@@ -156,7 +181,10 @@ describe("reduceFrame", () => {
   });
 
   it("returns the same object when a frame carries nothing new", () => {
-    const first = reduceFrame(emptyStateMap(), frame({ stage: "parse", phase: "done" }));
+    const first = reduceFrame(
+      emptyStateMap(),
+      frame({ stage: "parse", phase: "done" }),
+    );
     const second = reduceFrame(first, frame({ stage: "parse", phase: "done" }));
 
     // Identity stability is what stops a memoised canvas re-rendering on
@@ -166,7 +194,10 @@ describe("reduceFrame", () => {
 
   it("ignores a stage id the graph does not know", () => {
     const before = emptyStateMap();
-    const after = reduceFrame(before, frame({ stage: "invented_stage", phase: "done" }));
+    const after = reduceFrame(
+      before,
+      frame({ stage: "invented_stage", phase: "done" }),
+    );
 
     expect(after).toBe(before);
     expect(Object.keys(after)).toHaveLength(STAGE_IDS.length);
@@ -249,9 +280,124 @@ describe("completion", () => {
     ]);
     expect(isComplete(partial)).toBe(false);
 
-    const finished = reduceFrame(partial, frame({ stage: "ready", phase: "done" }));
+    const finished = reduceFrame(
+      partial,
+      frame({ stage: "ready", phase: "done" }),
+    );
 
     expect(isComplete(finished)).toBe(true);
+  });
+});
+
+describe("counts", () => {
+  it("keeps the total a completed stage publishes", () => {
+    const next = reduceFrame(
+      emptyStateMap(),
+      frame({ stage: "resolve_dependencies", phase: "done", count: 2871 }),
+    );
+
+    expect(next.resolve_dependencies.count).toBe(2871);
+  });
+
+  it("keeps the latest when one stage publishes more than once", () => {
+    // Mining git history reports commits and then files; the node ends up
+    // showing the second, which is the record it actually wrote.
+    const next = reduceFrames(emptyStateMap(), [
+      frame({ stage: "git_history", phase: "progress", count: 500 }),
+      frame({ stage: "git_history", phase: "progress", count: 1024 }),
+    ]);
+
+    expect(next.git_history.count).toBe(1024);
+  });
+
+  it("does not mistake a zero for a missing total", () => {
+    // A repository with no merged pull requests reports count=0, and that is
+    // an answer rather than the absence of one.
+    const next = reduceFrame(
+      emptyStateMap(),
+      frame({ stage: "pr_fetch", phase: "done", count: 0 }),
+    );
+
+    expect(next.pr_fetch.count).toBe(0);
+  });
+
+  it("leaves the total unset for a stage that publishes none", () => {
+    const next = reduceFrame(
+      emptyStateMap(),
+      frame({ stage: "detect_stack", phase: "done" }),
+    );
+
+    expect(next.detect_stack.count).toBeUndefined();
+  });
+});
+
+describe("isFlowing", () => {
+  /** Look an edge up by its endpoints, failing loudly if the graph moved. */
+  function edgeBetween(from: string, to: string) {
+    const edge = EDGES.find((e) => e.from === from && e.to === to);
+    if (!edge) throw new Error(`no edge ${from} -> ${to} in the graph`);
+    return edge;
+  }
+
+  /** A state map with every named stage done. */
+  function statesWith(done: readonly string[]): StageStateMap {
+    const map = emptyStateMap();
+    for (const id of done) map[id] = { state: "done" };
+    return map;
+  }
+
+  it("leaves nothing flowing once every stage is done", () => {
+    // The regression. Edges into a barrier have no stage to look up, so the
+    // original check compared `undefined` against "done", never matched, and
+    // left finished runs with particles streaming forever.
+    const finished = statesWith(STAGE_IDS);
+
+    expect(EDGES.filter((edge) => isFlowing(edge, finished))).toEqual([]);
+  });
+
+  it("stops an edge into a barrier once everything it feeds is done", () => {
+    const edge = edgeBetween("criticality", "fork_risk");
+
+    expect(isFlowing(edge, statesWith(["criticality"]))).toBe(true);
+    expect(
+      isFlowing(edge, statesWith(["criticality", "glossary"])),
+      "still waiting on reading_order",
+    ).toBe(true);
+    expect(
+      isFlowing(edge, statesWith(["criticality", "glossary", "reading_order"])),
+    ).toBe(false);
+  });
+
+  it("stops the feed into ready once ready is done", () => {
+    const edge = edgeBetween("join_final", "ready");
+
+    expect(isFlowing(edge, statesWith(["generate_embeddings", "brief"]))).toBe(
+      true,
+    );
+    expect(
+      isFlowing(edge, statesWith(["generate_embeddings", "brief", "ready"])),
+    ).toBe(false);
+  });
+
+  it("stops a plain edge when its target settles", () => {
+    const edge = edgeBetween("clone", "parse");
+
+    expect(isFlowing(edge, statesWith(["clone"]))).toBe(true);
+    expect(isFlowing(edge, statesWith(["clone", "parse"]))).toBe(false);
+  });
+
+  it("treats a failed target as settled rather than as still in flight", () => {
+    const edge = edgeBetween("clone", "parse");
+    const map = statesWith(["clone"]);
+    map.parse = { state: "failed" };
+
+    expect(isFlowing(edge, map)).toBe(false);
+  });
+
+  it("never flows before its source is done", () => {
+    expect(isFlowing(edgeBetween("clone", "parse"), emptyStateMap())).toBe(
+      false,
+    );
   });
 });
 
@@ -291,6 +437,41 @@ describe("normaliseTimes", () => {
   });
 
   it("handles a two-point edge", () => {
-    expect(normaliseTimes([[0, 0], [10, 0]])).toEqual([0, 1]);
+    expect(
+      normaliseTimes([
+        [0, 0],
+        [10, 0],
+      ]),
+    ).toEqual([0, 1]);
+  });
+});
+
+describe("pathLengthOf", () => {
+  it("sums the segments rather than measuring end to end", () => {
+    // The comet is a dash on the path, so it needs the travelled length of an
+    // elbow -- the straight-line distance would put it in the wrong place.
+    expect(
+      pathLengthOf([
+        [0, 0],
+        [300, 0],
+        [300, 100],
+      ]),
+    ).toBe(400);
+  });
+
+  it("is zero for a degenerate edge", () => {
+    expect(pathLengthOf([[5, 5]])).toBe(0);
+  });
+
+  it("agrees with the last entry of normaliseTimes", () => {
+    const points = [
+      [0, 0],
+      [120, 40],
+      [200, 40],
+      [200, 300],
+    ] as const;
+
+    expect(pathLengthOf(points)).toBeGreaterThan(0);
+    expect(normaliseTimes(points).at(-1)).toBe(1);
   });
 });
