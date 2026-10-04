@@ -28,6 +28,11 @@ Design rules (the load-bearing ones):
   per-batch callables in their original order and ``gather_in_order``
   returns results in the same order. The downstream code can therefore pair
   each result back with its input key without re-sorting.
+* **Bounded results, not just bounded requests.** ``gather_in_order`` holds
+  every response until the last one lands. Callers that persist each result
+  as it arrives -- the embedder's batch loop is the one today -- use
+  ``iter_gather_in_order`` instead, which yields in order from a fixed-size
+  in-flight window so a stage's peak memory does not scale with its input.
 
 The helper intentionally does *no* logging or progress reporting -- the
 caller drives the ``publish_log`` callback. That keeps this module boring
@@ -37,7 +42,8 @@ and easy to reason about.
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections import deque
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TypeVar
 
@@ -99,3 +105,81 @@ def gather_in_order[T](
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix=f"llm-{label}") as pool:
         futures: list[Future[T]] = [pool.submit(fn) for fn in callables]
         return [future.result() for future in futures]
+
+
+def iter_gather_in_order[T](
+    callables: Iterable[Callable[[], T]],
+    *,
+    max_workers: int = LLM_MAX_WORKERS,
+    label: str = "llm",
+) -> Iterator[T]:
+    """Yield results in submission order, keeping a bounded window in flight.
+
+    :func:`gather_in_order` returns only once *every* callable has completed,
+    so a caller that wants to consume results incrementally -- committing each
+    batch before the next is requested -- ends up holding all responses at
+    once. For embeddings that is the dominant term in the stage's peak
+    memory: a 1536-dimension vector is ~48 KB, so a repository-sized batch
+    list is hundreds of megabytes of floats that exist only to be written and
+    dropped.
+
+    This variant submits at most ``max_workers`` callables at a time and hands
+    each result back as soon as its future resolves, so the caller can release
+    one response before the next arrives. The window is topped up after each
+    yield rather than drained at a barrier, so the pool stays saturated.
+
+    Ordering, error propagation and the thread contract match
+    :func:`gather_in_order`: results arrive in submission order, a worker
+    exception surfaces on the caller thread, and the pool is shut down (which
+    joins the threads still running) before the exception leaves.
+
+    Args:
+        callables: One no-arg callable per network call, consumed lazily --
+            the tail is never submitted if the caller stops early.
+        max_workers: Size of the in-flight window, and of the pool.
+        label: Short tag used in the ``concurrent.futures.ThreadPoolExecutor``
+            thread-name prefix, so a hung thread is identifiable in
+            ``faulthandler`` dumps.
+
+    Yields:
+        Results, positionally aligned with ``callables``.
+
+    Raises:
+        Any exception raised inside a worker callable. Callables still queued
+        in the window are cancelled rather than started; the ones already
+        running are joined by the pool's shutdown.
+    """
+    iterator = iter(callables)
+    window: list[Callable[[], T]] = []
+    for _ in range(max_workers):
+        try:
+            window.append(next(iterator))
+        except StopIteration:
+            break
+
+    if not window:
+        return
+
+    if len(window) == 1:
+        # One call in total: a pool round trip would cost a context switch
+        # for no parallelism, matching ``gather_in_order``'s inline path.
+        yield window[0]()
+        return
+
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix=f"llm-{label}") as pool:
+        pending: deque[Future[T]] = deque(pool.submit(fn) for fn in window)
+        while pending:
+            future = pending.popleft()
+            try:
+                result = future.result()
+            except BaseException:
+                for outstanding in pending:
+                    outstanding.cancel()
+                raise
+            yield result
+
+            try:
+                following = next(iterator)
+            except StopIteration:
+                continue
+            pending.append(pool.submit(following))

@@ -10,16 +10,20 @@ symbol -- including the ``source_code`` column -- into a single Python list,
 then iterated it twice (once to build the chunk text, once to push it through
 the API). At ~2x the source text size, that list is the largest single
 object the pipeline holds at one time. The flow below splits symbol loading
-into ``EMBED_BUILD_BATCH_SIZE``-sized chunks so each batch's source text is
-garbage-collected before the next batch begins. The enrichment map
+into ``EMBED_BUILD_BATCH_SIZE``-sized pages and embeds each page before
+reading the next, so one page's chunk text is what the stage holds at its
+peak rather than the whole repository's. The enrichment map
 (``callers_map``/``callees_map``/``glossary_map``) is still loaded eagerly --
 it is column-projected (names + ids, no source) and the trade-off is
 acceptable.
 
-Concurrency shape: the embed-and-store loop submits every batch's
-network call to a bounded ``ThreadPoolExecutor`` (see
-:mod:`app.services._concurrency`). The worker threads perform the API call
-only -- they touch no ``Session``. The parent thread receives responses in
+Concurrency shape: the embed-and-store loop submits each batch's network call
+to a bounded ``ThreadPoolExecutor`` and consumes the responses as they arrive
+(see :mod:`app.services._concurrency`), committing a batch before requesting
+the next. That ordering is what keeps the peak flat -- a 1536-dimension
+vector is ~48 KB, so collecting every response before writing the first row
+made the stage scale with the repository. The worker threads perform the API
+call only -- they touch no ``Session``. The parent thread receives responses in
 input order and runs the database writes serially, which is the only
 threading-safe option on the sync engine without re-architecting session
 handling. The speedup is bounded by ``LLM_MAX_WORKERS``: on the box profile this
@@ -32,7 +36,7 @@ import logging
 import re
 import uuid
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any, Generator, Literal, cast
 from uuid import UUID, uuid5
 
@@ -52,7 +56,7 @@ from app.models import (
     OnboardingGuide,
     PullRequest,
 )
-from app.services._concurrency import gather_in_order
+from app.services._concurrency import iter_gather_in_order
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +102,11 @@ MAX_CHUNK_TOKENS = 2048
 BATCH_SIZE = 100
 
 # Symbols are projected (id, file_id, kind, name, source_code, docstring) one
-# batch at a time and the chunk built from them, so the chunk text never
+# page at a time and the chunk built from them, so the chunk text never
 # coexists in memory with the rest of the source code. A small enough number
 # that tracemalloc shows a flat profile through the loop; a large enough
-# number that the per-batch query overhead is negligible.
+# number that the page's several ``BATCH_SIZE`` batches still overlap on the
+# pool, and that the per-page query overhead is negligible.
 EMBED_BUILD_BATCH_SIZE = 500
 
 # OpenAI's per-request timeouts. The default read timeout is 600s, which would
@@ -291,59 +296,72 @@ def _iter_query_batches(
     """
     Yield embeddable symbols for a repo in ``batch_size`` slices.
 
+    Pages with a keyset cursor on ``AstSymbol.id`` -- ``WHERE id > :after
+    ORDER BY id LIMIT :batch_size`` -- rather than a server-side cursor. The
+    caller embeds and commits each page before asking for the next one, and a
+    commit closes a psycopg2 named cursor, so the streaming form could not
+    survive the loop it exists to feed. The keyset only ever moves forward, so
+    the whole walk costs one ordered pass over the primary key rather than a
+    re-scan per page, and each page is a fresh statement that a commit cannot
+    invalidate.
+
     Joins on ``File.repository_id`` rather than passing ``symbol_ids`` to an
     ``IN (...)``. The previous shape built ``symbol_ids`` in memory from
     every embeddable symbol and then ran four queries against it; past
     ~32k symbols the bind-parameter list exceeded the driver's limit and
     SQLAlchemy does not paginate ``IN`` lists, so the call failed outright.
-    Server-side chunking also matches what the file_graph helper already
-    does (``file_graph.py:41``).
-
-    ``stream_results=True`` opts in to a server-side cursor (psycopg2
-    feature), which is what makes ``fetchmany`` actually page rather than
-    slice an already-materialised list.
     """
-    stmt = (
-        select(
-            AstSymbol.id,
-            AstSymbol.file_id,
-            AstSymbol.kind,
-            AstSymbol.name,
-            AstSymbol.source_code,
-            AstSymbol.docstring,
-        )
-        .join(File, AstSymbol.file_id == File.id)
-        .where(
-            File.repository_id == repository_id,
-            AstSymbol.kind.in_(EMBEDDABLE_KINDS),
-            AstSymbol.source_code.isnot(None),
-            AstSymbol.source_code != "",
-        )
-        .execution_options(stream_results=True, max_row_buffer=batch_size)
-    )
-    result = db.execute(stmt)
+    after_id: UUID | None = None
     while True:
-        rows = result.fetchmany(batch_size)
+        stmt = (
+            select(
+                AstSymbol.id,
+                AstSymbol.file_id,
+                AstSymbol.kind,
+                AstSymbol.name,
+                AstSymbol.source_code,
+                AstSymbol.docstring,
+            )
+            .join(File, AstSymbol.file_id == File.id)
+            .where(
+                File.repository_id == repository_id,
+                AstSymbol.kind.in_(EMBEDDABLE_KINDS),
+                AstSymbol.source_code.isnot(None),
+                AstSymbol.source_code != "",
+            )
+            .order_by(AstSymbol.id)
+            .limit(batch_size)
+        )
+        if after_id is not None:
+            stmt = stmt.where(AstSymbol.id > after_id)
+
+        rows = db.execute(stmt).all()
         if not rows:
             break
         yield rows
+        after_id = rows[-1].id
 
 
 def _embed_batches(
     client: OpenAI,
     batches: list[list[tuple[UUID, str]]],
     label: str,
-) -> list:
-    """Submit one embedding call per batch to the parallel pool.
+) -> Iterator[Any]:
+    """Yield one embedding response per batch, in input order.
+
+    Results are handed back from a bounded in-flight window rather than
+    collected into a list first, so the caller can persist and release a
+    batch before the next response lands. See
+    :func:`app.services._concurrency.iter_gather_in_order`.
 
     Returns:
-        A list of responses, positionally aligned with ``batches``. Each
-        ``response.data`` is then paired back to the input items in
+        An iterator positionally aligned with ``batches``. Each
+        ``response.data`` is paired back to the input items in
         :func:`_embed_and_store`. The pool re-raises any worker exception
         to the caller, which logs and aborts the ingest -- the existing
         "fail loud" contract for embeddings.
     """
-    return gather_in_order(
+    return iter_gather_in_order(
         [
             cast(
                 Callable[[], Any],
@@ -376,8 +394,9 @@ def _embed_and_store(
     Single implementation of the embed-batch loop shared by all source types:
     batches the chunks, runs the OpenAI calls in parallel through
     :func:`_embed_batches`, and inserts one ``Embedding`` row per chunk in
-    input order on the parent thread. Each batch is committed as it
-    completes so partial progress survives a later API failure.
+    input order on the parent thread. Each batch is committed as its response
+    arrives, so partial progress survives a later API failure and the vectors
+    of a committed batch are released before the next response lands.
 
     Threads perform only the network call -- no ``Session`` is shared. The
     parent thread does all DB writes because the sync engine has no
@@ -422,49 +441,59 @@ def _embed_and_store(
     if publish_log:
         publish_log(f"Embedding {len(batches)} {label} batches in parallel...")
 
+    # The responses are consumed lazily, one batch at a time, so a batch's
+    # vectors are released as soon as its rows are committed. Requesting the
+    # whole list up front instead made the stage's peak memory scale with the
+    # repository: a 1536-dimension vector is ~48 KB, so a large repo held
+    # hundreds of megabytes of floats that existed only to be written and
+    # dropped.
     try:
         responses = _embed_batches(client, batches, label)
-    except Exception as e:
-        logger.error(f"OpenAI embedding call failed for {label}: {e}")
-        raise
 
-    # Walk the batches and their responses together; the embed-and-store
-    # helper guarantees positional alignment so the ``response.data`` items
-    # pair back to the input ``(source_id, chunk_text)`` tuples in order.
-    for batch_idx, (batch, response) in enumerate(zip(batches, responses, strict=True)):
-        rows = [
-            {
-                "source_type": source_type,
-                "source_id": source_id,
-                "file_id": file_id_of(source_id) if file_id_of else None,
-                "repository_id": repository_id,
-                "chunk_text": chunk_text,
-                "chunk_hash": _chunk_hash(chunk_text),
-                "embedding": embedding_data.embedding,
-            }
-            for (source_id, chunk_text), embedding_data in zip(batch, response.data)
-        ]
-        stmt = pg_insert(Embedding).values(rows)
-        if upsert:
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["repository_id", "source_type", "source_id"],
-                set_={
-                    "file_id": stmt.excluded.file_id,
-                    "chunk_text": stmt.excluded.chunk_text,
-                    "chunk_hash": stmt.excluded.chunk_hash,
-                    "embedding": stmt.excluded.embedding,
-                },
+        # Walk the batches and their responses together; the embed-and-store
+        # helper guarantees positional alignment so the ``response.data`` items
+        # pair back to the input ``(source_id, chunk_text)`` tuples in order.
+        for batch_idx, (batch, response) in enumerate(zip(batches, responses, strict=True)):
+            rows = [
+                {
+                    "source_type": source_type,
+                    "source_id": source_id,
+                    "file_id": file_id_of(source_id) if file_id_of else None,
+                    "repository_id": repository_id,
+                    "chunk_text": chunk_text,
+                    "chunk_hash": _chunk_hash(chunk_text),
+                    "embedding": embedding_data.embedding,
+                }
+                for (source_id, chunk_text), embedding_data in zip(batch, response.data)
+            ]
+            stmt = pg_insert(Embedding).values(rows)
+            if upsert:
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["repository_id", "source_type", "source_id"],
+                    set_={
+                        "file_id": stmt.excluded.file_id,
+                        "chunk_text": stmt.excluded.chunk_text,
+                        "chunk_hash": stmt.excluded.chunk_hash,
+                        "embedding": stmt.excluded.embedding,
+                    },
+                )
+            # Bulk insert bypasses the identity map entirely; the previous
+            # per-row ``db.add`` was the same shape for a long batch.
+            db.execute(stmt)
+
+            # One commit per batch, so a failure part way through the run keeps
+            # the batches that already landed rather than discarding all of
+            # them. This is also what lets the generator above drop each
+            # response as soon as it has been written.
+            db.commit()
+            inserted += len(batch)
+            logger.info(
+                f"{label} batch {batch_idx + 1}/{len(batches)} committed "
+                f"\u2014 {inserted} total embeddings so far"
             )
-        # Bulk insert bypasses the identity map entirely; the previous
-        # per-row ``db.add`` was the same shape for a long batch.
-        db.execute(stmt)
-
-        db.commit()
-        inserted += len(batch)
-        logger.info(
-            f"{label} batch {batch_idx + 1}/{len(batches)} committed "
-            f"\u2014 {inserted} total embeddings so far"
-        )
+    except Exception as e:
+        logger.error(f"Embedding failed for {label}: {e}")
+        raise
 
     return inserted
 
@@ -655,7 +684,16 @@ def generate_embeddings(
         stored_file_hashes = _load_stored_hashes(db, repository_id, "file")
 
     def _embed_symbol_chunks() -> int:
-        """Stream symbols, build chunks, embed all batches in parallel.
+        """Embed symbol chunks one page of symbols at a time.
+
+        Each ``EMBED_BUILD_BATCH_SIZE`` page is rendered, embedded and
+        committed before the next page is read, so the chunk text of one page
+        -- not of the whole repository -- is what the stage holds at its peak.
+        A page is several ``BATCH_SIZE`` batches, so the parallel pool still
+        has enough submissions to overlap OpenAI calls: a previous per-flush
+        shape called ``_embed_and_store`` once per ``BATCH_SIZE`` slice, and
+        the single-batch ``_iter_batches`` inside only ever emitted one
+        future, defeating the pool.
 
         Returns:
             Number of embeddings inserted or updated.
@@ -663,15 +701,14 @@ def generate_embeddings(
         nonlocal skipped
         # Each entry carries ``(symbol_id, file_id, chunk_text)``. Holding
         # the ``file_id`` alongside the ``source_id`` lets ``_embed_and_store``
-        # populate ``Embedding.file_id`` without a per-row lookup. Building
-        # the whole chunk list before submitting to the pool is what lets
-        # the parallel path actually overlap multiple OpenAI calls: a
-        # previous per-flush shape called ``_embed_and_store`` once per
-        # ``BATCH_SIZE`` slice, and the single-batch ``_iter_batches``
-        # inside only ever emitted one future, defeating the pool.
-        all_pending: list[tuple[UUID, UUID, str]] = []
+        # populate ``Embedding.file_id`` without a per-row lookup.
+        inserted = 0
+        built_total = 0
+        up_to_date_total = 0
 
         for batch_rows in _iter_query_batches(db, repository_id, EMBED_BUILD_BATCH_SIZE):
+            # Page-local: freed once the page has been embedded and committed.
+            page: list[tuple[UUID, UUID, str]] = []
             for row in batch_rows:
                 sym_id, file_id, kind, name, source_code, docstring = row
                 file_path = file_path_map.get(file_id, "unknown")
@@ -691,43 +728,47 @@ def generate_embeddings(
                     skipped += 1
                     continue
 
-                all_pending.append((sym_id, file_id, chunk_text))
+                page.append((sym_id, file_id, chunk_text))
                 embedded_file_ids.add(file_id)
                 source_id_to_file_id[sym_id] = file_id
 
-        if not all_pending:
-            return 0
+            if not page:
+                continue
 
-        items_full = [(sym_id, chunk_text) for sym_id, _fid, chunk_text in all_pending]
-        file_ids = {sym_id: fid for sym_id, fid, _t in all_pending}
-        if mode == "incremental":
-            # Reconcile: drop chunks whose stored hash matches the
-            # freshly-rendered text. An unchanged symbol in an unchanged
-            # file does not pay the OpenAI call.
-            items = _filter_chunks_by_hash(items_full, stored_symbol_hashes)
-        else:
-            items = items_full
-        if not items:
-            return 0
-        if publish_log:
-            publish_log(
-                f"Built {len(items_full)} symbol chunks ({skipped} skipped, "
-                f"{len(items_full) - len(items)} up to date)"
+            items_full = [(sym_id, chunk_text) for sym_id, _fid, chunk_text in page]
+            file_ids = {sym_id: fid for sym_id, fid, _t in page}
+            if mode == "incremental":
+                # Reconcile: drop chunks whose stored hash matches the
+                # freshly-rendered text. An unchanged symbol in an unchanged
+                # file does not pay the OpenAI call.
+                items = _filter_chunks_by_hash(items_full, stored_symbol_hashes)
+            else:
+                items = items_full
+
+            built_total += len(items_full)
+            up_to_date_total += len(items_full) - len(items)
+            if not items:
+                continue
+
+            inserted += _embed_and_store(
+                client,
+                db,
+                repository_id,
+                items,
+                source_type="symbol",
+                file_id_of=file_ids.get,
+                publish_log=publish_log,
+                label="symbol chunks",
+                upsert=(mode == "incremental"),
             )
-        # The ``all_pending`` local is the only reference to the chunk
-        # strings; once ``_embed_and_store`` returns they are unreachable
-        # and the per-batch lists inside the pool are the live copies.
-        return _embed_and_store(
-            client,
-            db,
-            repository_id,
-            items,
-            source_type="symbol",
-            file_id_of=file_ids.get,
-            publish_log=publish_log,
-            label="symbol chunks",
-            upsert=(mode == "incremental"),
-        )
+
+        if publish_log and built_total:
+            publish_log(
+                f"Built {built_total} symbol chunks ({skipped} skipped, "
+                f"{up_to_date_total} up to date)"
+            )
+
+        return inserted
 
     total_inserted += _embed_symbol_chunks()
 
