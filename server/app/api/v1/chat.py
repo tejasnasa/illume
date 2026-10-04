@@ -14,7 +14,7 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, Authenti
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select
 
-from app.api.validation import FreeText
+from app.api.validation import MultiLineText
 from app.core.database import AsyncSession, get_async_db
 from app.models.chat_message import ChatMessage as ChatMessageModel
 from app.models.repository import Repository
@@ -32,16 +32,26 @@ router = APIRouter(prefix="/api/v1/repository", tags=["chat"])
 
 
 class ChatMessageRequest(BaseModel):
-    """One prior conversation turn sent by the client."""
+    """One prior conversation turn sent by the client.
+
+    ``content`` is multi-line because an assistant turn is a markdown answer, which
+    is a line feed away from being prose. Validated as single-line free text, every
+    follow-up after a multi-line answer is refused.
+    """
 
     role: Literal["user", "assistant"]
-    content: FreeText
+    content: MultiLineText
 
 
 class ChatRequest(BaseModel):
-    """Question plus optional client-side history for follow-ups."""
+    """Question plus optional client-side history for follow-ups.
 
-    question: FreeText
+    ``question`` is multi-line because the composer submits on Enter and inserts a
+    newline on Shift+Enter, so a line feed is an input the UI offers rather than one a
+    client has to construct.
+    """
+
+    question: MultiLineText
     history: list[ChatMessageRequest] = []
 
 

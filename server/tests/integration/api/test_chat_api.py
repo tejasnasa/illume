@@ -242,6 +242,58 @@ class TestAskGuards:
 
         assert response.status_code == 422
 
+    async def test_accepts_a_multi_line_question(self, client, chattable, rag):
+        """
+        The composer submits on Enter and inserts a newline on Shift+Enter, so a line
+        feed is an input the UI offers. Rejecting it refuses a question the user has no
+        other way to ask.
+        """
+        _, repo = chattable
+
+        response = await client.post(
+            chat_url(repo), json={"question": "What is this?\nAnd what does it import?"}
+        )
+
+        assert response.status_code == 200
+
+    async def test_accepts_a_multi_line_answer_in_history(self, client, chattable, rag):
+        """
+        A follow-up carries the previous answers back, and an answer is markdown. With
+        single-line free text on `content`, the first multi-line answer poisons the
+        conversation: every later turn is refused with a 422 the user cannot act on.
+        """
+        _, repo = chattable
+
+        response = await client.post(
+            chat_url(repo),
+            json={
+                "question": "And then?",
+                "history": [
+                    {"role": "user", "content": "What is this?"},
+                    {
+                        "role": "assistant",
+                        "content": "A portfolio site.\n\n**Structure**\n- Projects\n- About",
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+
+    async def test_still_rejects_a_control_character_in_history(self, client, chattable, rag):
+        """Allowing line feeds must not reopen the NUL byte, which no text column holds."""
+        _, repo = chattable
+
+        response = await client.post(
+            chat_url(repo),
+            json={
+                "question": "q",
+                "history": [{"role": "assistant", "content": "before\x00after"}],
+            },
+        )
+
+        assert response.status_code == 422
+
     async def test_requires_authentication(self, client, chattable, rag):
         _, repo = chattable
         client.cookies.clear()
