@@ -1,10 +1,10 @@
 /**
  * Dashboard banner for users on the keyless free tier.
  *
- * Two states: the free ingestion is still unused (call to action: start
- * now), or it has been burned and there is no BYOK key yet (call to action:
- * add one in settings). BYOK users do not see the banner at all -- the
- * quota gate does not apply once a key is set.
+ * Two states: free ingestions are still available (call to action: start
+ * now), or the allowance is spent and there is no BYOK key yet (call to
+ * action: add one in settings). BYOK users do not see the banner at all --
+ * the quota gate does not apply once a key is set.
  *
  * @module FreeTierBanner
  */
@@ -13,15 +13,6 @@
 import { MoonStarsIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import User from "@/types/user";
-
-/**
- * The numbers the entitlement layer grants on the dashboard / chat path.
- * Both must match the server-side `FREE_INGESTIONS` and `FREE_CHAT_MESSAGES`
- * in `app/services/entitlements.py` -- the banner mirrors them so a future
- * cap change moves both at once.
- */
-const FREE_INGESTIONS = 1;
-const FREE_CHAT_MESSAGES = 5;
 
 /**
  * Props for the FreeTierBanner component.
@@ -40,36 +31,34 @@ type Props = {
  *   step is /settings, which the navbar already surfaces; showing it twice
  *   is noise).
  *
- * `FREE_INGESTIONS` is the per-user grant: a value of 1 means the boolean
- * `free_ingest_used` flips to `true` the moment the slot is consumed, so the
- * banner stays up exactly while that one slot is still available. Should
- * the grant ever move to N, the same intent ("banner visible while any
- * slot remains") becomes `ingestSpent < FREE_INGESTIONS`, computed off the
- * same counter on the user row -- so the constant is what couples this
- * check to the server-side `FREE_INGESTIONS` in
- * `app/services/entitlements.py`.
+ * The caps come from the server (`free_ingestions_limit` /
+ * `free_chat_messages_limit` on /auth/me), so tuning the policy in
+ * `app/services/entitlements.py` moves the banner's threshold with it.
  */
 function shouldShow(user: User): boolean {
   if (user.has_ai_key) return false;
-  // Boolean today: with the grant of 1, `free_ingest_used === true` means
-  // the single slot has been spent. Casting through a number makes the
-  // expression slot-comparable: 0 slots used when false, 1 when true.
-  const ingestSpent = user.free_ingest_used ? FREE_INGESTIONS : 0;
-  const chatSpent = user.free_chat_messages_used >= FREE_CHAT_MESSAGES;
-  return !(ingestSpent >= FREE_INGESTIONS && chatSpent);
+  const ingestSpent = user.free_ingestions_used >= user.free_ingestions_limit;
+  const chatSpent = user.free_chat_messages_used >= user.free_chat_messages_limit;
+  return !(ingestSpent && chatSpent);
 }
 
 /**
  * Builds the copy and primary CTA based on what is left.
  *
- * The CTA is "/settings" once any allowance has been spent -- the next
- * meaningful action is "save a key" -- and otherwise points at the repo
- * picker so a fresh user lands on the path the product is laid out for.
+ * While ingestion slots remain the banner keeps the onboarding tone, counting
+ * the slots once any have been spent. At the cap it switches to the muted
+ * "add a key" prompt, since no free ingest is left to offer. Both branches
+ * send the user to /settings -- the next meaningful action is to save a key.
  */
 function resolveMessage(user: User) {
-  if (!user.free_ingest_used) {
+  const remaining = user.free_ingestions_limit - user.free_ingestions_used;
+
+  if (remaining > 0) {
     return {
-      title: "You're on the free tier",
+      title:
+        user.free_ingestions_used === 0
+          ? "You're on the free tier"
+          : `${user.free_ingestions_used} of ${user.free_ingestions_limit} free ingestions used`,
       ctaLabel: "Add your own API key",
       ctaHref: "/settings",
       tone: "primary",

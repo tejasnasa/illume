@@ -10,9 +10,10 @@ one snapshot, rather than a per-axis sequence.
 
 The headline matrix:
 
-* :func:`claim_free_ingestion` returns ``True`` exactly once when called
-  twice in sequence -- the second call sees ``free_ingest_used = true`` and
-  refuses to bump it again.
+* :func:`claim_free_ingestion` returns ``True`` for the first
+  ``FREE_INGESTIONS`` calls and ``False`` for the next -- the bound is
+  enforced atomically with the increment, so a user cannot over-spend their
+  allowance.
 * :func:`claim_free_chat_message` returns ``True`` for the 5th call and
   ``False`` for the 6th -- the bound is enforced atomically with the
   increment, so a user cannot over-spend their allowance.
@@ -36,6 +37,7 @@ from app.models.repository import Repository
 from app.models.user import User
 from app.services.entitlements import (
     FREE_CHAT_MESSAGES,
+    FREE_INGESTIONS,
     claim_free_chat_message,
     claim_free_ingestion,
 )
@@ -125,7 +127,7 @@ def _run_claim_test(body: Callable[[User, sessionmaker[Session]], None]) -> None
 
 
 class TestClaimFreeIngestion:
-    """``claim_free_ingestion`` -- the one-shot per-user free ingestion.
+    """``claim_free_ingestion`` -- the bounded per-user free ingestion.
 
     The ingest claim does **not** commit by design: the caller is expected
     to bundle the claim with the ``Repository`` insert in one transaction,
@@ -134,22 +136,26 @@ class TestClaimFreeIngestion:
     reports whether the row was updated.
     """
 
-    def test_returns_true_once_then_false_on_second_call(self):
-        """The first claim succeeds; the second sees ``free_ingest_used = true`` and refuses."""
+    def test_returns_true_for_the_first_calls_then_false(self):
+        """A fresh user has ``FREE_INGESTIONS`` units; the (n+1)th call returns ``False``."""
 
         def _body(user: User, Session: sessionmaker[Session]) -> None:
-            session = Session()
-            assert claim_free_ingestion(session, user.id) is True
-            session.commit()
+            # The matrix: FREE_INGESTIONS succeeds, the next fails. Read in
+            # a single list so the assertion is one snapshot. Each claim
+            # commits on its own session, matching the caller-owned commit
+            # the helper's ``WHERE`` predicate depends on.
+            results = []
+            for _ in range(FREE_INGESTIONS + 1):
+                session = Session()
+                results.append(claim_free_ingestion(session, user.id))
+                session.commit()
 
-            session = Session()
-            assert claim_free_ingestion(session, user.id) is False
-            session.commit()
+            assert results == [True] * FREE_INGESTIONS + [False]
 
         _run_claim_test(_body)
 
-    def test_persists_the_flag_on_the_user_row(self):
-        """The boolean flip is visible to a fresh session; the caller committed."""
+    def test_persists_the_increment_on_the_user_row(self):
+        """The counter advance is visible to a fresh session; the caller committed."""
 
         def _body(user: User, Session: sessionmaker[Session]) -> None:
             session = Session()
@@ -157,16 +163,16 @@ class TestClaimFreeIngestion:
             session.commit()
 
             stored = Session().execute(select(User).where(User.id == user.id)).scalar_one()
-            assert stored.free_ingest_used is True
+            assert stored.free_ingestions_used == 1
             assert stored.free_chat_messages_used == 0
 
         _run_claim_test(_body)
 
-    def test_a_user_with_a_key_still_has_the_default_false(self):
+    def test_a_user_with_a_key_still_has_the_default_zero(self):
         """The counter is independent of the BYOK credential.
 
         A user with their own key is not on the free tier at all -- the
-        counter sits at ``false`` forever, but it is still a real column on
+        counter sits at ``0`` forever, but it is still a real column on
         the row.
         """
         session_factory = _sync_session_factory()
@@ -177,7 +183,7 @@ class TestClaimFreeIngestion:
 
             stored = Session().execute(select(User).where(User.id == user.id)).scalar_one()
             assert stored.ai_api_key == "sk-test"
-            assert stored.free_ingest_used is False
+            assert stored.free_ingestions_used == 0
         finally:
             if user is not None:
                 _cleanup(session_factory, user.id, None)

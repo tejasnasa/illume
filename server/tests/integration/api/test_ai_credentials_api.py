@@ -26,6 +26,7 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, Authenti
 from sqlalchemy import select
 
 from app.models.user import User
+from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_providers import PROVIDERS
 from tests.factories import make_user
 from tests.helpers import authenticate
@@ -461,7 +462,7 @@ class TestPut:
 
         stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
         assert stored.free_chat_messages_used == 0
-        assert stored.free_ingest_used is False
+        assert stored.free_ingestions_used == 0
 
     async def test_replaces_an_existing_credential(self, client, db_session, successful_probe):
         """A second PUT overwrites -- the user is updating, not appending."""
@@ -550,7 +551,7 @@ class TestDelete:
         user.ai_provider = "openai"
         user.ai_model = "gpt-4o-mini"
         user.ai_key_validated_at = datetime(2026, 1, 1, tzinfo=UTC)
-        user.free_ingest_used = True
+        user.free_ingestions_used = 1
         user.free_chat_messages_used = 3
         await db_session.flush()
         await authenticate(client, user)
@@ -558,7 +559,7 @@ class TestDelete:
         await client.delete(DELETE_URL)
 
         stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
-        assert stored.free_ingest_used is True
+        assert stored.free_ingestions_used == 1
         assert stored.free_chat_messages_used == 3
 
     async def test_delete_with_no_credential_is_idempotent(self, client, db_session):
@@ -600,8 +601,10 @@ class TestMeEnvelope:
         assert body["ai_provider"] == "openai"
         assert body["ai_model"] == "gpt-4o-mini"
         assert body["has_ai_key"] is True
-        assert body["free_ingest_used"] is False
+        assert body["free_ingestions_used"] == 0
         assert body["free_chat_messages_used"] == 0
+        assert body["free_ingestions_limit"] == FREE_INGESTIONS
+        assert body["free_chat_messages_limit"] == FREE_CHAT_MESSAGES
 
     async def test_reports_has_ai_key_false_for_a_keyless_user(self, client, db_session):
         user = await make_user(db_session)
@@ -635,7 +638,7 @@ class TestMeEnvelope:
 
     async def test_reports_free_tier_counters(self, client, db_session):
         user = await make_user(db_session)
-        user.free_ingest_used = True
+        user.free_ingestions_used = 1
         user.free_chat_messages_used = 2
         await db_session.flush()
         await authenticate(client, user)
@@ -643,8 +646,11 @@ class TestMeEnvelope:
         response = await client.get(ME_URL)
 
         body = response.json()
-        assert body["free_ingest_used"] is True
+        assert body["free_ingestions_used"] == 1
         assert body["free_chat_messages_used"] == 2
+        # The caps ride along so the client never mirrors the policy numbers.
+        assert body["free_ingestions_limit"] == FREE_INGESTIONS
+        assert body["free_chat_messages_limit"] == FREE_CHAT_MESSAGES
 
 
 # --- Repository sync_available --------------------------------------------

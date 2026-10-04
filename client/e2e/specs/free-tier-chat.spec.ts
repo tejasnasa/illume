@@ -117,8 +117,10 @@ test.describe("a fresh keyless user", () => {
     expect(res.ok()).toBe(true);
     const body = await res.json();
     expect(body.has_ai_key).toBe(false);
-    expect(body.free_ingest_used).toBe(false);
+    expect(body.free_ingestions_used).toBe(0);
     expect(body.free_chat_messages_used).toBe(0);
+    expect(body.free_ingestions_limit).toBeGreaterThan(0);
+    expect(body.free_chat_messages_limit).toBeGreaterThan(0);
   });
 
   test("the counter starts at zero and increments via /auth/me reads", async ({

@@ -17,8 +17,10 @@ function makeUser(overrides: Partial<User> = {}): User {
     ai_provider: null,
     ai_model: null,
     has_ai_key: false,
-    free_ingest_used: false,
+    free_ingestions_used: 0,
     free_chat_messages_used: 0,
+    free_ingestions_limit: 3,
+    free_chat_messages_limit: 5,
     ...overrides,
   };
 }
@@ -30,14 +32,14 @@ describe("visibility", () => {
     expect(screen.getByTestId("free-tier-banner")).toBeInTheDocument();
   });
 
-  it("renders while chat allowance remains, even after the free ingest is spent", () => {
+  it("renders while chat allowance remains, even after the free ingestions are spent", () => {
     // The chat counter is the one the banner's "kept you around" branch
-    // exercises -- the user has burned the single ingestion slot but
-    // still has questions left in the budget.
+    // exercises -- the user has burned every ingestion slot but still has
+    // questions left in the budget.
     render(
       <FreeTierBanner
         user={makeUser({
-          free_ingest_used: true,
+          free_ingestions_used: 3,
           free_chat_messages_used: 2,
         })}
       />,
@@ -63,7 +65,7 @@ describe("visibility", () => {
     render(
       <FreeTierBanner
         user={makeUser({
-          free_ingest_used: true,
+          free_ingestions_used: 3,
           free_chat_messages_used: 5,
         })}
       />,
@@ -74,7 +76,7 @@ describe("visibility", () => {
 });
 
 describe("copy", () => {
-  it("uses the onboarding copy while the free ingest is unused", () => {
+  it("uses the onboarding copy while the free ingestions are unused", () => {
     render(<FreeTierBanner user={makeUser()} />);
 
     expect(screen.getByText(/You're on the free tier/i)).toBeInTheDocument();
@@ -83,11 +85,27 @@ describe("copy", () => {
     ).toHaveAttribute("href", "/settings");
   });
 
-  it("uses the spent copy once the free ingest is burned", () => {
+  it("counts the slot usage while some ingestions remain", () => {
     render(
       <FreeTierBanner
         user={makeUser({
-          free_ingest_used: true,
+          free_ingestions_used: 1,
+          free_chat_messages_used: 1,
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/1 of 3 free ingestions used/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Add your own API key/i }),
+    ).toHaveAttribute("href", "/settings");
+  });
+
+  it("uses the spent copy once the free ingestions are burned", () => {
+    render(
+      <FreeTierBanner
+        user={makeUser({
+          free_ingestions_used: 3,
           free_chat_messages_used: 1,
         })}
       />,

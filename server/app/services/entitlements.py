@@ -30,13 +30,14 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.services.llm_config import LLMConfig
 
-# Per-user one-shot allowance. A free tier is supposed to be a *teaser*, not a
-# sustainable plan: one ingestion is enough to evaluate the artefact set,
-# five chat questions are enough to confirm the retrieval is doing what the
-# on-screen citations imply. The numbers are the policy; the routes are the
-# enforcers.
-FREE_INGESTIONS: int = 1
-FREE_CHAT_MESSAGES: int = 5
+# Per-user allowance. A free tier is supposed to be a *teaser*, not a
+# sustainable plan: a handful of ingestions is enough to evaluate the
+# artefact set, five chat questions are enough to confirm the retrieval is
+# doing what the on-screen citations imply. The numbers are the policy; the
+# routes are the enforcers. Both are served to the client on ``/auth/me`` so
+# the banner and the chat composer never carry a second copy that can drift.
+FREE_INGESTIONS: int = 3
+FREE_CHAT_MESSAGES: int = 10
 
 
 def llm_config_for(user: Any) -> LLMConfig | None:
@@ -72,13 +73,16 @@ def llm_config_for(user: Any) -> LLMConfig | None:
 
 
 def claim_free_ingestion(db: Session, user_id: uuid.UUID) -> bool:
-    """Atomically mark the free ingestion as spent.
+    """Atomically charge one of the user's free ingestions.
 
-    Uses a conditional ``UPDATE`` keyed on the row's current ``free_ingest_used``
-    value, so two concurrent callers cannot both succeed. The caller is
-    expected to bundle the claim with the ``Repository`` insert in one
-    transaction, so this function does **not** commit -- a failed insert
-    rolls back the claim and the allowance is preserved.
+    Bounded by :data:`FREE_INGESTIONS`: a user whose counter is already at
+    the cap cannot spend another. The ``WHERE`` clause enforces the bound
+    atomically with the increment, so the final permitted claim succeeds and
+    the next one returns ``False``.
+
+    The caller is expected to bundle the claim with the ``Repository`` insert
+    in one transaction, so this function does **not** commit -- a failed
+    insert rolls back the claim and the allowance is preserved.
 
     Args:
         db: An open sync session (the route layer's async session is
@@ -86,14 +90,17 @@ def claim_free_ingestion(db: Session, user_id: uuid.UUID) -> bool:
         user_id: The user attempting to ingest.
 
     Returns:
-        ``True`` if the free ingestion was just spent on this call, ``False``
-        if it had already been spent (or the user has their own key -- the
-        caller is responsible for that pre-check).
+        ``True`` if a free ingestion was just spent on this call, ``False``
+        if the cap had already been reached (or the user has their own key --
+        the caller is responsible for that pre-check).
     """
     result = db.execute(
         update(User)
-        .where(User.id == user_id, User.free_ingest_used.is_(False))
-        .values(free_ingest_used=True)
+        .where(
+            User.id == user_id,
+            User.free_ingestions_used < FREE_INGESTIONS,
+        )
+        .values(free_ingestions_used=User.free_ingestions_used + 1)
     )
     return int(result.rowcount or 0) == 1
 
@@ -141,8 +148,11 @@ async def aclaim_free_ingestion(db: AsyncSession, user_id: uuid.UUID) -> bool:
     """
     result = await db.execute(
         update(User)
-        .where(User.id == user_id, User.free_ingest_used.is_(False))
-        .values(free_ingest_used=True)
+        .where(
+            User.id == user_id,
+            User.free_ingestions_used < FREE_INGESTIONS,
+        )
+        .values(free_ingestions_used=User.free_ingestions_used + 1)
     )
     return int(result.rowcount or 0) == 1
 

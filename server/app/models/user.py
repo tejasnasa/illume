@@ -7,7 +7,7 @@ Represents a registered user in the system.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, text
+from sqlalchemy import DateTime, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -18,8 +18,8 @@ class User(Base):
     SQLAlchemy model representing an application user.
 
     Stores authentication details, GitHub OAuth tokens, profile information,
-    and the per-user stored-LLM-key credential together with the one-shot
-    free-tier counters.
+    and the per-user stored-LLM-key credential together with the free-tier
+    counters.
     """
 
     __tablename__ = "users"
@@ -42,8 +42,8 @@ class User(Base):
     ai_key_validated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    free_ingest_used: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false")
+    free_ingestions_used: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
     )
     free_chat_messages_used: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")

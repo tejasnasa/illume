@@ -139,8 +139,8 @@ async def _require_quota_for_creation(db: AsyncSession, user: User) -> None:
     """Raise 402 if ``user`` cannot ingest another repository.
 
     BYOK users are admitted immediately -- their stored key is the
-    authorisation. Keyless users must still have their one free ingestion;
-    if it has already been spent, a freshly-keyless request gets a 402
+    authorisation. Keyless users must still have free ingestions left;
+    once the allowance is spent, a freshly-keyless request gets a 402
     rather than a silent free pass.
 
     The free-tier claim and the ``Repository`` insert run inside the same
@@ -160,7 +160,7 @@ def _require_user_key(user: User) -> None:
     """Raise 402 if ``user`` has no stored API key.
 
     Auto-update, manual sync, and re-ingest are never free: a keyless
-    user who already had their free ingestion should not be able to keep
+    user who has spent their free ingestions should not be able to keep
     the artefact set current on the operator's bill. The free-tier gate
     is at :func:`_require_quota_for_creation`; this gate covers the paths
     a free repo cannot reach while it is alive.

@@ -64,9 +64,10 @@ export default async function Repository({
 
   /**
    * Resolves the chat quota so the composer can disable itself before any
-   * request goes out. The backend exposes the user's free-tier counter on
-   * /me; for a BYOK user the count is irrelevant (`null` in the panel), so the
-   * gate only fires for keyless users and after the allowance is spent.
+   * request goes out. The backend exposes the user's free-tier counter and
+   * its cap on /me; for a BYOK user the count is irrelevant (`null` in the
+   * panel), so the gate only fires for keyless users and after the allowance
+   * is spent.
    *
    * Wrapped in a try/catch because /me is unrelated to the page load -- a
    * transient failure here must not block rendering. The chat composer is the
@@ -77,7 +78,10 @@ export default async function Repository({
   try {
     const me = await GetMyData();
     if (!me.has_ai_key) {
-      freeChatRemaining = Math.max(0, 5 - me.free_chat_messages_used);
+      freeChatRemaining = Math.max(
+        0,
+        me.free_chat_messages_limit - me.free_chat_messages_used,
+      );
     }
   } catch {
     // Leave the count unknown; the chat composer remains enabled.

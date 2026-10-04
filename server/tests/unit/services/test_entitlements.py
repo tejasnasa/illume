@@ -56,9 +56,9 @@ def stub_settings(monkeypatch):
 class TestConstants:
     """The numeric policy is module-level so a deploy controls it."""
 
-    def test_free_ingestions_is_one(self):
-        """One ingestion -- enough to evaluate the artefact set, not enough to sustain use."""
-        assert entitlements.FREE_INGESTIONS == 1
+    def test_free_ingestions_is_three(self):
+        """Three ingestions -- enough to evaluate the artefact set, not enough to sustain use."""
+        assert entitlements.FREE_INGESTIONS == 3
 
     def test_free_chat_messages_is_five(self):
         """Five chat questions; enough to confirm retrieval matches the on-screen citations."""

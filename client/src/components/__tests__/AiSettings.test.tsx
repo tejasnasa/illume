@@ -45,8 +45,10 @@ function makeUser(overrides: Partial<User> = {}): User {
     ai_provider: null,
     ai_model: null,
     has_ai_key: false,
-    free_ingest_used: false,
+    free_ingestions_used: 0,
     free_chat_messages_used: 0,
+    free_ingestions_limit: 3,
+    free_chat_messages_limit: 5,
     ...overrides,
   };
 }

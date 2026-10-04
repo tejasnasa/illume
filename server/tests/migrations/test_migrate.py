@@ -390,7 +390,7 @@ class TestByokAndFreeTierDefaults:
         assert stored.ai_model is None
         assert stored.ai_key_validated_at is None
         # Free-tier counters carry their ``server_default`` values.
-        assert stored.free_ingest_used is False
+        assert stored.free_ingestions_used == 0
         assert stored.free_chat_messages_used == 0
 
     async def test_the_schema_has_six_columns_with_the_expected_types(self):
@@ -415,7 +415,7 @@ class TestByokAndFreeTierDefaults:
                         WHERE table_name = 'users'
                           AND column_name IN (
                             'ai_provider', 'ai_api_key', 'ai_model', 'ai_key_validated_at',
-                            'free_ingest_used', 'free_chat_messages_used'
+                            'free_ingestions_used', 'free_chat_messages_used'
                           )
                         """
                     )
@@ -429,7 +429,7 @@ class TestByokAndFreeTierDefaults:
             "ai_api_key",
             "ai_model",
             "ai_key_validated_at",
-            "free_ingest_used",
+            "free_ingestions_used",
             "free_chat_messages_used",
         }
 
@@ -440,60 +440,63 @@ class TestByokAndFreeTierDefaults:
             )
 
         # Counters are NOT NULL with server defaults so a raw INSERT lands a usable row.
-        assert by_name["free_ingest_used"].is_nullable == "NO"
-        assert "false" in (by_name["free_ingest_used"].column_default or "").lower()
-        assert by_name["free_chat_messages_used"].is_nullable == "NO"
-        assert "0" in (by_name["free_chat_messages_used"].column_default or "")
+        for counter_column in ("free_ingestions_used", "free_chat_messages_used"):
+            assert by_name[counter_column].is_nullable == "NO"
+            assert "0" in (by_name[counter_column].column_default or ""), (
+                f"{counter_column} must default to 0 so a raw INSERT is usable"
+            )
 
 
-class TestByokAndFreeTierBackfill:
+class TestFreeIngestionsCounter:
     """
-    The migration's two ``UPDATE``s reflect a deliberate operational state
-    change for existing accounts: anyone with a repository has used their
-    free ingestion, and keyless users stop getting auto-update subsidised
-    on the server key.
+    ``e5f6a7b8c9d0`` replaces the one-shot boolean with a counter, because the
+    grant is now a tunable number rather than a fixed one.
+
+    The ``column_name IN (...)`` query above cannot catch a column that was
+    supposed to be *dropped* -- an orphaned ``free_ingest_used`` simply would
+    not be selected. This class closes that hole: the boolean must be gone,
+    so a stale reader cannot silently keep flipping it.
+    """
+
+    async def test_the_boolean_flag_is_dropped(self):
+        """``free_ingest_used`` must not survive the counter migration."""
+        from sqlalchemy import create_engine, text
+
+        from tests.conftest import TEST_SYNC_DB_URL
+
+        engine = create_engine(TEST_SYNC_DB_URL)
+        try:
+            with engine.connect() as connection:
+                survived = connection.execute(
+                    text(
+                        """
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'users' AND column_name = 'free_ingest_used'
+                        """
+                    )
+                ).scalar()
+        finally:
+            engine.dispose()
+
+        assert survived is None
+
+
+class TestAutoUpdateBackfill:
+    """
+    ``c3d4e5f6a7b8``'s second ``UPDATE`` reflects a deliberate operational
+    state change for existing accounts: keyless users stop getting
+    auto-update subsidised on the server key.
 
     These tests run against the migrated database and inspect what the
-    backfill left behind. They construct rows that match the predicates the
-    ``UPDATE``s check, so the assertions exercise the actual backfill shape
+    backfill left behind. They construct rows that match the predicate the
+    ``UPDATE`` checks, so the assertions exercise the actual backfill shape
     rather than its absence.
+
+    The migration's *first* ``UPDATE`` -- marking users-with-a-repository as
+    having spent their free ingestion -- has no counterpart here: the column
+    it wrote was replaced by the counter in ``e5f6a7b8c9d0``, which
+    deliberately carries no backfill.
     """
-
-    async def test_a_user_without_a_repository_is_backfilled_as_unused(self, db_session):
-        """A user with no repository has not ingested -- their counter stays at the default."""
-        from sqlalchemy import select
-
-        from app.models.user import User
-        from tests.factories import make_user
-
-        user = await make_user(db_session)
-
-        stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
-
-        # The backfill's first UPDATE only marks users-with-a-repository. A
-        # fresh user with no repos has not had the flag flipped.
-        assert stored.free_ingest_used is False
-
-    async def test_a_user_with_a_repository_is_backfilled_as_used(self, db_session):
-        """A user who already owns a repo has demonstrably ingested at least once."""
-        from tests.factories import make_repo, make_user
-
-        user = await make_user(db_session)
-        await make_repo(db_session, user)
-
-        # Apply the migration's first backfill UPDATE -- the same statement
-        # the migration executes, imported from the migration module so the
-        # SQL cannot drift between migration and test.
-        await db_session.execute(_migration_text("MARK_USERS_WITH_REPOS_AS_FREE_INGEST_USED"))
-        await db_session.flush()
-
-        # ``make_user`` put the ``User`` row in the session's identity map
-        # via ``refresh``; a raw ``UPDATE`` does not invalidate it.
-        # ``refresh`` re-reads the row so the assertion below observes the
-        # post-backfill state rather than the snapshot the factory cached.
-        await db_session.refresh(user)
-
-        assert user.free_ingest_used is True
 
     async def test_a_keyless_user_with_a_repo_has_auto_update_cleared(self, db_session):
         """

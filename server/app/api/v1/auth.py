@@ -30,6 +30,7 @@ from app.core.config import settings
 from app.core.database import get_async_db
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
+from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_config import LLMConfig
 from app.services.llm_providers import PROVIDERS, get_provider
 
@@ -82,8 +83,10 @@ class UserResponse(BaseModel):
     ai_provider: str | None = None
     ai_model: str | None = None
     has_ai_key: bool = False
-    free_ingest_used: bool = False
+    free_ingestions_used: int = 0
     free_chat_messages_used: int = 0
+    free_ingestions_limit: int = FREE_INGESTIONS
+    free_chat_messages_limit: int = FREE_CHAT_MESSAGES
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -209,8 +212,10 @@ async def me(current_user: User = Depends(get_current_user)):
         ai_provider=current_user.ai_provider,
         ai_model=current_user.ai_model,
         has_ai_key=bool(current_user.ai_api_key),
-        free_ingest_used=current_user.free_ingest_used,
+        free_ingestions_used=current_user.free_ingestions_used,
         free_chat_messages_used=current_user.free_chat_messages_used,
+        free_ingestions_limit=FREE_INGESTIONS,
+        free_chat_messages_limit=FREE_CHAT_MESSAGES,
     )
 
 
@@ -522,7 +527,7 @@ async def delete_ai_credentials(
 
     Existing artefacts (glossary, reading order, embeddings, brief) survive
     -- they were generated and persisted independently of the key. The free
-    allowance does not come back: the counters (``free_ingest_used``,
+    allowance does not come back: the counters (``free_ingestions_used``,
     ``free_chat_messages_used``) are untouched, so a user who deletes their
     key still cannot re-ingest or ask another five questions.
 

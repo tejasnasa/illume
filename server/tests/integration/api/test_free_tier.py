@@ -27,7 +27,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.models.repository import Repository
 from app.models.user import User
-from app.services.entitlements import FREE_CHAT_MESSAGES, claim_free_ingestion
+from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS, claim_free_ingestion
 from app.services.rag import RAGResponse, SourceReference
 from app.tasks.sync import sync_repository
 from tests.conftest import TEST_SYNC_DB_URL
@@ -259,12 +259,12 @@ class TestCreateRepository:
         assert response.status_code == 202
 
         stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
-        assert stored.free_ingest_used is False
+        assert stored.free_ingestions_used == 0
 
     async def test_keyless_user_admitted_when_allowance_remains(
         self, client, db_session, dispatched
     ):
-        """A keyless user with ``free_ingest_used=False`` succeeds and burns the allowance."""
+        """A keyless user with free ingestions left succeeds and burns one."""
         user = await make_user(db_session)
         await authenticate(client, user)
 
@@ -273,7 +273,7 @@ class TestCreateRepository:
         assert response.status_code == 202
 
         stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
-        assert stored.free_ingest_used is True
+        assert stored.free_ingestions_used == 1
 
     async def test_keyless_user_402_when_allowance_is_gone(self, client, db_session, dispatched):
         """A keyless user whose allowance has already been used gets 402.
@@ -305,7 +305,13 @@ class TestCreateRepository:
             sync.commit()
             user_id = user.id
 
-            assert claim_free_ingestion(sync, user_id) is True
+            # Burn the whole allowance, then confirm the bound is closed --
+            # a keyless user must have every free ingestion spent before the
+            # gate turns them away.
+            for _ in range(FREE_INGESTIONS):
+                assert claim_free_ingestion(sync, user_id) is True
+                sync.commit()
+            assert claim_free_ingestion(sync, user_id) is False
             sync.commit()
 
             # Authenticate the same user via the async test client.
