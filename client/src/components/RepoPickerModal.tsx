@@ -42,7 +42,6 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [hasMoreRepos, setHasMoreRepos] = useState(true);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [reposError, setReposError] = useState<string | null>(null);
@@ -58,6 +57,16 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
   const [ingestError, setIngestError] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
+  /**
+   * The highest page actually loaded.
+   *
+   * Kept in a ref rather than in state because the scroll observer reads it from inside
+   * a callback. State read there is the value captured when the observer was built,
+   * which is a commit behind by the time the callback runs.
+   */
+  const loadedPageRef = useRef(1);
+  /** Whether a page request is in flight, so a callback cannot start a second one. */
+  const loadingRef = useRef(false);
 
   /** Debounces the search box to avoid a request per keystroke. */
   useEffect(() => {
@@ -71,7 +80,6 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
   /** Reloads page one whenever the debounced query or tab changes. */
   useEffect(() => {
     if (activeTab !== "my-repos") return;
-    setPage(1);
     setRepos([]);
     setHasMoreRepos(true);
     setReposError(null);
@@ -94,6 +102,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    loadingRef.current = true;
     setLoadingRepos(true);
     try {
       const data = await getMyGitHubRepos(
@@ -108,6 +117,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
       } else {
         setRepos((prev) => [...prev, ...data]);
       }
+      loadedPageRef.current = pageNumber;
       if (data.length < 30) {
         setHasMoreRepos(false);
       }
@@ -119,7 +129,11 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
         setReposError(err.message || "Failed to load repositories");
       }
     } finally {
-      if (!controller.signal.aborted) {
+      // Only the request that is still the current one may clear the flag: a superseded
+      // request finishing later would otherwise unlock the observer while its
+      // replacement is still in flight.
+      if (abortRef.current === controller) {
+        loadingRef.current = false;
         setLoadingRepos(false);
       }
     }
@@ -127,16 +141,22 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
 
   const observerRef = useRef<HTMLDivElement | null>(null);
 
-  /** Appends the next page when the scroll sentinel becomes visible. */
+  /**
+   * Appends the next page when the scroll sentinel becomes visible.
+   *
+   * The sentinel is only rendered once a page is on screen, and this effect refuses to
+   * attach while a request is in flight. Both guards matter on first paint: the modal
+   * mounts with no results and `loadingRepos` still false, so an observer attached at
+   * that moment fires as soon as it is delivered, asks for page two while page one is
+   * still outstanding, and `fetchRepos` aborts page one to make room for it. The list
+   * then opens on the second page and the first is never fetched.
+   */
   useEffect(() => {
     if (!hasMoreRepos || loadingRepos || activeTab !== "my-repos") return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting) {
-          const nextPage = page + 1;
-          setPage(nextPage);
-          fetchRepos(nextPage, debouncedSearch);
-        }
+        if (!entries[0].isIntersecting || loadingRef.current) return;
+        fetchRepos(loadedPageRef.current + 1, debouncedSearch);
       },
       { threshold: 0.1 },
     );
@@ -151,7 +171,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
         observer.unobserve(current);
       }
     };
-  }, [hasMoreRepos, loadingRepos, page, debouncedSearch, activeTab]);
+  }, [hasMoreRepos, loadingRepos, debouncedSearch, activeTab]);
 
   /**
    * Records the clicked repo and advances to version selection.
@@ -350,7 +370,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
                 </div>
               )}
 
-              {hasMoreRepos && !loadingRepos && (
+              {hasMoreRepos && !loadingRepos && repos.length > 0 && (
                 <div ref={observerRef} className="h-4" />
               )}
 

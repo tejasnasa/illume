@@ -55,7 +55,14 @@ type ObserverCallback = (entries: Array<{ isIntersecting: boolean }>) => void;
 
 class FakeIntersectionObserver {
   private readonly callback: ObserverCallback;
-  active = true;
+  /**
+   * Starts false, not true: an observer that has been constructed but never handed a
+   * target is watching nothing, and `fireIntersection` must not treat it as live. The
+   * component builds one on every render pass and only sometimes has a sentinel to give
+   * it, so the difference decides whether a test can fire a callback the browser
+   * would never deliver.
+   */
+  active = false;
 
   constructor(callback: ObserverCallback) {
     this.callback = callback;
@@ -63,6 +70,7 @@ class FakeIntersectionObserver {
   }
   observe() {
     this.active = true;
+    observeCalls += 1;
   }
   unobserve() {
     this.active = false;
@@ -79,6 +87,16 @@ class FakeIntersectionObserver {
 }
 
 let instances: FakeIntersectionObserver[] = [];
+
+/**
+ * How many times any observer has been handed a target.
+ *
+ * `active` says whether one is watching *now*, which is not enough: an observer that
+ * observed a sentinel and was then unobserved reports as inactive, and the moment it was
+ * live has already passed. Counting the calls answers the question that matters when
+ * asserting that the component attached nothing during a window -- did it ever attach.
+ */
+let observeCalls = 0;
 
 /**
  * Reports the sentinel as visible to whichever observer is still watching it.
@@ -99,8 +117,8 @@ function fireIntersection(): boolean {
 /**
  * Fires the sentinel once an observer is actually watching it.
  *
- * The component rebuilds its observer on every `loadingRepos` / `page` change, so between
- * a page rendering and the effect re-running there is a window with no live observer at
+ * The component rebuilds its observer on every `loadingRepos` change, so between a page
+ * rendering and the effect re-running there is a window with no live observer at
  * all. Firing during that window is a silent no-op: `fireIntersection` returns false, the
  * `waitFor` after it never sees the next page, and the failure reads as a product bug when
  * it is a race in the harness. Waiting for a live observer first is what makes these
@@ -179,6 +197,7 @@ async function loaded() {
 
 beforeEach(() => {
   instances = [];
+  observeCalls = 0;
   vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
 });
 
@@ -397,6 +416,40 @@ describe("pagination", () => {
   function stubPages() {
     return stubRepos((params) => (params.get("page") === "2" ? [repo(99)] : firstPage));
   }
+
+  it("does not watch the sentinel before the first page has loaded", async () => {
+    // The sentinel sits in view the moment the modal opens, so an observer attached
+    // before the first response arrives fires immediately, asks for page two, and
+    // aborts the outstanding page-one request to make room for it. The list then opens
+    // on page two and page one is never fetched at all.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const queries: URLSearchParams[] = [];
+    server.use(
+      http.get(REPOS_URL, async ({ request }) => {
+        queries.push(new URL(request.url).searchParams);
+        await gate;
+        return HttpResponse.json(firstPage);
+      }),
+    );
+
+    render(<RepoPickerModal />);
+
+    // Mid-flight: the request is out and nothing has come back yet. Nothing may be
+    // watching the sentinel, because the browser delivers an intersection for it as
+    // soon as one is attached and the sentinel is already in view.
+    await waitFor(() => expect(queries).toHaveLength(1));
+    expect(observeCalls).toBe(0);
+
+    release();
+    await waitFor(() => expect(screen.getByText("repo-30")).toBeInTheDocument());
+
+    // The sentinel is watched from here on, and only the first page was ever asked for.
+    await waitFor(() => expect(observeCalls).toBe(1));
+    expect(queries.map((query) => query.get("page"))).toEqual(["1"]);
+  });
 
   it("requests the next page when the sentinel becomes visible", async () => {
     const queries = stubPages();
