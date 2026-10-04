@@ -60,9 +60,9 @@ class TestConstants:
         """Three ingestions -- enough to evaluate the artefact set, not enough to sustain use."""
         assert entitlements.FREE_INGESTIONS == 3
 
-    def test_free_chat_messages_is_five(self):
-        """Five chat questions; enough to confirm retrieval matches the on-screen citations."""
-        assert entitlements.FREE_CHAT_MESSAGES == 5
+    def test_free_chat_messages_is_ten(self):
+        """Ten chat questions; enough to confirm retrieval matches the on-screen citations."""
+        assert entitlements.FREE_CHAT_MESSAGES == 10
 
 
 class TestLLMConfigFor:

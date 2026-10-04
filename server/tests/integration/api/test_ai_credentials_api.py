@@ -542,7 +542,7 @@ class TestDelete:
         """Deleting the key does not bring the allowance back.
 
         The counters are untouched -- a user who deleted their key still
-        cannot re-ingest or ask another five questions.
+        cannot re-ingest or ask another ten questions.
         """
         from datetime import UTC, datetime
 

@@ -125,7 +125,7 @@ setup("authenticate and verify the production target", async ({ request }) => {
   ).toBe("ready");
 
   // Precondition: chat runs on the account's own key. Without it the free path takes over,
-  // and the five-message lifetime allowance would be gone inside a week of nightly runs.
+  // and the ten-message lifetime allowance would be gone inside a week of nightly runs.
   const me = await request.get(`${SMOKE_API_URL}/api/v1/auth/me`);
   expect(me.status(), `reading the account failed: ${me.status()}`).toBe(200);
   const account = (await me.json()) as {

@@ -193,12 +193,12 @@ class TestClaimFreeIngestion:
 class TestClaimFreeChatMessage:
     """``claim_free_chat_message`` -- the bounded-per-user chat quota."""
 
-    def test_returns_true_for_the_first_five_calls_then_false(self):
+    def test_returns_true_for_every_allowed_call_then_false(self):
         """A fresh user has ``FREE_CHAT_MESSAGES`` units; the (n+1)th call returns ``False``."""
 
         def _body(user: User, Session: sessionmaker[Session]) -> None:
-            # The matrix: 5 succeeds, 6 fails. Read in a single list-comp
-            # so the assertion is one snapshot.
+            # The matrix: every allowed call succeeds, the next fails. Read in
+            # a single list-comp so the assertion is one snapshot.
             results = [
                 claim_free_chat_message(Session(), user.id) for _ in range(FREE_CHAT_MESSAGES + 1)
             ]

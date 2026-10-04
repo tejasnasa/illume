@@ -5,8 +5,9 @@ import { API_URL } from "../env";
 /**
  * The free-tier chat quota, exercised end to end.
  *
- * The plan calls for "a keyless E2E user ingests one repo free, asks five
- * questions, and the sixth renders the quota message". The seeded user the
+ * The plan calls for "a keyless E2E user ingests one repo free, asks the
+ * whole free question allowance, and the next one renders the quota
+ * message". The seeded user the
  * rest of the suite uses carries a BYOK key (otherwise the re-ingest
  * route's 402 gate would block the existing spec), so the free-tier flow
  * needs its own account.
@@ -128,7 +129,7 @@ test.describe("a fresh keyless user", () => {
   }) => {
     // Sanity check that /auth/me is the canonical read path the chat panel
     // uses to drive its quota display -- before any ask happens, the
-    // counter must be 0 so the panel can render "5 free questions left".
+    // counter must be 0 so the panel can render the full allowance as left.
     const initial = await readCounter(page);
     expect(initial).toBe(0);
   });

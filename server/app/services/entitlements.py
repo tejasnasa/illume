@@ -32,7 +32,7 @@ from app.services.llm_config import LLMConfig
 
 # Per-user allowance. A free tier is supposed to be a *teaser*, not a
 # sustainable plan: a handful of ingestions is enough to evaluate the
-# artefact set, five chat questions are enough to confirm the retrieval is
+# artefact set, ten chat questions are enough to confirm the retrieval is
 # doing what the on-screen citations imply. The numbers are the policy; the
 # routes are the enforcers. Both are served to the client on ``/auth/me`` so
 # the banner and the chat composer never carry a second copy that can drift.

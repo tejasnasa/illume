@@ -529,7 +529,7 @@ async def delete_ai_credentials(
     -- they were generated and persisted independently of the key. The free
     allowance does not come back: the counters (``free_ingestions_used``,
     ``free_chat_messages_used``) are untouched, so a user who deletes their
-    key still cannot re-ingest or ask another five questions.
+    key still cannot re-ingest or ask another ten questions.
 
     Args:
         db: Async database session.

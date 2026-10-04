@@ -27,7 +27,7 @@ export interface SmokeInfo {
    * The account's free-chat counter as setup found it.
    *
    * The suite's one chat question must not move this. If it does, the account has lost its
-   * own key and is quietly spending the five-message lifetime allowance the free tier
+   * own key and is quietly spending the ten-message lifetime allowance the free tier
    * grants -- which would exhaust the account within a week of nightly runs.
    */
   freeChatMessagesUsed: number;

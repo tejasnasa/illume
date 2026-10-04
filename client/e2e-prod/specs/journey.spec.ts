@@ -112,7 +112,7 @@ test("answers from the indexed sources and keeps the turn", async ({ page }) => 
 
 test("does not spend the account's free-tier allowance", async ({ page }) => {
   // Guards the premise the whole suite is built on: the account holds its own key, so chat
-  // is unmetered. Without it the free path takes over and the five-message lifetime
+  // is unmetered. Without it the free path takes over and the ten-message lifetime
   // allowance would be gone within a week of nightly runs -- and the failure would be a 402
   // in some later run, pointing nowhere near the cause.
   const response = await page.context().request.get(`${SMOKE_API_URL}/api/v1/auth/me`);
