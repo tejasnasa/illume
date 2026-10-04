@@ -207,12 +207,16 @@ class TestSymbolPaging:
             assert _symbol_embedding_count(session, repo_a) == 10
 
             # Exactly once each: ten rows, ten distinct source ids.
-            source_ids = session.execute(
-                select(Embedding.source_id).where(
-                    Embedding.repository_id == repo_a,
-                    Embedding.source_type == "symbol",
+            source_ids = (
+                session.execute(
+                    select(Embedding.source_id).where(
+                        Embedding.repository_id == repo_a,
+                        Embedding.source_type == "symbol",
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             assert len(set(source_ids)) == 10
 
             # The other repository was not touched by repo A's run.
