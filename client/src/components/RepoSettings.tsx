@@ -12,12 +12,44 @@ import {
   RepeatIcon,
   TrashIcon,
 } from "@phosphor-icons/react/dist/ssr";
-import { useRouter } from "next/navigation";
+import { useRouter, unstable_rethrow } from "next/navigation";
 import { useState } from "react";
 import ExportIllumeButton from "./ExportIllumeButton";
 import GitGraph from "./GitGraph";
 import Button from "./ui/Button";
 import Modal from "./ui/Modal";
+
+/**
+ * Runs a server action that finishes by redirecting to the dashboard.
+ *
+ * A successful run ends in `redirect()`, which reaches the client as a thrown
+ * framework error rather than a result -- `unstable_rethrow` hands it back to
+ * the router so it navigates, and this returns `null` either way. Only a
+ * genuine failure yields a message, which the caller renders next to the
+ * button that triggered it.
+ *
+ * @param run - The action to invoke.
+ * @param fallbackMessage - Shown when the failure carries no usable message,
+ *                          which is the norm once React masks server errors in
+ *                          production.
+ * @returns The failure message, or null when the action redirected.
+ */
+async function runRedirectingAction(
+  run: () => Promise<unknown>,
+  fallbackMessage: string,
+): Promise<string | null> {
+  try {
+    await run();
+    return null;
+  } catch (err) {
+    try {
+      unstable_rethrow(err);
+    } catch {
+      return null;
+    }
+    return err instanceof Error ? err.message : fallbackMessage;
+  }
+}
 
 /**
  * Renders export, delete, regenerate, auto-update, and version re-ingest controls.
@@ -29,7 +61,11 @@ import Modal from "./ui/Modal";
 export default function RepoSettings({ repo }: { repo: Repository }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   // Owner/name feed the version graph; empty strings hide that section.
   const match = repo.github_url.match(
@@ -71,6 +107,43 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
       setError(err.message || "Failed to start re-ingestion process");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  /**
+   * Rebuilds the repository's analysis, holding the confirm button in its
+   * loading state until the action settles. Like delete, the redirect that
+   * ends a successful run unmounts this tree, so the spinner is only cleared
+   * when there is a failure to report.
+   */
+  const handleRegenerate = async () => {
+    setIsRegenerating(true);
+    setRegenerateError(null);
+    const failure = await runRedirectingAction(
+      () => regenerateRepoAction(repo.id),
+      "Failed to regenerate repository",
+    );
+    if (failure) {
+      setRegenerateError(failure);
+      setIsRegenerating(false);
+    }
+  };
+
+  /**
+   * Deletes the repository, holding the confirm button in its loading state
+   * until the action settles. Cleared only on failure, for the same reason as
+   * regenerate.
+   */
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    setDeleteError(null);
+    const failure = await runRedirectingAction(
+      () => deleteRepoAction(repo.id),
+      "Failed to delete repository",
+    );
+    if (failure) {
+      setDeleteError(failure);
+      setIsDeleting(false);
     }
   };
 
@@ -141,12 +214,18 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
               Are you sure you want to regenerate this repository?
             </p>
             <Button
-              onClick={() => regenerateRepoAction(repo.id)}
+              onClick={handleRegenerate}
+              loading={isRegenerating}
               size="sm"
               className="font-semibold absolute bottom-4 right-4"
             >
               REGENERATE
             </Button>
+            {regenerateError && (
+              <p className="absolute bottom-4 left-4 text-xs text-red-400 max-w-[45%]">
+                {regenerateError}
+              </p>
+            )}
           </Modal>
         </div>
 
@@ -229,12 +308,18 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
               Are you sure you want to delete this repository?
             </p>
             <Button
-              onClick={() => deleteRepoAction(repo.id)}
+              onClick={handleDelete}
+              loading={isDeleting}
               size="sm"
               className="font-semibold absolute bottom-4 right-4 bg-red-500 hover:bg-red-600 text-white border-none"
             >
               DELETE
             </Button>
+            {deleteError && (
+              <p className="absolute bottom-4 left-4 text-xs text-red-400 max-w-[45%]">
+                {deleteError}
+              </p>
+            )}
           </Modal>
         </div>
       </div>
