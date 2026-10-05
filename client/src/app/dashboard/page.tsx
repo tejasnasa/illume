@@ -11,6 +11,7 @@ import RepoPickerModal from "@/components/RepoPickerModal";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import RepoCard from "@/components/ui/RepoCard";
+import { shouldShowFreeTierBanner } from "@/utils/freeTier";
 import { DatabaseIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
 
 /**
@@ -21,6 +22,10 @@ import { DatabaseIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
 export default async function Dashboard() {
   const repositories = await getRepositories();
   const myData = await GetMyData();
+
+  // Drives the empty state's span: it shares a row with the banner when the
+  // banner renders, and takes the row alone when it does not.
+  const showBanner = shouldShowFreeTierBanner(myData);
 
   return (
     <div>
@@ -70,19 +75,23 @@ export default async function Dashboard() {
             {repositories.map((repo) => (
               <RepoCard key={repo.id} repo={repo} />
             ))}
-          </div>
 
-          {repositories.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-(--border) rounded-3xl bg-(--secondary)/5">
-              <DatabaseIcon
-                size={48}
-                className="text-(--muted-foreground)/20 mb-4"
-              />
-              <p className="text-(--muted-foreground)">
-                No repositories found. Add your first one to get started!
-              </p>
-            </div>
-          )}
+            {repositories.length === 0 && (
+              <div
+                className={`min-h-56 flex flex-col items-center justify-center gap-3 px-6 py-10 text-center border-2 border-dashed border-(--border) rounded-sm bg-(--secondary)/5 ${
+                  showBanner ? "lg:col-span-2" : "col-span-full"
+                }`}
+              >
+                <DatabaseIcon
+                  size={40}
+                  className="text-(--muted-foreground)/20"
+                />
+                <p className="text-(--muted-foreground)">
+                  No repositories found. Add your first one to get started!
+                </p>
+              </div>
+            )}
+          </div>
         </section>
       </main>
     </div>

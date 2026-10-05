@@ -13,6 +13,7 @@
 import { MoonStarsIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import User from "@/types/user";
+import { shouldShowFreeTierBanner } from "@/utils/freeTier";
 
 /**
  * Props for the FreeTierBanner component.
@@ -20,27 +21,6 @@ import User from "@/types/user";
 type Props = {
   user: User;
 };
-
-/**
- * Resolves whether the banner is worth showing at all.
- *
- * Hidden when:
- * - the user has a saved BYOK key (the gate no longer applies), or
- * - the free ingestion allowance is spent AND the free chat allowance is
- *   also spent (the user is functionally outside the free tier and the next
- *   step is /settings, which the navbar already surfaces; showing it twice
- *   is noise).
- *
- * The caps come from the server (`free_ingestions_limit` /
- * `free_chat_messages_limit` on /auth/me), so tuning the policy in
- * `app/services/entitlements.py` moves the banner's threshold with it.
- */
-function shouldShow(user: User): boolean {
-  if (user.has_ai_key) return false;
-  const ingestSpent = user.free_ingestions_used >= user.free_ingestions_limit;
-  const chatSpent = user.free_chat_messages_used >= user.free_chat_messages_limit;
-  return !(ingestSpent && chatSpent);
-}
 
 /**
  * Builds the copy and primary CTA based on what is left.
@@ -83,7 +63,7 @@ function resolveMessage(user: User) {
  * @returns The rendered banner, or `null` when not applicable.
  */
 export default function FreeTierBanner({ user }: Props) {
-  if (!shouldShow(user)) return null;
+  if (!shouldShowFreeTierBanner(user)) return null;
 
   const { title, ctaLabel, ctaHref, tone } = resolveMessage(user);
 
@@ -99,7 +79,7 @@ export default function FreeTierBanner({ user }: Props) {
       className={`group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5 ${palette} flex flex-col items-center justify-around `}
     >
       <MoonStarsIcon size={120} weight="duotone" className="mt-0.5 shrink-0" />
-      <p className="font-semibold text-(--foreground) text-xl">{title}</p>
+      <p className="font-semibold text-(--foreground) text-xl mb-2">{title}</p>
       <Link
         href={ctaHref}
         className="shrink-0 self-center text-xs font-semibold text-(--primary) underline-offset-2 hover:bg-(--card) transition border border-(--border) py-3 px-4 rounded-sm"
