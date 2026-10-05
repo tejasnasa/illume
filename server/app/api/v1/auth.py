@@ -163,6 +163,7 @@ async def login(body: LoginRequest, response: Response, db: AsyncSession = Depen
         samesite="lax",
         secure=settings.ENVIRONMENT == "production",
         domain=settings.DOMAIN,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
     return MessageResponse(message="Logged in successfully")
 
@@ -334,6 +335,7 @@ async def github_callback(
         samesite="lax",
         secure=settings.ENVIRONMENT == "production",
         domain=settings.DOMAIN,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
     return redirect
