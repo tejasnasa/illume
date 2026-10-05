@@ -45,7 +45,13 @@ export default function Login() {
         </div>
       </section>
       <section className="hidden md:block w-1/2 relative overflow-hidden">
-        <Image src={loginimg} alt="Login" fill className="object-cover" />
+        <Image
+          src={loginimg}
+          alt="Login"
+          fill
+          preload
+          className="object-cover"
+        />
       </section>
     </main>
   );
