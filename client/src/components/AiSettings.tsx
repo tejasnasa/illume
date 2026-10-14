@@ -151,6 +151,11 @@ export default function AiSettings({ user }: Props) {
               },
             }))}
           />
+          {errors.provider && (
+            <p className="text-xs text-red-400 mt-1">
+              {errors.provider.message}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col my-4 gap-1">
@@ -185,7 +190,9 @@ export default function AiSettings({ user }: Props) {
           <Input
             id="model"
             type="text"
-            placeholder={modelPlaceholder || "e.g. gpt-5.6"}
+            // The literal fallback is the no-provider case: with a preset
+            // active, `modelPlaceholder` is that preset's default model.
+            placeholder={modelPlaceholder || "Choose a provider first"}
             aria-label="Model"
             aria-invalid={Boolean(errors.model)}
             {...register("model")}

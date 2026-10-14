@@ -59,7 +59,12 @@ export default function useAiCredentialsForm({
   const form = useForm<z.infer<typeof aiCredentialsSchema>>({
     resolver: zodResolver(aiCredentialsSchema),
     defaultValues: {
-      provider: initialProviderKey ?? presets[0]?.key ?? "",
+      // No preset is preselected on purpose. Defaulting to the first preset
+      // meant a new user pasted their key and model into a form whose one
+      // untouched field -- the provider -- was already wrong, and the
+      // mismatch only surfaced as a rejected probe. The schema requires a
+      // pick, so an empty value blocks submit with "Pick a provider."
+      provider: initialProviderKey ?? "",
       apiKey: "",
       model: initialModel ?? "",
     },

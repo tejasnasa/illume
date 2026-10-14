@@ -61,6 +61,22 @@ beforeEach(() => {
   removeAiCredentialsMock.mockResolvedValue(undefined as never);
 });
 
+type UserEvent = ReturnType<typeof userEvent.setup>;
+
+/**
+ * Picks `label` through the provider dropdown. No preset is preselected, so a
+ * fresh form's trigger reads "Select a provider"; after a selection it reads
+ * the active preset instead, which is what `current` is for.
+ */
+async function chooseProvider(
+  user: UserEvent,
+  label: RegExp,
+  current: RegExp = /select a provider/i,
+) {
+  await user.click(screen.getByRole("button", { name: current }));
+  await user.click(screen.getByRole("button", { name: label }));
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -77,7 +93,7 @@ describe("layout", () => {
 
     // The wrapper around the dropdown trigger must be `block` (not
     // `inline-block`) so the trigger fills its parent column.
-    const trigger = screen.getByRole("button", { name: /OpenAI/i });
+    const trigger = screen.getByRole("button", { name: /select a provider/i });
     const wrapper = trigger.parentElement;
     expect(wrapper).not.toBeNull();
     expect(wrapper!.className).toContain("block");
@@ -143,6 +159,17 @@ describe("layout", () => {
 
     expect(screen.getByLabelText(/Model/i)).toHaveValue("gpt-5.6-custom");
   });
+
+  it("leaves the provider unselected instead of defaulting to the first preset", () => {
+    // A silent default meant a user pasted their key and model into a form
+    // whose one untouched field was already wrong, and the mismatch only
+    // showed up later as a rejected probe.
+    render(<AiSettings user={makeUser()} />);
+
+    expect(
+      screen.getByRole("button", { name: /select a provider/i }),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("provider picker", () => {
@@ -150,25 +177,27 @@ describe("provider picker", () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
 
-    // Initial preset is OpenAI -> gpt-5.6.
+    // With nothing selected there is no preset to hint at, so the field
+    // prompts for the choice rather than suggesting an OpenAI model.
+    expect(screen.getByLabelText(/Model/i)).toHaveAttribute(
+      "placeholder",
+      "Choose a provider first",
+    );
+
+    // Select OpenAI first; the rest are switches from there.
+    await chooseProvider(user, /^OpenAI$/i);
     expect(screen.getByLabelText(/Model/i)).toHaveAttribute(
       "placeholder",
       "gpt-5.6",
     );
 
-    // Switch to Groq via the picker.
-    await user.click(screen.getByRole("button", { name: /OpenAI/i }));
-    await user.click(screen.getByRole("button", { name: /^Groq$/i }));
-
+    await chooseProvider(user, /^Groq$/i, /OpenAI/i);
     expect(screen.getByLabelText(/Model/i)).toHaveAttribute(
       "placeholder",
       "llama-3.3-70b",
     );
 
-    // Switch to DeepSeek.
-    await user.click(screen.getByRole("button", { name: /Groq/i }));
-    await user.click(screen.getByRole("button", { name: /^DeepSeek$/i }));
-
+    await chooseProvider(user, /^DeepSeek$/i, /Groq/i);
     expect(screen.getByLabelText(/Model/i)).toHaveAttribute(
       "placeholder",
       "deepseek-flash",
@@ -181,6 +210,7 @@ describe("save", () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
 
+    await chooseProvider(user, /^OpenAI$/i);
     await user.type(screen.getByLabelText(/API key/i), "sk-test-key-123");
     await user.click(screen.getByRole("button", { name: /Save key/i }));
 
@@ -196,6 +226,7 @@ describe("save", () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
 
+    await chooseProvider(user, /^OpenAI$/i);
     await user.type(screen.getByLabelText(/Model/i), "gpt-5.6");
     await user.type(screen.getByLabelText(/API key/i), "sk-test-key");
     await user.click(screen.getByRole("button", { name: /Save key/i }));
@@ -212,6 +243,7 @@ describe("save", () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
 
+    await chooseProvider(user, /^OpenAI$/i);
     await user.type(screen.getByLabelText(/API key/i), "sk-test-key");
     await user.click(screen.getByRole("button", { name: /Save key/i }));
 
@@ -221,6 +253,8 @@ describe("save", () => {
   it("clears the key field after a successful save (never echoes back)", async () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
+
+    await chooseProvider(user, /^OpenAI$/i);
 
     const keyInput = screen.getByLabelText(/API key/i);
     await user.type(keyInput, "sk-test-key");
@@ -237,6 +271,7 @@ describe("save", () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
 
+    await chooseProvider(user, /^OpenAI$/i);
     await user.type(screen.getByLabelText(/API key/i), "sk-bad-key");
     await user.click(screen.getByRole("button", { name: /Save key/i }));
 
@@ -258,8 +293,7 @@ describe("save", () => {
     render(<AiSettings user={makeUser()} />);
 
     // Switch to Groq so the model-placeholder logic matches the test copy.
-    await user.click(screen.getByRole("button", { name: /OpenAI/i }));
-    await user.click(screen.getByRole("button", { name: /^Groq$/i }));
+    await chooseProvider(user, /^Groq$/i);
 
     await user.type(screen.getByLabelText(/API key/i), "sk-test-key");
     await user.click(screen.getByRole("button", { name: /Save key/i }));
@@ -271,10 +305,24 @@ describe("save", () => {
     );
   });
 
+  it("blocks the save until a provider is picked", async () => {
+    const user = userEvent.setup();
+    render(<AiSettings user={makeUser()} />);
+
+    await user.type(screen.getByLabelText(/API key/i), "sk-test-key");
+    await user.click(screen.getByRole("button", { name: /Save key/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Pick a provider/i)).toBeInTheDocument(),
+    );
+    expect(saveAiCredentialsMock).not.toHaveBeenCalled();
+  });
+
   it("validates the api_key length before calling the action", async () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
 
+    await chooseProvider(user, /^OpenAI$/i);
     await user.type(screen.getByLabelText(/API key/i), "short");
     await user.click(screen.getByRole("button", { name: /Save key/i }));
 
@@ -295,6 +343,7 @@ describe("save", () => {
     const user = userEvent.setup();
     render(<AiSettings user={makeUser()} />);
 
+    await chooseProvider(user, /^OpenAI$/i);
     await user.type(screen.getByLabelText(/API key/i), "sk-test-key");
     await user.click(screen.getByRole("button", { name: /Save key/i }));
 

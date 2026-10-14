@@ -405,6 +405,94 @@ class TestPut:
         assert "isn't available" in response.json()["detail"]
         assert "Groq" in response.json()["detail"]
 
+    async def test_auth_error_names_the_provider_the_model_belongs_to(
+        self, client, db_session, probe_auth_error
+    ):
+        """The mix-up this hint exists for: another provider's key and model.
+
+        A user with a DeepSeek key pasted it while the picker was still on
+        OpenAI. "Incorrect API key for OpenAI." names the provider they already
+        know is wrong about them, so the detail also names DeepSeek.
+        """
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "sk-deepseek-key-12345",
+                "model": "deepseek-flash",
+            },
+        )
+
+        detail = response.json()["detail"]
+        assert response.status_code == 400
+        assert "Incorrect API key for OpenAI" in detail
+        assert "DeepSeek" in detail
+        assert "change the Provider field" in detail
+
+    async def test_auth_error_names_the_provider_the_key_prefix_belongs_to(
+        self, client, db_session, probe_auth_error
+    ):
+        """With a custom model id, a recognisable key prefix carries the signal."""
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "gsk_a_groq_key_12345",
+                "model": "some-custom-model",
+            },
+        )
+
+        detail = response.json()["detail"]
+        assert response.status_code == 400
+        assert "Incorrect API key for OpenAI" in detail
+        assert "Groq" in detail
+
+    async def test_auth_error_has_no_hint_for_a_simply_wrong_key(
+        self, client, db_session, probe_auth_error
+    ):
+        """Nothing points elsewhere, so the detail must not invent a provider."""
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "sk-simply-wrong-12345",
+                "model": "gpt-4o-mini",
+            },
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Incorrect API key for OpenAI."
+
+    async def test_status_error_names_the_provider_the_model_belongs_to(
+        self, client, db_session, probe_status_error
+    ):
+        """A valid key with another provider's model 404s the same way."""
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "sk-a-valid-openai-key",
+                "model": "llama-3.3-70b-versatile",
+            },
+        )
+
+        detail = response.json()["detail"]
+        assert response.status_code == 400
+        assert "isn't available on OpenAI" in detail
+        assert "Groq" in detail
+
     async def test_connection_error_maps_to_400(self, client, db_session, probe_connection_error):
         user = await make_user(db_session)
         await authenticate(client, user)

@@ -32,7 +32,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.models.user import User
 from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_config import LLMConfig
-from app.services.llm_providers import PROVIDERS, get_provider
+from app.services.llm_providers import PROVIDERS, get_provider, suggest_provider
 
 logger = logging.getLogger(__name__)
 
@@ -383,6 +383,43 @@ class AICredentialsPutRequest(BaseModel):
     model: FreeText
 
 
+def _provider_mismatch_hint(provider: str, api_key: str, model: str) -> str:
+    """Build the "wrong provider selected" half of a probe failure message.
+
+    A rejected key is the most common way a user discovers they left the
+    Provider field on its previous value: the key and model they pasted both
+    belong to a different preset, and the bare failure text names only the
+    provider that refused them. The hint names the preset the evidence points
+    at, so the fix ("change the Provider field") is in the message rather than
+    something the user has to infer from a 400.
+
+    Args:
+        provider: The preset the user selected.
+        api_key: The submitted credential.
+        model: The submitted model id.
+
+    Returns:
+        A leading-space sentence to append to a failure detail, or an empty
+        string when the submitted values look consistent with the selection --
+        that case is a genuinely wrong key, and guessing a provider for it
+        would be noise.
+    """
+    suggestion = suggest_provider(provider, model=model, api_key=api_key)
+    if suggestion is None:
+        return ""
+
+    suggested, reason = suggestion
+    evidence = (
+        f"{model!r} is {suggested.label}'s default model."
+        if reason == "model"
+        else f"That key looks like a {suggested.label} key."
+    )
+    return (
+        f" {evidence} If you meant to use {suggested.label}, change the"
+        " Provider field."
+    )
+
+
 async def _probe_credentials(provider: str, api_key: str, model: str) -> None:
     """Issue a 16-token ``responses.create`` to confirm the credential works.
 
@@ -432,7 +469,10 @@ async def _probe_credentials(provider: str, api_key: str, model: str) -> None:
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"Incorrect API key for {preset.label}.",
+            detail=(
+                f"Incorrect API key for {preset.label}."
+                f"{_provider_mismatch_hint(provider, api_key, model)}"
+            ),
         ) from exc
     except APIStatusError as exc:
         # The SDK uses status errors for any 4xx/5xx response other than
@@ -440,7 +480,10 @@ async def _probe_credentials(provider: str, api_key: str, model: str) -> None:
         # is the common case the plan calls out.
         raise HTTPException(
             status_code=400,
-            detail=f"That model isn't available on {preset.label}.",
+            detail=(
+                f"That model isn't available on {preset.label}."
+                f"{_provider_mismatch_hint(provider, api_key, model)}"
+            ),
         ) from exc
     except (APIConnectionError, APITimeoutError) as exc:
         raise HTTPException(
