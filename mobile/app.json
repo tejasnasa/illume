@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Illume",
+    "slug": "illume",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "illume",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.tejasnasa.illume",
+      "adaptiveIcon": {
+        "backgroundColor": "#09090b"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.tejasnasa.illume",
+      "supportsTablet": false
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "61ac3f1e-d54e-48a6-8d77-6ef0713c3a33"
+      }
+    }
+  }
+}
