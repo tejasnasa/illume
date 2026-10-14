@@ -3,13 +3,14 @@ Application configuration and environment variable management.
 
 Loads settings from environment variables and `.env` files using Pydantic.
 """
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """
     Global application settings schema.
-    
+
     Attributes:
         DATABASE_URL (str): Async PostgreSQL connection string.
         SYNC_DATABASE_URL (str): Synchronous PostgreSQL connection string.
@@ -44,7 +45,19 @@ class Settings(BaseSettings):
             mailbox on a domain verified in the Resend account, and a bare address --
             a display name would need the angle brackets and spaces that Docker's
             ``--env-file`` parser passes through literally.
+        OAUTH_REDIRECT_ALLOWLIST (list[str]): Exact-match allowlist of OAuth return
+            URIs the callback will redirect to when a ``redirect_uri`` query parameter
+            is supplied. Used by native clients to deep-link back into the app. Each
+            entry must be the exact URI -- no prefix matching, no wildcards. An empty
+            list disables the parameter and the callback always uses ``FRONTEND_URL``.
+            Validate at the boundary: an unvalidated ``redirect_uri`` is an
+            open-redirect and token-theft vector.
+        MOBILE_TOKEN_EXPIRE_MINUTES (int): JWT lifetime for native clients that
+            identify themselves via ``X-Illume-Client: mobile``. Web clients keep the
+            shorter ``ACCESS_TOKEN_EXPIRE_MINUTES``; native apps need a longer session
+            because users do not get a browser-cookie jar to silently refresh.
     """
+
     DATABASE_URL: str
     SYNC_DATABASE_URL: str
     REDIS_URL: str
@@ -63,6 +76,8 @@ class Settings(BaseSettings):
     CONTACT_TO_EMAIL: str
     CONTACT_FROM_EMAIL: str
     DOMAIN: str
+    OAUTH_REDIRECT_ALLOWLIST: list[str] = []
+    MOBILE_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 90  # 90 days
 
     model_config = SettingsConfigDict(env_file=".env")
 

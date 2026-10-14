@@ -8,11 +8,11 @@ credential store (BYOK provider/key/model) with a save-time probe.
 
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -221,43 +221,93 @@ async def me(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/github")
-async def github_login():
+async def github_login(state: str | None = None):
     """Redirect to GitHub's OAuth authorization page.
 
+    Args:
+        state: Caller-supplied opaque value that GitHub echoes back on the
+            callback. The mobile app uses this to carry a deep-link URI;
+            :func:`_select_redirect_target` validates it against
+            ``settings.OAUTH_REDIRECT_ALLOWLIST`` once the code arrives.
+            Anything not on the list is silently coerced to ``FRONTEND_URL``,
+            so a state that starts out as a near-miss is no worse than no
+            state at all.
+
     Returns:
-        Redirect to GitHub with client ID, redirect URI, and scopes.
+        Redirect to GitHub with client ID, redirect URI, scopes, and the
+        echoed ``state``.
     """
     params = {
         "client_id": settings.GITHUB_CLIENT_ID,
         "redirect_uri": settings.GITHUB_REDIRECT_URL,
         "scope": "user:email repo",
     }
+    if state:
+        params["state"] = state
     query = "&".join(f"{k}={v}" for k, v in params.items())
     return RedirectResponse(f"https://github.com/login/oauth/authorize?{query}")
 
 
-@router.get("/github/callback")
-async def github_callback(
-    code: str,
-    response: Response,
-    db: AsyncSession = Depends(get_async_db),
-):
-    """Complete GitHub OAuth and link the GitHub account.
-
-    Exchanges the OAuth code for an access token, fetches the GitHub
-    profile and verified primary email, then creates or links the local
-    user and sets the session cookie.
+def _select_redirect_target(redirect_uri: str | None) -> str:
+    """Return the post-auth redirect target, allowlisting ``redirect_uri``.
 
     Args:
-        code: OAuth authorization code from GitHub.
-        response: Unused; the session cookie is set on the redirect.
-        db: Async database session.
+        redirect_uri: Caller-supplied override, or ``None`` for the default.
 
     Returns:
-        Redirect to the frontend with the session cookie set.
+        ``settings.FRONTEND_URL`` by default; ``redirect_uri`` exactly when it
+        appears in ``settings.OAUTH_REDIRECT_ALLOWLIST``. Anything not on the
+        list -- including a near miss -- falls back to ``FRONTEND_URL``.
+
+    Note:
+        No prefix matching, per the open-redirect guidance. The allowlist is
+        the only thing that gets trusted, and only verbatim.
+    """
+    if redirect_uri is None:
+        return settings.FRONTEND_URL
+    if redirect_uri in settings.OAUTH_REDIRECT_ALLOWLIST:
+        return redirect_uri
+    return settings.FRONTEND_URL
+
+
+def _is_mobile_client(request_headers) -> bool:
+    """Return True when the caller opts in to the native auth contract.
+
+    Args:
+        request_headers: An iterable of header tuples (or a mapping) that
+            supports ``.get`` on lowercase keys.
+
+    Returns:
+        ``True`` only when the header is present and matches the documented
+        value. Any other value (including a near-miss string) is treated as a
+        web caller.
+    """
+    if hasattr(request_headers, "get"):
+        value = request_headers.get("x-illume-client")
+    else:
+        value = next(
+            (v for k, v in request_headers if k.lower() == "x-illume-client"),
+            None,
+        )
+    return value == "mobile"
+
+
+async def _exchange_github_code(code: str, redirect_uri: str) -> tuple[str, dict, list]:
+    """Exchange an OAuth code for a GitHub access token, the user profile, and emails.
+
+    Args:
+        code: The OAuth code returned by GitHub.
+        redirect_uri: The redirect_uri that was used to start the flow. Must
+            match what was passed to GitHub or the exchange is rejected.
+
+    Returns:
+        ``(github_token, github_user, emails)``: the raw GitHub access token,
+        the ``/user`` profile body, and the list of email records. The caller
+        stores the first argument on the linked ``User`` row and picks the
+        verified primary email out of the third.
 
     Raises:
-        HTTPException: 400 if token exchange fails or no verified email exists.
+        HTTPException: 400 if GitHub does not return an access token.
     """
     async with httpx.AsyncClient() as client:
         token_res = await client.post(
@@ -267,7 +317,7 @@ async def github_callback(
                 "client_id": settings.GITHUB_CLIENT_ID,
                 "client_secret": settings.GITHUB_CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": settings.GITHUB_REDIRECT_URL,
+                "redirect_uri": redirect_uri,
             },
         )
         token_data = token_res.json()
@@ -289,6 +339,51 @@ async def github_callback(
         )
         emails = email_res.json()
 
+    return github_token, github_user, emails
+
+
+@router.get("/github/callback")
+async def github_callback(
+    code: str,
+    response: Response,
+    request: Request,
+    state: str | None = None,
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Complete GitHub OAuth and link the GitHub account.
+
+    Exchanges the OAuth code for an access token, fetches the GitHub
+    profile and verified primary email, then creates or links the local
+    user and sets the session cookie.
+
+    Args:
+        code: OAuth authorization code from GitHub.
+        response: The raw ASGI response -- currently unused; cookie state is
+            attached to whatever redirect shape the call resolves to.
+        request: Used to read ``X-Illume-Client`` and any caller-supplied
+            headers.
+        state: Echoed from the ``/github`` call. When on the allowlist, the
+            callback redirects to this deep link instead of ``FRONTEND_URL``;
+            anything else is coerced to ``FRONTEND_URL`` (see
+            :func:`_select_redirect_target`).
+        db: Async database session.
+
+    Returns:
+        For web callers, the byte-identical ``RedirectResponse`` to
+        ``FRONTEND_URL`` with the session cookie attached.
+
+        For native callers (``X-Illume-Client: mobile``), the access token
+        in the response body so a deep-link return path can store it; the
+        cookie is still set for parity. The response shape differs across
+        these two contracts, by design -- web clients never see the token.
+
+    Raises:
+        HTTPException: 400 if token exchange fails or no verified email exists.
+    """
+    github_token, github_user, emails = await _exchange_github_code(
+        code, settings.GITHUB_REDIRECT_URL
+    )
+
     # Pick the verified primary email; GitHub may return several addresses.
     primary_email = next(
         (e["email"] for e in emails if e["primary"] and e["verified"]),
@@ -308,6 +403,17 @@ async def github_callback(
         result = await db.execute(select(User).where(User.email == primary_email))
         user = result.scalar_one_or_none()
 
+    is_mobile = _is_mobile_client(request.headers)
+    is_deep_link_state = state is not None and state in settings.OAUTH_REDIRECT_ALLOWLIST
+    # Deep-link callers are native by definition: the only path that lands a
+    # deep link in ``state`` is the mobile login button, so its token must be
+    # the long-lived one. Web callers without a header get the short expiry.
+    expires_minutes = (
+        settings.MOBILE_TOKEN_EXPIRE_MINUTES
+        if is_mobile or is_deep_link_state
+        else settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
+
     if user:
         user.github_id = github_id
         user.github_access_token = github_token
@@ -326,8 +432,46 @@ async def github_callback(
     await db.commit()
     await db.refresh(user)
 
-    redirect = RedirectResponse(url=settings.FRONTEND_URL, status_code=302)
-    token = create_access_token(subject=str(user.id))
+    is_deep_link = state is not None and state in settings.OAUTH_REDIRECT_ALLOWLIST
+    token = create_access_token(
+        subject=str(user.id),
+        expires_delta=timedelta(minutes=expires_minutes),
+    )
+
+    if is_mobile and not is_deep_link:
+        # Native callers without a deep-link state asked for a JSON token in
+        # the response body (no cookie jar in this flow). The deep-link
+        # path below covers the common case; this branch is here for
+        # callers that hit the callback directly with the header and no
+        # cookie.
+        return JSONResponse(
+            {
+                "access_token": token,
+                "token_type": "Bearer",
+                "expires_in": expires_minutes * 60,
+                "redirect_uri": settings.FRONTEND_URL,
+            }
+        )
+
+    if is_deep_link:
+        # The whole flow ran in a system browser, so we have no header and
+        # no cookie jar. Bundle the token into the redirect target so the
+        # native deep-link handler can pick it up. The plan flags this as a
+        # known exposure (token-in-URL) acceptable for the resume build.
+        from urllib.parse import urlencode, urlparse, urlunparse
+
+        target = _select_redirect_target(state)
+        parsed = urlparse(target)
+        query = {
+            "access_token": token,
+            "token_type": "Bearer",
+            "expires_in": str(expires_minutes * 60),
+        }
+        target_with_token = urlunparse(parsed._replace(query=urlencode(query)))
+        return RedirectResponse(url=target_with_token, status_code=302)
+
+    target = _select_redirect_target(state)
+    redirect = RedirectResponse(url=target, status_code=302)
     redirect.set_cookie(
         key="access_token",
         value=token,
@@ -335,7 +479,7 @@ async def github_callback(
         samesite="lax",
         secure=settings.ENVIRONMENT == "production",
         domain=settings.DOMAIN,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=expires_minutes * 60,
     )
 
     return redirect
@@ -414,10 +558,7 @@ def _provider_mismatch_hint(provider: str, api_key: str, model: str) -> str:
         if reason == "model"
         else f"That key looks like a {suggested.label} key."
     )
-    return (
-        f" {evidence} If you meant to use {suggested.label}, change the"
-        " Provider field."
-    )
+    return f" {evidence} If you meant to use {suggested.label}, change the Provider field."
 
 
 async def _probe_credentials(provider: str, api_key: str, model: str) -> None:
