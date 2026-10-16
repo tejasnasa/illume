@@ -136,7 +136,7 @@ class TestDeepLinkRedirect:
     async def test_deep_link_token_lasts_longer_than_web_session(
         self, client, allowlist_with_deep_link, stub_github
     ):
-        """Native sessions outlast the default web expiry so users do not have to re-login weekly."""
+        """Native sessions outlast the default web expiry so users do not have to re-login weekly"""
         response = await client.get(
             CALLBACK,
             params={"code": "valid-code", "state": "illume://auth/callback"},

@@ -1,3 +1,5 @@
+.env
+
 .agents/
 skills-lock.json
 
