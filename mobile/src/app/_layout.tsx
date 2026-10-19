@@ -13,12 +13,24 @@
  * The :func:`createQueryClient` factory builds the client lazily so
  * default options can be tuned without re-importing the module, and so
  * tests can override :class:`QueryClient` entirely.
+ *
+ * NativeWind handles visual styling for the children; the Stack's
+ * ``contentStyle`` background has to stay native because the Navigator
+ * reads a ``ViewStyle``, not a className.
+ *
+ * ``global.css`` is imported here so NativeWind's Metro hook registers
+ * the class registry at app start. Without this import, ``className``
+ * strings never resolve to styles and the elements render with React
+ * Native's defaults (dark text on iOS, light text on Android), which
+ * makes dark-themed screens invisible.
  */
 
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+import "../../global.css";
 
 import { installAppStateFocusBridge } from "@/api/focusManager";
 import { colors } from "@/theme/tokens";
