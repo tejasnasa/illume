@@ -1,3 +1,60 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/**
+ * Global stylesheet for the Expo Router app.
+ *
+ * Imports are layered so React Native Web's defaults cannot sit above
+ * Tailwind utilities, and so Tailwind's preflight does not fight the
+ * reset we ship in the runtime. The theme block re-declares the design
+ * tokens the v3 ``tailwind.config.js`` exposed; ``nativewind/theme``
+ * then teaches the runtime where to read them at runtime.
+ */
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+@import "nativewind/theme";
+
+@theme {
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
+
+  --color-card: #18181b;
+  --color-card-foreground: #fafafa;
+
+  --color-popover: #18181b;
+  --color-popover-foreground: #fafafa;
+
+  --color-primary: #a3004c;
+  --color-primary-foreground: #fdf2f8;
+
+  --color-secondary: #27272a;
+  --color-secondary-foreground: #fafafa;
+
+  --color-muted: #27272a;
+  --color-muted-foreground: #9f9fa9;
+
+  --color-accent: #27272a;
+  --color-accent-foreground: #fafafa;
+
+  --color-destructive: #ff6467;
+  --color-success: #42cb80;
+
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-input: rgba(255, 255, 255, 0.15);
+  --color-ring: #71717b;
+
+  --color-chart-1: #53eafd;
+  --color-chart-2: #00b8db;
+  --color-chart-3: #0092b8;
+  --color-chart-4: #007595;
+  --color-chart-5: #005f78;
+
+  --color-sidebar: #18181b;
+  --color-sidebar-foreground: #fafafa;
+  --color-sidebar-primary: #f6339a;
+  --color-sidebar-primary-foreground: #fdf2f8;
+  --color-sidebar-accent: #27272a;
+  --color-sidebar-accent-foreground: #fafafa;
+  --color-sidebar-border: rgba(255, 255, 255, 0.1);
+  --color-sidebar-ring: #71717b;
+}
