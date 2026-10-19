@@ -17,13 +17,11 @@ import {
   ActivityIndicator,
   Pressable,
   SafeAreaView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 
-import { colors } from "@/theme/tokens";
 import { buildAuthorizeUrl } from "@/lib/authCallback";
 
 const BACKEND_URL =
@@ -60,18 +58,27 @@ export default function LoginScreen() {
   const disabled = busy;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
-        <View style={styles.card}>
-          <Text style={styles.brand} accessibilityRole="header">
+    <SafeAreaView className="flex-1 bg-background">
+      <View className="flex-1 items-center justify-center px-6 py-4">
+        <View className="w-full max-w-[380px] items-center rounded-xl border border-border bg-card px-7 py-8">
+          <Text
+            accessibilityRole="header"
+            className="text-center text-base font-bold uppercase tracking-[2px] text-foreground"
+          >
             Illume
           </Text>
-          <Text style={styles.brandGlyph}>✦</Text>
+          <Text className="mb-2 text-center text-[44px] leading-[52px] text-chart-1">
+            ✦
+          </Text>
 
-          <Text style={styles.title}>Welcome to Illume</Text>
-          <Text style={styles.subtitle}>Sign in to analyze your codebase</Text>
+          <Text className="mt-2 text-center text-[22px] font-bold text-foreground">
+            Welcome to Illume
+          </Text>
+          <Text className="mt-1 text-center text-sm text-muted-foreground">
+            Sign in to analyze your codebase
+          </Text>
 
-          <View style={styles.divider} />
+          <View className="my-5 h-px w-full bg-border" />
 
           <Pressable
             accessibilityRole="button"
@@ -80,17 +87,27 @@ export default function LoginScreen() {
             onPress={onContinueWithGitHub}
             disabled={disabled}
             hitSlop={8}
-            style={[styles.button, disabled && styles.buttonDisabled]}
+            className={`min-h-[48px] w-full items-center justify-center rounded-lg bg-white px-4 py-3.5 ${
+              disabled ? "opacity-60" : ""
+            }`}
           >
             {busy ? (
               <ActivityIndicator size="small" color="#000000" />
             ) : (
-              <Text style={styles.buttonText}>Continue with GitHub</Text>
+              <Text
+                className="text-[15px] font-semibold text-black"
+                style={buttonTextStyle}
+              >
+                Continue with GitHub
+              </Text>
             )}
           </Pressable>
 
           {error ? (
-            <Text style={styles.error} accessibilityRole="alert">
+            <Text
+              accessibilityRole="alert"
+              className="mt-3 text-center text-[13px] text-destructive"
+            >
               {error}
             </Text>
           ) : null}
@@ -100,87 +117,11 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  card: {
-    width: "100%",
-    maxWidth: 380,
-    paddingVertical: 32,
-    paddingHorizontal: 28,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    backgroundColor: colors.card,
-    alignItems: "center",
-  },
-  brand: {
-    color: colors.foreground,
-    fontSize: 16,
-    fontWeight: "700",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    textAlign: "center",
-  },
-  brandGlyph: {
-    color: colors.chart1,
-    fontSize: 44,
-    lineHeight: 52,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  title: {
-    color: colors.foreground,
-    fontSize: 22,
-    fontWeight: "700",
-    textAlign: "center",
-    marginTop: 8,
-  },
-  subtitle: {
-    color: colors.mutedForeground,
-    fontSize: 14,
-    textAlign: "center",
-    marginTop: 4,
-  },
-  divider: {
-    width: "100%",
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginVertical: 20,
-  },
-  button: {
-    width: "100%",
-    backgroundColor: "#ffffff",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 48,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#000000",
-    fontSize: 15,
-    fontWeight: "600",
-    includeFontPadding: false,
-    textAlignVertical: "center",
-  },
-  error: {
-    color: colors.destructive,
-    fontSize: 13,
-    marginTop: 12,
-    textAlign: "center",
-  },
-});
+// ``includeFontPadding`` / ``textAlignVertical`` are Android-only native
+// props that NativeWind does not surface; the GitHub button text is
+// vertically centered through them so the line height matches the
+// button's min-height.
+const buttonTextStyle = {
+  includeFontPadding: false,
+  textAlignVertical: "center" as const,
+};

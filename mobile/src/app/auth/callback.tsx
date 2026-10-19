@@ -21,11 +21,12 @@
  */
 
 import { useEffect, useRef } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { parseAuthCallback } from "@/lib/authCallback";
 import { setAccessToken } from "@/lib/tokenStore";
+import { colors } from "@/theme/tokens";
 
 export default function AuthCallbackScreen() {
   const params = useLocalSearchParams() as Record<string, string | string[]>;
@@ -53,10 +54,12 @@ export default function AuthCallbackScreen() {
   }, [params]);
 
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#fafafa" />
-      <Text style={styles.title}>Completing sign-in…</Text>
-      <Text style={styles.body}>
+    <View className="flex-1 items-center justify-center bg-background p-6">
+      <ActivityIndicator size="large" color={colors.foreground} />
+      <Text className="mt-4 text-lg font-semibold text-foreground">
+        Completing sign-in…
+      </Text>
+      <Text className="mt-2 text-center text-[13px] text-muted-foreground">
         You can close this screen if it does not advance.
       </Text>
     </View>
@@ -94,24 +97,3 @@ function encodeValue(value: string): string {
   // Pass those through, percent-encode anything else.
   return value.replace(/[^a-zA-Z0-9._-]/g, (char) => encodeURIComponent(char));
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 24,
-  },
-  title: {
-    color: "#fafafa",
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 16,
-  },
-  body: {
-    color: "#9f9fa9",
-    fontSize: 13,
-    marginTop: 8,
-    textAlign: "center",
-  },
-});

@@ -7,7 +7,7 @@
  */
 
 import { Redirect, Stack } from "expo-router";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 
 import { useAuth } from "@/hooks/useAuth";
 import { colors } from "@/theme/tokens";
@@ -17,9 +17,9 @@ export default function AppLayout() {
 
   if (loading) {
     return (
-      <View style={styles.splash}>
+      <View className="flex-1 items-center justify-center bg-background">
         <ActivityIndicator size="large" color={colors.foreground} />
-        <Text style={styles.splashText}>Illume</Text>
+        <Text className="mt-4 text-2xl font-bold text-foreground">Illume</Text>
       </View>
     );
   }
@@ -37,18 +37,3 @@ export default function AppLayout() {
     />
   );
 }
-
-const styles = StyleSheet.create({
-  splash: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.background,
-  },
-  splashText: {
-    color: colors.foreground,
-    fontSize: 24,
-    fontWeight: "700",
-    marginTop: 16,
-  },
-});
