@@ -64,7 +64,7 @@ export function RepoCardSkeleton({
       testID={testID}
       accessibilityLabel="Loading repository"
       accessibilityRole="progressbar"
-      className="mb-3 overflow-hidden rounded border border-border bg-card p-4"
+      className="mb-3 overflow-hidden rounded border border-border p-4"
     >
       <View className="mb-3">
         <View className="h-[22px] w-3/5 overflow-hidden rounded bg-muted">

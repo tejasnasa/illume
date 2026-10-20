@@ -79,7 +79,7 @@ export function RepoCard({ repo, onPress }: RepoCardProps) {
       accessibilityRole="button"
       accessibilityLabel={`Open ${repo.name}`}
       onPress={onPress ? () => onPress(repo) : undefined}
-      className="mb-3 rounded border border-border bg-card p-4 active:border-primary"
+      className="mb-3 rounded border border-border p-4 active:border-primary"
     >
       <View className="mb-3 flex-row items-start">
         <View className="flex-1 min-w-0">
