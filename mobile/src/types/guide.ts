@@ -49,7 +49,7 @@ export default interface Guide {
       primary_owner: string;
       is_knowledge_silo: boolean;
     };
-  };
+  } | null;
 }
 
 /**

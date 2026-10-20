@@ -55,3 +55,19 @@ export function parseGitHubRepoUrl(url: string): ParsedGitHubRepo | null {
  */
 export const INVALID_GITHUB_URL_MESSAGE =
   "Please enter a valid GitHub repository URL (e.g. https://github.com/user/repo)";
+
+/**
+ * The ``owner/name`` label for a repository.
+ *
+ * The web client splits the GitHub URL on ``github.com/``; the same split
+ * is used here so a repository reads identically on both clients. The
+ * stored name is the fallback for a URL that does not carry one.
+ *
+ * @param githubUrl - The repository's GitHub URL.
+ * @param fallback - The repository's stored name.
+ * @returns The label to display.
+ */
+export function formatRepoLabel(githubUrl: string, fallback: string): string {
+  const parts = githubUrl.split("github.com/");
+  return parts.length > 1 && parts[1] ? parts[1] : fallback;
+}
