@@ -1,0 +1,42 @@
+# Files excluded from the EAS build upload.
+#
+# EAS uploads the project directory (not a git archive), so without this
+# the upload includes node_modules -- 1.6 GB, several minutes of
+# uploading, and a build that spends most of its time on the transfer.
+# The builder runs `npm ci` itself, so the installed tree is not needed.
+node_modules/
+
+# Metro / build artifacts. The builder regenerates both.
+.expo/
+dist/
+web-build/
+android/
+ios/
+
+# Native build outputs.
+*.apk
+*.aab
+*.ipa
+*.app
+
+# Local environment. EAS gets its values from the EAS environment, not
+# from this file -- and .env holds a development backend URL.
+.env
+.env.*
+!.env.example
+
+# Local tooling state.
+.agents/
+skills-lock.json
+coverage/
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS / editor noise.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.pem
