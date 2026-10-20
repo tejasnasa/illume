@@ -40,13 +40,7 @@ export const queryKeys = {
     ownership: (id: string) =>
       [...queryKeys.repositories.all, "ownership", id] as const,
     glossary: (id: string, page: number, query: string) =>
-      [
-        ...queryKeys.repositories.all,
-        "glossary",
-        id,
-        page,
-        query,
-      ] as const,
+      [...queryKeys.repositories.all, "glossary", id, page, query] as const,
     chatHistory: (id: string) =>
       [...queryKeys.repositories.all, "chat", id, "history"] as const,
   },
@@ -54,11 +48,27 @@ export const queryKeys = {
   /** GitHub proxy payloads (the user's repos, branches, commits). */
   github: {
     all: ["github"] as const,
-    myRepos: (query: string) =>
-      [...queryKeys.github.all, "repos", query] as const,
+    /**
+     * The authenticated user's repository list.
+     *
+     * The picker filters client-side (see
+     * :mod:`src.hooks.useGitHubRepos`), so this is a single cache entry
+     * shared by every search term -- no refetch per keystroke, and no
+     * cache entry per term either.
+     */
+    myRepos: () => [...queryKeys.github.all, "repos"] as const,
     branches: (owner: string, repo: string) =>
       [...queryKeys.github.all, "branches", owner, repo] as const,
     commits: (owner: string, repo: string, sha: string) =>
       [...queryKeys.github.all, "commits", owner, repo, sha] as const,
+    /**
+     * The merged multi-branch commit list the timeline renders.
+     *
+     * Separate from ``commits`` because the proxy exposes it at its own
+     * path and returns a different shape (parents and branch names per
+     * commit), so the two payloads must not share a cache entry.
+     */
+    multiBranchCommits: (owner: string, repo: string) =>
+      [...queryKeys.github.all, "multiBranchCommits", owner, repo] as const,
   },
 } as const;
