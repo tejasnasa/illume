@@ -15,6 +15,13 @@ export type ApiErrorKind =
   | "unauthorized"
   /** Server returned 404; the resource does not exist (or is not owned by the caller). */
   | "notFound"
+  /**
+   * Server returned 402; the caller has run out of free-tier allowance.
+   *
+   * Distinct from a generic 4xx because the remedy is different: the
+   * user has to add their own API key, not fix their request.
+   */
+  | "quota"
   /** Server returned any other 4xx. The caller generally should surface the message. */
   | "clientError"
   /** Server returned 5xx. Almost always transient. */
@@ -68,6 +75,7 @@ export class ApiError extends Error {
 export function kindFromStatus(status: number): ApiErrorKind {
   if (status === 401 || status === 403) return "unauthorized";
   if (status === 404) return "notFound";
+  if (status === 402) return "quota";
   if (status >= 400 && status < 500) return "clientError";
   if (status >= 500) return "server";
   return "unknown";

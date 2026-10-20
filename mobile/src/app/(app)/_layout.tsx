@@ -34,6 +34,17 @@ export default function AppLayout() {
         headerShown: false,
         contentStyle: { backgroundColor: colors.background },
       }}
-    />
+    >
+      {/*
+        The repository picker is a full-screen modal route rather than a
+        centred dialog: on a phone a dialog wastes the screen and fights
+        the soft keyboard, and the hardware back button should dismiss it
+        for free.
+      */}
+      <Stack.Screen
+        name="repo-picker"
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
+      />
+    </Stack>
   );
 }

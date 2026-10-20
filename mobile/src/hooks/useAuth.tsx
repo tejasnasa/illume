@@ -24,6 +24,7 @@ import {
   getAccessToken,
   setAccessToken,
 } from "@/lib/tokenStore";
+import type User from "@/types/user";
 
 /**
  * The default backend URL points at the local dev server. Operators override
@@ -33,12 +34,16 @@ import {
  */
 const DEFAULT_BACKEND_URL = "http://localhost:8000";
 
-interface AuthUser {
-  id: string;
-  email: string;
-  name: string;
-  avatar_url: string | null;
-}
+/**
+ * The profile returned by ``/auth/me``.
+ *
+ * Typed as the full :class:`User` record rather than a narrow subset:
+ * the endpoint already sends the free-tier counters and the BYOK flag, so
+ * narrowing them away here would only mean a second screen had to ask
+ * for the same payload again. The raw API key is never returned -- the
+ * server sends ``has_ai_key`` instead.
+ */
+type AuthUser = User;
 
 interface AuthContextValue {
   /** While ``true`` the token store has not yet been read; guards must show a splash. */
@@ -55,6 +60,15 @@ interface AuthContextValue {
   signIn: (token: string) => Promise<void>;
   /** Drop the token and reset the in-memory profile. */
   signOut: () => Promise<void>;
+  /**
+   * Re-read the profile from ``/auth/me``.
+   *
+   * The free-tier counters change when a repository is created, so the
+   * dashboard's banner would otherwise show a stale allowance until the
+   * next cold start. A failed refresh leaves the current profile in
+   * place -- a transient network error should not blank the banner.
+   */
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -166,9 +180,15 @@ export function AuthProvider({
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    if (!token) return;
+    const me = await fetchMe(token, baseUrl, fetchImpl);
+    if (me) setUser(me);
+  }, [token, baseUrl, fetchImpl]);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ loading, token, user, signIn, signOut }),
-    [loading, token, user, signIn, signOut],
+    () => ({ loading, token, user, signIn, signOut, refreshUser }),
+    [loading, token, user, signIn, signOut, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
