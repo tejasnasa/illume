@@ -296,4 +296,107 @@ describe("AuthProvider", () => {
     await expect(render(<NakedProbe />)).rejects.toThrow(/AuthProvider/);
     spy.mockRestore();
   });
+
+  it("refreshUser re-reads the profile so the counters stay current", async () => {
+    const store = makeMemStore("valid-jwt");
+    __setTokenStoreImplementation(store);
+
+    const first = {
+      id: "u1",
+      email: "a@b",
+      name: "A",
+      avatar_url: null,
+      has_ai_key: false,
+      free_ingestions_used: 0,
+      free_ingestions_limit: 3,
+    };
+    const second = { ...first, free_ingestions_used: 1 };
+
+    let call = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      call += 1;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => (call === 1 ? first : second),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    function Harness() {
+      const { user: u, refreshUser } = useAuth();
+      return (
+        <>
+          <Text testID="used">{String(u?.free_ingestions_used ?? "none")}</Text>
+          <Text testID="refresh" onPress={() => void refreshUser()}>
+            refresh
+          </Text>
+        </>
+      );
+    }
+
+    const result = await render(
+      <AuthProvider fetchImpl={fetchImpl}>
+        <Harness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(result.getByTestId("used").props.children).toBe("0");
+    });
+
+    await act(async () => {
+      result.getByTestId("refresh").props.onPress();
+    });
+
+    await waitFor(() => {
+      expect(result.getByTestId("used").props.children).toBe("1");
+    });
+  });
+
+  it("refreshUser keeps the current profile when the re-read fails", async () => {
+    const store = makeMemStore("valid-jwt");
+    __setTokenStoreImplementation(store);
+
+    const user = { id: "u1", email: "a@b", name: "A", avatar_url: null };
+    let call = 0;
+    const fetchImpl: typeof fetch = (async () => {
+      call += 1;
+      return {
+        ok: call === 1,
+        status: call === 1 ? 200 : 500,
+        json: async () => (call === 1 ? user : {}),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    function Harness() {
+      const { user: u, refreshUser } = useAuth();
+      return (
+        <>
+          <Text testID="email">{u?.email ?? "null"}</Text>
+          <Text testID="refresh" onPress={() => void refreshUser()}>
+            refresh
+          </Text>
+        </>
+      );
+    }
+
+    const result = await render(
+      <AuthProvider fetchImpl={fetchImpl}>
+        <Harness />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(result.getByTestId("email").props.children).toBe("a@b");
+    });
+
+    await act(async () => {
+      result.getByTestId("refresh").props.onPress();
+    });
+
+    // A failed refresh is not a logout -- the profile stays put.
+    await waitFor(() => {
+      expect(result.getByTestId("email").props.children).toBe("a@b");
+    });
+  });
 });

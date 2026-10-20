@@ -23,6 +23,10 @@ describe("kindFromStatus", () => {
     expect(kindFromStatus(422)).toBe("clientError");
   });
 
+  it("classifies 402 as a spent quota", () => {
+    expect(kindFromStatus(402)).toBe("quota");
+  });
+
   it("classifies 5xx as server", () => {
     expect(kindFromStatus(500)).toBe("server");
     expect(kindFromStatus(502)).toBe("server");

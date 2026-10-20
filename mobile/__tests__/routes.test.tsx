@@ -14,6 +14,7 @@ describe("route skeleton", () => {
     "../src/app/(app)/_layout",
     "../src/app/(app)/dashboard",
     "../src/app/(app)/settings",
+    "../src/app/(app)/repo-picker",
     "../src/app/(app)/repo/[id]/_layout",
     "../src/app/(app)/repo/[id]/index",
     "../src/app/(app)/repo/[id]/explorer",

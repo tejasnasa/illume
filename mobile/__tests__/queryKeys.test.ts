@@ -20,7 +20,9 @@ describe("queryKeys", () => {
 
   it("repositories.list is stable across calls", () => {
     expect(queryKeys.repositories.list()).toEqual(["repositories", "list"]);
-    expect(queryKeys.repositories.list()).toEqual(queryKeys.repositories.list());
+    expect(queryKeys.repositories.list()).toEqual(
+      queryKeys.repositories.list(),
+    );
   });
 
   it("repositories.detail scopes by id", () => {
@@ -64,7 +66,7 @@ describe("queryKeys", () => {
   });
 
   it("github.* keys are deterministic for the same inputs", () => {
-    expect(queryKeys.github.myRepos("")).toEqual(["github", "repos", ""]);
+    expect(queryKeys.github.myRepos()).toEqual(["github", "repos"]);
     expect(queryKeys.github.branches("foo", "bar")).toEqual([
       "github",
       "branches",

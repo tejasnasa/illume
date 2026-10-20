@@ -319,4 +319,38 @@ describe("DashboardScreen", () => {
 
     expect(pushCalls).toContain("/(app)/repo/42");
   });
+
+  it("opens the repository picker from the floating action button", async () => {
+    const harness = makeFetchHarness();
+    const user = { id: "u1", email: "a@b", name: "Ada", avatar_url: null };
+
+    harness.respond((call) => {
+      if (call.url.endsWith("/api/v1/auth/me")) {
+        return jsonResponse(200, user);
+      }
+      if (call.url.endsWith("/api/v1/repository")) {
+        return jsonResponse(200, []);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+
+    const screen = await renderDashboard(
+      harness.fetchImpl as unknown as typeof fetch,
+      queryClient,
+      <DashboardScreen />,
+    );
+
+    // The add-repository affordance is a floating button, not an inline
+    // one, so it lives outside the list header.
+    const fab = screen.getByTestId("dashboard-add-repository");
+    await act(async () => {
+      fireEvent.press(fab);
+    });
+
+    expect(pushCalls).toContain("/(app)/repo-picker");
+  });
 });
