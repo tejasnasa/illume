@@ -22,7 +22,8 @@ pytestmark = pytest.mark.smoke
 # ``/api/v1/repository/{repo_id}/...``.
 # 29 -> 32 with the AI credentials GET/PUT/DELETE under ``/api/v1/auth/me``.
 # 32 -> 33 with the public contact POST under ``/api/v1/contact``.
-EXPECTED_API_ROUTE_COUNT = 33
+# 33 -> 36 with the push-token GET/POST/DELETE under ``/api/v1/push/token``.
+EXPECTED_API_ROUTE_COUNT = 36
 
 EXPECTED_TAGS = {
     "auth",
@@ -33,6 +34,7 @@ EXPECTED_TAGS = {
     "graph",
     "guide",
     "ownership",
+    "push",
     "repository",
     "stats",
 }
@@ -53,6 +55,7 @@ REPRESENTATIVE_PATHS = {
     "/api/v1/repository/{repo_id}/stats",
     "/api/v1/repository/{repo_id}/chat",
     "/api/v1/repository/{repo_id}/export/illume",
+    "/api/v1/push/token",
 }
 
 
