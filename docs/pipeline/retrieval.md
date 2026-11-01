@@ -173,6 +173,14 @@ LIMIT 50
 The threshold is a cosine *distance*, so `< 0.7` means similarity greater than roughly `0.3` — a
 deliberately loose filter, because the next step narrows it.
 
+The ordering is served by `ix_embeddings_embedding_hnsw`, an HNSW index on `embedding` using
+`vector_cosine_ops`. Because the `repository_id` filter is applied *after* the index walk, a
+repository-filtered search also raises `hnsw.ef_search` to 200 and sets `hnsw.iterative_scan =
+strict_order` (pgvector 0.8+), so a small repository cannot be starved by a large one sharing the
+table. `strict_order` keeps hits in exact distance order, which the diversity caps rely on. On an
+older pgvector only `ef_search` is raised; the index is still used, so a filtered search can return
+fewer hits than asked for.
+
 ### Step 3 — Diversify down to ten
 
 Fifty candidates are narrowed to `TOP_K = 10` by `_apply_diversity_caps`, which runs in **Python, not
@@ -195,6 +203,11 @@ cap:
 Because of the backfill, **the caps are soft**. A question whose best matches are all code can return
 far more than five symbols — the caps shape the result set rather than bounding it. Their purpose is
 to stop one dominant type crowding out the commit or README context.
+
+The surviving hits are then resolved to their source rows in `services/retrieval/resolve.py`: one
+query per backing table (`ast_symbols`, `commits`, `pull_requests`) plus a single shared `files`
+query, rather than one or two round trips per hit. Order is preserved, and a hit whose backing row
+has been deleted still produces a citation with its detail fields empty.
 
 ### Step 4 — Generate, or decline
 
@@ -394,6 +407,6 @@ the uniqueness constraint on `(repository_id, source_type, source_id)` exists.
 - [sync.md](sync.md) — the incremental path, which reconciles by chunk hash instead of rebuilding.
 - [generation.md](generation.md) — the credential model the embedding path deliberately does *not*
   use.
-- [data-model.md](../data-model.md) — the `Embedding` table, its vector column, and the missing index.
+- [data-model.md](../data-model.md) — the `Embedding` table, its vector column, and the HNSW index.
 - [frontend.md](../frontend.md) — the chat UI, and how citation cards are rendered.
 - [api.md](../api.md) — the chat endpoints, their status codes, and the quota they enforce.

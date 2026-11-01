@@ -381,8 +381,6 @@ def _call_llm_narrative(prompt: str, llm: LLMConfig | None = None) -> str:
     response_kwargs = (
         llm.response_kwargs("low") if llm is not None else {"reasoning": {"effort": "low"}}
     )
-    if not response_kwargs:
-        response_kwargs = {"reasoning": {"effort": "low"}}
 
     try:
         response = client.responses.create(

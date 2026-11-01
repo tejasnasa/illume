@@ -200,7 +200,7 @@ def _annotate_files(
     reusable: dict[str, str] | None = None,
     llm: LLMConfig | None = None,
 ) -> dict[str, str]:
-    """Request LLM annotations in batches; failures skip the batch silently.
+    """Request LLM annotations in batches; a failure skips the batch and is logged.
 
     The language lookup is supplied by the caller because the trimmed
     stored payload no longer carries ``language`` per item --
@@ -237,8 +237,6 @@ def _annotate_files(
     response_kwargs = (
         llm.response_kwargs("minimal") if llm is not None else {"reasoning": {"effort": "minimal"}}
     )
-    if not response_kwargs:
-        response_kwargs = {"reasoning": {"effort": "minimal"}}
 
     if reusable:
         # Compute the set the LLM actually has to fill: the first
@@ -265,7 +263,7 @@ def _annotate_files(
         for i in range(0, len(annotated_batch_input), ANNOTATION_BATCH_SIZE)
     ]
 
-    def _request(batch: list[dict[str, Any]]) -> dict[str, str] | None:
+    def _request(batch: list[dict[str, Any]], batch_index: int) -> dict[str, str] | None:
         prompt = _build_annotation_prompt(batch)
         try:
             response = client.responses.create(
@@ -275,7 +273,16 @@ def _annotate_files(
                 max_output_tokens=1500,
             )
         except Exception as exc:
-            logger.error("reading_order: LLM annotation call failed: %s", exc)
+            # The batch range and exception class travel with the error so an
+            # all-batches-failed run is visible here rather than as a reading
+            # order that quietly came back with no annotations.
+            logger.error(
+                "reading_order: LLM annotation call failed for batch %d-%d (%s): %s",
+                batch_index * ANNOTATION_BATCH_SIZE,
+                batch_index * ANNOTATION_BATCH_SIZE + len(batch) - 1,
+                type(exc).__name__,
+                exc,
+            )
             return None
 
         raw = (response.output_text or "[]").strip()
@@ -297,7 +304,10 @@ def _annotate_files(
         }
 
     results = gather_in_order(
-        [cast(Callable[[], Any], (lambda b=batch: _request(b))) for batch in batches],
+        [
+            cast(Callable[[], Any], (lambda b=batch, i=batch_index: _request(b, i)))
+            for batch_index, batch in enumerate(batches)
+        ],
         label="annotate",
     )
 

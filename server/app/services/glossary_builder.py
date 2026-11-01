@@ -189,12 +189,12 @@ def build_glossary(
     # ``llm=None`` path keeps the historical ``reasoning.effort="minimal"``
     # payload; the configured-byok path delegates to ``LLMConfig`` so a
     # reasoning-incapable preset (Groq) sends an empty dict rather than
-    # 400-ing on a parameter the model does not understand.
+    # 400-ing on a parameter the model does not understand. An empty dict
+    # from a real credential is a final answer, not a missing value -- it
+    # must reach the SDK with no ``reasoning`` key at all.
     response_kwargs = (
         llm.response_kwargs("minimal") if llm is not None else {"reasoning": {"effort": "minimal"}}
     )
-    if not response_kwargs:
-        response_kwargs = {"reasoning": {"effort": "minimal"}}
 
     logger.info("[glossary] Starting for repo %s (mode=%s)", repo.id, mode)
 

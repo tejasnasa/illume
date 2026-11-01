@@ -2,9 +2,10 @@
 
 Embeds the user's query, searches stored embeddings in pgvector via
 cosine distance, applies per-source-type diversity caps to keep results
-varied, resolves each hit back to its underlying record (symbol, commit,
-PR, file, or document), and prompts an LLM with the assembled context to
-produce a grounded answer plus source references.
+varied, resolves the hits back to their underlying records in one query
+per source type (symbol, commit, PR, file, or document), and prompts an
+LLM with the assembled context to produce a grounded answer plus source
+references.
 """
 
 import logging
@@ -15,12 +16,13 @@ from uuid import UUID
 
 from openai import AsyncOpenAI
 from openai.types.responses import ResponseInputParam
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models import AstSymbol, Commit, Embedding, File, PullRequest
+from app.models import Embedding
 from app.services.llm_config import LLMConfig
+from app.services.retrieval.resolve import SourceReference, resolve_sources
 
 logger = logging.getLogger(__name__)
 
@@ -36,35 +38,57 @@ TYPE_CAPS = {
     "file": 2,
 }
 
+# pgvector 0.8 added iterative index scans. Below it, a filtered HNSW query
+# returns the global ``ef_search`` nearest rows and applies ``repository_id``
+# afterwards, so a small repository on a large instance can come back with too
+# few hits. The extension version is fixed for the life of a process, so the
+# answer is cached rather than re-read on every search.
+_ITERATIVE_SCAN_MIN_VERSION = (0, 8)
+_pgvector_supports_iterative_scan: bool | None = None
 
-@dataclass
-class SourceReference:
-    """A resolved citation backing part of a RAG answer.
 
-    Attributes:
-        source_type: One of "symbol", "commit", "pull_request", "file",
-            or "document".
-        chunk_text: The embedded text that matched the query.
-        file_path: Path for symbol/file sources.
-        symbol_name: Name for symbol sources.
-        start_line: Start line for symbol sources.
-        end_line: End line for symbol sources.
-        commit_hash: Hash for commit sources.
-        author_name: Author for commit sources.
-        pr_number: Number for pull request sources.
-        pr_title: Title for pull request sources.
+def _version_tuple(raw: str | None) -> tuple[int, ...]:
+    """Parses a dotted version string into its numeric components."""
+    if not raw:
+        return ()
+    parts: list[int] = []
+    for chunk in raw.split("."):
+        digits = "".join(c for c in chunk if c.isdigit())
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts)
+
+
+async def _prepare_filtered_vector_search(db: AsyncSession) -> None:
+    """Tunes pgvector for a repository-filtered HNSW search.
+
+    ``hnsw.ef_search`` is raised from its 40-row default to 200 so the walk has
+    a wider candidate pool, and ``hnsw.iterative_scan`` is set to
+    ``strict_order`` so the scan keeps going until the filter has produced
+    enough rows instead of stopping at the global top of the index.
+    ``strict_order`` rather than ``relaxed_order`` because the diversity caps
+    take hits in the order they arrive, and ``relaxed_order`` may return them
+    slightly out of distance order.
+
+    Both settings are transactional (``SET LOCAL``), which is why they are
+    issued on the search's own session rather than on a connection pool. On a
+    pgvector older than 0.8 ``iterative_scan`` does not exist and is skipped;
+    the index is still used there, so a small repository on a large instance
+    can come back with fewer hits than asked for.
     """
+    global _pgvector_supports_iterative_scan
+    if _pgvector_supports_iterative_scan is None:
+        raw_version = (
+            await db.execute(text("SELECT extversion FROM pg_extension WHERE extname = 'vector'"))
+        ).scalar_one_or_none()
+        _pgvector_supports_iterative_scan = (
+            _version_tuple(raw_version)[:2] >= _ITERATIVE_SCAN_MIN_VERSION
+        )
 
-    source_type: str
-    chunk_text: str
-    file_path: str | None = None
-    symbol_name: str | None = None
-    start_line: int | None = None
-    end_line: int | None = None
-    commit_hash: str | None = None
-    author_name: str | None = None
-    pr_number: int | None = None
-    pr_title: str | None = None
+    await db.execute(text("SET LOCAL hnsw.ef_search = 200"))
+    if _pgvector_supports_iterative_scan:
+        await db.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
 
 
 @dataclass
@@ -98,7 +122,7 @@ class ChatMessage:
 
 def _apply_diversity_caps(embeddings: Sequence[Embedding], total: int = TOP_K) -> list[Embedding]:
     """Selects up to `total` hits while respecting per-type caps, then fills any remaining slots by relevance order."""
-    type_counts = defaultdict(int)
+    type_counts: defaultdict[str, int] = defaultdict(int)
     selected = []
 
     for e in embeddings:
@@ -132,6 +156,9 @@ async def _embed_query(client: AsyncOpenAI, query: str) -> list[float]:
 
 async def _vector_search(db: AsyncSession, repository_id, query_vector, top_k=TOP_K):
     """Finds nearest embeddings via pgvector cosine distance, filtered to similarity above 0.3 (distance < 0.7)."""
+    # The repository filter is applied after the index walk, so tell pgvector to
+    # keep scanning until it has enough surviving rows (see the helper).
+    await _prepare_filtered_vector_search(db)
     result = await db.execute(
         select(Embedding)
         .filter(
@@ -148,63 +175,14 @@ async def _vector_search(db: AsyncSession, repository_id, query_vector, top_k=TO
 
 
 async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceReference:
-    """Loads the record behind an embedding hit and builds its citation."""
-    # Branch per type because source_id points at a different table each time;
-    # missing rows degrade to None fields rather than dropping the citation.
-    if embedding.source_type == "symbol":
-        symbol = (
-            await db.execute(select(AstSymbol).filter(AstSymbol.id == embedding.source_id))
-        ).scalar_one_or_none()
-        file = (
-            await db.execute(select(File).filter(File.id == embedding.file_id))
-        ).scalar_one_or_none()
-        return SourceReference(
-            source_type="symbol",
-            chunk_text=embedding.chunk_text,
-            file_path=file.path if file else None,
-            symbol_name=symbol.name if symbol else None,
-            start_line=symbol.start_line if symbol else None,
-            end_line=symbol.end_line if symbol else None,
-        )
+    """Loads the record behind one embedding hit and builds its citation.
 
-    elif embedding.source_type == "commit":
-        commit = (
-            await db.execute(select(Commit).filter(Commit.id == embedding.source_id))
-        ).scalar_one_or_none()
-        return SourceReference(
-            source_type="commit",
-            chunk_text=embedding.chunk_text,
-            commit_hash=commit.hash if commit else None,
-            author_name=commit.author_name if commit else None,
-        )
-
-    elif embedding.source_type == "pull_request":
-        pr = (
-            await db.execute(select(PullRequest).filter(PullRequest.id == embedding.source_id))
-        ).scalar_one_or_none()
-        return SourceReference(
-            source_type="pull_request",
-            chunk_text=embedding.chunk_text,
-            pr_number=pr.number if pr else None,
-            pr_title=pr.title if pr else None,
-        )
-
-    elif embedding.source_type == "file":
-        file = (
-            await db.execute(select(File).filter(File.id == embedding.file_id))
-        ).scalar_one_or_none()
-        return SourceReference(
-            source_type="file",
-            chunk_text=embedding.chunk_text,
-            file_path=file.path if file else None,
-        )
-
-    else:
-        # Documents (README sections) are keyed by repository_id, not a row ID.
-        return SourceReference(
-            source_type="document",
-            chunk_text=embedding.chunk_text,
-        )
+    Kept for callers that hold a single hit; the batched
+    :func:`app.services.retrieval.resolve.resolve_sources` is what the answer
+    path uses, so a larger candidate pool does not mean one query per hit.
+    """
+    resolved = await resolve_sources(db, [embedding])
+    return resolved[0]
 
 
 def _build_prompt(query: str, sources: list[SourceReference]) -> str:
@@ -301,7 +279,7 @@ async def answer_question(
             generated=False,
         )
 
-    sources = [await _resolve_source(db, e) for e in chunks]
+    sources = await resolve_sources(db, chunks)
     prompt = _build_prompt(query, sources)
 
     # Retrieved context goes in the system role; history replays as turns so
@@ -325,8 +303,6 @@ async def answer_question(
     generation_response_kwargs = (
         llm.response_kwargs("minimal") if llm is not None else {"reasoning": {"effort": "minimal"}}
     )
-    if not generation_response_kwargs:
-        generation_response_kwargs = {"reasoning": {"effort": "minimal"}}
 
     logger.info("Calling LLM for answer generation")
     response = await generation_client.responses.create(

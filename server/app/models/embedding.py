@@ -23,6 +23,15 @@ class Embedding(Base):
     __tablename__ = "embeddings"
     __table_args__ = (
         Index("ix_embeddings_repository_id", "repository_id"),
+        # Declared here so autogenerate cannot classify the live HNSW index as
+        # stray schema and drop it -- which is exactly what happened to the
+        # first version of this index.
+        Index(
+            "ix_embeddings_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
         UniqueConstraint(
             "repository_id",
             "source_type",
