@@ -8,27 +8,31 @@ React Native / Expo port of the Illume web client.
 mobile/
 └── src/
     ├── app/                expo-router routes
-    │   ├── _layout.tsx     root: providers, fonts, theme
+    │   ├── _layout.tsx     root: providers, query client, error boundary
+    │   ├── index.tsx       cold-start decision (dashboard / carousel / login)
+    │   ├── +not-found.tsx  unknown / stale deep links
     │   ├── onboarding.tsx  replaces the marketing landing page
     │   ├── login.tsx
-    │   ├── auth/callback.tsx   deep-link target for OAuth
+    │   ├── auth/callback.tsx   deep-link target for OAuth (Android)
     │   └── (app)/              protected route group
     │       ├── _layout.tsx
     │       ├── dashboard.tsx
-    │       ├── settings.tsx
+    │       ├── settings.tsx   and settings/{ai,auto-update,danger,contact}
+    │       ├── repo-picker.tsx
     │       └── repo/[id]/
     │           ├── _layout.tsx
-    │           ├── index.tsx
-    │           ├── explorer.tsx
+    │           ├── index.tsx     the overview, and the live ingest view
+    │           ├── explorer.tsx  the file tree
     │           ├── glossary.tsx
-    │           └── graph.tsx
-    ├── components/         shared RN components
-    ├── ui/                 primitives: Button, Input, Sheet, Modal…
+    │           ├── graph.tsx    the 3D dependency graph
+    │           └── chat.tsx
+    ├── components/         shared RN components (screens' building blocks)
+    ├── ui/                 small presentational pieces (RepoCard, MarkdownText,
+    │                       status badge, tab bar, floating action button…)
     ├── hooks/              ports of client/src/hooks/ (useAuth lives here)
     ├── lib/                framework-agnostic helpers (tokenStore, authCallback)
     ├── api/                one client, token-injecting
     ├── types/              copied from client/src/types/
-    ├── graph/              the 3D renderer (graph milestone)
     └── theme/tokens.ts     design tokens (sRGB hex / rgba)
 ├── e2e/                    Maestro flows
 └── __tests__/              jest specs
@@ -59,15 +63,97 @@ to `node_modules/.bin/eas` rather than the placeholder. If you ever see
 the error above, the fix is `npm install` (which restores the local
 binary) -- not a different command.
 
+## Building
+
+Three EAS profiles, in `eas.json`:
+
+| Profile       | What it produces                                   |
+| ------------- | -------------------------------------------------- |
+| `development` | A dev client for `npx expo start --dev-client`.    |
+| `preview`     | An APK, installable on any device without a store. |
+| `production`  | A release build, versioned by EAS.                 |
+
+```bash
+npx eas build --profile preview --platform android
+```
+
+`eas-cli` is a devDependency so `npx eas ...` resolves to the real binary
+rather than the unrelated `eas` package on npm -- see the note below.
+
+### `EXPO_PUBLIC_BACKEND_URL` must be set for preview and production builds
+
+`.env` is gitignored and EAS does not upload it, so a build that does not set
+this variable has no backend address. Development builds fall back to
+`http://10.0.2.2:8000` (the Android emulator's host alias); release builds
+refuse to start and say so, because that address resolves to nothing on a
+real device.
+
+The `preview` and `production` profiles in `eas.json` already point at the
+deployed API, `https://illume-api.tejasnasa.me`. The `development` profile
+deliberately has no value: a dev client loads its bundle from Metro, so it
+picks up the local `.env` instead.
+
+`eas env:create`/`eas env:list` manage the dashboard side if the URL ever
+needs to move without a commit.
+
+### Building an installable APK against the deployed backend
+
+```bash
+npx eas login                       # once per machine
+npx eas build --profile preview --platform android
+```
+
+`preview` produces an APK (`distribution: internal`, `buildType: apk`) and
+prints a download link and a QR code. Install it, sign in with GitHub, and
+the app talks to the production API -- no local server, no Metro.
+
+The first line of the build log reports the archive size. It should be a few
+megabytes. If it is hundreds of megabytes or more, `.easignore` is not
+matching — EAS archives the git repository root, and an ignore rule whose
+line ends in a carriage return matches nothing. `.gitattributes` pins that
+file to LF for exactly this reason.
+
+Three things have to be true for that sign-in to land:
+
+1. The backend's `OAUTH_REDIRECT_ALLOWLIST` contains `illume://auth/callback`
+   exactly. If it does not, the callback redirects to `FRONTEND_URL` (the
+   web app) instead and the phone never receives the token.
+2. The phone can reach `https://illume-api.tejasnasa.me` (HTTPS, so the
+   ingest WebSocket becomes `wss://` automatically).
+3. The device clock is roughly right -- the token is a JWT and a badly
+   skewed clock fails validation.
+
+Push notifications are the one feature that will not work from a `preview`
+build until `google-services.json` is added (see the next section).
+
+### Push notifications need a Firebase configuration
+
+Remote push on Android goes through Firebase Cloud Messaging, so a
+**release** build needs a `google-services.json` at the project root and
+`android.googleServicesFile` pointing at it in `app.json`.
+
+Without it, `getExpoPushTokenAsync` fails on Android and no token is ever
+registered -- the app works, it just never pushes. A development build
+works without it: Expo's own push service is used for local development.
+
+The permission is asked for **after the first successful ingest**, not at
+launch. A cold permission prompt gets denied, because nobody knows what
+they are agreeing to yet.
+
 ## Testing
 
 ```bash
 npm test                # runs __tests__/ via jest-expo
+npm run typecheck       # tsc --noEmit
 ```
+
+There is no linter in this package yet: the web client's ESLint config does
+not apply to React Native, and no React Native config has been added. Do not
+add a `lint` script that does not lint.
 
 The `tokens.test.ts` spec asserts every token in `src/theme/tokens.ts` is a
 string the React Native color parser accepts; the `routes.test.tsx` spec
-imports every placeholder route file so a missing screen fails the build.
+imports every route file so a missing screen fails the build.
 Auth-specific specs live alongside:
 
 - `tokenStore.test.ts` -- round-trips through the encrypted-storage adapter.
@@ -77,6 +163,9 @@ Auth-specific specs live alongside:
   hydrated, expired, network failure, sign-in / sign-out).
 - `authCallbackScreen.test.tsx` -- mounts the callback screen end-to-end
   with a mocked router to assert the parse -> store -> redirect sequence.
+
+The end-to-end flows live in `e2e/` and need a real device, a running
+backend, and an account signed in by hand -- see `e2e/README.md`.
 
 ## Deep links
 
@@ -90,10 +179,21 @@ the app.
 The login screen opens the backend's `/api/v1/auth/github?state=...` URL in
 a system browser via `expo-web-browser`; GitHub walks the user through the
 consent screen, the backend exchanges the code, and the resulting redirect
-carries the token in the query string of the deep-link URL. The callback
-screen parses the URL, persists the token via `expo-secure-store`, and
-navigates to the dashboard. The root layout's `(app)/_layout.tsx` enforces
-the inverse -- a missing or invalid token redirects to `/login`.
+carries the token in the query string of the deep-link URL.
+
+The redirect comes back **two different ways depending on the platform**:
+
+- **Android** delivers it as a `Linking` event, which mounts
+  `src/app/auth/callback.tsx`; that screen parses the URL and calls
+  `signIn`.
+- **iOS** runs inside `ASWebAuthenticationSession`, which hands the URL back
+  to the `openAuthSessionAsync` promise and emits no event. `login.tsx`
+  therefore also parses the returned URL and calls `signIn` itself.
+
+Both paths go through `useAuth().signIn` -- writing the token straight to
+`expo-secure-store` is not enough, because the route guard reads the auth
+context, not the store. The root layout's `(app)/_layout.tsx` enforces the
+inverse -- a missing or invalid token redirects to `/login`.
 
 The token stored on the device is also the one sent as
 `Authorization: Bearer <token>` on every API call, decrypted by the backend's
@@ -101,33 +201,36 @@ The token stored on the device is also the one sent as
 
 ## Native dependencies in this build
 
-**Every native module the whole plan needs is installed and linked now**, so
-the phases after this do not require another rebuild. The list below is
-what the Android build actually contains; `node scripts/check-native-linking.mjs`
+**Every native module the app needs is installed and linked**, so a feature
+does not need another rebuild to land. The list below is what the Android
+build actually contains; `node scripts/check-native-linking.mjs`
 verifies it against the same resolution Gradle uses.
 
 | Package                                     | Used by                                         |
 | ------------------------------------------- | ----------------------------------------------- |
 | `expo-secure-store`                         | Encrypted token storage                         |
-| `expo-auth-session` + `expo-web-browser`    | GitHub OAuth flow                               |
-| `expo-application` + `expo-crypto`          | OAuth state params (transitive of auth-session) |
-| `@react-native-async-storage/async-storage` | Non-secret prefs                                |
+| `expo-web-browser`                          | GitHub OAuth flow                               |
+| `@react-native-async-storage/async-storage` | The "onboarding seen" flag                      |
 | `expo-dev-client`                           | Metro handshake, dev menu                       |
-| `expo-splash-screen`                        | The launch screen (Phase 1)                     |
+| `expo-splash-screen`                        | The launch screen (config plugin in `app.json`) |
 | `react-native-svg`                          | The git graph's rail lines and commit nodes     |
-| `expo-gl`                                   | The 3D dependency graph (Phase 9)               |
-| `three` (**pinned `0.162.0`**)              | The 3D scene graph (Phase 9)                    |
-| `d3-force-3d`                               | The 3D layout force simulation (Phase 9)        |
-| `expo-blur`                                 | The glass-card backdrop (Phase 6)               |
-| `expo-file-system`                          | Writing the export file (Phase 12)              |
-| `expo-sharing`                              | The share sheet for exports (Phase 12)          |
-| `expo-notifications` + `expo-device`        | Push on ingest completion (Phase 13)            |
-| `react-native-pager-view`                   | The onboarding carousel (Phase 14)              |
+| `expo-gl`                                   | The 3D dependency graph                         |
+| `three` (**pinned `0.162.0`**)              | The 3D scene graph                              |
+| `d3-force-3d`                               | The 3D layout force simulation                  |
+| `expo-file-system`                          | Writing the export file                         |
+| `expo-sharing`                              | The share sheet for exports                     |
+| `expo-notifications`                        | Push on ingest completion (loaded lazily)       |
 | `expo-build-properties`                     | Release-build Gradle settings (config plugin)   |
 
+Installed but not imported anywhere yet: `expo-auth-session`,
+`expo-application`, `expo-crypto`, `expo-blur`, `expo-device`, `expo-linking`,
+`expo-system-ui`, `react-native-gesture-handler` and `react-native-pager-view`
+(the carousel is a `FlatList`). They are listed here so the next person does
+not go looking for a consumer that does not exist.
+
 `three` is pinned to `0.162.0` because r163 dropped WebGL 1 support and
-`expo-gl` provides a WebGL 1 context. Bumping it breaks the graph -- see
-the plan's §5.2.
+`expo-gl` provides a WebGL 1 context. Bumping it breaks the graph outright;
+the pin is permanent until the renderer moves off `expo-gl`.
 
 ### Adding a native module means rebuilding the dev client
 

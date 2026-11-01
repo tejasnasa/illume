@@ -151,6 +151,15 @@ illume/
 │   │   └── proxy.ts            # Middleware auth gate
 │   └── tests/                  # Vitest suite
 │
+├── mobile/                     # React Native / Expo application
+│   ├── src/app/                # expo-router routes (the file tree is the route tree)
+│   ├── src/components/         # Feature components (graph renderer, ingest flow, …)
+│   ├── src/hooks/              # Data and state hooks
+│   ├── src/lib/                # Framework-agnostic logic
+│   ├── src/api/                # One bearer-token HTTP client per endpoint group
+│   ├── __tests__/              # Jest suite (jest-expo)
+│   └── e2e/                    # Maestro flows
+│
 └── server/                     # FastAPI Backend Application
     ├── app/
     │   ├── api/v1/             # 11 routers, mounted under /api/v1
@@ -241,6 +250,30 @@ npm run dev
 ```
 
 The web interface is now at **`http://localhost:3000`**. Sign in with GitHub, submit any public or private repository, and watch the analysis run in real time.
+
+### 📱 Step 5: Run the Mobile App (optional)
+
+The Expo app in `mobile/` is a separate client for the same backend. It needs a development build
+(Expo Go cannot run it — push and `expo-gl` both need native modules):
+
+```bash
+cd ../mobile
+npm install
+cp .env.example .env      # set EXPO_PUBLIC_BACKEND_URL to your machine's LAN address
+npx expo run:android      # build + install the dev client
+npx expo start --dev-client
+```
+
+To install it on a phone without a local Android SDK, build an APK in the cloud against the
+deployed API:
+
+```bash
+npx eas login
+npx eas build --profile preview --platform android
+```
+
+Full details — routing, auth, the graph renderer, testing and the build profiles — are in
+[`docs/mobile.md`](docs/mobile.md).
 
 > Every step above has a `make` target — `make setup` does dependency install, the env files and the migrations in one go, and `make api` / `make worker` / `make beat` / `make web` run the four processes. **`make help`** lists them all.
 
@@ -334,6 +367,7 @@ The full documentation lives in [`docs/`](docs/README.md). It is written to be r
 | [api.md](docs/api.md) · [websockets.md](docs/websockets.md) | The HTTP API and the live progress stream |
 | [data-model.md](docs/data-model.md) · [auth.md](docs/auth.md) | Schema and migrations; authentication and authorisation |
 | [pipeline/git-intelligence.md](docs/pipeline/git-intelligence.md) · [frontend.md](docs/frontend.md) | Ownership and criticality; the Next.js application |
+| [mobile.md](docs/mobile.md) | The React Native / Expo application: routing, bearer session, query cache, graph renderer, builds |
 | [deployment.md](docs/deployment.md) · [exports.md](docs/exports.md) | Containers, CI/CD and the production env file; the `.illume` text export |
 | [testing.md](docs/testing.md) | All three test suites, in depth |
 

@@ -22,6 +22,7 @@ Pick the path that matches what you are trying to do.
 | Understand ownership, knowledge silos, and criticality           | [pipeline/git-intelligence.md](pipeline/git-intelligence.md)     |
 | Call the HTTP API or wire up a client                           | [api.md](api.md) · [websockets.md](websockets.md)                |
 | Work on the Next.js application                                 | [frontend.md](frontend.md)                                       |
+| Work on the React Native application                            | [mobile.md](mobile.md)                                           |
 | Change the database schema                                      | [data-model.md](data-model.md)                                   |
 | Deploy or operate a running instance                            | [deployment.md](deployment.md)                                   |
 | Run, write, or debug the test suites                            | [testing.md](testing.md)                                         |
@@ -85,6 +86,11 @@ The analysis pipeline is the heart of the product. These six documents follow it
 - **[frontend.md](frontend.md)** — The Next.js application: routing, the server/client component
   split, the three data-fetching strategies and why all three exist, and the WebGL rendering
   constraints.
+
+- **[mobile.md](mobile.md)** — The React Native / Expo application: routing and the param hook that
+  trips everyone, the bearer-token session lifecycle on both platforms, the query cache and its
+  invalidation rules, a screen-by-screen tour, the ingest stream, the chat, the 3D graph renderer
+  built on `expo-gl`, the token system, testing, and the EAS build path.
 
 ### Supporting systems
 
