@@ -13,24 +13,22 @@
  */
 
 import { useCallback, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  SafeAreaView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 
-import { buildAuthorizeUrl } from "@/lib/authCallback";
+import { resolveBackendUrl } from "@/api/client";
+import { useAuth } from "@/hooks/useAuth";
+import { buildAuthorizeUrl, parseAuthCallback } from "@/lib/authCallback";
 
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 const DEEP_LINK = "illume://auth/callback";
 
 export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { signIn } = useAuth();
+  const insets = useSafeAreaInsets();
 
   /**
    * Hand the user off to the system browser for the OAuth dance.
@@ -38,13 +36,38 @@ export default function LoginScreen() {
    * ``openAuthSessionAsync`` with the deep-link as the second argument
    * tells the OS to send the final browser redirect back to the app rather
    * than back to the WebBrowser context, which would otherwise get stuck.
+   *
+   * The returned URL is handled here as well as by the deep-link route,
+   * because the two platforms differ: Android delivers the redirect as a
+   * ``Linking`` event (which mounts ``/auth/callback``), while iOS uses
+   * ``ASWebAuthenticationSession``, which hands the URL back to this
+   * promise and emits no event at all. Relying on the deep link alone makes
+   * sign-in impossible on iOS -- the browser closes and the login screen
+   * sits there.
    */
   const onContinueWithGitHub = useCallback(async () => {
     setError(null);
     setBusy(true);
     try {
-      const url = buildAuthorizeUrl(BACKEND_URL, DEEP_LINK);
-      await WebBrowser.openAuthSessionAsync(url, DEEP_LINK);
+      const url = buildAuthorizeUrl(resolveBackendUrl(), DEEP_LINK);
+      const result = await WebBrowser.openAuthSessionAsync(url, DEEP_LINK);
+
+      if (result.type !== "success" || !result.url) return;
+
+      const payload = parseAuthCallback(result.url);
+      if (!payload.token) {
+        setError(
+          payload.error ?? "GitHub did not return a sign-in token. Try again.",
+        );
+        return;
+      }
+
+      const accepted = await signIn(payload.token);
+      if (accepted) {
+        router.replace("/(app)/dashboard");
+      } else {
+        setError("That sign-in could not be verified. Please try again.");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to open browser");
     } finally {
@@ -53,20 +76,40 @@ export default function LoginScreen() {
       // case the in-app screen does not get a chance to mount.
       setBusy(false);
     }
-  }, []);
+  }, [signIn]);
 
   const disabled = busy;
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    // A plain ``View`` padded by the inset: the safe-area component is a
+    // native view that ``className`` does not reach, so its ``flex-1`` was
+    // ignored and the centred card below collapsed to no height.
+    <View
+      className="flex-1 bg-background"
+      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+    >
+      {/*
+        The introduction is reachable again from here: once it has been
+        seen, the flag stops the cold start from showing it, so a reader who
+        signs out and wants to read it once more has no other way back in.
+      */}
+      <View className="flex-row justify-end px-4 pt-2">
+        <Pressable
+          testID="login-help"
+          accessibilityRole="button"
+          accessibilityLabel="Show the introduction"
+          onPress={() => router.push("/onboarding")}
+          hitSlop={8}
+          className="min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-border active:bg-secondary"
+        >
+          <Text className="text-base font-semibold text-muted-foreground">
+            ?
+          </Text>
+        </Pressable>
+      </View>
+
       <View className="flex-1 items-center justify-center px-6 py-4">
         <View className="w-full max-w-[380px] items-center rounded-xl border border-border bg-card px-7 py-8">
-          <Text
-            accessibilityRole="header"
-            className="text-center text-base font-bold uppercase tracking-[2px] text-foreground"
-          >
-            Illume
-          </Text>
           <Text className="mb-2 text-center text-[44px] leading-[52px] text-chart-1">
             ✦
           </Text>
@@ -113,7 +156,7 @@ export default function LoginScreen() {
           ) : null}
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

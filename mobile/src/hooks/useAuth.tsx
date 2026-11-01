@@ -15,24 +15,22 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
+import { AppState } from "react-native";
 
 import {
   clearAccessToken,
   getAccessToken,
   setAccessToken,
 } from "@/lib/tokenStore";
+import { clearQueryCache } from "@/lib/queryClientRegistry";
+import { resolveBackendUrl, setUnauthorizedHandler } from "@/api/client";
+import { deregisterPushToken } from "@/api/push";
+import { getPushToken } from "@/lib/pushNotifications";
 import type User from "@/types/user";
-
-/**
- * The default backend URL points at the local dev server. Operators override
- * this at build time via ``EXPO_PUBLIC_BACKEND_URL`` -- the same variable the
- * web client uses. Keeping it in one place here means a release build cannot
- * accidentally regress to ``localhost`` when the env var is missing in CI.
- */
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
 
 /**
  * The profile returned by ``/auth/me``.
@@ -56,8 +54,13 @@ interface AuthContextValue {
    * Persist the token and validate it against the backend. Stores first,
    * validates second: a failure to validate simply leaves the user logged
    * out, but a token is never returned to the caller without being saved.
+   *
+   * @returns ``false`` when the backend rejected the token (the caller
+   *   should route back to the login screen), ``true`` otherwise -- a
+   *   network failure still counts as signed in, because the token may be
+   *   perfectly valid and the profile is retried later.
    */
-  signIn: (token: string) => Promise<void>;
+  signIn: (token: string) => Promise<boolean>;
   /** Drop the token and reset the in-memory profile. */
   signOut: () => Promise<void>;
   /**
@@ -81,36 +84,42 @@ interface AuthProviderProps {
   backendUrl?: string;
 }
 
-function resolveBackendUrl(override?: string): string {
-  if (override) return override.replace(/\/+$/, "");
-  // ``process.env`` is statically replaced at bundle time when the variable
-  // is prefixed with ``EXPO_PUBLIC_``; we read it lazily so a missing value
-  // falls back to the local dev default rather than throwing.
-  const envValue = (process.env as Record<string, string | undefined>)
-    .EXPO_PUBLIC_BACKEND_URL;
-  return (envValue ?? DEFAULT_BACKEND_URL).replace(/\/+$/, "");
-}
+/**
+ * The outcome of validating a token against ``/auth/me``.
+ *
+ * ``unreachable`` is the important case: a network failure must not be
+ * mistaken for an invalid session. On a phone the backend is a LAN address
+ * that drops whenever the device changes network, and signing the reader out
+ * because their train went into a tunnel is the wrong answer. Only a
+ * ``rejected`` verdict -- a 401/403 -- means the token is actually dead.
+ */
+type MeResult =
+  | { status: "ok"; user: AuthUser }
+  | { status: "rejected" }
+  | { status: "unreachable" };
 
 /**
  * Read the current user from the backend using a bearer token.
  *
- * Returns ``null`` for any non-200 response -- callers treat expiry and
- * network failures the same way (logged out), since either leaves the user
- * with a token that will not work.
+ * A non-401/403 failure (5xx, DNS, timeout, abort) resolves to
+ * ``unreachable`` so the caller can keep a token that may still be valid.
  */
 async function fetchMe(
   token: string,
   backendUrl: string,
   fetchImpl: typeof fetch,
-): Promise<AuthUser | null> {
+): Promise<MeResult> {
   try {
     const response = await fetchImpl(`${backendUrl}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!response.ok) return null;
-    return (await response.json()) as AuthUser;
+    if (response.status === 401 || response.status === 403) {
+      return { status: "rejected" };
+    }
+    if (!response.ok) return { status: "unreachable" };
+    return { status: "ok", user: (await response.json()) as AuthUser };
   } catch {
-    return null;
+    return { status: "unreachable" };
   }
 }
 
@@ -133,6 +142,10 @@ export function AuthProvider({
 
   const baseUrl = useMemo(() => resolveBackendUrl(backendUrl), [backendUrl]);
 
+  // The token whose profile fetch has already been retried, so a backend that
+  // stays unreachable does not trigger a request per render.
+  const retriedFor = useRef<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -144,12 +157,20 @@ export function AuthProvider({
       }
       const me = await fetchMe(stored, baseUrl, fetchImpl);
       if (cancelled) return;
-      if (me) {
+      if (me.status === "ok") {
         setTokenState(stored);
-        setUser(me);
+        setUser(me.user);
+      } else if (me.status === "rejected") {
+        // Token did not validate; drop it so the guard sends the user to
+        // /login. Re-read first: a deep-link callback can write a fresh token
+        // while this validation was in flight, and deleting that one would
+        // be exactly the sign-in it was meant to complete.
+        const current = await getAccessToken();
+        if (current === stored) await clearAccessToken();
       } else {
-        // Token did not validate; drop it so the guard sends the user to /login.
-        await clearAccessToken();
+        // The backend is unreachable. Keep the stored session -- the token may
+        // still be valid -- and let the retry below fill in the profile.
+        setTokenState(stored);
       }
       setLoading(false);
     })();
@@ -158,32 +179,122 @@ export function AuthProvider({
     };
   }, [baseUrl, fetchImpl]);
 
+  // A session that could not be validated on cold start (or that was signed
+  // in while the backend was unreachable) has a token but no profile. Try
+  // once more as soon as that changes; a 401 clears the session, a network
+  // failure is left for the next focus event.
+  useEffect(() => {
+    if (!token || user) return;
+    if (retriedFor.current === token) return;
+    retriedFor.current = token;
+
+    let cancelled = false;
+    void (async () => {
+      const me = await fetchMe(token, baseUrl, fetchImpl);
+      if (cancelled) return;
+      if (me.status === "ok") {
+        setUser(me.user);
+      } else if (me.status === "rejected") {
+        await clearAccessToken();
+        setTokenState(null);
+        setUser(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user, baseUrl, fetchImpl]);
+
+  // A profile that could not be read at launch is retried when the app
+  // comes back to the foreground -- the case where the backend was
+  // unreachable on launch and the network has since returned.
+  useEffect(() => {
+    if (!token) return;
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next !== "active" || user) return;
+      void (async () => {
+        const me = await fetchMe(token, baseUrl, fetchImpl);
+        if (me.status === "ok") {
+          setUser(me.user);
+        } else if (me.status === "rejected") {
+          await clearAccessToken();
+          setTokenState(null);
+          setUser(null);
+        }
+      })();
+    });
+    return () => subscription.remove();
+  }, [token, user, baseUrl, fetchImpl]);
+
   const signIn = useCallback(
     async (next: string) => {
       await setAccessToken(next);
       const me = await fetchMe(next, baseUrl, fetchImpl);
-      if (me) {
+      if (me.status === "ok") {
         setTokenState(next);
-        setUser(me);
-      } else {
+        setUser(me.user);
+        return true;
+      }
+      if (me.status === "rejected") {
         // We persisted a token we cannot use. Clear it so the guard does not
         // bounce us back into the app on the next render.
         await clearAccessToken();
+        setTokenState(null);
+        setUser(null);
+        return false;
       }
+      // Signed in but the profile could not be read yet. Keep the session --
+      // the retry effect above fills the profile in when the backend answers.
+      setTokenState(next);
+      return true;
     },
     [baseUrl, fetchImpl],
   );
 
+  const signingOut = useRef(false);
+
   const signOut = useCallback(async () => {
-    await clearAccessToken();
-    setTokenState(null);
-    setUser(null);
+    // The API client's 401 handler points here, and the deregistration call
+    // below can itself come back 401 -- without this guard that is a loop.
+    if (signingOut.current) return;
+    signingOut.current = true;
+    try {
+      // The device stops receiving notifications about this account before
+      // the token is dropped, so a signed-out phone is not left holding a
+      // registration that still works.
+      try {
+        const pushToken = await getPushToken();
+        if (pushToken) await deregisterPushToken(pushToken);
+      } catch {
+        // A push token that cannot be removed is not a reason to fail a
+        // sign-out.
+      }
+      await clearAccessToken();
+      setTokenState(null);
+      setUser(null);
+      // The cache holds the previous account's repositories, guide, graph
+      // and chat. Clearing it is what stops a second sign-in in the same
+      // process from reading the first account's data.
+      clearQueryCache();
+    } finally {
+      signingOut.current = false;
+    }
   }, []);
+
+  // An expired session is a 401 on any request. Nothing else in the app can
+  // reach the token state, so the client hands the event here.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      void signOut();
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [signOut]);
 
   const refreshUser = useCallback(async () => {
     if (!token) return;
     const me = await fetchMe(token, baseUrl, fetchImpl);
-    if (me) setUser(me);
+    if (me.status === "ok") setUser(me.user);
   }, [token, baseUrl, fetchImpl]);
 
   const value = useMemo<AuthContextValue>(

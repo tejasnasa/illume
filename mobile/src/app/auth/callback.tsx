@@ -25,12 +25,17 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { parseAuthCallback } from "@/lib/authCallback";
-import { setAccessToken } from "@/lib/tokenStore";
+import { useAuth } from "@/hooks/useAuth";
 import { colors } from "@/theme/tokens";
 
 export default function AuthCallbackScreen() {
   const params = useLocalSearchParams() as Record<string, string | string[]>;
   const handled = useRef(false);
+  // ``signIn`` -- not a bare ``setAccessToken`` call -- because the route
+  // guard reads the token from the auth context. Writing only the secure
+  // store would leave that context at ``null`` and bounce the just-signed-in
+  // reader straight back to the login screen.
+  const { signIn } = useAuth();
 
   useEffect(() => {
     if (handled.current) return;
@@ -45,13 +50,16 @@ export default function AuthCallbackScreen() {
 
     if (token) {
       void (async () => {
-        await setAccessToken(token);
-        router.replace("/dashboard");
+        const accepted = await signIn(token);
+        // A rejected token means the sign-in did not take; going on to the
+        // dashboard would only be bounced back here by the guard, with the
+        // reader given no reason why.
+        router.replace(accepted ? "/dashboard" : "/login");
       })();
     } else {
       router.replace("/login");
     }
-  }, [params]);
+  }, [params, signIn]);
 
   return (
     <View className="flex-1 items-center justify-center bg-background p-6">

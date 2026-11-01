@@ -3,9 +3,9 @@
  *
  * Wires the providers every screen reads from:
  *
- * - :class:`QueryClientProvider` -- TanStack Query for every data fetch
- *   after Phase 3. The :func:`installAppStateFocusBridge` call below is
- *   the one piece of mobile glue React Query does not set up itself.
+ * - :class:`QueryClientProvider` -- TanStack Query for every data fetch.
+ *   The :func:`installAppStateFocusBridge` call below is the one piece of
+ *   mobile glue React Query does not set up itself.
  * - :class:`AuthProvider` -- token state, cold-start validation, sign-in
  *   and sign-out. Lives in ``hooks/useAuth`` so screens can read it
  *   without pulling in the route tree.
@@ -25,6 +25,8 @@
  * makes dark-themed screens invisible.
  */
 
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -33,8 +35,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "../../global.css";
 
 import { installAppStateFocusBridge } from "@/api/focusManager";
+import { registerQueryClient } from "@/lib/queryClientRegistry";
 import { colors } from "@/theme/tokens";
 import { AuthProvider } from "@/hooks/useAuth";
+import {
+  useNotificationNavigation,
+  usePushNotifications,
+} from "@/hooks/usePushNotifications";
 
 /**
  * Default :class:`QueryClient` options.
@@ -64,12 +71,78 @@ function createQueryClient(): QueryClient {
 
 const queryClient = createQueryClient();
 installAppStateFocusBridge();
+// The auth provider clears the cache on sign-out, and it must keep working
+// when it is mounted without a provider (its own specs do that).
+registerQueryClient(queryClient);
+
+/**
+ * The last-resort screen.
+ *
+ * A render error anywhere below the root layout lands here rather than
+ * showing a blank screen. The reader gets a way out -- retrying the render
+ * is often enough, because the failures that reach this point are usually a
+ * transient one (a chunk that failed to load, a piece of state that was
+ * half-formed for one render).
+ *
+ * @param props - The error and the retry the router offers.
+ * @returns The error screen.
+ */
+export function ErrorBoundary({
+  error,
+  retry,
+}: {
+  error: Error;
+  retry: () => void;
+}) {
+  const onRetry = useCallback(() => retry(), [retry]);
+
+  return (
+    <View className="flex-1 items-center justify-center bg-background p-6">
+      <Text className="mb-2 text-lg font-bold text-foreground">
+        Something went wrong
+      </Text>
+      <Text className="mb-6 text-center text-[13px] text-muted-foreground">
+        {error?.message ?? "An unexpected error stopped this screen."}
+      </Text>
+      <Pressable
+        testID="error-boundary-retry"
+        accessibilityRole="button"
+        accessibilityLabel="Try again"
+        onPress={onRetry}
+        className="min-h-[44px] justify-center rounded bg-primary px-5 py-2.5"
+      >
+        <Text className="text-sm font-semibold text-primary-foreground">
+          Try again
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/**
+ * Re-register the device's push token on every launch.
+ *
+ * Expo rotates tokens, and a token the backend has never seen delivers
+ * nothing. This used to run only while an ingest screen was mounted, so a
+ * reader whose token rotated after their first ingest stopped receiving
+ * notifications without any visible failure.
+ *
+ * @returns Nothing; the hook works through effects.
+ */
+function PushRegistration(): null {
+  usePushNotifications();
+  return null;
+}
 
 export default function RootLayout() {
+  // A tapped notification opens the repository it names.
+  useNotificationNavigation();
+
   return (
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <PushRegistration />
           <StatusBar style="light" />
           <Stack
             screenOptions={{
