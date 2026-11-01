@@ -1,26 +1,31 @@
-# Files excluded from the EAS build upload.
+# Excluded from the EAS build upload.
 #
-# EAS uploads the project directory (not a git archive), so without this
-# the upload includes node_modules -- 1.6 GB, several minutes of
-# uploading, and a build that spends most of its time on the transfer.
-# The builder runs `npm ci` itself, so the installed tree is not needed.
+# EAS archives the git repository root, not this directory, so these rules
+# are matched at any depth and must not start with a slash.
+#
+# Keep this file LF. A rule whose line ends in a carriage return does not
+# match anything, which is how a 709 MB node_modules tree ends up in the
+# upload while this file says it does not. ``.gitattributes`` pins the
+# checkout to LF for that reason.
 node_modules/
-
-# Metro / build artifacts. The builder regenerates both.
 .expo/
 dist/
 web-build/
 android/
 ios/
-
-# Native build outputs.
 *.apk
 *.aab
 *.ipa
 *.app
 
-# Local environment. EAS gets its values from the EAS environment, not
-# from this file -- and .env holds a development backend URL.
+# Sibling applications are not part of a mobile build.
+client/
+server/
+docs/
+showcase/
+
+# Local environment. EAS reads its values from the build profile or the
+# EAS environment, never from a checked-out .env.
 .env
 .env.*
 !.env.example
