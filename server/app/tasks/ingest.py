@@ -1,3 +1,11 @@
+"""
+The ingestion task.
+
+Clones a repository, analyses it, and publishes the progress of both to the
+live log. The analysis is committed before the task reports completion, so
+the notifications sent from here are about work that is already durable.
+"""
+
 import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -14,9 +22,53 @@ from app.services._stages import Phase, Stage
 from app.services.cloner import cleanup_clone, clone_repository
 from app.services.entitlements import llm_config_for
 from app.services.pipeline import run_full_analysis
+from app.services.push import NotifyEvent, notify_user
 from app.tasks._parallel import run_pr_fetch_in_thread
 
 logger = logging.getLogger(__name__)
+
+
+def _notify(repo: Repository, event: NotifyEvent) -> None:
+    """
+    Send the push notification for a finished ingestion.
+
+    Never raises. The analysis is already committed by the time this runs,
+    so a push that cannot be delivered must not fail the task: the data is
+    in the database either way, and the live log already carries the
+    outcome.
+
+    Args:
+        repo: The repository the event is about.
+        event: What happened.
+    """
+    try:
+        notify_user(
+            repo.user_id,
+            event,
+            repository_id=repo.id,
+            repository_number=repo.repo_number,
+            repository_name=repo.name,
+        )
+    except Exception:
+        logger.exception("Could not send the %s push for repo %s", event.value, repo.id)
+
+
+def _is_final_attempt(task) -> bool:
+    """
+    Whether this attempt is the last one the task will make.
+
+    A failed ingestion is retried, and every retry walks the same failure
+    path. Pushing on each attempt would send the same "ingestion failed"
+    notification up to four times for one ingestion, so the push waits for
+    the attempt that gives up.
+
+    Args:
+        task: The bound task running the ingestion.
+
+    Returns:
+        True when no further attempt will follow this one.
+    """
+    return getattr(task.request, "retries", 0) >= (task.max_retries or 0)
 
 
 @contextmanager
@@ -150,14 +202,16 @@ def ingest_repository(
                 phase=Phase.DONE,
             )
             publish("done", "DONE", stage=Stage.READY, phase=Phase.DONE)
+            _notify(repo, NotifyEvent.INGEST_COMPLETED)
 
         except Exception as exc:
             logger.exception("Ingestion failed for repo %s", repo_id)
             db.rollback()
+            failed_repo = None
             try:
-                repo = db.query(Repository).filter(Repository.id == repo_id).first()
-                if repo:
-                    repo.status = "failed"
+                failed_repo = db.query(Repository).filter(Repository.id == repo_id).first()
+                if failed_repo:
+                    failed_repo.status = "failed"
                     db.commit()
             except Exception:
                 pass
@@ -167,6 +221,10 @@ def ingest_repository(
             # would be a guess the client would render as fact.
             publish("status_update", f"Error: {exc}", status="failed", phase=Phase.FAILED)
             publish("error", "ERROR", phase=Phase.FAILED)
+            # The repository may be gone entirely, in which case there is no
+            # owner to notify.
+            if failed_repo is not None and _is_final_attempt(self):
+                _notify(failed_repo, NotifyEvent.INGEST_FAILED)
             raise self.retry(exc=exc, countdown=10)
 
         finally:

@@ -3,6 +3,7 @@ FastAPI application entry point.
 
 Registers all API routers, middleware (CORS, Auth), and handles application lifespan events.
 """
+
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -18,6 +19,7 @@ from app.api.v1 import (
     graph,
     guide,
     ownership,
+    push,
     repository,
     stats,
     ws,
@@ -55,6 +57,7 @@ app.include_router(guide.router)
 app.include_router(stats.router)
 app.include_router(github_proxy.router)
 app.include_router(contact.router)
+app.include_router(push.router)
 
 
 @app.get("/healthz")

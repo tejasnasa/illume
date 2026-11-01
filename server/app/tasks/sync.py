@@ -45,6 +45,7 @@ from app.services.dependency_resolver import (
 from app.services.entitlements import llm_config_for
 from app.services.git_analyzer import analyze_git_history
 from app.services.llm_config import LLMConfig
+from app.services.push import notify_user, sync_event
 from app.services.repo_cache import (
     CLONE_CACHE_ENABLED,
     ensure_clone,
@@ -359,6 +360,10 @@ def sync_repository(self, repo_id: str, access_token: str | None = None) -> dict
     the no-op short-circuit (the sweep logs that case separately). Errors
     are caught, recorded on the row, and re-raised so the worker can
     apply its retry/backoff contract.
+
+    A finished sync notifies the owner only when the user asked for it; a
+    sync the auto-update sweep picked up is silent in both directions.
+    :func:`_requested_by_user` is what tells the two apart.
     """
     repo_uuid = uuid.UUID(str(repo_id))
     db = next(get_sync_db())
@@ -402,13 +407,21 @@ def sync_repository(self, repo_id: str, access_token: str | None = None) -> dict
             return None
 
         now = datetime.now(UTC)
+        # Read the row's ``sync_status`` before the lease is taken: taking it
+        # overwrites the status with ``updating``, and ``queued`` is what
+        # marks a sync the user asked for.
+        manual = _requested_by_user(
+            getattr(self.request, "args", None) or (),
+            getattr(self.request, "kwargs", None) or {},
+            repo.sync_status,
+        )
         generation = _take_lease(db, repo, now)
         if generation is None:
             logger.info("sync_repository: lease not acquired for %s", repo_id)
             return None
 
         try:
-            return _do_sync(db, repo, access_token, generation, now)
+            summary = _do_sync(db, repo, access_token, generation, now)
         except Exception as exc:
             db.rollback()
             error_message = f"{type(exc).__name__}: {exc}"
@@ -418,13 +431,74 @@ def sync_repository(self, repo_id: str, access_token: str | None = None) -> dict
                 logger.exception("sync_repository: failed to record failure for %s", repo_id)
                 raise rec_exc from exc
             logger.exception("sync_repository: %s failed", repo_id)
+            _notify(repo, manual=manual, failed=True)
             raise
+        _notify(repo, manual=manual, failed=False)
+        return summary
     finally:
         # Runs on every exit -- including the ``return None`` guards above and
         # the two generation-changed aborts in ``_do_sync``, none of which
         # settle the row on their own.
         _release_lease(db, repo_uuid, generation)
         db.close()
+
+
+def _requested_by_user(
+    request_args: tuple,
+    request_kwargs: dict,
+    sync_status: str | None,
+) -> bool:
+    """
+    Whether the running sync was one the user asked for.
+
+    Two independent signals, either of which is enough:
+
+    * the row was marked ``queued`` -- the manual route does that before it
+      dispatches the task, and the auto-update sweep never touches
+      ``sync_status`` when it claims a row;
+    * the task was dispatched without the owner's GitHub token -- the manual
+      route dispatches ``sync_repository.delay(str(repo_id))`` because the
+      request carries the user's session, while the sweep dispatches
+      ``sync_repository.delay(str(repo.id), owner_token)`` because it has
+      to hand over the credentials to clone with.
+
+    Args:
+        request_args: The positional arguments the task was dispatched with.
+        request_kwargs: The keyword arguments the task was dispatched with.
+        sync_status: The row's ``sync_status`` when the task started.
+
+    Returns:
+        True when the sync was user-initiated.
+    """
+    if sync_status == "queued":
+        return True
+    return len(request_args) < 2 and not request_kwargs
+
+
+def _notify(repo: Repository, *, manual: bool, failed: bool) -> None:
+    """
+    Send the push notification for a finished sync. Never raises.
+
+    A scheduled auto-update is silent in both directions: the repository
+    keeps the analysis it already had, which is still valid, and the
+    settings panel already polls ``sync_status`` for the outcome.
+
+    Args:
+        repo: The repository the event is about.
+        manual: Whether the user asked for this sync.
+        failed: Whether the sync failed.
+    """
+    event = sync_event(manual=manual, failed=failed)
+    try:
+        notify_user(
+            repo.user_id,
+            event,
+            repository_id=repo.id,
+            repository_number=repo.repo_number,
+            repository_name=repo.name,
+        )
+    except Exception:
+        logger.exception("Could not send the %s push for repo %s", event.value, repo.id)
 
 
 def _resolve_token(db: Session, repo: Repository, access_token: str | None) -> str | None:
