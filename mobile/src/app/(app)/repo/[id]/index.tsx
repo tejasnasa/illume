@@ -8,8 +8,8 @@
  *
  * - ``ready`` -- the overview: identity, status, architecture summary and
  *   the detected tech stack.
- * - anything else -- the not-ready view, which names the pipeline stage
- *   the repository is at.
+ * - anything else -- the live ingest view, which watches the pipeline run
+ *   and keeps the raw log one tap away.
  *
  * The guide request is gated on the repository being ready, so a
  * repository still being indexed spends no requests on an endpoint that
@@ -18,14 +18,13 @@
 
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { useLocalSearchParams } from "expo-router";
+import { useGlobalSearchParams } from "expo-router";
 
 import { useRepository } from "@/hooks/useRepositories";
 import { useRepositoryGuide } from "@/hooks/useRepoGuide";
 import { isReadyStatus } from "@/lib/repoStatus";
-import { formatRepoLabel } from "@/lib/githubUrl";
+import { IngestFlow } from "@/components/IngestFlow";
 import { RepoDetail } from "@/ui/RepoDetail";
-import { RepoStatusView } from "@/ui/RepoStatusView";
 import { colors } from "@/theme/tokens";
 
 /**
@@ -34,7 +33,11 @@ import { colors } from "@/theme/tokens";
  * @returns The overview, the not-ready view, or a loading placeholder.
  */
 export default function RepoIndexScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // ``useGlobalSearchParams``, not the local variant: these screens are
+  // tab children, not the ``[id]`` segment itself, and a local lookup
+  // only sees the current route's own params -- which is why every
+  // screen here used to receive an empty id and render nothing.
+  const { id } = useGlobalSearchParams<{ id: string }>();
   const repoNumber = String(id ?? "");
 
   const { data: repo, isLoading, isError } = useRepository(repoNumber);
@@ -82,12 +85,11 @@ export default function RepoIndexScreen() {
         : undefined;
 
     return (
-      <RepoStatusView
+      <IngestFlow
+        repoId={repo.id}
+        repoNumber={repoNumber}
         status={repo.status}
         failureAgeMs={failureAgeMs}
-        repoLabel={formatRepoLabel(repo.github_url, repo.name)}
-        branch={repo.ingested_branch}
-        commitSha={repo.ingested_commit_sha}
       />
     );
   }
