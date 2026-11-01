@@ -12,12 +12,15 @@ export const colors = {
   background: "#09090b",
   // oklch(0.985 0 0)
   foreground: "#fafafa",
-  // oklch(0.21 0.006 285.885)
-  card: "#18181b",
+  // The web value is oklch(0.21 0.006 285.885) (#18181b), which reads as a
+  // raised slab on a desktop display. On a phone the same value makes every
+  // card look like a separate pane, so the card surface sits just above the
+  // background and the border does the separating.
+  card: "#0e0e10",
   // oklch(0.985 0 0)
   cardForeground: "#fafafa",
-  // oklch(0.21 0.006 285.885)
-  popover: "#18181b",
+  // Matches the card surface, for the same reason.
+  popover: "#0e0e10",
   // oklch(0.985 0 0)
   popoverForeground: "#fafafa",
   // oklch(0.459 0.187 3.815)
@@ -56,8 +59,8 @@ export const colors = {
   chart4: "#007595",
   // oklch(0.45 0.085 224.283)
   chart5: "#005f78",
-  // oklch(0.21 0.006 285.885)
-  sidebar: "#18181b",
+  // Matches the card surface, for the same reason.
+  sidebar: "#0e0e10",
   // oklch(0.985 0 0)
   sidebarForeground: "#fafafa",
   // oklch(0.656 0.241 354.308)

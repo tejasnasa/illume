@@ -50,6 +50,17 @@ export function resolveBackendUrl(override?: string): string {
   if (override) return override.replace(/\/+$/, "");
   const envValue = (process.env as Record<string, string | undefined>)
     .EXPO_PUBLIC_BACKEND_URL;
+  const isDev = typeof __DEV__ === "undefined" || __DEV__;
+  if (!envValue && !isDev) {
+    // A release build with no backend URL is not a working app: the emulator
+    // alias below resolves to nothing on a real device, and every request
+    // fails as a generic network error. Fail with the fix in the message
+    // instead of leaving the reader to guess.
+    throw new Error(
+      "EXPO_PUBLIC_BACKEND_URL is not set. Set it in the EAS build profile " +
+        "or in the build environment before producing a release build.",
+    );
+  }
   return (envValue ?? DEFAULT_BACKEND_URL).replace(/\/+$/, "");
 }
 
@@ -79,6 +90,43 @@ export interface ApiRequestResult<T> {
 }
 
 const JSON_CONTENT_TYPE = "application/json";
+
+/**
+ * Called when the backend rejects the bearer token.
+ *
+ * The auth provider registers a sign-out; the client itself must not import
+ * the provider, which would make the network layer depend on React state.
+ */
+type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+/**
+ * How long after a 401 a second one is ignored.
+ *
+ * React Query retries a failed query once, and a screen with several
+ * queries can produce a burst of them, so the first 401 of a burst is the
+ * only one that should sign the reader out.
+ */
+const UNAUTHORIZED_DEBOUNCE_MS = 2_000;
+
+let lastUnauthorizedAt = 0;
+
+/**
+ * Register (or clear) the handler invoked on a 401 response.
+ *
+ * @param handler - The handler, or ``null`` to unregister.
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
+function notifyUnauthorized(): void {
+  const now = Date.now();
+  if (now - lastUnauthorizedAt < UNAUTHORIZED_DEBOUNCE_MS) return;
+  lastUnauthorizedAt = now;
+  unauthorizedHandler?.();
+}
 
 /**
  * Issue an authenticated request against the backend.
@@ -138,6 +186,9 @@ export async function apiRequest<T = unknown>(
   const parsed = await parseBody(response);
 
   if (!response.ok) {
+    // Only a 401 means the token itself is dead. A 403 is a specific
+    // permission refusal and must not sign the reader out.
+    if (response.status === 401) notifyUnauthorized();
     const kind: ApiErrorKind = kindFromStatus(response.status);
     throw new ApiError({
       kind,

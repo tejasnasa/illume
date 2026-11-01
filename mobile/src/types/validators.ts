@@ -9,9 +9,11 @@ import { z } from "zod";
  * Signup form validation: name, email, and a hardened password policy.
  */
 export const signupSchema = z.object({
+  // Three, not two: the server's RegisterRequest requires three, so a
+  // two-character name would pass here and come back a 422.
   name: z
     .string()
-    .min(2, { message: "Full name must be at least 2 characters long." }),
+    .min(3, { message: "Full name must be at least 3 characters long." }),
   email: z
     .string()
     .trim()

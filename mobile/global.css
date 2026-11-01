@@ -18,10 +18,13 @@
   --color-background: #09090b;
   --color-foreground: #fafafa;
 
-  --color-card: #18181b;
+  /* Kept in step with src/theme/tokens.ts. The card surface sits just
+     above the background so a phone screen does not read as a stack of
+     separate panes; the border does the separating instead of the fill. */
+  --color-card: #0e0e10;
   --color-card-foreground: #fafafa;
 
-  --color-popover: #18181b;
+  --color-popover: #0e0e10;
   --color-popover-foreground: #fafafa;
 
   --color-primary: #a3004c;
@@ -49,7 +52,7 @@
   --color-chart-4: #007595;
   --color-chart-5: #005f78;
 
-  --color-sidebar: #18181b;
+  --color-sidebar: #0e0e10;
   --color-sidebar-foreground: #fafafa;
   --color-sidebar-primary: #f6339a;
   --color-sidebar-primary-foreground: #fdf2f8;

@@ -11,16 +11,18 @@ export default interface Repository {
   github_url: string;
   name: string;
   status: string;
-  architecture_summary: string;
+  // Null until the analysis has produced them (and permanently for a
+  // repository whose ingest failed), so every read has to tolerate a miss.
+  architecture_summary: string | null;
   repo_number: number;
-  primary_language: string;
+  primary_language: string | null;
   detected_stack: {
     ci_cd: string[];
     databases: string[];
     languages: string[];
     frameworks: string[];
     infrastructure: string[];
-  };
+  } | null;
   // Shape varies by stack (map or list of entry-point candidates).
   entry_points: unknown;
   ingested_branch: string | null;

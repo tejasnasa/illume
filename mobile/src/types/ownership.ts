@@ -10,12 +10,12 @@ export default interface Ownership {
   files: {
     file_id: string;
     file_path: string;
-    primary_owner: string;
+    primary_owner: string | null;
     contributors: {
       name: string;
-      email: string;
-      percentage: number;
-      last_commit: string;
+      email: string | null;
+      percentage: number | null;
+      last_commit: string | null;
     }[];
     bus_factor: number;
     is_knowledge_silo: boolean;
@@ -30,12 +30,12 @@ export interface Silo {
   silos: {
     file_id: string;
     file_path: string;
-    primary_owner: string;
+    primary_owner: string | null;
     contributors: {
       name: string;
-      email: string;
-      percentage: number;
-      last_commit: string;
+      email: string | null;
+      percentage: number | null;
+      last_commit: string | null;
     }[];
     bus_factor: number;
     is_knowledge_silo: boolean;

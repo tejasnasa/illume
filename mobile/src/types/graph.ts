@@ -19,6 +19,8 @@ export default interface Graph {
     language: string;
     fan_in: number;
     fan_out: number;
+    /** Cyclomatic complexity; symbol level only. */
+    complexity?: number;
   }[];
   links: {
     source: string;
