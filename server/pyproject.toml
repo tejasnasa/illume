@@ -10,6 +10,8 @@ dependencies = [
     "celery>=5.6.3",
     "fastapi[standard]>=0.135.3",
     "gitpython>=3.1.46",
+    "httpx>=0.28.1",
+    "langgraph>=1.2.19",
     "openai>=2.31.0",
     "passlib[bcrypt]>=1.7.4",
     "pgvector>=0.4.2",
@@ -20,12 +22,15 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "redis>=7.4.0",
     "sqlalchemy>=2.0.49",
+    "sse-starlette>=3.6.0",
     "tree-sitter>=0.25.2",
     "tree-sitter-language-pack>=1.5.0",
+    "typesafe-sdk>=0.7.5",
 ]
 
 [dependency-groups]
 dev = [
+    "deepeval>=4.3.2",
     "fakeredis>=2.38.0",
     "freezegun>=1.5.5",
     "mypy>=2.3.1",

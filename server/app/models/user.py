@@ -7,7 +7,7 @@ Represents a registered user in the system.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, text
+from sqlalchemy import Boolean, DateTime, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -40,6 +40,14 @@ class User(Base):
     ai_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
     ai_model: Mapped[str | None] = mapped_column(String, nullable=True)
     ai_key_validated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Nullable on purpose: ``None`` means "not measured yet", which is different
+    # from a measured "this credential cannot call tools". A row from before the
+    # column existed, or one saved while the probe could not reach the provider,
+    # stays NULL and is checked lazily on the first agent request.
+    ai_supports_tools: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    ai_tools_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     free_ingestions_used: Mapped[int] = mapped_column(

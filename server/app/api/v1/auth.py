@@ -33,6 +33,7 @@ from app.models.user import User
 from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_config import LLMConfig
 from app.services.llm_providers import PROVIDERS, get_provider, suggest_provider
+from app.services.tool_support import check_tool_support
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,9 @@ class UserResponse(BaseModel):
     ai_provider: str | None = None
     ai_model: str | None = None
     has_ai_key: bool = False
+    # ``None`` means "not measured"; ``False`` means the provider answered and
+    # could not call tools. The two are different states for the agent presets.
+    ai_supports_tools: bool | None = None
     free_ingestions_used: int = 0
     free_chat_messages_used: int = 0
     free_ingestions_limit: int = FREE_INGESTIONS
@@ -213,6 +217,7 @@ async def me(current_user: User = Depends(get_current_user)):
         ai_provider=current_user.ai_provider,
         ai_model=current_user.ai_model,
         has_ai_key=bool(current_user.ai_api_key),
+        ai_supports_tools=current_user.ai_supports_tools,
         free_ingestions_used=current_user.free_ingestions_used,
         free_chat_messages_used=current_user.free_chat_messages_used,
         free_ingestions_limit=FREE_INGESTIONS,
@@ -511,6 +516,11 @@ class AICredentialsResponse(BaseModel):
     model: str | None = None
     has_key: bool = False
     validated_at: datetime | None = None
+    # What the probe learned about function calling. ``None`` when the check
+    # has not run, ``False`` when the provider answered and could not call
+    # tools -- the state that disables the agent presets in the UI.
+    supports_tools: bool | None = None
+    tools_checked_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -561,12 +571,14 @@ def _provider_mismatch_hint(provider: str, api_key: str, model: str) -> str:
     return f" {evidence} If you meant to use {suggested.label}, change the Provider field."
 
 
-async def _probe_credentials(provider: str, api_key: str, model: str) -> None:
-    """Issue a 16-token ``responses.create`` to confirm the credential works.
+async def _probe_credentials(provider: str, api_key: str, model: str) -> bool | None:
+    """Confirm the credential generates text, then whether it can call tools.
 
-    Uses the same :class:`LLMConfig` shape the four generation services use,
-    so an incompatible combination of provider/model/reasoning-support is
-    caught at the form rather than as silently empty artefacts later.
+    The first 16-token ``responses.create`` proves the key and model work. Uses
+    the same :class:`LLMConfig` shape the four generation services use, so an
+    incompatible combination of provider/model/reasoning-support is caught at
+    the form rather than as silently empty artefacts later. A second request
+    then offers a trivial function to answer the separate tool-calling question.
 
     The route layer is responsible for rejecting unknown providers with a
     422 before this is called -- see :func:`put_ai_credentials`. Keeping
@@ -578,6 +590,13 @@ async def _probe_credentials(provider: str, api_key: str, model: str) -> None:
             Must be a known preset.
         api_key: The user-supplied credential.
         model: The user-supplied model id.
+
+    Returns:
+        Whether the credential can call function tools. This is recorded, not
+        enforced: a key that generates text but cannot call tools is still a
+        valid key, so the second probe never turns a successful save into a
+        failure. ``None`` when the tool probe got no answer at all, which
+        leaves the verdict unmeasured for the lazy check to retry.
 
     Raises:
         HTTPException: 400 with a provider-specific message on failure. The
@@ -632,6 +651,10 @@ async def _probe_credentials(provider: str, api_key: str, model: str) -> None:
             detail=f"Could not reach {preset.label}.",
         ) from exc
 
+    # The key works for generation. Whether it can call tools is a second
+    # question, answered without ever rejecting the save.
+    return await check_tool_support(client, config)
+
 
 @router.get("/me/ai-credentials", response_model=AICredentialsResponse)
 async def get_ai_credentials(current_user: User = Depends(get_current_user)):
@@ -652,6 +675,8 @@ async def get_ai_credentials(current_user: User = Depends(get_current_user)):
         model=current_user.ai_model,
         has_key=bool(current_user.ai_api_key),
         validated_at=current_user.ai_key_validated_at,
+        supports_tools=current_user.ai_supports_tools,
+        tools_checked_at=current_user.ai_tools_checked_at,
     )
 
 
@@ -686,13 +711,17 @@ async def put_ai_credentials(
             detail=f"Unknown provider: {body.provider!r}. Choose one of {_ALLOWED_PROVIDER_KEYS}.",
         )
 
-    # Probe first; persist only on success.
-    await _probe_credentials(body.provider, body.api_key, body.model)
+    # Probe first; persist only on success. The returned flag is the tool
+    # check -- it is stored with the credential, never used to reject it.
+    supports_tools = await _probe_credentials(body.provider, body.api_key, body.model)
+    checked_at = datetime.now(UTC)
 
     current_user.ai_provider = body.provider
     current_user.ai_api_key = body.api_key
     current_user.ai_model = body.model
-    current_user.ai_key_validated_at = datetime.now(UTC)
+    current_user.ai_key_validated_at = checked_at
+    current_user.ai_supports_tools = supports_tools
+    current_user.ai_tools_checked_at = checked_at if supports_tools is not None else None
     await db.commit()
     await db.refresh(current_user)
 
@@ -701,6 +730,8 @@ async def put_ai_credentials(
         model=current_user.ai_model,
         has_key=bool(current_user.ai_api_key),
         validated_at=current_user.ai_key_validated_at,
+        supports_tools=current_user.ai_supports_tools,
+        tools_checked_at=current_user.ai_tools_checked_at,
     )
 
 
@@ -728,6 +759,10 @@ async def delete_ai_credentials(
     current_user.ai_api_key = None
     current_user.ai_model = None
     current_user.ai_key_validated_at = None
+    # The tool verdict described the credential being removed; a future key is
+    # a different provider and model, so it has not been measured.
+    current_user.ai_supports_tools = None
+    current_user.ai_tools_checked_at = None
     await db.commit()
     await db.refresh(current_user)
 

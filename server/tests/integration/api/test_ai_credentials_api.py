@@ -20,8 +20,11 @@ Pins the five things the save flow can do wrong:
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
+import respx
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AuthenticationError
 from sqlalchemy import select
 
@@ -37,6 +40,11 @@ GET_URL = "/api/v1/auth/me/ai-credentials"
 PUT_URL = "/api/v1/auth/me/ai-credentials"
 DELETE_URL = "/api/v1/auth/me/ai-credentials"
 ME_URL = "/api/v1/auth/me"
+
+# The OpenAI preset's base URL plus the Responses path. respx intercepts the
+# SDK's transport, so the probe runs its real request-shaping code without a
+# socket.
+OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
 
 # --- shared probe stubs ----------------------------------------------------
@@ -145,6 +153,50 @@ class _StubResponse:
     """A response shape that exercises the success branch."""
 
     output_text = "pong"
+
+
+def _responses_payload(*, function_call: bool) -> dict:
+    """A wire-shaped Responses payload with or without a function call.
+
+    Mirrors ``scripts/openai_stub_server.py``: the SDK parses these fields
+    directly, so a payload missing one surfaces as a client-side validation
+    error rather than a test assertion.
+    """
+    if function_call:
+        output = [
+            {
+                "type": "function_call",
+                "id": "fc_stub",
+                "call_id": "call_stub",
+                "name": "ping",
+                "arguments": "{}",
+                "status": "completed",
+            }
+        ]
+        tool_choice = "required"
+    else:
+        output = [
+            {
+                "type": "message",
+                "id": "msg_stub",
+                "role": "assistant",
+                "status": "completed",
+                "content": [{"type": "output_text", "text": "pong", "annotations": []}],
+            }
+        ]
+        tool_choice = "none"
+
+    return {
+        "id": "resp_stub",
+        "object": "response",
+        "created_at": 0,
+        "model": "stub",
+        "status": "completed",
+        "output": output,
+        "parallel_tool_calls": False,
+        "tool_choice": tool_choice,
+        "tools": [],
+    }
 
 
 # --- GET ------------------------------------------------------------------
@@ -739,6 +791,220 @@ class TestMeEnvelope:
         # The caps ride along so the client never mirrors the policy numbers.
         assert body["free_ingestions_limit"] == FREE_INGESTIONS
         assert body["free_chat_messages_limit"] == FREE_CHAT_MESSAGES
+
+
+# --- Function-calling support ---------------------------------------------
+
+
+class TestToolSupportProbe:
+    """The second probe records function-calling support; it never rejects a key.
+
+    The shape of the request is asserted from the wire body, which also pins
+    the tool definition and ``tool_choice: "required"`` -- the two details a
+    provider needs in order to answer the question at all.
+    """
+
+    @respx.mock
+    async def test_a_function_call_is_recorded_as_supported(self, client, db_session):
+        route = respx.post(OPENAI_RESPONSES_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=_responses_payload(function_call=False)),
+                httpx.Response(200, json=_responses_payload(function_call=True)),
+            ]
+        )
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "sk-test-key-12345",
+                "model": "gpt-4o-mini",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["supports_tools"] is True
+        assert body["tools_checked_at"] is not None
+
+        stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert stored.ai_supports_tools is True
+        assert stored.ai_tools_checked_at is not None
+
+        # The second request is the tool probe: one ping function, required.
+        requests = [json.loads(call.request.content) for call in route.calls]
+        assert len(requests) == 2
+        tool_request = requests[1]
+        assert tool_request["tool_choice"] == "required"
+        assert tool_request["tools"][0]["type"] == "function"
+        assert tool_request["tools"][0]["name"] == "ping"
+
+    @respx.mock
+    async def test_text_only_provider_is_recorded_but_still_saves(self, client, db_session):
+        route = respx.post(OPENAI_RESPONSES_URL).mock(
+            return_value=httpx.Response(200, json=_responses_payload(function_call=False))
+        )
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "sk-test-key-12345",
+                "model": "gpt-4o-mini",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["supports_tools"] is False
+        # Both probes ran: the text check and the tool check.
+        assert route.call_count == 2
+        stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert stored.ai_api_key == "sk-test-key-12345"
+        assert stored.ai_supports_tools is False
+
+    @respx.mock
+    async def test_a_rejected_tool_choice_is_recorded_but_still_saves(self, client, db_session):
+        """A provider that 400s on tools answered the question; it did not reject the key."""
+        respx.post(OPENAI_RESPONSES_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=_responses_payload(function_call=False)),
+                httpx.Response(
+                    400,
+                    json={
+                        "error": {
+                            "message": "tool_choice is not supported",
+                            "type": "invalid_request_error",
+                            "param": "tool_choice",
+                            "code": None,
+                        }
+                    },
+                ),
+            ]
+        )
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "sk-test-key-12345",
+                "model": "gpt-4o-mini",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["supports_tools"] is False
+
+    @respx.mock
+    async def test_no_answer_from_the_tool_probe_leaves_it_unmeasured(self, client, db_session):
+        """A timeout says nothing about tools; recording ``False`` would never be re-probed."""
+        respx.post(OPENAI_RESPONSES_URL).mock(
+            side_effect=[
+                httpx.Response(200, json=_responses_payload(function_call=False)),
+                httpx.ConnectTimeout("timed out"),
+            ]
+        )
+        user = await make_user(db_session)
+        await authenticate(client, user)
+
+        response = await client.put(
+            PUT_URL,
+            json={
+                "provider": "openai",
+                "api_key": "sk-test-key-12345",
+                "model": "gpt-4o-mini",
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["supports_tools"] is None
+        assert body["tools_checked_at"] is None
+        stored = (await db_session.execute(select(User).where(User.id == user.id))).scalar_one()
+        assert stored.ai_api_key == "sk-test-key-12345"
+        assert stored.ai_supports_tools is None
+
+
+class TestLazyToolSupport:
+    """``ensure_tool_support`` fills the NULL case once and caches a measured one."""
+
+    @respx.mock
+    async def test_checks_once_for_a_user_saved_before_the_columns(self, db_session):
+        from app.services.tool_support import ensure_tool_support
+
+        route = respx.post(OPENAI_RESPONSES_URL).mock(
+            return_value=httpx.Response(200, json=_responses_payload(function_call=True))
+        )
+        user = await make_user(
+            db_session,
+            ai_api_key="sk-test-key-12345",
+            ai_provider="openai",
+            ai_model="gpt-4o-mini",
+        )
+        assert user.ai_supports_tools is None
+
+        assert await ensure_tool_support(db_session, user) is True
+        assert route.call_count == 1
+        assert user.ai_supports_tools is True
+        assert user.ai_tools_checked_at is not None
+
+        # A cached verdict is reused with no second request.
+        assert await ensure_tool_support(db_session, user) is True
+        assert route.call_count == 1
+
+    @respx.mock
+    async def test_a_measured_false_is_not_reprobed(self, db_session):
+        from app.services.tool_support import ensure_tool_support
+
+        route = respx.post(OPENAI_RESPONSES_URL).mock(
+            return_value=httpx.Response(200, json=_responses_payload(function_call=True))
+        )
+        user = await make_user(
+            db_session,
+            ai_api_key="sk-test-key-12345",
+            ai_provider="openai",
+            ai_model="gpt-4o-mini",
+        )
+        user.ai_supports_tools = False
+        await db_session.flush()
+
+        assert await ensure_tool_support(db_session, user) is False
+        assert route.call_count == 0
+
+    @respx.mock
+    async def test_a_server_error_is_retried_on_the_next_request(self, db_session):
+        from app.services.tool_support import ensure_tool_support
+
+        route = respx.post(OPENAI_RESPONSES_URL).mock(
+            side_effect=[
+                httpx.Response(503, json={"error": {"message": "overloaded"}}),
+                httpx.Response(200, json=_responses_payload(function_call=True)),
+            ]
+        )
+        user = await make_user(
+            db_session,
+            ai_api_key="sk-test-key-12345",
+            ai_provider="openai",
+            ai_model="gpt-4o-mini",
+        )
+
+        assert await ensure_tool_support(db_session, user) is None
+        assert user.ai_supports_tools is None
+
+        assert await ensure_tool_support(db_session, user) is True
+        assert route.call_count == 2
+
+    async def test_a_keyless_user_has_nothing_to_check(self, db_session):
+        from app.services.tool_support import ensure_tool_support
+
+        user = await make_user(db_session)
+
+        assert await ensure_tool_support(db_session, user) is None
 
 
 # --- Repository sync_available --------------------------------------------

@@ -140,8 +140,8 @@ def response_kwargs(self, effort: str = "minimal") -> dict[str, Any]:
 
 Both carry a trap worth stating: `base_url=None` must never reach the SDK, and `{}` from
 `response_kwargs` is a *legitimate answer*, not a missing value. See
-[Why is the reasoning parameter still wrong?](#why-is-the-reasoning-parameter-still-wrong) for what
-happens when a caller treats it as one.
+[Why do the call sites trust an empty `response_kwargs`?](#why-do-the-call-sites-trust-an-empty-response_kwargs)
+for what happens when a caller treats it as one.
 
 ### Configuring the operator's credential
 
@@ -187,10 +187,21 @@ Responses call with the supplied provider, key and model, and writes the row onl
 The probe uses a 15-second timeout and disables retries, so a hanging provider fails at the form
 rather than holding the request open. The API key must be 8–512 characters.
 
-This is the difference between a form that tells a user their key is wrong and one that accepts it
-and then produces empty glossaries an hour later. `GET` never returns the key — only whether one is
-stored, which provider, which model, and when it was validated. See
-[auth.md](../auth.md#the-ai-credential-store).
+A **second probe** answers a different question: can this credential call function tools? Agent
+presets need function calling, and a key that generates text perfectly well may be paired with a
+model or provider that rejects `tool_choice`. The second request offers one trivial `ping` function
+and asks for `tool_choice: "required"`; a response containing a `function_call` item means yes.
+
+That verdict is **recorded, never enforced**. A failed tool probe does not reject the save — the key
+is valid — so the result lands in `users.ai_supports_tools` and `users.ai_tools_checked_at`, and the
+UI disables the agent presets with a reason when it is `False`. `NULL` is a third state: *not
+measured*, which is what every row saved before these columns existed carries. The first agent
+request checks such a row once and stores the answer (`services/tool_support.py`).
+
+These probes are the difference between a form that tells a user their key is wrong and one that
+accepts it and then produces empty glossaries an hour later. `GET` never returns the key — only
+whether one is stored, which provider, which model, when it was validated, and whether it can call
+tools. See [auth.md](../auth.md#the-ai-credential-store).
 
 ## Stage 2 — The glossary
 
@@ -375,25 +386,20 @@ The cost is that `FREE_INGESTIONS` is **inert** — no enforcement code reads it
 changes nothing. It survives as documentation of the policy, and as a trap: it looks like the knob for
 the free tier and is not one.
 
-### Why is the reasoning parameter still wrong?
+### Why do the call sites trust an empty `response_kwargs`?
 
-It should not be, and this is the one entry here that records a defect rather than a decision.
+Because the `llm is None` branch already supplies its own reasoning dict, so `{}` can only have come
+from a real credential that does not support reasoning. The alternative — treating `{}` as "no
+credential was passed" — cannot tell those two states apart, and the old code re-added
+`{"reasoning": {"effort": ...}}` for exactly the providers the registry exists to protect.
 
-`response_kwargs()` correctly returns `{}` for a provider that cannot reason, and
-`tests/unit/services/test_llm_config.py` pins that. But all four call sites then do:
-
-```python
-if not response_kwargs:
-    response_kwargs = {"reasoning": {"effort": "minimal"}}
-```
-
-which cannot distinguish "no credential was passed" from "this provider does not support reasoning" —
-so it re-adds the parameter for exactly the providers the registry exists to protect. A Groq user
-gets a 400. Worse, `_annotate_files` swallows per-batch failures, so the reading order can come back
-with zero annotations and no error at all.
-
-The fix is to delete those four fallbacks: the `llm is None` branch already supplies its own dict, so
-`{}` from a real credential can be trusted to mean what it says.
+That was a defect for a while: a Groq user got a 400 on every generation call, and because
+`_annotate_files` swallows per-batch failures, a reading order could come back with zero annotations
+and no error at all. The fallback is gone from all four call sites, and
+`tests/unit/services/test_generation_reasoning_kwargs.py` pins each request body with a
+reasoning-incapable `LLMConfig`, including a regression test that an empty dict reaches the SDK with
+no `reasoning` field. The reading-order batch failure now logs the batch range and the exception
+class, so a silently empty annotation set is visible in the worker log.
 
 ### Why does the `llm=None` branch still read `settings.AI_MODEL`?
 
