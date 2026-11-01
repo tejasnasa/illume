@@ -325,7 +325,9 @@ export function GitGraph({
           <Text className="font-mono font-bold text-primary">
             {selectedCommit
               ? `commit ${selectedCommit.short_sha} (${selectedCommit.branches[0]})`
-              : `branch ${effectiveBranch} (default)`}
+              : `branch ${effectiveBranch}${
+                  effectiveBranch === defaultBranch ? " (default)" : ""
+                }`}
           </Text>
         </Text>
 

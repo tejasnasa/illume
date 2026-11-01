@@ -5,9 +5,8 @@
  *
  * Port of ``client/src/app/repo/[id]/page.tsx`` (the 341-line web
  * repository page) to a vertical scroll. The web page is a two-column
- * split -- overview on the left, chat on the right -- and the chat half
- * belongs to a later phase, so what is left is a single scrolling column
- * of cards.
+ * split -- overview on the left, chat on the right -- and on a phone the
+ * chat half becomes a screen of its own, reached from the button below.
  *
  * The cards the web page shows, in the same order and with the same
  * headings:
@@ -22,11 +21,13 @@
  */
 
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
+import { router } from "expo-router";
 
 import type Repository from "@/types/repository";
 import type { default as Guide } from "@/types/guide";
 import { timeAgo } from "@/lib/timeAgo";
 import { formatRepoLabel } from "@/lib/githubUrl";
+import { statusTone } from "@/lib/repoStatus";
 import { MarkdownText } from "@/ui/MarkdownText";
 import { colors } from "@/theme/tokens";
 
@@ -142,7 +143,7 @@ export function RepoDetail({
           accessibilityRole="link"
           accessibilityLabel={`Open ${label} on GitHub`}
           onPress={() => void Linking.openURL(repo.github_url)}
-          className="flex-row items-center"
+          className="min-h-[44px] flex-row items-center"
         >
           <Text className="mr-2 text-lg text-primary">◈</Text>
           <Text
@@ -160,11 +161,26 @@ export function RepoDetail({
           Processing Status
         </Text>
         <View className="flex-row items-end justify-between">
+          {/* The overview is only reached for a ready repository in the
+              normal flow, but the status is still read from the record:
+              printing a success tick for a failed row is worse than
+              printing nothing. */}
           <Text
             testID="repo-detail-status"
-            className="text-xl font-bold uppercase text-success"
+            className={`text-xl font-bold uppercase ${
+              statusTone(repo.status) === "destructive"
+                ? "text-destructive"
+                : statusTone(repo.status) === "success"
+                  ? "text-success"
+                  : "text-chart-2"
+            }`}
           >
-            ✓ {repo.status}
+            {statusTone(repo.status) === "success"
+              ? "✓"
+              : statusTone(repo.status) === "destructive"
+                ? "!"
+                : "…"}{" "}
+            {repo.status}
           </Text>
           <View className="items-end">
             <Text className="text-[11px] text-muted-foreground">
@@ -176,6 +192,20 @@ export function RepoDetail({
           </View>
         </View>
       </View>
+
+      {/* The chat is a screen of its own on a phone, so the overview is
+          where it is reached from. */}
+      <Pressable
+        testID="repo-detail-chat"
+        accessibilityRole="button"
+        accessibilityLabel="Ask a question about this repository"
+        onPress={() => router.push(`/(app)/repo/${repo.repo_number}/chat`)}
+        className="mb-4 min-h-[44px] flex-row items-center justify-center gap-2 rounded bg-primary px-4 py-2.5"
+      >
+        <Text className="text-sm font-semibold text-primary-foreground">
+          Ask about this code
+        </Text>
+      </Pressable>
 
       {/* 3. The AI architecture overview. */}
       <View className="mb-4 rounded border border-border p-4">

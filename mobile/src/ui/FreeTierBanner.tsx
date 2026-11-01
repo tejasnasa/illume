@@ -17,7 +17,10 @@
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 
-import { resolveFreeTierMessage, shouldShowFreeTierBanner } from "@/lib/freeTier";
+import {
+  resolveFreeTierMessage,
+  shouldShowFreeTierBanner,
+} from "@/lib/freeTier";
 import type User from "@/types/user";
 
 /** Props for the FreeTierBanner component. */
@@ -36,7 +39,10 @@ export interface FreeTierBannerProps {
  * @param testID - Test hook.
  * @returns The rendered banner, or ``null`` when not applicable.
  */
-export function FreeTierBanner({ user, testID = "free-tier-banner" }: FreeTierBannerProps) {
+export function FreeTierBanner({
+  user,
+  testID = "free-tier-banner",
+}: FreeTierBannerProps) {
   if (!user || !shouldShowFreeTierBanner(user)) return null;
 
   const { title, ctaLabel, tone } = resolveFreeTierMessage(user);
@@ -62,7 +68,7 @@ export function FreeTierBanner({ user, testID = "free-tier-banner" }: FreeTierBa
         accessibilityRole="link"
         accessibilityLabel={ctaLabel}
         onPress={() => router.push("/(app)/settings")}
-        className="shrink-0 rounded border border-border px-4 py-3"
+        className="min-h-[44px] shrink-0 justify-center rounded border border-border px-4 py-3"
       >
         <Text className="text-xs font-semibold text-primary">{ctaLabel}</Text>
       </Pressable>

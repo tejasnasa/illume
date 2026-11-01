@@ -7,7 +7,7 @@
  * icon, a single line of copy ("No repositories found. Add your first one
  * to get started!"), and the same dashed card visual. ``Add New Repository``
  * is a separate affordance -- the screen routes the tap to that flow in
- * Phase 5; the empty state itself stays a status message, not a button, to
+ * the repository picker; the empty state itself stays a status message,
  * keep the connection between the two screens obvious.
  */
 

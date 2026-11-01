@@ -6,9 +6,9 @@
  * The hooks are the only call-site for the :mod:`src.api.repository`
  * transport: query keys live alongside the fetches and the dashboard
  * reads ``data``, ``isLoading`` and ``refetch`` from here. Having one
- * place per domain keeps Phase 5 (creation) and Phase 6 (detail view)
- * honest about cache invalidation -- a refetch after ``createRepository``
- * only needs to land in one helper.
+ * place per domain keeps creation and the detail view honest about cache
+ * invalidation -- a refetch after ``createRepository`` only needs to land
+ * in one helper.
  */
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
@@ -21,14 +21,23 @@ import { queryKeys } from "@/api/queryKeys";
  * Fetch the caller's repositories.
  *
  * React Query handles loading/error/data, refetch-on-focus (wired by the
- * AppState bridge in Phase 3), and dedup across concurrent subscribers.
+ * AppState bridge), and dedup across concurrent subscribers.
  * The list key (``queryKeys.repositories.list``) is stable across calls,
  * so two screens asking for the same data hit one network request.
  */
-export function useRepositories(): UseQueryResult<Repository[], Error> {
+export function useRepositories(options?: {
+  /**
+   * Milliseconds between background refetches, or ``false`` to stop.
+   *
+   * The dashboard polls while an ingest is running; every other screen
+   * leaves it unset and relies on the focus/refetch policy.
+   */
+  refetchInterval?: number | false;
+}): UseQueryResult<Repository[], Error> {
   return useQuery({
     queryKey: queryKeys.repositories.list(),
     queryFn: getRepositories,
+    refetchInterval: options?.refetchInterval ?? false,
   });
 }
 

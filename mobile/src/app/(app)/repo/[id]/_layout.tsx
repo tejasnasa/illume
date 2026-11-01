@@ -26,8 +26,8 @@
 
 import { useCallback, useEffect } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { router, useLocalSearchParams, usePathname } from "expo-router";
-import { Tabs } from "expo-router/js-tabs";
+import { router, useGlobalSearchParams, usePathname } from "expo-router";
+import { Tabs, type BottomTabBarProps } from "expo-router/js-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { RepoStatusPoller } from "@/components/RepoStatusPoller";
@@ -53,13 +53,50 @@ const SECTION_TABS = [
 ] as const;
 
 /**
+ * The routes that are reachable but never listed in the tab bar.
+ *
+ * ``href: null`` is what marks a screen as hidden: the navigator drops
+ * the item from its own bar. This shell draws a custom bar instead
+ * (:component:`RepoTabBar`), and a custom bar has to honour the same rule
+ * itself -- otherwise the chat screen turns into a fifth tab.
+ */
+const HIDDEN_ROUTES = new Set(["chat", "settings"]);
+
+/**
+ * Drop the hidden routes from the state the custom tab bar draws.
+ *
+ * The focused index is carried over rather than recomputed: a hidden route
+ * that is focused leaves the index pointing past the end of the shortened
+ * list, which is exactly what keeps every tab unhighlighted while the
+ * chat screen is open.
+ *
+ * @param state - The navigator's state.
+ * @returns The state without the hidden routes.
+ */
+function withoutHiddenRoutes(
+  state: BottomTabBarProps["state"],
+): BottomTabBarProps["state"] {
+  const routes = state.routes.filter((route) => !HIDDEN_ROUTES.has(route.name));
+  if (routes.length === state.routes.length) return state;
+
+  const focusedKey = state.routes[state.index]?.key;
+  const focusedIndex = routes.findIndex((route) => route.key === focusedKey);
+
+  return {
+    ...state,
+    routes,
+    index: focusedIndex >= 0 ? focusedIndex : state.index,
+  };
+}
+
+/**
  * Render the repository shell.
  *
  * @returns The shell, or a redirect when the requested tab does not exist
  *   for a repository that has not been indexed.
  */
 export default function RepoLayout() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id } = useGlobalSearchParams<{ id: string }>();
   const repoNumber = String(id ?? "");
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
@@ -115,7 +152,7 @@ export default function RepoLayout() {
           accessibilityRole="button"
           accessibilityLabel="Back to dashboard"
           onPress={goBack}
-          className="rounded border border-border px-4 py-2"
+          className="min-h-[44px] justify-center rounded border border-border px-4 py-2"
         >
           <Text className="text-sm font-semibold text-foreground">
             Back to dashboard
@@ -163,6 +200,18 @@ export default function RepoLayout() {
           syncStatus={repo.sync_status}
           testID="repo-header-status"
         />
+
+        {/* The repository's own settings, next to the status it reports. */}
+        <Pressable
+          testID="repo-settings"
+          accessibilityRole="button"
+          accessibilityLabel="Repository settings"
+          onPress={() => router.push(`/(app)/repo/${repoNumber}/settings`)}
+          hitSlop={8}
+          className="ml-2 rounded px-2 py-1 active:bg-secondary"
+        >
+          <Text className="text-lg text-foreground">⚙</Text>
+        </Pressable>
       </View>
 
       <RepoStatusPoller
@@ -172,7 +221,13 @@ export default function RepoLayout() {
       />
 
       <Tabs
-        tabBar={(props) => <RepoTabBar {...props} sectionsAvailable={ready} />}
+        tabBar={(props) => (
+          <RepoTabBar
+            {...props}
+            state={withoutHiddenRoutes(props.state)}
+            sectionsAvailable={ready}
+          />
+        )}
         screenOptions={{
           headerShown: false,
           // The bar is custom, but the position still decides whether it
@@ -190,6 +245,14 @@ export default function RepoLayout() {
             options={{ title: tab.title }}
           />
         ))}
+
+        {/*
+          The chat is a screen of its own rather than a tab: it has a URL
+          of its own, and ``href: null`` keeps it out of the tab bar
+          while leaving it navigable.
+        */}
+        <Tabs.Screen name="chat" options={{ href: null }} />
+        <Tabs.Screen name="settings" options={{ href: null }} />
       </Tabs>
     </View>
   );

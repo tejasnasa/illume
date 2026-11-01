@@ -88,7 +88,7 @@ export function RepoTabBar({
             accessibilityLabel={label}
             testID={`repo-tab-${route.name}`}
             onPress={onPress}
-            className="flex-1 items-center justify-center px-2 py-3"
+            className="min-h-[44px] flex-1 items-center justify-center px-2 py-3"
           >
             <Text
               className={

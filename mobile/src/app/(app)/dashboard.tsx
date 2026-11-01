@@ -13,10 +13,9 @@
  * - A pull-to-refresh :component:`RefreshControl` so the user can force a
  *   refetch without leaving the screen.
  *
- * The header carries a logout action so Phase 4 has an entry point
- * before Settings (Phase 12) is wired up properly. The router redirect
- * falls through to :func:`useAuth`'s sign-out; the guard rerenders and
- * bounces to ``/login`` because the token is gone.
+ * The header carries a logout action as well. The router redirect falls
+ * through to :func:`useAuth`'s sign-out; the guard rerenders and bounces to
+ * ``/login`` because the token is gone.
  *
  * Styling uses NativeWind ``className``; only the safe-area inset and
  * the ``RefreshControl`` native props (``colors`` / ``tintColor`` /
@@ -24,13 +23,14 @@
  * cannot be expressed as static class strings.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { useRepositories } from "@/hooks/useRepositories";
 import { useAuth } from "@/hooks/useAuth";
+import { isReadyStatus } from "@/lib/repoStatus";
 import { RepoCard } from "@/ui/RepoCard";
 import { RepoCardSkeleton } from "@/ui/RepoCardSkeleton";
 import { DashboardEmptyState } from "@/ui/DashboardEmptyState";
@@ -40,13 +40,32 @@ import { colors } from "@/theme/tokens";
 
 const SKELETON_PLACEHOLDERS = 3;
 
+/** How often the dashboard re-reads the list while an ingest is running. */
+const INGEST_POLL_MS = 5_000;
+
 export default function DashboardScreen() {
+  // Polled only while something is actually being ingested: a card that
+  // says "pending" has to become "ready" without the reader discovering
+  // pull-to-refresh, but an idle dashboard must not poll.
+  const [pollWhileIngesting, setPollWhileIngesting] = useState(false);
+
   const { data, isLoading, isError, error, refetch, isRefetching } =
-    useRepositories();
+    useRepositories({
+      refetchInterval: pollWhileIngesting ? INGEST_POLL_MS : false,
+    });
   const { signOut, user } = useAuth();
   const insets = useSafeAreaInsets();
 
   const repositories = useMemo(() => data ?? [], [data]);
+
+  // The interval only has to run when at least one repository is not in a
+  // terminal state; once everything has settled it is switched off.
+  useEffect(() => {
+    const anyInFlight = repositories.some(
+      (repo) => !isReadyStatus(repo.status) && repo.status !== "failed",
+    );
+    setPollWhileIngesting(anyInFlight);
+  }, [repositories]);
 
   const onRepoPress = useCallback((repo: { repo_number: number }) => {
     router.push(`/(app)/repo/${repo.repo_number}`);
@@ -117,18 +136,39 @@ export default function DashboardScreen() {
                   Manage and explore your indexed codebases.
                 </Text>
               </View>
-              <Pressable
-                onPress={handleLogout}
-                accessibilityRole="button"
-                accessibilityLabel="Log out"
-                testID="dashboard-logout"
-                hitSlop={8}
-                className="rounded px-2.5 py-1.5 active:bg-secondary"
-              >
-                <Text className="text-sm font-semibold text-foreground">
-                  Log out
-                </Text>
-              </Pressable>
+              <View className="flex-row items-center">
+                {/*
+                  Settings is reachable from here rather than only through
+                  the free-tier banner: that banner hides itself for a BYOK
+                  user or once both allowances are spent, which left those
+                  readers with no way to manage their key, export a
+                  repository, or reach the contact form.
+                */}
+                <Pressable
+                  onPress={() => router.push("/(app)/settings")}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open settings"
+                  testID="dashboard-settings"
+                  hitSlop={8}
+                  className="mr-1 rounded px-2.5 py-1.5 active:bg-secondary"
+                >
+                  <Text className="text-sm font-semibold text-foreground">
+                    Settings
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleLogout}
+                  accessibilityRole="button"
+                  accessibilityLabel="Log out"
+                  testID="dashboard-logout"
+                  hitSlop={8}
+                  className="rounded px-2.5 py-1.5 active:bg-secondary"
+                >
+                  <Text className="text-sm font-semibold text-foreground">
+                    Log out
+                  </Text>
+                </Pressable>
+              </View>
             </View>
 
             <FreeTierBanner user={user} />
@@ -146,8 +186,19 @@ export default function DashboardScreen() {
                   Couldn't load repositories
                 </Text>
                 <Text className="text-center text-[13px] text-muted-foreground">
-                  {error?.message ?? "Pull down to try again."}
+                  {error?.message ?? "The server could not be reached."}
                 </Text>
+                <Pressable
+                  testID="dashboard-retry"
+                  accessibilityRole="button"
+                  accessibilityLabel="Try loading the repositories again"
+                  onPress={handleRefresh}
+                  className="mt-2 min-h-[44px] justify-center rounded border border-border px-4 py-2 active:bg-secondary"
+                >
+                  <Text className="text-sm font-semibold text-foreground">
+                    Try again
+                  </Text>
+                </Pressable>
               </View>
             ) : (
               <DashboardEmptyState />

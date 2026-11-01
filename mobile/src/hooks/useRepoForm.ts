@@ -25,11 +25,13 @@
  */
 
 import { useCallback, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   createRepository,
   type CreateRepositoryResponse,
 } from "@/api/repository";
+import { queryKeys } from "@/api/queryKeys";
 import { ApiError } from "@/lib/apiError";
 
 /** The version of a repository to ingest. */
@@ -70,6 +72,7 @@ export function useRepoForm(): UseRepoFormResult {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
   const [quotaExceeded, setQuotaExceeded] = useState(false);
+  const queryClient = useQueryClient();
 
   const clearError = useCallback(() => {
     setIngestError(null);
@@ -85,11 +88,19 @@ export function useRepoForm(): UseRepoFormResult {
       setQuotaExceeded(false);
 
       try {
-        return await createRepository({
+        const created = await createRepository({
           github_url: values.github_url,
           branch: values.branch,
           commit_sha: values.commit_sha,
         });
+        // The dashboard's list is cached for 30s, so without this a reader
+        // who is sent back to it would not see the repository they just
+        // queued. The server answers 202 before the row is queryable, so
+        // this is a refetch of a list that will grow, not a stale read.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.repositories.list(),
+        });
+        return created;
       } catch (error) {
         if (error instanceof ApiError) {
           setIngestError(error.message || "Failed to start ingestion process");
@@ -102,7 +113,7 @@ export function useRepoForm(): UseRepoFormResult {
         setIsSubmitting(false);
       }
     },
-    [],
+    [queryClient],
   );
 
   return { submit, isSubmitting, ingestError, quotaExceeded, clearError };

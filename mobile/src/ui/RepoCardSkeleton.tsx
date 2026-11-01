@@ -14,6 +14,7 @@
 import { useEffect } from "react";
 import { Dimensions, View } from "react-native";
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
@@ -21,6 +22,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { colors } from "@/theme/tokens";
 
 const SHIMMER_WIDTH = Dimensions.get("window").width;
@@ -43,8 +45,14 @@ export function RepoCardSkeleton({
   testID = "repo-card-skeleton",
 }: RepoCardSkeletonProps) {
   const offset = useSharedValue(-SHIMMER_WIDTH);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
+    // A reader who has asked for less motion gets a still placeholder.
+    if (reducedMotion) {
+      offset.value = 0;
+      return;
+    }
     offset.value = withRepeat(
       withTiming(SHIMMER_WIDTH, {
         duration: SWEEP_DURATION_MS,
@@ -53,7 +61,14 @@ export function RepoCardSkeleton({
       -1,
       false,
     );
-  }, [offset]);
+
+    // An infinite animation keeps driving the UI thread after the card is
+    // gone unless it is cancelled; a dashboard that swaps three skeletons
+    // for real rows would otherwise leave three loops running.
+    return () => {
+      cancelAnimation(offset);
+    };
+  }, [offset, reducedMotion]);
 
   const sweepStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: offset.value }],

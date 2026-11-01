@@ -25,6 +25,8 @@ import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   Text,
   TextInput,
@@ -161,7 +163,7 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
           accessibilityRole="tab"
           accessibilityState={{ selected: isActive }}
           onPress={() => setActiveTab(tab)}
-          className={`flex-1 items-center justify-center border-b-2 py-3 ${
+          className={`min-h-[44px] flex-1 items-center justify-center border-b-2 py-3 ${
             isActive
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground"
@@ -236,6 +238,27 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      {/* A modal route has no visible dismissal of its own: the hardware
+          back button is the only way out on Android, and on iOS the reader
+          has to know the sheet can be swiped. This is the explicit exit. */}
+      <View className="flex-row items-center justify-between px-4 pb-1 pt-3">
+        <Text className="text-base font-semibold text-foreground">
+          Add a repository
+        </Text>
+        <Pressable
+          testID="repo-picker-cancel"
+          accessibilityRole="button"
+          accessibilityLabel="Cancel adding a repository"
+          onPress={() => onClose?.(null)}
+          hitSlop={8}
+          className="rounded px-2 py-1 active:bg-secondary"
+        >
+          <Text className="text-sm font-semibold text-muted-foreground">
+            Cancel
+          </Text>
+        </Pressable>
+      </View>
+
       <View className="flex-row border-b border-border">
         {tabButton("my-repos", "My Repositories")}
         {tabButton("external", "External URL")}
@@ -255,6 +278,9 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
           <FlatList
             testID="repo-picker-list"
             data={repos}
+            // Without this the first tap after typing a search only
+            // dismisses the keyboard, and the repository needs a second tap.
+            keyboardShouldPersistTaps="handled"
             keyExtractor={(repo) => repo.full_name}
             contentContainerStyle={{
               paddingHorizontal: 16,
@@ -270,7 +296,7 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
                 accessibilityRole="button"
                 accessibilityLabel={`Select ${item.name}`}
                 onPress={() => handleSelectMyRepo(item)}
-                className="mb-2 flex-row items-center justify-between rounded border border-border bg-secondary/5 px-3 py-3 active:border-primary"
+                className="mb-2 min-h-[44px] flex-row items-center justify-between rounded border border-border bg-secondary/5 px-3 py-3 active:border-primary"
               >
                 <View className="min-w-0 flex-1 pr-3">
                   <Text
@@ -338,8 +364,9 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
           />
         </View>
       ) : (
-        <View
+        <KeyboardAvoidingView
           className="flex-1 justify-between px-4 py-4"
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={{ paddingBottom: insets.bottom + 16 }}
         >
           <View>
@@ -372,7 +399,7 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
               Continue
             </Text>
           </Pressable>
-        </View>
+        </KeyboardAvoidingView>
       )}
     </View>
   );
