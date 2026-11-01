@@ -1,0 +1,22 @@
+appId: com.tejasnasa.illume
+name: Chat
+---
+# The chat screen: the composer, and a question answered with citations.
+#
+# The repository number is the one the seeded account owns. The answer
+# depends on the model behind the account, so only the shape of the turn is
+# asserted -- that an answer comes back with its citations -- not what it
+# says.
+- launchApp
+- openLink: "illume://repo/1/chat"
+- assertVisible:
+    id: "chat-screen"
+- assertVisible:
+    id: "chat-input"
+- tapOn:
+    id: "chat-input"
+- inputText: "What does this repository do?"
+- tapOn:
+    id: "chat-send"
+- assertVisible:
+    id: "chat-list"

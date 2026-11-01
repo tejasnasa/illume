@@ -53,7 +53,7 @@ jest.mock("expo-router", () => {
     default: routerObj,
     router: routerObj,
     useRouter: () => routerObj,
-    useLocalSearchParams: () => mockParams,
+    useGlobalSearchParams: () => mockParams,
     useSegments: () => ["repo", "42"],
     usePathname: () => mockPathname,
     Stack: ((p: { children?: unknown }) => p.children) as unknown as object,

@@ -1,0 +1,14 @@
+appId: com.tejasnasa.illume
+name: Dashboard
+---
+# The signed-in home screen.
+#
+# The state is not cleared: the device has to be signed in already. The
+# sign-in is a GitHub OAuth round trip through a browser, which Maestro
+# cannot drive, so it is done by hand once per device.
+- launchApp
+- assertVisible:
+    id: "dashboard-list"
+- assertVisible: "Dashboard"
+- assertVisible:
+    id: "dashboard-add-repository"

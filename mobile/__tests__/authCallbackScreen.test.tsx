@@ -7,6 +7,7 @@
  * ``useLocalSearchParams`` and a mocked ``router.replace`` spy.
  */
 
+import type { ReactElement } from "react";
 import { Text } from "react-native";
 import { render, waitFor } from "@testing-library/react-native";
 
@@ -34,7 +35,26 @@ jest.mock("expo-router", () => ({
 }));
 
 import AuthCallbackScreen from "@/app/auth/callback";
+import { AuthProvider } from "@/hooks/useAuth";
 import { __setTokenStoreImplementation } from "@/lib/tokenStore";
+
+const mockFetch = jest.fn();
+
+/**
+ * Mount the callback inside the provider it now depends on.
+ *
+ * The screen signs in through the auth context rather than writing the token
+ * store directly -- writing only the store leaves the route guard's token
+ * `null` and bounces the reader straight back to /login -- so the provider
+ * has to be part of the test.
+ */
+function renderScreen(element: ReactElement = <AuthCallbackScreen />) {
+  return render(
+    <AuthProvider fetchImpl={mockFetch as unknown as typeof fetch} backendUrl="http://backend.test">
+      {element}
+    </AuthProvider>,
+  );
+}
 
 describe("AuthCallbackScreen", () => {
   beforeEach(() => {
@@ -44,6 +64,11 @@ describe("AuthCallbackScreen", () => {
       token_type: "Bearer",
       expires_in: "1296000",
     };
+    mockFetch.mockReset().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "user-1", name: "Reader" }),
+    });
     jest.spyOn(console, "error").mockImplementation(() => {});
   });
 
@@ -63,7 +88,7 @@ describe("AuthCallbackScreen", () => {
       async deleteItemAsync() {},
     });
 
-    await render(<AuthCallbackScreen />);
+    await renderScreen();
 
     await waitFor(() => {
       expect(writes).toContain("url-token");
@@ -95,7 +120,7 @@ describe("AuthCallbackScreen", () => {
       async deleteItemAsync() {},
     });
 
-    await render(<AuthCallbackScreen />);
+    await renderScreen();
 
     await waitFor(() => {
       expect(writes).toContain(
@@ -108,7 +133,7 @@ describe("AuthCallbackScreen", () => {
   it("routes to /login when the URL carries no token", async () => {
     mockParams = {};
 
-    await render(<AuthCallbackScreen />);
+    await renderScreen();
 
     await waitFor(() => {
       expect(mockRouterReplace).toHaveBeenCalledWith("/login");
@@ -129,7 +154,7 @@ describe("AuthCallbackScreen", () => {
       async deleteItemAsync() {},
     });
 
-    await render(<AuthCallbackScreen />);
+    await renderScreen();
 
     await waitFor(() => {
       expect(mockRouterReplace).toHaveBeenCalledWith("/login");
@@ -149,7 +174,7 @@ describe("AuthCallbackScreen", () => {
       async deleteItemAsync() {},
     });
 
-    const result = await render(
+    const result = await renderScreen(
       <>
         <Text testID="holder">placeholder</Text>
         <AuthCallbackScreen />
@@ -157,7 +182,7 @@ describe("AuthCallbackScreen", () => {
     );
     result.unmount();
 
-    await render(<AuthCallbackScreen />);
+    await renderScreen();
 
     await waitFor(() => {
       expect(writes.length).toBeGreaterThan(0);

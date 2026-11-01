@@ -14,12 +14,16 @@ describe("route skeleton", () => {
     "../src/app/(app)/_layout",
     "../src/app/(app)/dashboard",
     "../src/app/(app)/settings",
+    "../src/app/(app)/settings/ai",
+    "../src/app/(app)/settings/contact",
     "../src/app/(app)/repo-picker",
     "../src/app/(app)/repo/[id]/_layout",
     "../src/app/(app)/repo/[id]/index",
     "../src/app/(app)/repo/[id]/explorer",
     "../src/app/(app)/repo/[id]/glossary",
     "../src/app/(app)/repo/[id]/graph",
+    "../src/app/(app)/repo/[id]/chat",
+    "../src/app/(app)/repo/[id]/settings",
   ];
 
   for (const route of routes) {

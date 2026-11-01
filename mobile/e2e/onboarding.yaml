@@ -1,0 +1,16 @@
+appId: com.tejasnasa.illume
+name: Onboarding carousel
+---
+# The first-run carousel: three screens, a skip button, and a way through.
+#
+# This flow clears the app's state, so it only works on an account that has
+# never seen the carousel.
+- launchApp:
+    clearState: true
+- assertVisible:
+    id: "onboarding-pages"
+- assertVisible:
+    id: "onboarding-skip"
+- tapOn:
+    id: "onboarding-get-started"
+- assertVisible: "Welcome to Illume"

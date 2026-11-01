@@ -40,7 +40,7 @@ jest.mock("expo-router", () => {
     default: routerObj,
     router: routerObj,
     useRouter: () => routerObj,
-    useLocalSearchParams: () => mockParams,
+    useGlobalSearchParams: () => mockParams,
     useSegments: () => ["repo", "42"],
     usePathname: () => "/repo/42",
     Stack: ((p: { children?: unknown }) => p.children) as unknown as object,
@@ -117,12 +117,14 @@ function makeGuide(): Guide {
       data_flow: [],
       module_edges: [],
       key_modules: [],
-      ownership_summary: {
-        file_id: "repo-1",
-        bus_factor: 1,
-        primary_owner: "tejas",
-        is_knowledge_silo: false,
-      },
+      ownership_summary: [
+        {
+          file_id: "repo-1",
+          bus_factor: 1,
+          primary_owner: "tejas",
+          is_knowledge_silo: false,
+        },
+      ],
     },
   };
 }
@@ -271,14 +273,14 @@ describe("RepoIndexScreen", () => {
     const screen = await renderScreen(makeRepo({ status: "parsing" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("repo-status-headline")).toBeTruthy();
+      expect(screen.getByTestId("ingest-flow-headline")).toBeTruthy();
     });
 
-    expect(screen.getByTestId("repo-status-headline")).toHaveTextContent(
+    expect(screen.getByTestId("ingest-flow-headline")).toHaveTextContent(
       "Parse files",
     );
-    // The stage list below names the pipeline the repository is walking.
-    expect(screen.getAllByText("Fetch Repo").length).toBeGreaterThan(0);
+    // The live board draws the pipeline the repository is walking.
+    expect(screen.getByTestId("ingest-flow-canvas")).toBeTruthy();
     expect(screen.queryByTestId("repo-detail")).toBeNull();
   });
 
@@ -286,10 +288,10 @@ describe("RepoIndexScreen", () => {
     const screen = await renderScreen(makeRepo({ status: "failed" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("repo-status-headline")).toBeTruthy();
+      expect(screen.getByTestId("ingest-flow-headline")).toBeTruthy();
     });
 
-    expect(screen.getByTestId("repo-status-headline")).toHaveTextContent(
+    expect(screen.getByTestId("ingest-flow-headline")).toHaveTextContent(
       "Failed, retrying…",
     );
     expect(screen.queryByTestId("repo-detail")).toBeNull();
@@ -299,7 +301,7 @@ describe("RepoIndexScreen", () => {
     const screen = await renderScreen(makeRepo({ status: "parsing" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("repo-status-view")).toBeTruthy();
+      expect(screen.getByTestId("ingest-flow-canvas")).toBeTruthy();
     });
 
     expect(screen.queryByText("External")).toBeNull();

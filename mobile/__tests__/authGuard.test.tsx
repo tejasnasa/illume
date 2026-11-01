@@ -58,7 +58,10 @@ function makeFetch(user: object | null, expectedUrl?: string): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-const ME_URL = "http://localhost:8000/api/v1/auth/me";
+// The provider and the API client share one resolver, so the endpoint is the
+// client's default (the Android emulator's host alias) rather than a second
+// hardcoded localhost.
+const ME_URL = "http://10.0.2.2:8000/api/v1/auth/me";
 
 function Probe({ id = "probe" }: { id?: string }) {
   const { loading, token, user } = useAuth();
@@ -141,11 +144,16 @@ describe("AuthProvider", () => {
     });
   });
 
-  it("treats a network failure as logged out and drops the token", async () => {
+  it("keeps the stored session when the network fails, and retries once", async () => {
+    // A phone loses its network routinely. Treating that as a rejected
+    // session would sign the reader out every time the backend is briefly
+    // unreachable, so the token stays and the profile is retried.
     const store = makeMemStore("stored-jwt");
     __setTokenStoreImplementation(store);
 
+    let callCount = 0;
     const fetchImpl: typeof fetch = (async () => {
+      callCount += 1;
       throw new Error("network down");
     }) as unknown as typeof fetch;
 
@@ -156,9 +164,13 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() => {
-      expect(result.getByTestId("probe-token").props.children).toBe("null");
-      expect(store.deletes).toBe(1);
+      expect(result.getByTestId("probe-token").props.children).toBe(
+        "stored-jwt",
+      );
+      expect(result.getByTestId("probe-user").props.children).toBe("null");
     });
+    expect(store.deletes).toBe(0);
+    expect(callCount).toBeLessThanOrEqual(2);
   });
 
   it("signIn stores the token and hydrates the user", async () => {

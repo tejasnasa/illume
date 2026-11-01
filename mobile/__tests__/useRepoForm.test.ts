@@ -12,7 +12,9 @@
  *    one.
  */
 
+import { createElement, type ReactNode } from "react";
 import { renderHook, act, waitFor } from "@testing-library/react-native";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { router } from "expo-router";
 
 import { useRepoForm } from "@/hooks/useRepoForm";
@@ -37,6 +39,17 @@ jest.mock("expo-router", () => {
     Redirect: (() => null) as unknown as object,
   };
 });
+
+/**
+ * The hook invalidates the repository list after a successful creation, so
+ * it needs a query client. One per file is enough: the invalidation is a
+ * side effect the assertions below do not inspect.
+ */
+const queryClient = new QueryClient();
+
+function wrapper({ children }: { children: ReactNode }) {
+  return createElement(QueryClientProvider, { client: queryClient }, children);
+}
 
 const VALUES = {
   github_url: "https://github.com/owner/name",
@@ -78,7 +91,7 @@ describe("useRepoForm", () => {
       fetchImpl as unknown as typeof fetch;
 
     try {
-      const { result } = await renderHook(() => useRepoForm());
+      const { result } = await renderHook(() => useRepoForm(), { wrapper });
 
       let created: unknown = null;
       await act(async () => {
@@ -118,7 +131,7 @@ describe("useRepoForm", () => {
     };
 
     try {
-      const { result } = await renderHook(() => useRepoForm());
+      const { result } = await renderHook(() => useRepoForm(), { wrapper });
 
       await act(async () => {
         await result.current.submit(VALUES);
@@ -144,7 +157,7 @@ describe("useRepoForm", () => {
       fetchImpl as unknown as typeof fetch;
 
     try {
-      const { result } = await renderHook(() => useRepoForm());
+      const { result } = await renderHook(() => useRepoForm(), { wrapper });
 
       await act(async () => {
         const created = await result.current.submit(VALUES);
@@ -169,7 +182,7 @@ describe("useRepoForm", () => {
       fetchImpl as unknown as typeof fetch;
 
     try {
-      const { result } = await renderHook(() => useRepoForm());
+      const { result } = await renderHook(() => useRepoForm(), { wrapper });
 
       await act(async () => {
         await result.current.submit(VALUES);
@@ -191,7 +204,7 @@ describe("useRepoForm", () => {
       fetchImpl as unknown as typeof fetch;
 
     try {
-      const { result } = await renderHook(() => useRepoForm());
+      const { result } = await renderHook(() => useRepoForm(), { wrapper });
 
       await act(async () => {
         await result.current.submit(VALUES);

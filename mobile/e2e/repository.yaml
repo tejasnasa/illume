@@ -1,0 +1,23 @@
+appId: com.tejasnasa.illume
+name: Repository and its sections
+---
+# The repository shell: the identity header, the section tabs, and the
+# reading order.
+#
+# The repository number is the one the seeded account owns. Change it in
+# this file, or the flow fails on a repository that does not exist.
+- launchApp
+- openLink: "illume://repo/1"
+- assertVisible:
+    id: "repo-name"
+- assertVisible:
+    id: "repo-tab-index"
+- assertVisible: "Home"
+- tapOn:
+    id: "repo-tab-glossary"
+- assertVisible:
+    id: "glossary-list"
+- tapOn:
+    id: "repo-tab-explorer"
+- assertVisible:
+    id: "repo-tab-index"
