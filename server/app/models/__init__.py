@@ -3,6 +3,7 @@ SQLAlchemy ORM models for the Illume application.
 
 This module exposes all database entities used across the application.
 """
+
 from app.models.ast_symbol import AstSymbol
 from app.models.chat_message import ChatMessage
 from app.models.code_owner import CodeOwner
@@ -13,6 +14,7 @@ from app.models.file import File
 from app.models.glossary_entry import GlossaryEntry
 from app.models.onboarding_guide import OnboardingGuide
 from app.models.pull_request import PullRequest
+from app.models.push_token import PushToken
 from app.models.repository import Repository
 from app.models.user import User
 
@@ -29,4 +31,5 @@ __all__ = [
     "GlossaryEntry",
     "OnboardingGuide",
     "PullRequest",
+    "PushToken",
 ]

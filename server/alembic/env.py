@@ -15,6 +15,7 @@ from app.models import (
     glossary_entry,
     onboarding_guide,
     pull_request,
+    push_token,
     repository,
     user,
 )
