@@ -48,8 +48,12 @@ export const DEFAULT_BACKEND_URL = "http://10.0.2.2:8000";
  */
 export function resolveBackendUrl(override?: string): string {
   if (override) return override.replace(/\/+$/, "");
-  const envValue = (process.env as Record<string, string | undefined>)
-    .EXPO_PUBLIC_BACKEND_URL;
+  // Keep this a literal member expression. Expo substitutes the value by
+  // matching `process.env.EXPO_PUBLIC_*` in the AST at bundle time, so a
+  // cast, a destructure or an index signature around `process.env` stops the
+  // substitution silently -- the expression then reads `undefined` at runtime
+  // and a release build throws the error below on launch.
+  const envValue = process.env.EXPO_PUBLIC_BACKEND_URL;
   const isDev = typeof __DEV__ === "undefined" || __DEV__;
   if (!envValue && !isDev) {
     // A release build with no backend URL is not a working app: the emulator

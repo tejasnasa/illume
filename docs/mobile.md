@@ -229,6 +229,20 @@ A **release** build with no value throws at startup with an actionable message r
 trying to reach an emulator alias on a real phone. A development build keeps the `10.0.2.2`
 fallback.
 
+#### The read has to stay a literal member expression
+
+Expo substitutes these values by matching a `process.env.EXPO_PUBLIC_*` member expression in the
+AST, before the bundle is written. Wrap `process.env` in anything — a type cast, a destructure, an
+index signature — and the pattern no longer matches, the substitution silently does not happen, and
+the expression reads `undefined` on the device. `resolveBackendUrl` in `api/client.ts` therefore
+reads `process.env.EXPO_PUBLIC_BACKEND_URL` bare, and `__tests__/publicEnvInlining.test.ts` reads
+the source and fails if that changes.
+
+This is worth its own guard because it is invisible everywhere else: typechecks pass, jest passes
+(the test environment has a real `process.env`), and the bundle builds. Only an installed release
+build fails, and it fails at launch rather than at the call site. The symptom is the launch error
+"EXPO_PUBLIC_BACKEND_URL is not set" from an app that was built with the variable set.
+
 `api/ingest.ts` derives the WebSocket URL from the same base by swapping `http` for `ws` — so an
 HTTPS backend automatically produces `wss://`.
 
@@ -980,6 +994,7 @@ compares the declared modules against the same resolution Gradle uses.
 | Symptom | Cause | Fix |
 | --- | --- | --- |
 | Every request fails with a network error on a device | `EXPO_PUBLIC_BACKEND_URL` is missing or points at `localhost` | Set it to a host the phone can reach; release builds refuse to start without it |
+| An installed release build launches with "EXPO_PUBLIC_BACKEND_URL is not set", though the variable is in `eas.json` | The read is wrapped in a cast or destructure, so Expo never substituted it; or the build was started before the value was added | Keep the read a literal `process.env.EXPO_PUBLIC_BACKEND_URL`; check the build's start time against the `eas.json` edit |
 | Sign-in completes in the browser but the app stays on login | The token was written to SecureStore without updating auth context, or the deep link is not allowlisted | Both paths call `signIn`; check `OAUTH_REDIRECT_ALLOWLIST` |
 | Works on Android, sign-in never returns on iOS | The `openAuthSessionAsync` result was ignored | `login.tsx` handles the promise result; iOS emits no deep-link event |
 | A screen renders nothing but its header | `useLocalSearchParams` was used under a dynamic segment | Use `useGlobalSearchParams` |
