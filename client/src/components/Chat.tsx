@@ -18,7 +18,8 @@ import Textarea from "./ui/Textarea";
  *
  * @param repoId - ID of the repository whose chat history to show.
  * @param url - Repository URL forwarded to message bubbles for links.
- * @param branch - Repository's ingested branch, forwarded to citation links.
+ * @param commitSha - Repository's ingested commit, pinned in citation links.
+ * @param branch - Repository's ingested branch, used when the commit is missing.
  * @param freeChatRemaining - Free-tier chat messages left for the user.
  *                            `null` means the count is unknown (e.g. the
  *                            user has a BYOK key, where the quota does not
@@ -30,11 +31,13 @@ import Textarea from "./ui/Textarea";
 export default function Chat({
   repoId,
   url,
+  commitSha,
   branch,
   freeChatRemaining,
 }: {
   repoId: string;
   url: string;
+  commitSha?: string | null;
   branch?: string | null;
   freeChatRemaining: number | null;
 }) {
@@ -118,6 +121,7 @@ export default function Chat({
             error={msg.error}
             errorKind={msg.errorKind}
             url={url}
+            commitSha={commitSha}
             branch={branch}
             onDelete={deleteMessage}
           />

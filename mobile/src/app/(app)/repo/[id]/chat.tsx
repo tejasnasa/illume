@@ -233,6 +233,7 @@ export default function RepoChatScreen() {
             error={item.error}
             errorKind={item.errorKind}
             url={repo?.github_url ?? ""}
+            commitSha={repo?.ingested_commit_sha ?? null}
             branch={repo?.ingested_branch ?? null}
             onDelete={deleteMessage}
           />

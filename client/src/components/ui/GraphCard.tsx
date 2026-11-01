@@ -2,6 +2,7 @@
  * Floating inspector card for a selected dependency-graph node.
  * @module GraphCard
  */
+import { resolveGithubRef } from "@/lib/github";
 import {
   CodeIcon,
   FileCodeIcon,
@@ -15,7 +16,8 @@ import {
  * @param setSelectedNode Setter used to clear the selection on close.
  * @param currentLevel The active graph level ("file" or "symbol"), controlling which metrics show.
  * @param github_url The repository base URL for the GitHub link.
- * @param branch Repository's ingested branch, used in place of ``master`` when set.
+ * @param commitSha The ingested commit, which the link pins to when set.
+ * @param branch Repository's ingested branch, used when the SHA is missing.
  * @param annotation Optional note shown for file-level nodes.
  * @returns The rendered graph inspector element.
  */
@@ -24,6 +26,7 @@ export default function GraphCard({
   setSelectedNode,
   currentLevel,
   github_url,
+  commitSha,
   branch,
   annotation,
 }: {
@@ -31,9 +34,12 @@ export default function GraphCard({
   setSelectedNode: (node: any) => void;
   currentLevel: string;
   github_url: string;
+  commitSha?: string | null;
   branch?: string | null;
   annotation: string | null;
 }) {
+  const githubRef = resolveGithubRef(commitSha, branch);
+
   return (
     <section className="absolute top-4 right-4 z-20 w-80 glass-card p-5 rounded-sm flex flex-col shadow-2xl animate-fade-left h-fit">
       <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-(--primary) to-(--chart-2)" />
@@ -164,7 +170,7 @@ export default function GraphCard({
 
         <a
           className="bg-white hover:bg-white/80 transition-colors text-black flex items-center gap-2 p-2 justify-center rounded-sm font-semibold uppercase"
-          href={`${github_url}/blob/${branch ?? "master"}/${selectedNode.path}`}
+          href={`${github_url}/blob/${githubRef}/${selectedNode.path}`}
           target="_blank"
         >
           <GithubLogoIcon weight="bold" />

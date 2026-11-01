@@ -2,6 +2,7 @@
  * Numbered glossary entry card with a source-file link.
  * @module GlossaryEntry
  */
+import { resolveGithubRef } from "@/lib/github";
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
@@ -11,7 +12,8 @@ import Link from "next/link";
  * @param start The base offset added to idx for the displayed entry number.
  * @param idx The zero-based index of this entry within the current page.
  * @param github_url The repository base URL for the source-file link.
- * @param branch Repository's ingested branch, used in place of ``master`` when set.
+ * @param commitSha The ingested commit, which the link pins to when set.
+ * @param branch Repository's ingested branch, used when the SHA is missing.
  * @returns The rendered glossary entry element.
  */
 export default function GlossaryEntry({
@@ -19,14 +21,18 @@ export default function GlossaryEntry({
   start,
   idx,
   github_url,
+  commitSha,
   branch,
 }: {
   entry: any;
   start: number;
   idx: number;
   github_url: string;
+  commitSha?: string | null;
   branch?: string | null;
 }) {
+  const githubRef = resolveGithubRef(commitSha, branch);
+
   return (
     <div
       key={entry.id}
@@ -43,7 +49,7 @@ export default function GlossaryEntry({
         </div>
         {entry.file_path && (
           <Link
-            href={`${github_url}/blob/${branch ?? "master"}/${entry.file_path}#L${entry.line_number}`}
+            href={`${github_url}/blob/${githubRef}/${entry.file_path}#L${entry.line_number}`}
             target="_blank"
             className="flex items-center gap-2 font-mono text-sm text-(--chart-2) bg-(--chart-2)/10 hover:bg-(--chart-2)/20 transition-colors px-2 py-1 rounded truncate max-w-50 sm:max-w-xs shrink-0"
             title={entry.file_path}

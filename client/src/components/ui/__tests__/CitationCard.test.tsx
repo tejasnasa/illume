@@ -201,26 +201,43 @@ describe("github links", () => {
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("hardcodes the master branch", () => {
-    // The card falls back to ``master`` when no ``branch`` prop is supplied, which is
-    // what a call site that does not yet know the ingested branch will see.
-    render(<CitationCard src={symbol} url={URL} />);
+  it("pins the link to the ingested commit when one is supplied", () => {
+    // The commit is the snapshot the answer was grounded in. A branch link drifts as
+    // the branch moves, so the SHA wins even when the branch is also known.
+    render(
+      <CitationCard
+        src={symbol}
+        url={URL}
+        commitSha="a1b2c3d4"
+        branch="develop"
+      />,
+    );
 
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
-      expect.stringContaining("/blob/master/"),
+      `${URL}/blob/a1b2c3d4/src/util.py#L4-L6`,
     );
   });
 
-  it("uses the provided branch in place of the master fallback", () => {
-    // The repository's ingested branch is forwarded by callers (ChatBubble) so a repo
-    // ingested from ``main`` -- GitHub's default -- produces a live link rather than a
-    // dead ``master`` one.
+  it("falls back to the ingested branch when the commit is missing", () => {
+    // A repository ingested before the commit watermark was recorded still links by
+    // branch, so a repo ingested from ``main`` produces a live link rather than a dead
+    // ``master`` one.
     render(<CitationCard src={symbol} url={URL} branch="develop" />);
 
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
       `${URL}/blob/develop/src/util.py#L4-L6`,
+    );
+  });
+
+  it("falls back to master when neither ref is recorded", () => {
+    // Last resort for rows that carry neither a commit nor a branch.
+    render(<CitationCard src={symbol} url={URL} />);
+
+    expect(screen.getByRole("link")).toHaveAttribute(
+      "href",
+      expect.stringContaining("/blob/master/"),
     );
   });
 

@@ -332,6 +332,7 @@ export default async function Repository({
         <Chat
           repoId={repo.id}
           url={repo.github_url}
+          commitSha={repo.ingested_commit_sha}
           branch={repo.ingested_branch}
           freeChatRemaining={freeChatRemaining}
         />

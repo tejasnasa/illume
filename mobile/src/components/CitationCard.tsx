@@ -10,8 +10,8 @@
  * of text the citation was built from. On a phone the cards are one per
  * row, so the chunk has room to breathe.
  *
- * The link out to GitHub is the one place this client deliberately
- * diverges from the web: see :func:`resolveGithubHref`.
+ * The link out to GitHub follows the same commit-pinned rule as the web
+ * client: see :func:`resolveGithubHref`.
  */
 
 import { useState } from "react";
@@ -137,12 +137,11 @@ function resolveSubLabel(
 /**
  * Build the GitHub link for a citation, when one applies.
  *
- * The web client hard-codes ``master`` in this link
- * (``client/src/components/ui/CitationCard.tsx``), which makes it a dead
- * button for a repository ingested from ``main`` -- or from any other
- * branch. The mobile client uses the branch the repository was actually
- * indexed at, and only falls back to ``master`` when the repository does
- * not record one.
+ * The link pins to the commit the repository was ingested at, because that
+ * is the snapshot the answer was grounded in -- a branch link drifts as the
+ * branch moves. The branch is the fallback for a repository ingested before
+ * the commit watermark was recorded, and ``master`` is the last resort for a
+ * row that records neither.
  *
  * The line anchor is only added for a symbol whose range is known; the
  * web client appends it unconditionally, which produces a
@@ -151,15 +150,21 @@ function resolveSubLabel(
  * @param src - The citation source.
  * @param url - The repository's GitHub URL.
  * @param branch - The branch the repository was ingested from.
+ * @param commitSha - The commit the repository was ingested at.
  * @returns The GitHub URL, or ``null`` when the kind has no link target.
  */
 export function resolveGithubHref(
   src: ChatSource,
   url: string,
   branch?: string | null,
+  commitSha?: string | null,
 ): string | null {
   const ref =
-    branch && branch.length > 0 ? branch : DEFAULT_SOURCE_BRANCH;
+    commitSha && commitSha.length > 0
+      ? commitSha
+      : branch && branch.length > 0
+        ? branch
+        : DEFAULT_SOURCE_BRANCH;
   const base = url.replace(/\/+$/, "");
 
   if (src.source_type === "symbol") {
@@ -188,13 +193,13 @@ export interface CitationCardProps {
   /** The repository's GitHub URL; the source link is built from it. */
   url: string;
   /**
-   * The branch the repository was ingested from.
+   * The commit the repository was ingested at.
    *
-   * The web client hard-codes ``master`` in this link, which breaks for
-   * every repository that was not ingested from ``master``. The mobile
-   * client uses the branch the repository was indexed at and only falls
-   * back to ``master`` when the repository does not record one.
+   * Preferred over ``branch`` so the link cannot drift after the branch
+   * moves. Falls back to the branch, then ``master``, when absent.
    */
+  commitSha?: string | null;
+  /** The branch the repository was ingested from; the fallback ref. */
   branch?: string | null;
   /** Test hook. */
   testID?: string;
@@ -203,12 +208,13 @@ export interface CitationCardProps {
 /**
  * Draw one citation.
  *
- * @param props - The source, the repository's URL and branch.
+ * @param props - The source, the repository's URL, commit and branch.
  * @returns The rendered card.
  */
 export function CitationCard({
   src,
   url,
+  commitSha,
   branch,
   testID = "citation-card",
 }: CitationCardProps) {
@@ -218,7 +224,7 @@ export function CitationCard({
   const config = TYPE_CONFIG[type];
   const primary = resolvePrimaryLabel(type, src);
   const sub = resolveSubLabel(type, src);
-  const href = resolveGithubHref(src, url, branch);
+  const href = resolveGithubHref(src, url, branch, commitSha);
 
   const toggle = () => setExpanded((value) => !value);
 

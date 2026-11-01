@@ -40,6 +40,7 @@ export default async function GraphPage({
       currentLevel={currentLevel}
       repoId={id}
       github_url={repo.github_url}
+      commitSha={repo.ingested_commit_sha}
       branch={repo.ingested_branch}
       guide={guide}
     />

@@ -237,7 +237,7 @@ describe("RepoChatScreen", () => {
     );
   });
 
-  it("links a citation to the branch the repository was ingested from", async () => {
+  it("links a citation to the commit the repository was ingested at", async () => {
     const openUrl = jest
       .spyOn(Linking, "openURL")
       .mockImplementation(async () => true);
@@ -251,7 +251,7 @@ describe("RepoChatScreen", () => {
     await fireEvent.press(screen.getByTestId("citation-card-0-github"));
 
     expect(openUrl).toHaveBeenCalledWith(
-      "https://github.com/example/foo/blob/main/app/tasks/ingest.py#L10-L20",
+      "https://github.com/example/foo/blob/abcdef1234567890/app/tasks/ingest.py#L10-L20",
     );
 
     openUrl.mockRestore();

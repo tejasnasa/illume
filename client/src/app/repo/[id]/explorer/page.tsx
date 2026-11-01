@@ -48,6 +48,7 @@ export default async function ExplorerPage({
           github_url={repo.github_url}
           repoId={repo.id}
           guide={guide}
+          commitSha={repo.ingested_commit_sha}
           branch={repo.ingested_branch}
         />
       )}

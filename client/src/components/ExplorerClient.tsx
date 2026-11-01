@@ -58,7 +58,8 @@ const buildTree = (files: FileNode[]): TreeNode => {
  * @param guide - Onboarding guide with reading order and annotations.
  * @param github_url - Repository URL for outbound source links.
  * @param repoId - ID used for ownership lookups.
- * @param branch - Repository's ingested branch, forwarded to source-link consumers.
+ * @param commitSha - Repository's ingested commit, pinned in source links.
+ * @param branch - Repository's ingested branch, used when the commit is missing.
  * @returns Explorer layout with navigable tree and detail panel.
  */
 export default function ExplorerClient({
@@ -66,12 +67,14 @@ export default function ExplorerClient({
   guide,
   github_url,
   repoId,
+  commitSha,
   branch,
 }: {
   graphData: Graph;
   guide: Guide;
   github_url: string;
   repoId: string;
+  commitSha?: string | null;
   branch?: string | null;
 }) {
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
@@ -221,6 +224,7 @@ export default function ExplorerClient({
               ownershipData={ownershipData}
               isLoading={isLoadingOwnership}
               githubUrl={github_url}
+              commitSha={commitSha}
               branch={branch}
               onClose={handleClose}
             />

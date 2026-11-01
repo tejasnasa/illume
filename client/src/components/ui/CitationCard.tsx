@@ -2,6 +2,7 @@
  * Expandable citation card for a single RAG source.
  * @module CitationCard
  */
+import { resolveGithubRef } from "@/lib/github";
 import ChatMessage from "@/types/chat";
 import {
   CaretDownIcon,
@@ -123,15 +124,17 @@ function resolveSubLabel(type: SourceType, src: Source): string {
  * Builds a GitHub deep link for a citation when one applies.
  * @param src The citation source.
  * @param url The repository base URL.
- * @param branch The repository's ingested branch, or null to fall back to ``master``.
+ * @param commitSha The commit the repository was ingested at, preferred when set.
+ * @param branch The repository's ingested branch, used when the SHA is missing.
  * @returns The GitHub URL, or null when the type has no link target.
  */
 function resolveGithubHref(
   src: Source,
   url: string,
+  commitSha: string | null,
   branch: string | null,
 ): string | null {
-  const ref = branch ?? "master";
+  const ref = resolveGithubRef(commitSha, branch);
   if (src.source_type === "symbol")
     return `${url}/blob/${ref}/${src.file_path}#L${src.start_line}-L${src.end_line}`;
   if (src.source_type === "file") return `${url}/blob/${ref}/${src.file_path}`;
@@ -162,16 +165,19 @@ function GithubLink({ href }: { href: string }) {
  * Renders an expandable card summarizing one cited source.
  * @param src The citation source to display.
  * @param url The repository base URL for GitHub links.
- * @param branch The repository's ingested branch, used in place of ``master`` when set.
+ * @param commitSha The ingested commit, which the link pins to when set.
+ * @param branch The repository's ingested branch, used when the SHA is missing.
  * @returns The rendered citation card element.
  */
 export default function CitationCard({
   src,
   url,
+  commitSha,
   branch,
 }: {
   src: Source;
   url: string;
+  commitSha?: string | null;
   branch?: string | null;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -179,7 +185,12 @@ export default function CitationCard({
   const type = resolveType(src);
   const config = TYPE_CONFIG[type];
   const Icon = config.icon;
-  const githubHref = resolveGithubHref(src, url, branch ?? null);
+  const githubHref = resolveGithubHref(
+    src,
+    url,
+    commitSha ?? null,
+    branch ?? null,
+  );
 
   return (
     <div

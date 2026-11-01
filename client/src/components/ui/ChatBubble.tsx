@@ -20,6 +20,7 @@ interface Props {
   error?: boolean;
   errorKind?: ChatErrorKind;
   url: string;
+  commitSha?: string | null;
   branch?: string | null;
   onDelete?: (id: string) => void;
 }
@@ -33,7 +34,8 @@ interface Props {
  * @param errorKind Narrows the error styling: `quota` is the free-tier 402
  *                  and gets a /settings link instead of the generic string.
  * @param url Repository URL used to build citation links.
- * @param branch Repository's ingested branch; passed through to citation cards.
+ * @param commitSha Repository's ingested commit; passed through to citation cards.
+ * @param branch Repository's ingested branch; used when the commit is missing.
  * @param onDelete Optional handler to delete this message.
  * @returns The rendered chat bubble element.
  */
@@ -44,6 +46,7 @@ export default function ChatBubble({
   error,
   errorKind,
   url,
+  commitSha,
   branch,
   onDelete,
 }: Props) {
@@ -103,7 +106,13 @@ export default function ChatBubble({
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {message.sources.map((src, i) => (
-                    <CitationCard url={url} branch={branch} key={i} src={src} />
+                    <CitationCard
+                      url={url}
+                      commitSha={commitSha}
+                      branch={branch}
+                      key={i}
+                      src={src}
+                    />
                   ))}
                 </div>
               </div>

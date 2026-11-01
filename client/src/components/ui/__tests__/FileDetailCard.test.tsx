@@ -115,22 +115,32 @@ describe("github link", () => {
     );
   });
 
-  it("hardcodes the master branch", () => {
-    // The card falls back to ``master`` when no ``branch`` prop is supplied; four other
-    // components share the same fallback. The opportunistic fix threads the ingested
-    // branch through so a repo ingested from ``main`` no longer dead-links.
-    const { container } = renderCard();
+  it("pins the link to the ingested commit when one is supplied", () => {
+    // The commit is the snapshot the file was indexed at, so it wins over the branch.
+    const { container } = renderCard({
+      commitSha: "a1b2c3d4",
+      branch: "develop",
+    });
 
     expect(container.querySelector("a")?.getAttribute("href")).toContain(
-      "/blob/master/",
+      "/blob/a1b2c3d4/",
     );
   });
 
-  it("uses the provided branch in place of the master fallback", () => {
+  it("falls back to the ingested branch when the commit is missing", () => {
     const { container } = renderCard({ branch: "develop" });
 
     expect(container.querySelector("a")?.getAttribute("href")).toContain(
       "/blob/develop/",
+    );
+  });
+
+  it("falls back to master when neither ref is recorded", () => {
+    // Last resort for rows that carry neither a commit nor a branch.
+    const { container } = renderCard();
+
+    expect(container.querySelector("a")?.getAttribute("href")).toContain(
+      "/blob/master/",
     );
   });
 

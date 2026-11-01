@@ -2,6 +2,7 @@
  * Slide-in detail card showing file metadata and ownership stats.
  * @module FileDetailCard
  */
+import { resolveGithubRef } from "@/lib/github";
 import { FileNode } from "@/types/explorer";
 import {
   CrownIcon,
@@ -22,6 +23,7 @@ interface Props {
   ownershipData: any;
   isLoading: boolean;
   githubUrl: string;
+  commitSha?: string | null;
   branch?: string | null;
   annotation: string | null;
   onClose: () => void;
@@ -33,7 +35,8 @@ interface Props {
  * @param ownershipData Ownership payload with primary owner, bus factor, and contributors.
  * @param isLoading When true, shows the ownership loading state.
  * @param githubUrl Repository URL used for the "view on GitHub" link.
- * @param branch Repository's ingested branch, used in place of ``master`` when set.
+ * @param commitSha The ingested commit, which the link pins to when set.
+ * @param branch Repository's ingested branch, used when the SHA is missing.
  * @param annotation Optional note appended below the ownership section.
  * @param onClose Handler invoked when the close button is clicked.
  * @returns The rendered detail card element.
@@ -43,10 +46,12 @@ export default function FileDetailCard({
   ownershipData,
   isLoading,
   githubUrl,
+  commitSha,
   branch,
   onClose,
   annotation,
 }: Props) {
+  const githubRef = resolveGithubRef(commitSha, branch);
   return (
     <motion.div
       key="detail-card"
@@ -67,7 +72,7 @@ export default function FileDetailCard({
         </button>
 
         <Link
-          href={`${githubUrl}/blob/${branch ?? "master"}/${file.path}`}
+          href={`${githubUrl}/blob/${githubRef}/${file.path}`}
           target="_blank"
           className="absolute p-2 top-4 right-14 text-(--muted-foreground) hover:bg-(--secondary) rounded-full transition-colors"
         >

@@ -167,7 +167,9 @@ export interface ChatBubbleProps {
   errorKind?: ChatErrorKind;
   /** The repository's GitHub URL; the citation links are built from it. */
   url: string;
-  /** The branch the repository was ingested from. */
+  /** The commit the repository was ingested at; the preferred link ref. */
+  commitSha?: string | null;
+  /** The branch the repository was ingested from; the fallback link ref. */
   branch?: string | null;
   /** Called when the reader deletes the turn. */
   onDelete?: (id: string) => void;
@@ -186,6 +188,7 @@ export function ChatBubble({
   error,
   errorKind,
   url,
+  commitSha,
   branch,
   onDelete,
 }: ChatBubbleProps) {
@@ -253,6 +256,7 @@ export function ChatBubble({
                   key={`${source.source_type}-${index}`}
                   src={source}
                   url={url}
+                  commitSha={commitSha}
                   branch={branch}
                   testID={`citation-card-${index}`}
                 />

@@ -39,6 +39,7 @@ export default async function GlossaryPage({
       <GlossarySearch
         github_url={repo.github_url}
         repoId={repo.id}
+        commitSha={repo.ingested_commit_sha}
         branch={repo.ingested_branch}
       >
         <div className="flex justify-between items-center mb-6">
@@ -95,6 +96,7 @@ export default async function GlossaryPage({
                 start={start}
                 idx={idx}
                 github_url={repo.github_url}
+                commitSha={repo.ingested_commit_sha}
                 branch={repo.ingested_branch}
               />
             ))}

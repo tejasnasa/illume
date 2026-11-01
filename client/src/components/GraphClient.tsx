@@ -31,7 +31,8 @@ const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
  * @param currentLevel - Active granularity ("file" or "symbol").
  * @param repoId - Repository ID used for level-change navigation.
  * @param github_url - Repository URL for source links in the detail card.
- * @param branch - Repository's ingested branch, forwarded to the detail card.
+ * @param commitSha - Repository's ingested commit, pinned in source links.
+ * @param branch - Repository's ingested branch, used when the commit is missing.
  * @param guide - Guide with reading order and per-file annotations.
  * @returns Full-viewport graph view with legend, search, and tour controls.
  */
@@ -40,6 +41,7 @@ export default function GraphClient({
   currentLevel,
   repoId,
   github_url,
+  commitSha,
   branch,
   guide,
 }: {
@@ -48,6 +50,7 @@ export default function GraphClient({
   currentLevel: string;
   repoId: string;
   github_url: string;
+  commitSha?: string | null;
   branch?: string | null;
 }) {
   const router = useRouter();
@@ -255,6 +258,7 @@ export default function GraphClient({
           setSelectedNode={setSelectedNode}
           currentLevel={currentLevel}
           github_url={github_url}
+          commitSha={commitSha}
           branch={branch}
           annotation={readingOrderMap[selectedNode?.path]?.annotation ?? null}
         />
