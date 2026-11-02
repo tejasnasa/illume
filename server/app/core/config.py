@@ -29,6 +29,11 @@ class Settings(BaseSettings):
             returning ``None`` and the route layer returning 402.
         AI_BASE_URL (str): Override for the free tier’s base URL. Empty means the
             DeepSeek registry default (``https://api.deepseek.com``, **without** ``/v1``).
+        COHERE_API_KEY (str): The operator's Cohere key for the ``cohere`` reranker.
+            Empty makes that reranker unavailable; retrieval then falls back to the
+            fused order.
+        OPENROUTER_API_KEY (str): The operator's OpenRouter key, used for the Decisions
+            API behind the ``jev`` reranker. Empty makes that reranker unavailable.
         ACCESS_TOKEN_EXPIRE_MINUTES (int): JWT token validity duration.
         SECRET_KEY (str): Secret key for JWT signing.
         FRONTEND_URL (str): CORS allowed origin for the frontend.
@@ -65,6 +70,8 @@ class Settings(BaseSettings):
     AI_MODEL: str
     AI_API_KEY: str = ""
     AI_BASE_URL: str = ""
+    COHERE_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     SECRET_KEY: str
     FRONTEND_URL: str
