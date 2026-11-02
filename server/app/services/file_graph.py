@@ -8,9 +8,10 @@ rules.
 """
 
 from collections import defaultdict
+from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, aliased
 
@@ -237,6 +238,161 @@ async def query_file_edges_async(
         .filter(TargetSymbol.c.file_id.in_(select(File.id).where(File.repository_id == repo_id)))
     )
     return (await db.execute(stmt)).all()
+
+
+# A barrel chain longer than this is treated as unresolvable rather than walked
+# further; real re-export chains are a hop or two deep.
+_MAX_BARREL_DEPTH = 5
+
+# The symbol kinds that make a file a graph node. A file with none of them
+# contributes no node to the visualisation either, which is how a barrel is
+# recognised.
+NODE_SYMBOL_KINDS = ("function", "class")
+
+
+async def _edge_counts_touching(
+    db: AsyncSession, repo_id: UUID, file_ids: Collection[UUID]
+) -> list[tuple[UUID, UUID, int]]:
+    """Collapsed ``(source_file, target_file, count)`` rows with an endpoint in ``file_ids``.
+
+    The join is the one in :func:`query_file_edges_async`: both symbols must
+    belong to the repository, and one row is one underlying dependency, so
+    ``count`` is the number of dependencies the file pair collapses.
+    """
+    SourceSymbol = AstSymbol.__table__.alias("src_sym")
+    TargetSymbol = AstSymbol.__table__.alias("tgt_sym")
+    repo_files = select(File.id).where(File.repository_id == repo_id)
+    ids = list(file_ids)
+    stmt = (
+        select(SourceSymbol.c.file_id, TargetSymbol.c.file_id, func.count())
+        .select_from(Dependency)
+        .join(SourceSymbol, Dependency.source_symbol_id == SourceSymbol.c.id)
+        .join(TargetSymbol, Dependency.target_symbol_id == TargetSymbol.c.id)
+        .where(SourceSymbol.c.file_id.in_(repo_files))
+        .where(TargetSymbol.c.file_id.in_(repo_files))
+        .where(SourceSymbol.c.file_id.in_(ids) | TargetSymbol.c.file_id.in_(ids))
+        .group_by(SourceSymbol.c.file_id, TargetSymbol.c.file_id)
+    )
+    return [(src, tgt, int(count)) for src, tgt, count in (await db.execute(stmt)).all()]
+
+
+async def _files_without_nodes(
+    db: AsyncSession, repo_id: UUID, file_ids: Collection[UUID]
+) -> set[UUID]:
+    """The given files that hold no function or class symbol."""
+    if not file_ids:
+        return set()
+    has_node = (
+        select(AstSymbol.id)
+        .where(AstSymbol.file_id == File.id, AstSymbol.kind.in_(NODE_SYMBOL_KINDS))
+        .exists()
+    )
+    stmt = select(File.id).where(
+        File.repository_id == repo_id, File.id.in_(list(file_ids)), ~has_node
+    )
+    return set((await db.execute(stmt)).scalars().all())
+
+
+async def query_neighbours_async(
+    db: AsyncSession,
+    repo_id: UUID,
+    file_ids: Collection[UUID],
+    *,
+    through_barrels: bool = True,
+) -> list[tuple[UUID, UUID, int]]:
+    """The files one import away from each given file, in both directions.
+
+    Edges are derived exactly as :func:`iter_file_edges` derives them: both
+    symbols inside the repository, self-edges dropped, one pair per file
+    pair with the number of underlying dependencies as its weight. An
+    importer and an importee of the same file are both neighbours, and a
+    neighbour that is both gets the two weights added.
+
+    With ``through_barrels`` a neighbour that holds no function or class (a
+    re-export file such as ``index.ts``) is not reported itself. The walk
+    continues through it in the same direction, so a seed that imports a barrel
+    reaches the real files behind it, and a file that imports a seed through a
+    barrel is found as the seed's importer. The weight is that of the edge
+    that reached the barrel. This is the rule ``graph_builder`` applies to the
+    visualisation, here done at file level. A barrel with nothing behind it,
+    for instance a file of type declarations, is kept as itself.
+
+    Args:
+        db: The request's session.
+        repo_id: The only repository read.
+        file_ids: The files whose neighbours are wanted.
+        through_barrels: Walk through barrel files rather than reporting them.
+
+    Returns:
+        ``(seed_file_id, neighbour_file_id, weight)`` rows, unordered.
+    """
+    seeds = set(file_ids)
+    if not seeds:
+        return []
+
+    # Directions: "out" follows imports (seed -> neighbour), "in" follows importers.
+    direct: dict[tuple[UUID, UUID], int] = defaultdict(int)
+    hops: dict[tuple[str, UUID, UUID], int] = {}
+    for src, tgt, count in await _edge_counts_touching(db, repo_id, seeds):
+        if src == tgt:
+            continue
+        if src in seeds:
+            hops[("out", src, tgt)] = count
+        if tgt in seeds:
+            hops[("in", tgt, src)] = count
+
+    if not through_barrels:
+        for (_, seed, neighbour), count in hops.items():
+            direct[(seed, neighbour)] += count
+        return [(seed, neighbour, count) for (seed, neighbour), count in direct.items()]
+
+    barrels = await _files_without_nodes(db, repo_id, {n for _, _, n in hops})
+    resolved: dict[tuple[UUID, UUID], int] = defaultdict(int)
+    kept_barrels: dict[tuple[UUID, UUID], int] = defaultdict(int)
+    for (_, seed, neighbour), count in hops.items():
+        if neighbour not in barrels:
+            resolved[(seed, neighbour)] += count
+
+    # Each frontier entry is a barrel reached from a seed, with the weight of
+    # the edge that got there. ``visited`` makes a cycle of barrels terminate.
+    frontier = {key: count for key, count in hops.items() if key[2] in barrels}
+    visited = set(frontier)
+    reached: dict[tuple[UUID, UUID], int] = {}
+    for _ in range(_MAX_BARREL_DEPTH):
+        if not frontier:
+            break
+        edges = await _edge_counts_touching(db, repo_id, {key[2] for key in frontier})
+        onward: dict[tuple[str, UUID, UUID], int] = {}
+        for (direction, seed, barrel), weight in frontier.items():
+            found = False
+            for src, tgt, _ in edges:
+                if src == tgt:
+                    continue
+                if direction == "out" and src == barrel:
+                    onward[(direction, seed, tgt)] = weight
+                    found = True
+                elif direction == "in" and tgt == barrel:
+                    onward[(direction, seed, src)] = weight
+                    found = True
+            if not found:
+                kept_barrels[(seed, barrel)] = max(kept_barrels[(seed, barrel)], weight)
+        next_barrels = await _files_without_nodes(db, repo_id, {key[2] for key in onward})
+        frontier = {}
+        for key, weight in onward.items():
+            _, seed, node = key
+            if node == seed:
+                continue
+            if node in next_barrels:
+                if key not in visited:
+                    visited.add(key)
+                    frontier[key] = weight
+            else:
+                reached[(seed, node)] = max(reached.get((seed, node), 0), weight)
+
+    merged: dict[tuple[UUID, UUID], int] = dict(resolved)
+    for pair, weight in {**kept_barrels, **reached}.items():
+        merged[pair] = max(merged.get(pair, 0), weight)
+    return [(seed, neighbour, count) for (seed, neighbour), count in merged.items()]
 
 
 def build_dep_path_map(
