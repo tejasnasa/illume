@@ -12,6 +12,7 @@ from app.models import (
     dependency,
     embedding,
     file,
+    file_cochange,
     glossary_entry,
     onboarding_guide,
     pull_request,

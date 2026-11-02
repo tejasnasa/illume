@@ -11,6 +11,7 @@ from app.models.commit import Commit
 from app.models.dependency import Dependency
 from app.models.embedding import Embedding
 from app.models.file import File
+from app.models.file_cochange import FileCochange
 from app.models.glossary_entry import GlossaryEntry
 from app.models.onboarding_guide import OnboardingGuide
 from app.models.pull_request import PullRequest
@@ -24,6 +25,7 @@ __all__ = [
     "Dependency",
     "Embedding",
     "File",
+    "FileCochange",
     "Repository",
     "User",
     "Commit",

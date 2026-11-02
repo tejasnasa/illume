@@ -486,6 +486,148 @@ class TestEmbeddingsHnswIndex:
         assert "ef_construction" in row.definition
 
 
+def _index_row(name: str):
+    """Validity, access method and definition of one index, read from the catalog."""
+    from sqlalchemy import create_engine, text
+
+    from tests.conftest import TEST_SYNC_DB_URL
+
+    engine = create_engine(TEST_SYNC_DB_URL)
+    try:
+        with engine.connect() as connection:
+            return connection.execute(
+                text(
+                    """
+                    SELECT i.indisvalid, am.amname,
+                           pg_get_indexdef(i.indexrelid) AS definition
+                    FROM pg_class c
+                    JOIN pg_index i ON i.indexrelid = c.oid
+                    JOIN pg_am am ON am.oid = c.relam
+                    WHERE c.relname = :name
+                    """
+                ),
+                {"name": name},
+            ).one_or_none()
+    finally:
+        engine.dispose()
+
+
+class TestRetrievalIndexes:
+    """The full-text column and the trigram indexes behind keyword, name and grep search.
+
+    The trigram indexes are partial, and a query only uses a partial index when
+    it repeats the predicate, so the predicate itself is pinned here.
+    """
+
+    def test_search_tsv_is_a_stored_generated_column(self):
+        from sqlalchemy import create_engine, text
+
+        from tests.conftest import TEST_SYNC_DB_URL
+
+        engine = create_engine(TEST_SYNC_DB_URL)
+        try:
+            with engine.connect() as connection:
+                row = connection.execute(
+                    text(
+                        """
+                        SELECT a.attgenerated, format_type(a.atttypid, a.atttypmod) AS type
+                        FROM pg_attribute a
+                        WHERE a.attrelid = 'embeddings'::regclass AND a.attname = 'search_tsv'
+                        """
+                    )
+                ).one_or_none()
+        finally:
+            engine.dispose()
+
+        assert row is not None, "embeddings.search_tsv is missing"
+        assert row.attgenerated == "s", "search_tsv must be a stored generated column"
+        assert row.type == "tsvector"
+
+    def test_the_full_text_index_is_gin(self):
+        row = _index_row("ix_embeddings_search_tsv")
+        assert row is not None
+        assert row.indisvalid is True
+        assert row.amname == "gin"
+
+    @pytest.mark.parametrize(
+        ("name", "column"),
+        [("ix_ast_symbols_name_trgm", "name"), ("ix_ast_symbols_source_trgm", "source_code")],
+    )
+    def test_trigram_indexes_are_partial_on_searchable_kinds(self, name, column):
+        row = _index_row(name)
+        assert row is not None, f"{name} is missing"
+        assert row.indisvalid is True, "a failed CONCURRENTLY build leaves the index unusable"
+        assert row.amname == "gin"
+        assert f"{column} gin_trgm_ops" in row.definition
+        for kind in ("function", "class", "method"):
+            assert kind in row.definition
+        assert "import" not in row.definition
+
+
+class TestFileCochange:
+    """The pair table's invariants are enforced by the database, not by the builder."""
+
+    async def _two_files(self, db_session):
+        from tests.factories import make_file, make_repo, make_user
+
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user)
+        first = await make_file(db_session, repo, path="a.py")
+        second = await make_file(db_session, repo, path="b.py")
+        low, high = sorted([first, second], key=lambda f: str(f.id))
+        return repo, low, high
+
+    async def test_a_pair_is_stored_smaller_id_first(self, db_session):
+        from sqlalchemy.exc import IntegrityError
+
+        from app.models import FileCochange
+
+        repo, low, high = await self._two_files(db_session)
+        db_session.add(
+            FileCochange(
+                repository_id=repo.id,
+                file_a_id=high.id,
+                file_b_id=low.id,
+                together=2,
+                a_count=3,
+                b_count=4,
+                jaccard=0.4,
+            )
+        )
+        with pytest.raises(IntegrityError, match="ck_file_cochange_ordered_pair"):
+            await db_session.flush()
+
+    async def test_deleting_a_file_removes_its_pairs(self, db_session):
+        from sqlalchemy import delete, func, select
+
+        from app.models import File, FileCochange
+
+        repo, low, high = await self._two_files(db_session)
+        db_session.add(
+            FileCochange(
+                repository_id=repo.id,
+                file_a_id=low.id,
+                file_b_id=high.id,
+                together=2,
+                a_count=3,
+                b_count=4,
+                jaccard=0.4,
+            )
+        )
+        await db_session.flush()
+
+        await db_session.execute(delete(File).where(File.id == high.id))
+
+        remaining = (
+            await db_session.execute(
+                select(func.count())
+                .select_from(FileCochange)
+                .where(FileCochange.repository_id == repo.id)
+            )
+        ).scalar_one()
+        assert remaining == 0
+
+
 class TestFreeIngestionsCounter:
     """
     ``e5f6a7b8c9d0`` replaces the one-shot boolean with a counter, because the
