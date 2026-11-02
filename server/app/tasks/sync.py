@@ -36,6 +36,7 @@ from app.core.celery import celery
 from app.core.database import get_sync_db
 from app.models.repository import Repository
 from app.models.user import User
+from app.services.cochange import build_cochange
 from app.services.criticality import run_criticality_scoring
 from app.services.dependency_resolver import (
     compute_fan_metrics,
@@ -289,7 +290,9 @@ def _run_step_a(
 
     Sequence is fixed: file delta first, then ``analyze_git_history``
     (which writes the ``git_last_modified`` / ``has_tests`` columns
-    ``run_criticality_scoring`` reads), then dependency_resolver --
+    ``run_criticality_scoring`` reads), then the co-change rebuild (which
+    needs the file rows and the commit rows just written), then
+    dependency_resolver --
     whose INSERT-only contract requires the prior DELETE --
     then fan metrics, then criticality, then stack detection.
     The whole thing is one transaction so a reader either sees the old
@@ -305,6 +308,9 @@ def _run_step_a(
     upserted, deleted, _changed, changed_file_ids = apply_file_delta(db, repo.id, repo_root, paths)
 
     analyze_git_history(db, None, repo, repo_root)
+    # A full rebuild from the stored commits, inside this transaction, so a
+    # reader sees either the old co-change table or the new one.
+    build_cochange(db, repo.id)
     delete_repo_edges(db, repo.id)
     resolve_dependencies(db, repo.id, str(repo_root))
     compute_fan_metrics(db, repo.id)

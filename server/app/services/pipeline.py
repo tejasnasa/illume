@@ -17,6 +17,8 @@ Stage order, deliberately:
 * ``analyze_git_history`` -- must precede ``run_criticality_scoring``
   because criticality reads ``File.git_last_modified`` and ``File.has_tests``
   written only by ``_bulk_update_files``.
+* ``build_cochange`` -- reads the commit rows ``analyze_git_history`` writes
+  and the file rows the parse stage writes, so it follows both.
 * ``run_criticality_scoring``.
 * ``build_glossary`` and ``build_reading_order`` overlapped.
 * ``embed_repository_symbols`` and ``generate_brief`` overlapped.
@@ -46,6 +48,7 @@ from sqlalchemy.orm import Session
 from app.models.repository import Repository
 from app.services._stage_timer import stage
 from app.services._stages import Phase, Stage
+from app.services.cochange import build_cochange
 from app.services.criticality import run_criticality_scoring
 from app.services.git_analyzer import analyze_git_history
 from app.services.llm_config import LLMConfig
@@ -159,6 +162,22 @@ def run_full_analysis(
 
     with stage("git_history"):
         analyze_git_history(db, redis_client, repo, repo_root)
+
+    publish(
+        "cochange_started",
+        "Mapping files that change together...",
+        stage=Stage.COCHANGE,
+        phase=Phase.STARTED,
+    )
+    with stage("cochange"):
+        build_cochange(db, repo.id)
+        db.commit()
+    publish(
+        "cochange_complete",
+        "Co-change map ready.",
+        stage=Stage.COCHANGE,
+        phase=Phase.DONE,
+    )
 
     readme_content = _read_readme(repo_root)
 

@@ -559,3 +559,60 @@ class TestStageVocabularyOnTheWire:
 
 # ``Callable`` was used to silence a forward-reference lint about the
 # ``run_full_analysis`` signature; not needed here after import cleanup.
+
+
+class TestCochangeStage:
+    """The co-change rebuild runs once files and commits both exist, and says so."""
+
+    def test_the_builder_runs_after_parse_and_git_history_and_before_criticality(
+        self, pipeline_repo, clone_root, stubbed_clone, monkeypatch
+    ):
+        import app.services.pipeline as pipeline_module
+
+        calls: list[str] = []
+
+        def recording(name: str):
+            real = getattr(pipeline_module, name)
+
+            def wrapper(*args, **kwargs):
+                calls.append(name)
+                return real(*args, **kwargs)
+
+            return wrapper
+
+        for name in (
+            "process_repository_files",
+            "analyze_git_history",
+            "build_cochange",
+            "run_criticality_scoring",
+        ):
+            monkeypatch.setattr(pipeline_module, name, recording(name))
+
+        _run_pipeline(pipeline_repo, clone_root)
+
+        assert calls == [
+            "process_repository_files",
+            "analyze_git_history",
+            "build_cochange",
+            "run_criticality_scoring",
+        ]
+
+    def test_started_and_done_frames_are_published_in_order(
+        self, pipeline_repo, clone_root, stubbed_clone
+    ):
+        recorder = _run_pipeline(pipeline_repo, clone_root)
+
+        frames = [
+            (frame["stage"], frame["phase"])
+            for frame in recorder.frames
+            if frame.get("stage") in (Stage.GIT_HISTORY, Stage.COCHANGE, Stage.CRITICALITY)
+            and frame.get("phase") in ("started", "done")
+        ]
+        cochange = [f for f in frames if f[0] == Stage.COCHANGE]
+        assert cochange == [("cochange", "started"), ("cochange", "done")]
+        assert Stage.COCHANGE == "cochange"
+        # The frames sit between git history finishing and criticality starting.
+        last_git_done = max(i for i, f in enumerate(frames) if f == ("git_history", "done"))
+        first_cochange = frames.index(("cochange", "started"))
+        criticality_started = frames.index(("criticality", "started"))
+        assert last_git_done < first_cochange < criticality_started

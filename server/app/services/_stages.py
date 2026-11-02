@@ -24,6 +24,7 @@ class Stage(StrEnum):
     COMPUTE_FAN_METRICS = "compute_fan_metrics"
     DETECT_STACK = "detect_stack"
     GIT_HISTORY = "git_history"
+    COCHANGE = "cochange"
     CRITICALITY = "criticality"
     GLOSSARY = "glossary"
     READING_ORDER = "reading_order"
