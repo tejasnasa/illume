@@ -138,22 +138,33 @@ class TestArchitectureBriefOmitsReasoning:
 class TestChatAnswerOmitsReasoning:
     async def test_groq_credential_sends_no_reasoning_field(self, monkeypatch):
         from app.services import rag
+        from app.services.retrieval import single_shot
+        from app.services.retrieval.candidate import Candidate
+        from app.services.retrieval.pipeline import RetrievalResult, RetrievalTrace
 
         responses = _AsyncRecordingResponses("The parser lives in app/parser.py.")
         monkeypatch.setattr(rag, "AsyncOpenAI", _factory(responses))
 
-        async def _embed_query(client, query):
-            return [0.0]
+        async def _retrieve(config, question, *, ctx, history=(), llm=None):
+            reference = rag.SourceReference(source_type="file", chunk_text="x", file_path="a.py")
+            candidate = Candidate(key="F:a.py", reference=reference, text="x")
+            trace = RetrievalTrace(
+                channels=(),
+                reranker="none",
+                reranker_degraded=False,
+                degraded=(),
+                config_hash=config.config_hash(),
+            )
+            return RetrievalResult(
+                question=question,
+                variants=(),
+                candidates=(candidate,),
+                pool=(candidate,),
+                trace=trace,
+            )
 
-        async def _vector_search(db, repository_id, query_vector, top_k=10):
-            return [SimpleNamespace(source_type="file", source_id=uuid4(), file_id=uuid4())]
-
-        async def _resolve_sources(db, embeddings):
-            return [rag.SourceReference(source_type="file", chunk_text="x", file_path="a.py")]
-
-        monkeypatch.setattr(rag, "_embed_query", _embed_query)
-        monkeypatch.setattr(rag, "_vector_search", _vector_search)
-        monkeypatch.setattr(rag, "resolve_sources", _resolve_sources)
+        # ``rag`` runs retrieval through the answerer, so the seam is its ``retrieve``.
+        monkeypatch.setattr(single_shot, "retrieve", _retrieve)
 
         result = await rag.answer_question(
             "where is the parser?", uuid4(), None, llm=_groq_config()

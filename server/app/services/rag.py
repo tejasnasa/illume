@@ -1,28 +1,36 @@
 """Retrieval-augmented question answering over a repository.
 
-Embeds the user's query, searches stored embeddings in pgvector via
-cosine distance, applies per-source-type diversity caps to keep results
-varied, resolves the hits back to their underlying records in one query
-per source type (symbol, commit, PR, file, or document), and prompts an
-LLM with the assembled context to produce a grounded answer plus source
-references.
+:func:`answer_question` is the chat endpoint's entry point. It runs the Classic
+preset of the retrieval pipeline (see :mod:`app.services.retrieval`): embed the
+query, search stored embeddings in pgvector by cosine distance, apply per-source-type
+diversity caps, resolve the hits to their underlying records in one query per
+source type, and prompt an LLM with the assembled context to produce a grounded
+answer plus source references.
+
+The pgvector search, the caps and the resolver also live on here as the helpers
+that path was built from (:func:`_vector_search`, :func:`_apply_diversity_caps`,
+:func:`_resolve_source`). They are kept because other code and tests import them,
+and because they are the reference the Classic preset is held equal to.
 """
 
 import logging
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Literal, Sequence, cast
+from typing import Literal, Sequence
 from uuid import UUID
 
 from openai import AsyncOpenAI
-from openai.types.responses import ResponseInputParam
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models import Embedding
 from app.services.llm_config import LLMConfig
+from app.services.retrieval.channels.base import RetrievalContext
+from app.services.retrieval.config import CLASSIC
 from app.services.retrieval.resolve import SourceReference, resolve_sources
+from app.services.retrieval.single_shot import answer, build_classic_prompt
+from app.services.retrieval.vector import prepare_filtered_vector_search
 
 logger = logging.getLogger(__name__)
 
@@ -37,58 +45,6 @@ TYPE_CAPS = {
     "document": 1,
     "file": 2,
 }
-
-# pgvector 0.8 added iterative index scans. Below it, a filtered HNSW query
-# returns the global ``ef_search`` nearest rows and applies ``repository_id``
-# afterwards, so a small repository on a large instance can come back with too
-# few hits. The extension version is fixed for the life of a process, so the
-# answer is cached rather than re-read on every search.
-_ITERATIVE_SCAN_MIN_VERSION = (0, 8)
-_pgvector_supports_iterative_scan: bool | None = None
-
-
-def _version_tuple(raw: str | None) -> tuple[int, ...]:
-    """Parses a dotted version string into its numeric components."""
-    if not raw:
-        return ()
-    parts: list[int] = []
-    for chunk in raw.split("."):
-        digits = "".join(c for c in chunk if c.isdigit())
-        if not digits:
-            break
-        parts.append(int(digits))
-    return tuple(parts)
-
-
-async def _prepare_filtered_vector_search(db: AsyncSession) -> None:
-    """Tunes pgvector for a repository-filtered HNSW search.
-
-    ``hnsw.ef_search`` is raised from its 40-row default to 200 so the walk has
-    a wider candidate pool, and ``hnsw.iterative_scan`` is set to
-    ``strict_order`` so the scan keeps going until the filter has produced
-    enough rows instead of stopping at the global top of the index.
-    ``strict_order`` rather than ``relaxed_order`` because the diversity caps
-    take hits in the order they arrive, and ``relaxed_order`` may return them
-    slightly out of distance order.
-
-    Both settings are transactional (``SET LOCAL``), which is why they are
-    issued on the search's own session rather than on a connection pool. On a
-    pgvector older than 0.8 ``iterative_scan`` does not exist and is skipped;
-    the index is still used there, so a small repository on a large instance
-    can come back with fewer hits than asked for.
-    """
-    global _pgvector_supports_iterative_scan
-    if _pgvector_supports_iterative_scan is None:
-        raw_version = (
-            await db.execute(text("SELECT extversion FROM pg_extension WHERE extname = 'vector'"))
-        ).scalar_one_or_none()
-        _pgvector_supports_iterative_scan = (
-            _version_tuple(raw_version)[:2] >= _ITERATIVE_SCAN_MIN_VERSION
-        )
-
-    await db.execute(text("SET LOCAL hnsw.ef_search = 200"))
-    if _pgvector_supports_iterative_scan:
-        await db.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
 
 
 @dataclass
@@ -158,7 +114,7 @@ async def _vector_search(db: AsyncSession, repository_id, query_vector, top_k=TO
     """Finds nearest embeddings via pgvector cosine distance, filtered to similarity above 0.3 (distance < 0.7)."""
     # The repository filter is applied after the index walk, so tell pgvector to
     # keep scanning until it has enough surviving rows (see the helper).
-    await _prepare_filtered_vector_search(db)
+    await prepare_filtered_vector_search(db)
     result = await db.execute(
         select(Embedding)
         .filter(
@@ -185,38 +141,8 @@ async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceRefer
     return resolved[0]
 
 
-def _build_prompt(query: str, sources: list[SourceReference]) -> str:
-    """Builds the system prompt with labeled context blocks and the grounding rules."""
-    context_blocks = []
-
-    for i, src in enumerate(sources):
-        if src.source_type == "symbol":
-            header = f"[Source {i + 1}] [Code] {src.file_path} — {src.symbol_name} (lines {src.start_line}–{src.end_line})"
-        elif src.source_type == "commit":
-            header = f"[Source {i + 1}] [Commit] {src.commit_hash} by {src.author_name}"
-        elif src.source_type == "pull_request":
-            header = f"[Source {i + 1}] [PR #{src.pr_number}] {src.pr_title}"
-        elif src.source_type == "file":
-            header = f"[Source {i + 1}] [Code] {src.file_path}"
-        else:
-            header = f"[Source {i + 1}] [README]"
-        context_blocks.append(f"{header}\n{src.chunk_text}")
-
-    context = "\n\n---\n\n".join(context_blocks)
-    return f"""You are an expert code assistant analyzing a software repository.
-            Answer the user's question using ONLY the context provided below.
-            Context includes code, commit messages, pull requests, files and documentation.
-            Be specific — reference file names, function names, line numbers, commit hashes, or PR numbers where relevant.
-            If the answer cannot be found in the context, say so clearly.
-
-            ## Context
-            {context}
-
-            ## Question
-            {query}
-
-            ## Answer
-        """
+# The Classic prompt lives with the answerer that uses it; this name stays for importers.
+_build_prompt = build_classic_prompt
 
 
 async def answer_question(
@@ -229,11 +155,13 @@ async def answer_question(
 ) -> RAGResponse:
     """Answer a natural-language question about a repository.
 
-    Flow: embed the query, run a pgvector cosine-distance search scoped to
-    the repository, cap results per source type for diversity, resolve each
-    hit to a citable source, then prompt the LLM (`settings.AI_MODEL`) with
-    the retrieved context, prior chat history, and the question. The model
-    is instructed to answer only from the provided context.
+    Runs the Classic preset through :func:`app.services.retrieval.single_shot.answer`:
+    embed the query, run a pgvector cosine-distance search scoped to the
+    repository, cap results per source type for diversity, resolve each hit to a
+    citable source, then prompt the LLM with the retrieved context, prior chat
+    history, and the question. The model is instructed to answer only from the
+    provided context. The behaviour is the chat endpoint's long-standing one,
+    byte for byte; this function only supplies the clients.
 
     Args:
         query: The user's question.
@@ -262,56 +190,27 @@ async def answer_question(
     # Embeddings stay on the server key by design -- the 1536-dim vector
     # column is shared across all users, and a per-user embedding key would
     # shard the index. The retrieval half of the pipeline therefore keeps
-    # its single client; the generation half gets a second client built
-    # from the resolved credential.
+    # its single client; the generation client is built by the answerer from
+    # the resolved credential, through the factory below.
     embed_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    logger.info(f"Embedding query for repo {repository_id}: {query!r}")
-    query_vector = await _embed_query(embed_client, query)
+    async def embed(texts: Sequence[str]) -> list[list[float]]:
+        return [await _embed_query(embed_client, text) for text in texts]
 
-    chunks = await _vector_search(db, repository_id, query_vector, 10)
-    logger.info(f"Retrieved {len(chunks)} chunks from pgvector")
+    def generation_client(**client_kwargs):
+        # Resolved on each call so the name patched on this module is the one used.
+        return AsyncOpenAI(**client_kwargs)
 
-    if not chunks:
-        return RAGResponse(
-            answer="No relevant code was found in this repository for your question.",
-            sources=[],
-            generated=False,
-        )
-
-    sources = await resolve_sources(db, chunks)
-    prompt = _build_prompt(query, sources)
-
-    # Retrieved context goes in the system role; history replays as turns so
-    # the model can resolve follow-up questions against prior context.
-    messages: list[dict] = [{"role": "system", "content": prompt}]
-
-    if history:
-        for turn in history:
-            messages.append({"role": turn.role, "content": turn.content})
-
-    messages.append({"role": "user", "content": query})
-
-    # Generation client: the user's BYOK key when present, otherwise the
-    # server key. ``client_kwargs`` omits ``base_url`` when None so the
-    # SDK default applies (which is also how the E2E stub is reached).
-    generation_client_kwargs = (
-        llm.client_kwargs() if llm is not None else {"api_key": settings.OPENAI_API_KEY}
+    logger.info(f"Answering query for repo {repository_id}: {query!r}")
+    ctx = RetrievalContext(repository_id=repository_id, db=db, embed=embed)
+    result = await answer(
+        CLASSIC,
+        query,
+        ctx=ctx,
+        history=history or (),
+        llm=llm,
+        client_factory=generation_client,
     )
-    generation_client = AsyncOpenAI(**generation_client_kwargs)
-    generation_model = llm.model if llm is not None else settings.AI_MODEL
-    generation_response_kwargs = (
-        llm.response_kwargs("minimal") if llm is not None else {"reasoning": {"effort": "minimal"}}
-    )
+    logger.info(f"Retrieved {len(result.retrieval.candidates)} chunks from pgvector")
 
-    logger.info("Calling LLM for answer generation")
-    response = await generation_client.responses.create(
-        model=generation_model,
-        **generation_response_kwargs,
-        input=cast(ResponseInputParam, messages),
-        max_output_tokens=3000,
-    )
-
-    answer = (response.output_text or "").strip()
-
-    return RAGResponse(answer=answer, sources=sources, generated=True)
+    return RAGResponse(answer=result.answer, sources=result.sources, generated=result.generated)

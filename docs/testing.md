@@ -236,6 +236,7 @@ tests/
 ├── fixtures/
 │   ├── sample_repo.py             # an in-memory repo used by the ingest tests
 │   ├── openai_stub.py             # the deterministic OpenAI fake
+│   ├── retrieval.py               # data-driven retrieval fixtures, incl. the 30-file RETRIEVAL_FIXTURE
 │   └── golden/                    # golden files and their comparison helper
 ├── smoke/                         # marker: smoke
 ├── unit/                          # marker: unit
@@ -245,6 +246,7 @@ tests/
 │   ├── api/                       # one module per router
 │   ├── tasks/                     # the Celery ingestion pipeline
 │   └── ws/                        # the ingest WebSocket
+├── tools/                         # runnable helpers, not tests (retrieval_trace)
 ├── security/                      # marker: security
 └── migrations/                    # marker: migration
 ```
@@ -387,6 +389,28 @@ pub/sub delivery is what is being asserted.
 **The database is not mocked.** This is deliberate: a mocked database cannot report that a query is
 wrong, that a constraint fires, or that a migration and a model disagree, and those are the kinds of
 problems this suite is meant to catch.
+
+### The retrieval recall check
+
+`tests/integration/services/test_retrieval_recall.py` seeds `RETRIEVAL_FIXTURE` (a 30-file web API
+with a barrel file, three co-change pairs, a bulk commit that must be ignored, a function too long to
+embed, and a camelCase name) once per module, then runs 14 known-answer questions through the real
+pipeline with the fake embedder and no API key. It asserts recall@10 per preset against recorded
+floors. Those constants only move up, and moving one is a reviewed change.
+
+Dense search is noise here (hash vectors are never within the 0.7 cut), so the check guards the
+lexical, symbol, grep, graph and co-change channels and fusion, not embedding quality. The fixture
+uses sparse hash vectors and fixed row ids: dense random vectors make the HNSW index cost about
+50 ms per insert, and random ids make tie-breaking, and so ranking near the cut-off, vary by run.
+
+To see which channel found which file for one question, against the test database only:
+
+```bash
+cd server
+uv run python -m tests.tools.retrieval_trace                       # default question
+uv run python -m tests.tools.retrieval_trace graph-direct --preset hybrid
+uv run python -m tests.tools.retrieval_trace --list
+```
 
 ### Golden files
 
