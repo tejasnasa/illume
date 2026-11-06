@@ -9,8 +9,9 @@ when the graph is built.
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
 from dataclasses import dataclass, field
+from itertools import count
 from typing import Any
 
 from app.services.agent.budgets import RunBudget
@@ -62,6 +63,10 @@ class AgentDeps:
         verifier: Checks citations after the answer; ``None`` skips the check.
         screen: Inspects tool results; ``None`` passes them through.
         system_prompt: The agent's system prompt.
+        worker_id: The worker this collaborator set belongs to, or ``None`` for
+            the main agent. Its events and steps are tagged with it.
+        step_counter: The run-wide step counter. Workers share the parent's, so
+            the log has one ordering however many branches write to it.
     """
 
     config: PipelineConfig
@@ -78,11 +83,14 @@ class AgentDeps:
     decider: Decider | None = None
     verifier: Verifier | None = None
     screen: ResultScreen | None = None
+    worker_id: str | None = None
+    step_counter: Iterator[int] | None = None
     _tools: list[dict[str, Any]] = field(default_factory=list, init=False)
     _allowed: frozenset[str] = field(default_factory=frozenset, init=False)
-    _next_step: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
+        if self.step_counter is None:
+            self.step_counter = count()
         names = list(self.agent.tools) if self.agent.tools is not None else None
         if names is not None and FINISH_TOOL not in names:
             names.append(FINISH_TOOL)
@@ -105,13 +113,17 @@ class AgentDeps:
 
     def next_step(self) -> int:
         """Reserves the next step index."""
-        index = self._next_step
-        self._next_step += 1
-        return index
+        assert self.step_counter is not None
+        return next(self.step_counter)
 
     async def event(self, name: str, payload: dict[str, Any]) -> None:
-        """Emits an event, absorbing a failing listener."""
-        await safe_emit(self.emit, name, payload)
+        """Emits an event, absorbing a failing listener.
+
+        A worker's events carry its id, so concurrent branches can be told
+        apart and drawn as separate lanes.
+        """
+        tagged = payload if self.worker_id is None else {**payload, "worker_id": self.worker_id}
+        await safe_emit(self.emit, name, tagged)
 
     async def record(
         self,
@@ -134,7 +146,14 @@ class AgentDeps:
         step = self.next_step() if index is None else index
         duration = round((time.perf_counter() - started) * 1000, 2) if started is not None else 0.0
         await self.steps.record(
-            StepRecord(index=step, kind=kind, node=node, payload=payload, duration_ms=duration)
+            StepRecord(
+                index=step,
+                kind=kind,
+                node=node,
+                payload=payload,
+                duration_ms=duration,
+                worker_id=self.worker_id,
+            )
         )
         return step
 

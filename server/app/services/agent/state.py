@@ -10,8 +10,9 @@ moment it is crossed, so those counters live in
 
 from __future__ import annotations
 
+import operator
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypedDict
@@ -164,6 +165,114 @@ class VerificationReport:
         return bool(self.unsupported)
 
 
+# --- splitting one question across workers -------------------------------------
+
+Focus = Literal["code", "graph", "history"]
+
+WorkerStatus = Literal["completed", "partial", "failed", "timed_out"]
+
+
+@dataclass(frozen=True)
+class SubQuestion:
+    """One independent investigation a question was split into.
+
+    Attributes:
+        id: A short identifier, unique within the plan.
+        question: The part of the original question this investigation answers.
+        focus: Where the investigation should concentrate: source text, the
+            import graph, or history.
+    """
+
+    id: str
+    question: str
+    focus: Focus = "code"
+
+    def to_dict(self) -> dict[str, str]:
+        """The sub-question as JSON-serialisable data."""
+        return {"id": self.id, "question": self.question, "focus": self.focus}
+
+
+@dataclass(frozen=True)
+class Plan:
+    """A question split into the investigations that answer it.
+
+    Attributes:
+        subquestions: The investigations, in the order they were planned.
+        synthesis_hint: What the closing answer should emphasise, when the
+            planner said anything about it.
+        model: The model that produced the plan.
+    """
+
+    subquestions: tuple[SubQuestion, ...]
+    synthesis_hint: str = ""
+    model: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        """The plan as JSON-serialisable data."""
+        return {
+            "subquestions": [sub.to_dict() for sub in self.subquestions],
+            "synthesis_hint": self.synthesis_hint,
+            "model": self.model,
+        }
+
+
+@dataclass(frozen=True)
+class WorkerResult:
+    """What one worker found, however it ended.
+
+    Attributes:
+        worker_id: The worker's id within the run, which its events carry too.
+        subquestion_id: The plan entry this worker investigated.
+        question: The sub-question as planned.
+        focus: Where the worker concentrated.
+        status: ``completed`` when it wrote findings, ``partial`` when a limit
+            stopped it, ``failed`` when a model call failed, ``timed_out`` when
+            its work was cut off.
+        stop_reason: Why the worker's loop ended.
+        answer: Its findings, which may be a summary of what it saw when it
+            never wrote one.
+        evidence_keys: The citation keys it gathered.
+        iterations: Model turns it took.
+        error: Why it failed, when it did.
+    """
+
+    worker_id: str
+    subquestion_id: str
+    question: str
+    focus: str
+    status: WorkerStatus
+    stop_reason: StopReason
+    answer: str
+    evidence_keys: tuple[str, ...] = ()
+    iterations: int = 0
+    error: str | None = None
+
+    @property
+    def failed(self) -> bool:
+        """Whether the worker produced no findings at all."""
+        return self.status in ("failed", "timed_out")
+
+    def to_dict(self) -> dict[str, Any]:
+        """The result as JSON-serialisable data, for the step log."""
+        return {
+            "worker_id": self.worker_id,
+            "subquestion_id": self.subquestion_id,
+            "question": self.question,
+            "focus": self.focus,
+            "status": self.status,
+            "stop_reason": self.stop_reason.value,
+            "answer_chars": len(self.answer),
+            "evidence_keys": list(self.evidence_keys),
+            "iterations": self.iterations,
+            "error": self.error,
+        }
+
+
+def unanswered(results: Sequence[WorkerResult]) -> tuple[str, ...]:
+    """The sub-questions no worker produced findings for."""
+    return tuple(result.question for result in results if result.failed)
+
+
 class AgentState(TypedDict):
     """Everything the nodes read and write.
 
@@ -182,6 +291,8 @@ class AgentState(TypedDict):
         gate_rejections: Times the sufficiency check sent the agent back.
         draft: The answer the agent wrote with ``finish``, until it is accepted.
         confidence_note: What the agent said was uncertain, from ``finish``.
+        plan: The sub-questions the question was split into, when it was.
+        worker_results: What each worker found, however it ended.
         turn_end: How the last model turn ended: ``tools``, ``finish``,
             ``text`` or ``limit``.
         pending_calls: Function calls of the last turn that have no output yet.
@@ -208,6 +319,8 @@ class AgentState(TypedDict):
     gate_rejections: int
     draft: str | None
     confidence_note: str | None
+    plan: Plan | None
+    worker_results: Annotated[list[WorkerResult], operator.add]
     turn_end: str | None
     pending_calls: list[dict[str, Any]]
     consecutive_errors: int
@@ -248,6 +361,8 @@ def initial_state(
         gate_rejections=0,
         draft=None,
         confidence_note=None,
+        plan=None,
+        worker_results=[],
         turn_end=None,
         pending_calls=[],
         consecutive_errors=0,

@@ -37,12 +37,15 @@ from app.services.agent.deps import AgentDeps, ResultScreen, Verifier
 from app.services.agent.errors import RunError, describe_error
 from app.services.agent.events import Event, safe_emit
 from app.services.agent.graph import build_graph, recursion_limit
+from app.services.agent.nodes.merge import ordered_results
 from app.services.agent.nodes.synthesize import write_answer
 from app.services.agent.prompts import PROMPT_VERSION, RepoBrief, build_system_prompt, opening_items
 from app.services.agent.state import (
     ChatTurn,
     Evidence,
+    Plan,
     StopReason,
+    WorkerResult,
     initial_state,
     resolve_citations,
 )
@@ -100,6 +103,8 @@ class RunResult:
         limits: The limits in force, including the caller's input token limit.
         model: The generation model.
         route: The routing decision that chose this graph, when there was one.
+        plan: The sub-questions the run was split into, when it was.
+        workers: What each worker found, in plan order.
         error: Why the run failed, when it did.
     """
 
@@ -122,6 +127,8 @@ class RunResult:
     limits: dict[str, int] = field(default_factory=dict)
     model: str = ""
     route: RouteDecision | None = None
+    plan: Plan | None = None
+    workers: tuple[WorkerResult, ...] = ()
     error: RunError | None = None
 
 
@@ -196,8 +203,12 @@ def _effective_agent(config: PipelineConfig, context_window: int | None) -> Agen
 def _build_decider(
     config: PipelineConfig, llm: LLMConfig, emit: Emit, run_id: uuid.UUID
 ) -> Decider | None:
-    """The run's decider, or ``None`` when no decision is configured to run."""
-    if not config.checks.gate:
+    """The run's decider, or ``None`` when no decision is configured to run.
+
+    Planning asks its own question even when the sufficiency gate is off, so
+    planner execution builds a decider either way.
+    """
+    if not config.checks.gate and config.execution != "planner":
         return None
     try:
         return get_decider(config.decider, llm=llm, emit=emit, session_id=str(run_id))
@@ -329,6 +340,9 @@ async def run_agent(
         "max_input_tokens": agent_config.max_input_tokens,
         "context_window": agent_config.context_window,
     }
+    if config.planner is not None:
+        limits["max_workers"] = config.planner.max_workers
+        limits["worker_iterations"] = config.planner.worker_iterations
     await safe_emit(
         sink,
         Event.RUN_STARTED,
@@ -455,6 +469,8 @@ async def _result(
 ) -> RunResult:
     usage = await deps.budget.snapshot()
     citations = resolve_citations(answer, state["evidence"]) if answer else None
+    plan = state["plan"]
+    workers = tuple(ordered_results(state))
     return RunResult(
         run_id=run_id,
         status=status,
@@ -464,7 +480,7 @@ async def _result(
         cited=citations.cited if citations else (),
         unresolved=citations.unresolved if citations else (),
         evidence=dict(state["evidence"]),
-        iterations=state["iteration"],
+        iterations=state["iteration"] + sum(worker.iterations for worker in workers),
         tool_calls=usage.tool_calls,
         input_tokens=usage.input_tokens,
         output_tokens=usage.output_tokens,
@@ -475,6 +491,8 @@ async def _result(
         limits=limits,
         model=deps.llm.model,
         route=state["route"],
+        plan=plan,
+        workers=workers,
         error=error,
     )
 

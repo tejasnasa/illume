@@ -27,6 +27,8 @@ class Event(StrEnum):
         NODE: A graph node started or finished (``phase``).
         ROUTE: The routing decision that chose this graph.
         SEED: Retrieval results were put in front of the agent.
+        PLAN: The question was split into sub-questions, or planning was
+            skipped.
         THINKING: A piece of the model's interim text.
         MODEL_CALL: One model call finished, with its token usage.
         TOOL_CALL: A tool call is about to run.
@@ -41,6 +43,7 @@ class Event(StrEnum):
         DEGRADED: Something worked with less than asked: a limit was reached or
             a model-backed stage fell back.
         ERROR: The run failed.
+        WORKER_FAILED: One worker failed while the others carried on.
         RUN_FINISHED: The run ended, however it ended.
     """
 
@@ -48,6 +51,7 @@ class Event(StrEnum):
     NODE = "node"
     ROUTE = "route"
     SEED = "seed"
+    PLAN = "plan"
     THINKING = "thinking"
     MODEL_CALL = "model_call"
     TOOL_CALL = "tool_call"
@@ -60,6 +64,7 @@ class Event(StrEnum):
     ANSWER = "answer"
     DEGRADED = "degraded"
     ERROR = "error"
+    WORKER_FAILED = "worker_failed"
     RUN_FINISHED = "run_finished"
 
 

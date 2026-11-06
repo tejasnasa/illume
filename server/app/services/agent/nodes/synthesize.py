@@ -20,7 +20,11 @@ from app.services.agent.deps import (
 )
 from app.services.agent.events import Event
 from app.services.agent.nodes._model import stream_response, usage_of
-from app.services.agent.prompts import build_synthesis_prompt, opening_items
+from app.services.agent.prompts import (
+    build_synthesis_prompt,
+    opening_items,
+    with_coverage_note,
+)
 from app.services.agent.state import AgentState, StopReason
 
 NOTHING_WRITTEN = (
@@ -78,7 +82,13 @@ def make_synthesize_node(deps: AgentDeps):
     async def synthesize(state: AgentState) -> dict[str, Any]:
         reason = state["stop_reason"] or StopReason.TEXT_REPLY
         if reason is StopReason.FINISHED and state["draft"]:
-            return {"answer": state["draft"], "stop_reason": reason}
-        return {"answer": await write_answer(deps, state, reason), "stop_reason": reason}
+            answer = state["draft"]
+        else:
+            answer = await write_answer(deps, state, reason)
+        # A worker that failed leaves a gap the answer must name, not hide.
+        return {
+            "answer": with_coverage_note(answer, state["worker_results"]),
+            "stop_reason": reason,
+        }
 
     return synthesize

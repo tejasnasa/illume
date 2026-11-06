@@ -13,6 +13,13 @@ The nodes and what leaves each one:
 * ``synthesize`` goes to ``verify``, which ends the run, or sends it back to
   ``agent`` to repair unsupported claims.
 
+With parallel execution the question may be split first: ``seed`` leads to
+``planner`` instead of ``agent``. When the plan says the question is simple,
+``planner`` leads to ``agent`` and the graph is the one above. Otherwise it
+fans out to one ``worker`` per sub-question, every worker leads to ``merge``,
+and ``merge`` leads to the gate as a finished draft. Each worker is the agent
+loop compiled as a subgraph of its own.
+
 ``finish`` is a tool, so the tools node is where a finished answer appears and
 where the loop hands over to the gate. Every way out of the loop passes through
 ``synthesize``, so a run always produces an answer.
@@ -24,21 +31,28 @@ from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
 from app.services.agent.deps import AgentDeps
 from app.services.agent.events import Event
 from app.services.agent.nodes import (
     make_agent_node,
     make_gate_node,
+    make_merge_node,
+    make_planner_node,
     make_route_node,
     make_seed_node,
     make_synthesize_node,
     make_tools_node,
     make_verify_node,
+    make_worker_node,
 )
+from app.services.agent.nodes.worker import WorkerInput, worker_items
 from app.services.agent.state import AgentState
 
 NODE_NAMES = ("route", "seed", "agent", "tools", "gate", "synthesize", "verify")
+
+PLANNER_NODE_NAMES = ("planner", "worker", "merge")
 
 # The graph takes this many steps per model turn at most (agent, tools, and the
 # gate that may follow), plus the nodes outside the loop.
@@ -74,6 +88,27 @@ def _after_gate(state: AgentState) -> str:
 
 def _after_verify(state: AgentState) -> str:
     return "agent" if state["answer"] is None else END
+
+
+def _after_planner(state: AgentState) -> str | list[Send]:
+    """The single agent when planning was skipped, one send per sub-question otherwise."""
+    plan = state["plan"]
+    if plan is None:
+        return "agent"
+    question = state["standalone_question"] or state["question"]
+    return [
+        Send(
+            "worker",
+            WorkerInput(
+                worker_id=f"w{index}",
+                subquestion=subquestion,
+                items=worker_items(state["items"], subquestion, question),
+                evidence=dict(state["evidence"]),
+                question=question,
+            ),
+        )
+        for index, subquestion in enumerate(plan.subquestions, start=1)
+    ]
 
 
 def _instrumented(
@@ -114,7 +149,21 @@ def build_graph(deps: AgentDeps):
 
     graph.add_edge(START, "route")
     graph.add_edge("route", "seed")
-    graph.add_edge("seed", "agent")
+    if deps.config.execution == "planner":
+        planner = _instrumented(deps, "planner", make_planner_node(deps))
+        graph.add_node("planner", cast(Any, planner))
+        graph.add_node(
+            "worker",
+            cast(Any, make_worker_node(deps)),
+            input_schema=WorkerInput,
+        )
+        graph.add_node("merge", cast(Any, _instrumented(deps, "merge", make_merge_node(deps))))
+        graph.add_edge("seed", "planner")
+        graph.add_conditional_edges("planner", _after_planner, ["agent", "worker"])
+        graph.add_edge("worker", "merge")
+        graph.add_edge("merge", "gate")
+    else:
+        graph.add_edge("seed", "agent")
     graph.add_conditional_edges("agent", _after_agent, ["tools", "gate", "agent", "synthesize"])
     graph.add_conditional_edges("tools", _after_tools, ["gate", "agent", "synthesize"])
     graph.add_conditional_edges("gate", _after_gate, ["agent", "synthesize"])

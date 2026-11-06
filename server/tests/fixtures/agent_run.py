@@ -13,8 +13,9 @@ from __future__ import annotations
 import asyncio
 import copy
 import itertools
+import json
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -28,6 +29,7 @@ from app.services.retrieval.config import (
     AgentConfig,
     ChecksConfig,
     PipelineConfig,
+    PlannerConfig,
     QueryConfig,
 )
 
@@ -65,6 +67,11 @@ def finish(answer: str, note: str | None = None, *, call_id: str | None = None):
     if note is not None:
         arguments["confidence_note"] = note
     return call("finish", arguments, call_id=call_id)
+
+
+def plan_reply(subquestions: Sequence[dict[str, str]], hint: str = "") -> Turn:
+    """A reply to the structured plan call."""
+    return turn(message(json.dumps({"subquestions": list(subquestions), "synthesis_hint": hint})))
 
 
 def message(text: str) -> dict[str, Any]:
@@ -223,6 +230,100 @@ class ScriptedModel:
         yield SimpleNamespace(type="response.completed", response=build_response(reply))
 
 
+# A phrase from the merge prompt that no other request carries.
+MERGE_MARKER = "combining the findings of several investigators"
+
+
+class RoutedModel(ScriptedModel):
+    """A scripted model that answers each branch of a parallel run differently.
+
+    With workers running at once, one ordered script would make a test depend on
+    which worker reached the model first. This model picks the reply from what
+    the request is: the structured plan call, one of the workers (by the
+    sub-question in its input), the merge call, or the single agent when
+    planning was skipped.
+
+    Attributes:
+        requests: A deep copy of every request's keyword arguments, in order.
+        tags: One tag per request: ``planner``, ``merge``, ``worker:<id>`` or
+            ``fallback``.
+    """
+
+    def __init__(
+        self,
+        *,
+        planner: Turn | None = None,
+        merge: Turn | None = None,
+        workers: Mapping[str, Sequence[Turn]] | None = None,
+        fallback: Sequence[Turn] = (),
+    ) -> None:
+        self.planner = planner
+        self.merge = merge
+        self._workers = {key: list(script) for key, script in (workers or {}).items()}
+        self._fallback = list(fallback)
+        self.requests = []
+        self.tags: list[str] = []
+        self.client_inits: list[dict[str, Any]] = []
+        self.responses = self
+
+    def tagged(self, tag: str) -> list[dict[str, Any]]:
+        """The requests one branch received, in order."""
+        return [
+            request for request, name in zip(self.requests, self.tags, strict=True) if name == tag
+        ]
+
+    def worker_requests(self, subquestion: str) -> list[dict[str, Any]]:
+        """The requests one worker made."""
+        return self.tagged(f"worker:{subquestion}")
+
+    def _next(self, request: dict[str, Any]) -> tuple[str, Turn]:
+        if "text" in request and self.planner is not None:
+            return "planner", self.planner
+        texts = _strings(request.get("input"))
+        if self.merge is not None and any(MERGE_MARKER in text for text in texts):
+            return "merge", self.merge
+        matches = [key for key in self._workers if any(key in text for text in texts)]
+        if matches:
+            key = max(matches, key=len)
+            script = self._workers[key]
+            if not script:
+                raise AssertionError(f"the script for {key!r} is used up")
+            return f"worker:{key}", script.pop(0)
+        if self._fallback:
+            return "fallback", self._fallback.pop(0)
+        raise AssertionError(f"no scripted reply for a request carrying {texts[-1][:120]!r}")
+
+    async def create(self, **kwargs: Any) -> Any:
+        self.requests.append(copy.deepcopy(kwargs))
+        tag, reply = self._next(kwargs)
+        self.tags.append(tag)
+        if reply.before is not None:
+            await reply.before()
+        if reply.error is not None:
+            raise reply.error
+        if not kwargs.get("stream"):
+            return build_response(reply)
+        return self._events(reply)
+
+
+def _strings(value: Any) -> list[str]:
+    """Every string in a request value, for routing and substring assertions."""
+    found: list[str] = []
+
+    def walk(item: Any) -> None:
+        if isinstance(item, str):
+            found.append(item)
+        elif isinstance(item, dict):
+            for child in item.values():
+                walk(child)
+        elif isinstance(item, list):
+            for child in item:
+                walk(child)
+
+    walk(value)
+    return found
+
+
 # --- a decider that answers from a list -----------------------------------------------
 
 
@@ -291,6 +392,43 @@ def agent_config(
         channels=HYBRID.channels,
         execution="agent",
         agent=AgentConfig(seed=seed, tools=tools, **limits),
+        checks=ChecksConfig(gate=gate),
+    )
+
+
+def planner_config(
+    *,
+    gate: bool = False,
+    seed: bool = True,
+    max_workers: int = 4,
+    worker_iterations: int = 8,
+    min_subquestions: int = 2,
+    plan_threshold: float = 0.5,
+    **limits: Any,
+) -> PipelineConfig:
+    """A pipeline configuration for parallel execution over the retrieval fixture.
+
+    Args:
+        gate: Turn the sufficiency check on.
+        seed: Run the retrieval before fanning out.
+        max_workers: The most sub-questions a plan may hold.
+        worker_iterations: Model turns per worker.
+        min_subquestions: The fewest sub-questions worth fanning out.
+        plan_threshold: The probability at which planning runs.
+        **limits: Overrides for the agent's limits.
+    """
+    return PipelineConfig(
+        name="planner_test",
+        query=QueryConfig(condense=False, history_messages=10),
+        channels=HYBRID.channels,
+        execution="planner",
+        agent=AgentConfig(seed=seed, **limits),
+        planner=PlannerConfig(
+            max_workers=max_workers,
+            worker_iterations=worker_iterations,
+            min_subquestions=min_subquestions,
+            plan_threshold=plan_threshold,
+        ),
         checks=ChecksConfig(gate=gate),
     )
 

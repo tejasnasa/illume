@@ -17,6 +17,9 @@ if TYPE_CHECKING:
 
 StepKind = Literal[
     "seed",
+    "plan",
+    "worker",
+    "merge",
     "model_call",
     "tool_call",
     "decision",
