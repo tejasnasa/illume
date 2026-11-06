@@ -21,6 +21,7 @@ Pins the five things the save flow can do wrong:
 from __future__ import annotations
 
 import json
+from typing import Any
 
 import httpx
 import pytest
@@ -162,6 +163,7 @@ def _responses_payload(*, function_call: bool) -> dict:
     directly, so a payload missing one surfaces as a client-side validation
     error rather than a test assertion.
     """
+    output: list[dict[str, Any]]
     if function_call:
         output = [
             {

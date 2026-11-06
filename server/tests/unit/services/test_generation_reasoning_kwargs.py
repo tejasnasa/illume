@@ -60,7 +60,7 @@ class _RecordingClient:
 class _AsyncRecordingResponses(_RecordingResponses):
     """The async twin; ``rag`` awaits ``responses.create``."""
 
-    async def create(
+    async def create(  # type: ignore[override]
         self, *, model: Any = None, input: Any = None, **kwargs: Any
     ) -> SimpleNamespace:
         self.kwargs_list.append(kwargs)

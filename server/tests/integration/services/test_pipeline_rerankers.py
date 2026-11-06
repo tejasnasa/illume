@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import Literal
 
 import httpx
 import pytest
@@ -35,7 +36,7 @@ VERIFY_VECTOR = hash_vector(
 )
 
 
-def config_for(kind: str, top_n: int = 4) -> PipelineConfig:
+def config_for(kind: Literal["none", "cohere", "llm", "jev"], top_n: int = 4) -> PipelineConfig:
     return HYBRID.model_copy(
         update={
             "rerank": RerankConfig(kind=kind, candidate_pool=12, top_n=top_n),

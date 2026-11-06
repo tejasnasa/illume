@@ -6,6 +6,8 @@ produced it, so its stability is pinned as carefully as the validation rules.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -29,7 +31,7 @@ pytestmark = pytest.mark.unit
 
 
 def _config(**overrides) -> PipelineConfig:
-    fields = {
+    fields: dict[str, Any] = {
         "name": "custom",
         "channels": (DenseChannel(), LexicalChannel()),
     }

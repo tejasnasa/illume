@@ -42,7 +42,7 @@ def _list(channel: str, keys: list[str], *, variant: int = 0, weight: float = 1.
     )
 
 
-def _scores(merged: list[Candidate]) -> dict[str, float]:
+def _scores(merged: list[Candidate]) -> dict[str, float | None]:
     return {candidate.key: candidate.fused_score for candidate in merged}
 
 

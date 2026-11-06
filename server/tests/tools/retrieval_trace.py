@@ -62,6 +62,7 @@ def _assert_test_stack() -> None:
 _assert_test_stack()
 
 from app.core.config import settings  # noqa: E402
+from app.services.retrieval.candidate import Candidate  # noqa: E402
 from app.services.retrieval.channels.base import RetrievalContext  # noqa: E402
 from app.services.retrieval.config import PRESETS, GrepChannel, PipelineConfig  # noqa: E402
 from app.services.retrieval.pipeline import RetrievalResult, retrieve  # noqa: E402
@@ -117,7 +118,7 @@ def render(result: RetrievalResult, config: PipelineConfig, known) -> str:
         "== per channel, ranked (variant 0) ==",
     ]
 
-    by_channel: dict[str, list[tuple[int, object]]] = defaultdict(list)
+    by_channel: dict[str, list[tuple[int, Candidate]]] = defaultdict(list)
     for candidate in result.pool:
         for hit in candidate.channel_hits:
             if hit.variant == 0:

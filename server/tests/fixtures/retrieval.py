@@ -28,7 +28,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -533,7 +533,7 @@ async def seed_repo(
 
     # Each import is a fresh symbol in the importing file, never a graph node. The
     # target is the first symbol the imported file holds.
-    first_symbol = {}
+    first_symbol: dict[str, AstSymbol] = {}
     for (path, _), symbol in seeded.symbols.items():
         first_symbol.setdefault(path, symbol)
     import_pairs: list[tuple[AstSymbol, str]] = []
@@ -878,9 +878,13 @@ def _module(
 def _commit(message: str, files: Sequence[str], author: str = "Ada Lovelace") -> CommitSpec:
     """A commit whose hash is derived from its message, with the embedder's chunk text."""
     digest = hashlib.sha1(message.encode("utf-8")).hexdigest()[:16]
+    # The chunk builders only read attributes, so a namespace stands in for the row.
     chunk = _build_commit_chunk(
-        SimpleNamespace(
-            hash=digest, author_name=author, message=message, changed_files_list=list(files)
+        cast(
+            Any,
+            SimpleNamespace(
+                hash=digest, author_name=author, message=message, changed_files_list=list(files)
+            ),
         )
     )
     return CommitSpec(
@@ -890,7 +894,9 @@ def _commit(message: str, files: Sequence[str], author: str = "Ada Lovelace") ->
 
 def _pull_request(number: int, title: str, description: str) -> PullRequestSpec:
     """A pull request with the embedder's chunk text."""
-    chunk = _build_pr_chunk(SimpleNamespace(number=number, title=title, description=description))
+    chunk = _build_pr_chunk(
+        cast(Any, SimpleNamespace(number=number, title=title, description=description))
+    )
     return PullRequestSpec(number=number, title=title, description=description, chunk_text=chunk)
 
 
