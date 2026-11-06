@@ -1,7 +1,8 @@
 /**
- * User settings route -- AI credentials editor lives here today.
+ * User settings route -- the AI credential and the agent settings.
  * @module SettingsPage
  */
+import AgentSettings from "@/components/AgentSettings";
 import AiSettings from "@/components/AiSettings";
 import Navbar from "@/components/Navbar";
 import GetMyData from "@/api/auth";
@@ -10,7 +11,7 @@ import GetMyData from "@/api/auth";
  * Server-rendered settings page that fetches the user once and hands the
  * row to the client AiSettings form.
  *
- * @returns Settings layout with navbar and the BYOK editor.
+ * @returns Settings layout with navbar, the BYOK editor and the agent settings.
  */
 export default async function Settings() {
   const user = await GetMyData();
@@ -28,6 +29,7 @@ export default async function Settings() {
 
         <section className="space-y-6 mx-auto max-w-3xl w-full">
           <AiSettings user={user} />
+          <AgentSettings user={user} />
         </section>
       </main>
     </div>

@@ -24,6 +24,10 @@ export default interface User {
   ai_provider: string | null;
   ai_model: string | null;
   has_ai_key: boolean;
+  /** The user's own agent context window; null or absent means the default. */
+  ai_context_window?: number | null;
+  /** The server's default agent context window. */
+  ai_context_window_default?: number;
   free_ingestions_used: number;
   free_chat_messages_used: number;
   free_ingestions_limit: number;

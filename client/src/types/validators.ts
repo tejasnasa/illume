@@ -56,6 +56,34 @@ export const repoCreateSchema = z.object({
 });
 
 /**
+ * The bounds of the agent context window, mirroring `MIN_CONTEXT_WINDOW` /
+ * `MAX_CONTEXT_WINDOW` on the server.
+ */
+export const MIN_CONTEXT_WINDOW = 32_000;
+export const MAX_CONTEXT_WINDOW = 1_000_000;
+
+/**
+ * Agent settings form validation. The window is typed as text so a blank
+ * field can mean "use the default"; thousands separators are accepted.
+ */
+export const agentSettingsSchema = z.object({
+  contextWindow: z
+    .string()
+    .trim()
+    .transform((value) => value.replace(/[,_\s]/g, ""))
+    .refine(
+      (value) =>
+        value === "" ||
+        (/^\d+$/.test(value) &&
+          Number(value) >= MIN_CONTEXT_WINDOW &&
+          Number(value) <= MAX_CONTEXT_WINDOW),
+      {
+        message: `Enter a whole number from ${MIN_CONTEXT_WINDOW.toLocaleString("en-US")} to ${MAX_CONTEXT_WINDOW.toLocaleString("en-US")}, or leave it blank for the default.`,
+      },
+    ),
+});
+
+/**
  * BYOK credentials form validation.
  */
 export const aiCredentialsSchema = z.object({
@@ -117,4 +145,3 @@ export const contactSchema = z.object({
     .max(5000, { message: "Message must be at most 5000 characters long." }),
   illume_hp: z.string(),
 });
-
