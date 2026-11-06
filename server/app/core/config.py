@@ -33,7 +33,8 @@ class Settings(BaseSettings):
             Empty makes that reranker unavailable; retrieval then falls back to the
             fused order.
         OPENROUTER_API_KEY (str): The operator's OpenRouter key, used for the Decisions
-            API behind the ``jev`` reranker. Empty makes that reranker unavailable.
+            API behind the ``jev`` decider and reranker. Empty makes both unavailable,
+            and decisions fall back to the user's model.
         ACCESS_TOKEN_EXPIRE_MINUTES (int): JWT token validity duration.
         SECRET_KEY (str): Secret key for JWT signing.
         FRONTEND_URL (str): CORS allowed origin for the frontend.

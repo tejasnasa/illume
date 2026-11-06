@@ -15,6 +15,7 @@ from app.services.retrieval.config import (
     CLASSIC,
     PRESETS,
     AgentConfig,
+    ChecksConfig,
     CochangeChannel,
     DenseChannel,
     GraphChannel,
@@ -84,6 +85,23 @@ class TestPresets:
     def test_unknown_preset_raises(self):
         with pytest.raises(KeyError):
             get_preset("nope")
+
+
+class TestDecisionThresholds:
+    def test_every_threshold_is_a_field_with_the_documented_default(self):
+        checks = ChecksConfig()
+        assert checks.sufficiency_threshold == 0.7
+        assert checks.injection_threshold == 0.5
+        assert checks.route_confidence == 0.6
+
+    def test_a_threshold_outside_zero_to_one_is_refused(self):
+        for field in ("sufficiency_threshold", "injection_threshold", "route_confidence"):
+            with pytest.raises(ValidationError):
+                ChecksConfig(**{field: 1.5})
+
+    def test_a_threshold_changes_the_config_hash(self):
+        tuned = _config(checks=ChecksConfig(route_confidence=0.9))
+        assert tuned.config_hash() != _config().config_hash()
 
 
 class TestValidation:

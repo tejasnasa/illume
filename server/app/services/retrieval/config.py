@@ -280,7 +280,11 @@ class PlannerConfig(_Frozen):
 
 
 class ChecksConfig(_Frozen):
-    """The checks that run on the way to an answer.
+    """The checks that run on the way to an answer, and the decision thresholds.
+
+    Every threshold is a field rather than a constant buried in a node, so an
+    evaluation arm can vary it. The defaults are starting points to be tuned on
+    a held-out slice, never on the slice a result is reported for.
 
     Attributes:
         gate: Ask whether the evidence suffices before the agent may answer.
@@ -289,6 +293,8 @@ class ChecksConfig(_Frozen):
         sufficiency_threshold: The probability at which the gate lets the
             agent answer.
         injection_threshold: The probability at which the guard withholds text.
+        route_confidence: The confidence at which the router's choice is trusted.
+            Below it, callers take the expensive path rather than guess.
     """
 
     gate: bool = False
@@ -296,6 +302,7 @@ class ChecksConfig(_Frozen):
     guard: bool = False
     sufficiency_threshold: float = Field(default=0.7, ge=0, le=1)
     injection_threshold: float = Field(default=0.5, ge=0, le=1)
+    route_confidence: float = Field(default=0.6, ge=0, le=1)
 
 
 # --- the whole -------------------------------------------------------------

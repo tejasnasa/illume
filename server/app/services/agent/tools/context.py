@@ -10,18 +10,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models import Repository
+from app.services.decisions.base import Decider
 from app.services.llm_config import LLMConfig
 from app.services.retrieval.channels.base import Embedder, Emit, RetrievalContext
 from app.services.retrieval.config import PipelineConfig
 from app.services.retrieval.embedding import embed_texts
-
-
-class Decider(Protocol):
-    """Makes the narrow yes/no and choice decisions of an agent run.
-
-    No tool consults it; the context carries one so the loop that owns the
-    decisions can reach it through the same object it hands to tools.
-    """
 
 
 class SharedBudget(Protocol):

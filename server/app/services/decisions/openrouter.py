@@ -30,6 +30,15 @@ logger = logging.getLogger(__name__)
 
 DECISIONS_URL = "https://openrouter.ai/api/alpha/decisions"
 
+# The model asked for. Pinned, never the ``-latest`` alias: a silent model change
+# would make results from different dates incomparable. Each response names the
+# exact snapshot that answered, and that is what callers log.
+JEV_MODEL = "typesafe/jev-1.14"
+
+# Text sent in one request, in UTF-8 bytes. Above this Jev switches to a slower,
+# less accurate long-context mode, so callers split a large fan-out instead.
+MAX_REQUEST_BYTES = 32_000
+
 REQUEST_TIMEOUT_SECONDS = 30.0
 
 QuestionType = Literal["score", "choice", "noul"]

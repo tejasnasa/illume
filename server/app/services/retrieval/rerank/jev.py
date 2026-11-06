@@ -17,10 +17,20 @@ import asyncio
 
 from app.core.config import settings
 from app.services.decisions.openrouter import (
+    JEV_MODEL,
+    MAX_REQUEST_BYTES,
     DecisionResponse,
     ScoreAnswer,
     ScoreQuestion,
     submit,
+)
+from app.services.decisions.points import (
+    MAX_PASSAGE_CHARS as MAX_PASSAGE_CHARS,
+)
+from app.services.decisions.points import (
+    RELEVANCE_LEVELS,
+    relevance_instructions,
+    relevance_state,
 )
 from app.services.retrieval.candidate import Candidate
 from app.services.retrieval.rerank.base import (
@@ -30,38 +40,18 @@ from app.services.retrieval.rerank.base import (
     with_scores,
 )
 
-# Pinned, never the ``-latest`` alias: a silent model change would make results
-# from different dates incomparable. The response reports the exact snapshot.
-JEV_MODEL = "typesafe/jev-1.14"
-
-# Text sent per request, in UTF-8 bytes; above this Jev switches to long-context mode.
-MAX_REQUEST_BYTES = 32_000
-
-MAX_PASSAGE_CHARS = 1500
-MAX_QUESTION_CHARS = 1000
+# The wording, the rubric and the bounds are the relevance decision point's, so
+# this reranker and that point ask the same question. ``JEV_MODEL``,
+# ``MAX_REQUEST_BYTES`` and ``MAX_PASSAGE_CHARS`` are re-exported because this
+# module's tests and callers name them.
 
 MAX_PARALLEL_REQUESTS = 4
 
-LEVELS = (
-    "unrelated",
-    "mentions the topic",
-    "partially answers",
-    "directly answers",
-)
-
-_INSTRUCTIONS = (
-    "Rate how well the passage below answers the question in the state. The passage "
-    "comes from a code repository.\n\nPassage ({key}):\n{text}"
-)
+LEVELS = RELEVANCE_LEVELS
 
 
 def _size(text: str) -> int:
     return len(text.encode("utf-8"))
-
-
-def _truncate(text: str, limit: int) -> str:
-    """Cuts to ``limit`` characters, marking the cut."""
-    return text if len(text) <= limit else text[:limit] + "\n[truncated]"
 
 
 class JevReranker:
@@ -108,7 +98,7 @@ class JevReranker:
         if not candidates:
             return []
 
-        state = f"Question about a code repository:\n{_truncate(question, MAX_QUESTION_CHARS)}"
+        state = relevance_state(question)
         batches = self._batches(state, candidates)
         gate = asyncio.Semaphore(MAX_PARALLEL_REQUESTS)
 
@@ -157,9 +147,7 @@ class JevReranker:
         current: dict[str, ScoreQuestion] = {}
         used = _size(state)
         for index, candidate in enumerate(candidates):
-            instructions = _INSTRUCTIONS.format(
-                key=candidate.key, text=_truncate(candidate.text, MAX_PASSAGE_CHARS)
-            )
+            instructions = relevance_instructions(candidate.key, candidate.text)
             cost = _size(instructions) + rubric + _size(f"p{index}")
             if current and used + cost > MAX_REQUEST_BYTES:
                 batches.append(current)

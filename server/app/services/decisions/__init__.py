@@ -1,9 +1,38 @@
-"""Typed decisions from a decision model, over OpenRouter's Decisions API."""
+"""The decision layer: one typed interface, a decision model and an LLM stand-in.
+
+``base`` holds the contract and the fallback between implementations, ``jev``
+asks OpenRouter's Decisions API, ``llm`` asks the caller's model for its own
+probability, and ``points`` holds the six decisions the pipeline makes together
+with the wording and thresholds each uses.
+"""
 
 from __future__ import annotations
 
+from app.services.decisions.base import (
+    NOUL_FALSE,
+    NOUL_TRUE,
+    ChoiceResult,
+    Decider,
+    DeciderUnavailable,
+    DecisionRecord,
+    DecisionResult,
+    FallbackDecider,
+    NoulResult,
+    RecordDecision,
+    Result,
+    ScoreResult,
+    get_decider,
+    make_record,
+    record_decision,
+    state_bytes,
+    state_hash,
+)
+from app.services.decisions.jev import JevDecider
+from app.services.decisions.llm import LlmDecider
 from app.services.decisions.openrouter import (
     DECISIONS_URL,
+    JEV_MODEL,
+    MAX_REQUEST_BYTES,
     Answer,
     ChoiceAnswer,
     ChoiceQuestion,
@@ -17,19 +46,78 @@ from app.services.decisions.openrouter import (
     ScoreQuestion,
     submit,
 )
+from app.services.decisions.points import (
+    CITATION_OPTIONS,
+    RELEVANCE_LEVELS,
+    ROUTE_CONFIDENCE,
+    ROUTE_OPTIONS,
+    CitationDecision,
+    CitationVerdict,
+    InjectionDecision,
+    PlanDecision,
+    RelevanceDecision,
+    Route,
+    RouteDecision,
+    SufficiencyDecision,
+    decide_citation_support,
+    decide_injection,
+    decide_plan,
+    decide_relevance,
+    decide_route,
+    decide_sufficiency,
+)
 
 __all__ = [
+    "CITATION_OPTIONS",
     "DECISIONS_URL",
+    "JEV_MODEL",
+    "MAX_REQUEST_BYTES",
+    "NOUL_FALSE",
+    "NOUL_TRUE",
+    "RELEVANCE_LEVELS",
+    "ROUTE_CONFIDENCE",
+    "ROUTE_OPTIONS",
     "Answer",
     "ChoiceAnswer",
     "ChoiceQuestion",
+    "ChoiceResult",
+    "CitationDecision",
+    "CitationVerdict",
+    "Decider",
+    "DeciderUnavailable",
     "DecisionError",
+    "DecisionRecord",
     "DecisionResponse",
+    "DecisionResult",
     "DecisionUnavailable",
+    "FallbackDecider",
+    "InjectionDecision",
+    "JevDecider",
+    "LlmDecider",
     "NoulAnswer",
     "NoulQuestion",
+    "NoulResult",
+    "PlanDecision",
     "Question",
+    "RecordDecision",
+    "RelevanceDecision",
+    "Result",
+    "Route",
+    "RouteDecision",
     "ScoreAnswer",
     "ScoreQuestion",
+    "ScoreResult",
+    "SufficiencyDecision",
+    "decide_citation_support",
+    "decide_injection",
+    "decide_plan",
+    "decide_relevance",
+    "decide_route",
+    "decide_sufficiency",
+    "get_decider",
+    "make_record",
+    "record_decision",
+    "state_bytes",
+    "state_hash",
     "submit",
 ]
