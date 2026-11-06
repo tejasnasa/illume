@@ -189,7 +189,12 @@ class FakeResponses:
             raise output
         if kwargs.get("stream"):
             return self._events(output)
-        return SimpleNamespace(output_text=output)
+        # A usage report, as a provider returns one, so callers that record
+        # tokens have something to record.
+        return SimpleNamespace(
+            output_text=output,
+            usage=SimpleNamespace(input_tokens=100, output_tokens=7),
+        )
 
     async def _events(self, output: str):
         yield SimpleNamespace(type="response.created")

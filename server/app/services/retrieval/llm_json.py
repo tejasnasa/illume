@@ -91,6 +91,31 @@ async def call_json(
         ModelFailure: On unusable output. Provider errors and timeouts propagate
             as the exceptions they are.
     """
+    parsed, _ = await call_json_response(
+        client, llm, system=system, user=user, format_name=format_name, schema=schema
+    )
+    return parsed
+
+
+async def call_json_response(
+    client: AsyncOpenAI,
+    llm: LLMConfig,
+    *,
+    system: str,
+    user: str,
+    format_name: str,
+    schema: dict[str, Any],
+) -> tuple[Any, Any]:
+    """:func:`call_json`, plus the provider's response for usage accounting.
+
+    Returns:
+        The parsed value and the raw response, so a caller that records tokens
+        can read ``response.usage``.
+
+    Raises:
+        ModelFailure: On unusable output. Provider errors and timeouts propagate
+            as the exceptions they are.
+    """
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
@@ -123,4 +148,4 @@ async def call_json(
                 **llm.response_kwargs("minimal"),
                 input=cast(ResponseInputParam, plain),
             )
-    return parse_json(response.output_text)
+    return parse_json(response.output_text), response
