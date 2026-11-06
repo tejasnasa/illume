@@ -53,6 +53,8 @@ class LLMConfig:
             ``reasoning={"effort": ...}``. Mirrors the provider registry
             entry; carried on the object so callers don't need a second
             registry lookup.
+        supports_strict_tools: Whether function tool schemas may be sent with
+            ``strict: true``. Mirrors the provider registry entry.
         source: ``"user"`` when built from a stored key, ``"server"`` for the
             free tier. Surfaces in logs and in the ``init_kwargs`` test
             assertion that distinguishes a BYOK run from a keyless one.
@@ -63,6 +65,7 @@ class LLMConfig:
     base_url: str | None = None
     supports_reasoning: bool = True
     source: Source = "server"
+    supports_strict_tools: bool = False
 
     @classmethod
     def server_default(cls) -> LLMConfig | None:
@@ -93,6 +96,7 @@ class LLMConfig:
             base_url=base_url,
             supports_reasoning=deepseek.supports_reasoning,
             source="server",
+            supports_strict_tools=deepseek.supports_strict_tools,
         )
 
     @classmethod
@@ -133,6 +137,7 @@ class LLMConfig:
             base_url=provider.base_url,
             supports_reasoning=provider.supports_reasoning,
             source="user",
+            supports_strict_tools=provider.supports_strict_tools,
         )
 
     def client_kwargs(self) -> dict[str, Any]:

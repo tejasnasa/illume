@@ -53,6 +53,13 @@ class AIProvider:
         supports_reasoning: True if the provider's ``responses.create``
             accepts the ``reasoning={"effort": ...}`` parameter. Groq is the
             one False; see module docstring.
+        supports_strict_tools: True if the provider enforces ``strict: true``
+            on function tool schemas (every property required, no extra
+            properties). A provider that merely ignores the flag, or rejects
+            it, stays False and is sent the plain schema. Only OpenAI is
+            True: Groq enforces strict mode on a few models only, OpenRouter
+            forwards to whichever backend serves the model, and DeepSeek
+            accepts it only on its separate beta endpoint.
         key_prefixes: Prefixes that identify this provider's keys, used only
             to build a "did you mean" hint when a probe is rejected -- never
             to validate. Deliberately empty for OpenAI and DeepSeek: both
@@ -68,6 +75,7 @@ class AIProvider:
     default_model: str
     supports_reasoning: bool
     key_prefixes: tuple[str, ...] = ()
+    supports_strict_tools: bool = False
 
 
 PROVIDERS: dict[str, AIProvider] = {
@@ -77,6 +85,7 @@ PROVIDERS: dict[str, AIProvider] = {
         base_url="https://api.openai.com/v1",
         default_model="gpt-4o-mini",
         supports_reasoning=True,
+        supports_strict_tools=True,
     ),
     "groq": AIProvider(
         key="groq",

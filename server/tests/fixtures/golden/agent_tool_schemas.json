@@ -1,0 +1,595 @@
+[
+  {
+    "description": "End the run with the final answer. Call it once, when the evidence gathered is enough or no more can be found. Cite what supports each claim with the keys from the tool results.",
+    "name": "finish",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "answer": {
+          "description": "The final answer in markdown. Cite evidence inline with the keys the tools returned, for example [F:app/main.py:3-9] or [C:a1b2c3d4].",
+          "maxLength": 30000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "confidence_note": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What is uncertain or missing, if anything. Omit when the answer is complete."
+        }
+      },
+      "required": [
+        "answer",
+        "confidence_note"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "List the files that import a file, strongest first. Use it to see what depends on a file and what a change to it could affect. Re-export files are looked through, so you get the real importers.",
+    "name": "get_importers",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "description": "How many files to return.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The file's path.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "limit"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "List the files that a file imports, strongest first. Use it to see what a file depends on. Re-export files are looked through.",
+    "name": "get_importees",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "description": "How many files to return.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The file's path.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "limit"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Find the shortest chain of imports connecting two files, trying both directions. Answers how one part of the code reaches another. Reports when there is none within max_depth steps.",
+    "name": "find_path",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "max_depth": {
+          "description": "The most import steps to follow (1 to 6).",
+          "maximum": 6,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "The starting file's path.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        },
+        "target": {
+          "description": "The file to reach.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "target",
+        "max_depth"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "List the files that tend to change in the same commits as a file. Shows hidden coupling that imports do not: files you will probably need to edit together.",
+    "name": "get_cochanged",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "k": {
+          "description": "How many files to return.",
+          "maximum": 50,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "The file's path.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "k"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Facts about one file: criticality and why, how many files import it and how many it imports, who owns it and whether that is a single person, whether it has tests, how often and how recently it changes, and where it sits in the reading order. Use it to judge how risky or central a file is.",
+    "name": "get_file_info",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "The file's path.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Look up project terms in the glossary generated for this repository. Returns definitions of the domain concepts and key symbols whose names contain the term.",
+    "name": "get_glossary",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "term": {
+          "description": "The term, or part of it, to look up.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "term"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "The repository at a glance: the architecture summary, detected tech stack, entry points and the most critical files. Call it first for broad questions about what the project is or how it is organised.",
+    "name": "get_overview",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {},
+      "required": [],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "List the repository's files, in path order, with language, size, how many files import each, and criticality. Use it like `ls`: browse a directory with path_prefix instead of guessing paths.",
+    "name": "list_files",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only files in this language, such as `python`."
+        },
+        "limit": {
+          "description": "How many files to return.",
+          "maximum": 200,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path_prefix": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only files whose path starts with this, such as `app/auth/`."
+        }
+      },
+      "required": [
+        "path_prefix",
+        "language",
+        "limit"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Outline one file: its functions, classes and methods with their line ranges. Cheaper than reading the file when you only need its shape.",
+    "name": "list_symbols",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "description": "The file's path.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Read the full, line-numbered body of a function, class or method, by exact name or by id. Reads functions that are too long to appear whole in search results. If several symbols share a name, pass path to choose.",
+    "name": "read_symbol",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The symbol's exact name. Give this or symbol_id."
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "With name: only the symbol in this file, when several share the name."
+        },
+        "symbol_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "An id from search_symbols or search_code. Give this or name."
+        }
+      },
+      "required": [
+        "name",
+        "symbol_id",
+        "path"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Read a file's text, line-numbered, exactly as it was at the ingested commit. Use it for what the symbol tools cannot show: imports, constants, module-level code, configuration and documentation files. At most 400 lines come back per call; the result says where to continue. Only files that ingestion recorded can be read, up to 2 MB, and not binary files.",
+    "name": "read_file",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "end_line": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Last line to read. At most 400 lines are returned per call."
+        },
+        "path": {
+          "description": "The file's path, relative to the repository root, as list_files shows it.",
+          "maxLength": 1024,
+          "minLength": 1,
+          "type": "string"
+        },
+        "start_line": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "First line to read. Omit to start at line 1."
+        }
+      },
+      "required": [
+        "path",
+        "start_line",
+        "end_line"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Search the repository by meaning and by keyword, using the same retrieval as the chat. Returns the best matching code, files, commits, pull requests and README sections, each with a citation key. Start here for open questions; use search_symbols or grep_code when you know an exact name or string.",
+    "name": "search_code",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "k": {
+          "description": "How many results to return (1 to 30).",
+          "maximum": 30,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "query": {
+          "description": "What to look for, as a question or a few keywords or identifiers.",
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_types": {
+          "anyOf": [
+            {
+              "items": {
+                "enum": [
+                  "symbol",
+                  "file",
+                  "commit",
+                  "pull_request",
+                  "document"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only return these kinds of source. Omit to search everything."
+        }
+      },
+      "required": [
+        "query",
+        "k",
+        "source_types"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Find functions, classes and methods by name. Matches exact names first, then similar spellings and names that contain the text. Returns path, line range, kind and the first line of the docstring. Use it when you know roughly what a symbol is called; use read_symbol to see its body.",
+    "name": "search_symbols",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "function",
+                "class",
+                "method"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only symbols of this kind. Omit for all kinds."
+        },
+        "limit": {
+          "description": "How many symbols to return.",
+          "maximum": 50,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The symbol name, or part of it. Spelling need not be exact.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "limit"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Search for a regular expression inside the bodies of functions, classes and methods. Returns `path:line: text` for each matching line. Only code inside those symbols is searched: module-level statements, imports, constants and configuration files are not, so use read_file for them. Patterns over 200 characters, or ones that take too long, are refused.",
+    "name": "grep_code",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "max_results": {
+          "description": "How many matching symbols to return.",
+          "maximum": 100,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only search files whose path matches this glob, such as `app/auth/*.py`."
+        },
+        "pattern": {
+          "description": "A PostgreSQL regular expression, matched against each symbol body. Escape regex characters to search for them literally.",
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern",
+        "path_glob",
+        "max_results"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  },
+  {
+    "description": "Search commit messages and merged pull requests by meaning. Use it for why and when questions: why something was changed, who introduced it, what a pull request was for. Results are history, not the current code.",
+    "name": "search_history",
+    "parameters": {
+      "additionalProperties": false,
+      "properties": {
+        "k": {
+          "description": "How many results to return (1 to 30).",
+          "maximum": 30,
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "Search commits, pull requests, or both.",
+          "enum": [
+            "commit",
+            "pr",
+            "both",
+            null
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 1024,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only commits that changed this file. Pull requests are left out when set."
+        },
+        "query": {
+          "description": "What happened or why, in a few words.",
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "query",
+        "kind",
+        "path",
+        "k"
+      ],
+      "type": "object"
+    },
+    "strict": true,
+    "type": "function"
+  }
+]

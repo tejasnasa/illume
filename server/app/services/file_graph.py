@@ -9,6 +9,7 @@ rules.
 
 from collections import defaultdict
 from collections.abc import Collection
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -299,8 +300,9 @@ async def query_neighbours_async(
     file_ids: Collection[UUID],
     *,
     through_barrels: bool = True,
+    direction: Literal["both", "importers", "importees"] = "both",
 ) -> list[tuple[UUID, UUID, int]]:
-    """The files one import away from each given file, in both directions.
+    """The files one import away from each given file, in both directions by default.
 
     Edges are derived exactly as :func:`iter_file_edges` derives them: both
     symbols inside the repository, self-edges dropped, one pair per file
@@ -322,6 +324,8 @@ async def query_neighbours_async(
         repo_id: The only repository read.
         file_ids: The files whose neighbours are wanted.
         through_barrels: Walk through barrel files rather than reporting them.
+        direction: ``importers`` keeps only files that import a seed, ``importees``
+            only files a seed imports, ``both`` keeps either.
 
     Returns:
         ``(seed_file_id, neighbour_file_id, weight)`` rows, unordered.
@@ -336,9 +340,9 @@ async def query_neighbours_async(
     for src, tgt, count in await _edge_counts_touching(db, repo_id, seeds):
         if src == tgt:
             continue
-        if src in seeds:
+        if src in seeds and direction != "importers":
             hops[("out", src, tgt)] = count
-        if tgt in seeds:
+        if tgt in seeds and direction != "importees":
             hops[("in", tgt, src)] = count
 
     if not through_barrels:
@@ -363,16 +367,16 @@ async def query_neighbours_async(
             break
         edges = await _edge_counts_touching(db, repo_id, {key[2] for key in frontier})
         onward: dict[tuple[str, UUID, UUID], int] = {}
-        for (direction, seed, barrel), weight in frontier.items():
+        for (walk, seed, barrel), weight in frontier.items():
             found = False
             for src, tgt, _ in edges:
                 if src == tgt:
                     continue
-                if direction == "out" and src == barrel:
-                    onward[(direction, seed, tgt)] = weight
+                if walk == "out" and src == barrel:
+                    onward[(walk, seed, tgt)] = weight
                     found = True
-                elif direction == "in" and tgt == barrel:
-                    onward[(direction, seed, src)] = weight
+                elif walk == "in" and tgt == barrel:
+                    onward[(walk, seed, src)] = weight
                     found = True
             if not found:
                 kept_barrels[(seed, barrel)] = max(kept_barrels[(seed, barrel)], weight)
