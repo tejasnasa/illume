@@ -69,6 +69,7 @@ class ToolResult(BaseModel):
         truncated: Whether ``text`` was cut to the limit.
         elapsed_ms: Wall time of the call.
         nodes: Files to highlight in the graph, when the tool names any.
+        error_type: The exception class, when the handler raised one.
     """
 
     tool: str
@@ -78,6 +79,7 @@ class ToolResult(BaseModel):
     truncated: bool = False
     elapsed_ms: float = 0.0
     nodes: NodeEvent | None = None
+    error_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -341,6 +343,7 @@ class ToolRegistry:
                 "error",
                 f"`{name}` failed with an internal error ({type(error).__name__}). "
                 "Try different arguments, or a different tool.",
+                error_type=type(error).__name__,
             )
 
         text, truncated = cap_text(output.render())

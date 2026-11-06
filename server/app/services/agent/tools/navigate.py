@@ -253,6 +253,11 @@ async def _read_symbol(ctx: ToolContext, args: ReadSymbolInput) -> ReadSymbolOut
     ]
     total = int(rows[0].total) if rows else 0
     note = "Several symbols share this name; pass `path` to pick one." if total > 1 else None
+    if not rows and args.symbol_id is not None:
+        note = (
+            "That symbol id is no longer in the index, because the repository was updated "
+            "after it was returned. Look the symbol up again by name with search_symbols."
+        )
     return ReadSymbolOutput(total=total, items=items, note=note)
 
 

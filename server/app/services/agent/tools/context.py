@@ -18,10 +18,24 @@ from app.services.retrieval.embedding import embed_texts
 
 
 class SharedBudget(Protocol):
-    """Counts the limits of one run across the tool calls that share it.
+    """Counts the limits of one run across everything that shares it.
 
-    No tool charges it; it is carried for the same reason as :class:`Decider`.
+    One object serves the whole run, so every counter is read and changed behind
+    one lock: a limit is enforced the moment it is crossed, not at the next
+    point where concurrent updates are merged.
     """
+
+    async def reserve_tool_calls(self, count: int) -> int:
+        """Claims up to ``count`` tool calls and returns how many were granted."""
+        ...
+
+    async def add_usage(self, input_tokens: int, output_tokens: int = 0) -> None:
+        """Adds the tokens a provider reported for one model call."""
+        ...
+
+    async def exceeded(self) -> str | None:
+        """The name of a limit that has been reached, or ``None`` when none has."""
+        ...
 
 
 class NodeEvent(BaseModel):
