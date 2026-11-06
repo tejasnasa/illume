@@ -33,6 +33,11 @@ from app.models.user import User
 from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_config import LLMConfig
 from app.services.llm_providers import PROVIDERS, get_provider, suggest_provider
+from app.services.retrieval.config import (
+    DEFAULT_CONTEXT_WINDOW,
+    MAX_CONTEXT_WINDOW,
+    MIN_CONTEXT_WINDOW,
+)
 from app.services.tool_support import check_tool_support
 
 logger = logging.getLogger(__name__)
@@ -87,6 +92,10 @@ class UserResponse(BaseModel):
     # ``None`` means "not measured"; ``False`` means the provider answered and
     # could not call tools. The two are different states for the agent presets.
     ai_supports_tools: bool | None = None
+    # The user's own context window for agent runs; ``None`` means the default,
+    # which is served alongside so the UI never carries a second copy of it.
+    ai_context_window: int | None = None
+    ai_context_window_default: int = DEFAULT_CONTEXT_WINDOW
     free_ingestions_used: int = 0
     free_chat_messages_used: int = 0
     free_ingestions_limit: int = FREE_INGESTIONS
@@ -218,6 +227,7 @@ async def me(current_user: User = Depends(get_current_user)):
         ai_model=current_user.ai_model,
         has_ai_key=bool(current_user.ai_api_key),
         ai_supports_tools=current_user.ai_supports_tools,
+        ai_context_window=current_user.ai_context_window,
         free_ingestions_used=current_user.free_ingestions_used,
         free_chat_messages_used=current_user.free_chat_messages_used,
         free_ingestions_limit=FREE_INGESTIONS,
@@ -772,3 +782,64 @@ async def delete_ai_credentials(
         has_key=False,
         validated_at=None,
     )
+
+
+class AgentSettingsResponse(BaseModel):
+    """The user's agent settings, with the bounds the form validates against.
+
+    ``context_window`` is ``None`` when the user has not chosen one; the
+    default is served alongside so the client never hard-codes it.
+    """
+
+    context_window: int | None = None
+    context_window_default: int = DEFAULT_CONTEXT_WINDOW
+    context_window_min: int = MIN_CONTEXT_WINDOW
+    context_window_max: int = MAX_CONTEXT_WINDOW
+
+
+class AgentSettingsPutRequest(BaseModel):
+    """Payload for saving the user's agent settings.
+
+    ``context_window`` is the most input tokens one model call of an agent run
+    may carry. ``null`` resets it to the default.
+    """
+
+    context_window: int | None = Field(default=None, ge=MIN_CONTEXT_WINDOW, le=MAX_CONTEXT_WINDOW)
+
+
+@router.get("/me/agent-settings", response_model=AgentSettingsResponse)
+async def get_agent_settings(current_user: User = Depends(get_current_user)):
+    """Return the current user's agent settings.
+
+    Separate from the AI credential so changing a setting never needs the key
+    again, and removing the key does not reset the settings.
+
+    Args:
+        current_user: User resolved by the auth dependency.
+
+    Returns:
+        The saved context window (``None`` for the default) and its bounds.
+    """
+    return AgentSettingsResponse(context_window=current_user.ai_context_window)
+
+
+@router.put("/me/agent-settings", response_model=AgentSettingsResponse)
+async def put_agent_settings(
+    body: AgentSettingsPutRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Save the current user's agent settings.
+
+    Args:
+        body: The settings; a value outside the bounds is a 422.
+        db: Async database session.
+        current_user: User resolved by the auth dependency.
+
+    Returns:
+        The settings as saved.
+    """
+    current_user.ai_context_window = body.context_window
+    await db.commit()
+    await db.refresh(current_user)
+    return AgentSettingsResponse(context_window=current_user.ai_context_window)

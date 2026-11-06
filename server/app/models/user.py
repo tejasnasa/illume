@@ -50,6 +50,9 @@ class User(Base):
     ai_tools_checked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # ``None`` means "use the default context window"; a number is the most
+    # input tokens one model call of the user's agent runs may carry.
+    ai_context_window: Mapped[int | None] = mapped_column(Integer, nullable=True)
     free_ingestions_used: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )

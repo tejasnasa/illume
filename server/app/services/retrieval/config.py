@@ -22,6 +22,14 @@ from typing import Annotated, Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
+DEFAULT_CONTEXT_WINDOW = 250_000
+"""Input tokens one model call may carry unless the user chose another window."""
+
+MIN_CONTEXT_WINDOW = 32_000
+MAX_CONTEXT_WINDOW = 1_000_000
+"""The range a user may set their context window to."""
+
+
 class _Frozen(BaseModel):
     """Frozen, and strict about unknown fields so a typo fails at parse time."""
 
@@ -228,7 +236,14 @@ class AgentConfig(_Frozen):
         max_tool_calls: Tool calls across the whole run.
         max_seconds: Wall clock before the run answers with what it has.
         hard_cancel_seconds: Wall clock before the run is cancelled outright.
-        max_input_tokens: Input tokens across the run, from reported usage.
+        max_input_tokens: Input tokens across the run, from reported usage. A
+            guard against runaways, not a per-call limit.
+        context_window: Input tokens one model call may carry. The user's own
+            setting overrides it for their runs.
+        compact_at: The share of the context window at which older tool
+            results in the conversation are replaced by short stubs.
+        keep_recent_turns: Tool-calling turns at the end of the conversation
+            that compaction leaves whole.
         max_repair_rounds: Rounds spent fixing unsupported citations.
         max_gate_rejections: Times the sufficiency check may send the agent
             back before it must answer.
@@ -242,6 +257,11 @@ class AgentConfig(_Frozen):
     max_seconds: int = Field(default=120, ge=10, le=600)
     hard_cancel_seconds: int = Field(default=150, ge=10, le=900)
     max_input_tokens: int = Field(default=1_500_000, ge=1_000, le=10_000_000)
+    context_window: int = Field(
+        default=DEFAULT_CONTEXT_WINDOW, ge=MIN_CONTEXT_WINDOW, le=MAX_CONTEXT_WINDOW
+    )
+    compact_at: float = Field(default=0.8, ge=0.3, le=0.95)
+    keep_recent_turns: int = Field(default=2, ge=0, le=10)
     max_repair_rounds: int = Field(default=1, ge=0, le=3)
     max_gate_rejections: int = Field(default=2, ge=0, le=5)
     seed: bool = True

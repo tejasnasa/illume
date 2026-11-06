@@ -23,7 +23,8 @@ pytestmark = pytest.mark.smoke
 # 29 -> 32 with the AI credentials GET/PUT/DELETE under ``/api/v1/auth/me``.
 # 32 -> 33 with the public contact POST under ``/api/v1/contact``.
 # 33 -> 36 with the push-token GET/POST/DELETE under ``/api/v1/push/token``.
-EXPECTED_API_ROUTE_COUNT = 36
+# 36 -> 38 with the agent settings GET/PUT under ``/api/v1/auth/me``.
+EXPECTED_API_ROUTE_COUNT = 38
 
 EXPECTED_TAGS = {
     "auth",
