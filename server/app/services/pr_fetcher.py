@@ -11,7 +11,6 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
-from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -20,10 +19,10 @@ from sqlalchemy.orm import Session
 from app.models import PullRequest
 from app.services._publish import publish_log
 from app.services._stages import Phase, Stage
+from app.services.github_http import GITHUB_API_BASE, parse_github_url, retry_after_seconds
 
 logger = logging.getLogger(__name__)
 
-GITHUB_API_BASE = "https://api.github.com"
 MAX_PRS = 200
 PER_PAGE = 100
 REQUEST_TIMEOUT = 20.0
@@ -104,19 +103,10 @@ def fetch_pull_requests(
 
 def _parse_github_url(github_url: str) -> tuple[str, str]:
     """Extract (owner, repo_name) from a GitHub URL, stripping a .git suffix."""
-    url = github_url.strip().rstrip("/")
-    if not url.startswith("http"):
-        url = f"https://{url}"
-
-    parsed = urlparse(url)
-    parts = [p for p in parsed.path.split("/") if p]
-
-    if len(parts) < 2:
-        raise GitHubClientError(f"Cannot parse owner/repo from URL: {github_url!r}")
-
-    owner = parts[0]
-    repo_name = parts[1].removesuffix(".git")
-    return owner, repo_name
+    try:
+        return parse_github_url(github_url)
+    except ValueError as exc:
+        raise GitHubClientError(str(exc)) from exc
 
 
 def _fetch_merged_prs(
@@ -186,7 +176,7 @@ def _get_with_retry(
         if response.status_code in (429, 403):
             # 403 is included because GitHub also signals rate limiting with it;
             # honour the server-provided wait instead of a fixed backoff.
-            retry_after = _parse_retry_after(response)
+            retry_after = retry_after_seconds(response)
             logger.warning(
                 "GitHub rate limit hit (attempt %d/%d). Waiting %ds.",
                 attempt,
@@ -214,27 +204,6 @@ def _get_with_retry(
             f"GitHub API returned {response.status_code}: {response.text[:200]}"
         )
     raise GitHubClientError("Exhausted retries without a successful response")
-
-
-def _parse_retry_after(response: httpx.Response) -> int:
-    """Derive wait seconds from Retry-After / X-RateLimit-Reset, default 60."""
-    # Prefer Retry-After (explicit delay); fall back to computing seconds
-    # until the reset epoch timestamp; both are optional on real responses.
-    if retry_after := response.headers.get("Retry-After"):
-        try:
-            return int(retry_after)
-        except ValueError:
-            pass
-
-    if reset_ts := response.headers.get("X-RateLimit-Reset"):
-        try:
-            wait = int(reset_ts) - int(time.time())
-            # Clock skew could yield <=0; always sleep at least 1s.
-            return max(wait, 1)
-        except ValueError:
-            pass
-
-    return 60
 
 
 def _normalise_pr(raw: dict) -> dict:
