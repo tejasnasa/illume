@@ -104,6 +104,7 @@ def _match_file(
     *,
     path_by_id: dict[uuid.UUID, str],
     language_by_id: dict[uuid.UUID, str],
+    importing_file: str | None = None,
 ) -> uuid.UUID | None:
     """Match a resolved import specifier to a known file id.
 
@@ -119,6 +120,8 @@ def _match_file(
         index_map: Package-entry index from :func:`_build_stem_indexes`.
         path_by_id: Lookup of file path by id, used only by disambiguation.
         language_by_id: Lookup of file language by id, used only by disambiguation.
+        importing_file: Path of the importing file, used only to break ties
+            in disambiguation.
 
     Returns:
         The matched file id, or None if no strategy succeeds.
@@ -135,7 +138,7 @@ def _match_file(
             matched_id = candidates[0]
         elif len(candidates) > 1:
             matched_id = _disambiguate_candidates(
-                candidates, language, resolved, path_by_id, language_by_id
+                candidates, language, resolved, path_by_id, language_by_id, importing_file
             )
 
     return matched_id
@@ -147,12 +150,15 @@ def _disambiguate_candidates(
     resolved: str,
     path_by_id: dict[uuid.UUID, str],
     language_by_id: dict[uuid.UUID, str],
+    importing_file: str | None = None,
 ) -> uuid.UUID | None:
     """Pick the best file among several sharing the same filename.
 
     Narrows candidates to the importer's language family first; if several
     remain, prefers an exact suffix match on the resolved specifier, then the
-    candidate with the longest reversed path-segment overlap.
+    candidate with the longest reversed path-segment overlap. Candidates that
+    tie are split in favour of one under the importer's own top-level
+    directory, so in a monorepo an app's import stays inside that app.
 
     Args:
         candidates: File ids whose filename stem equals the resolved basename.
@@ -160,6 +166,7 @@ def _disambiguate_candidates(
         resolved: The resolved import specifier being matched.
         path_by_id: Lookup of file path by id, used to score candidates.
         language_by_id: Lookup of file language by id, used to filter candidates.
+        importing_file: Path of the importing file, used to break ties.
 
     Returns:
         The best-matching file id, or None if no candidate stands out.
@@ -184,30 +191,34 @@ def _disambiguate_candidates(
     if len(filtered) == 1:
         return filtered[0]
 
-    # Prefer exact suffix match; otherwise score candidates by how many
-    # trailing path segments overlap the specifier.
+    home = importing_file.replace("\\", "/").split("/", 1)[0] if importing_file else None
+    r_parts = resolved.split("/")
+
+    # Prefer an exact suffix match; otherwise score candidates by how many
+    # trailing path segments overlap the specifier. Ties go to a candidate in
+    # the importer's top-level directory, then to the first seen.
     best: uuid.UUID | None = None
-    best_score = 0
+    best_rank: tuple[float, bool] = (0, False)
     for cid in filtered:
         c_path = path_by_id.get(cid, "")
         c_stem = c_path.replace("\\", "/").rsplit(".", 1)[0]
         if c_stem.endswith(resolved):
-            return cid
-        # Compare path segments from the end: more shared trailing segments
-        # = deeper structural similarity.
-        r_parts = resolved.split("/")
-        c_parts = c_stem.split("/")
-        score = 0
-        for rp, cp in zip(reversed(r_parts), reversed(c_parts)):
-            if rp == cp:
-                score += 1
-            else:
-                break
-        if score > best_score:
-            best_score = score
+            score: float = float("inf")
+        else:
+            # Compare path segments from the end: more shared trailing
+            # segments = deeper structural similarity.
+            score = 0
+            for rp, cp in zip(reversed(r_parts), reversed(c_stem.split("/")), strict=False):
+                if rp == cp:
+                    score += 1
+                else:
+                    break
+        rank = (score, home is not None and c_stem.split("/", 1)[0] == home)
+        if score > 0 and rank > best_rank:
+            best_rank = rank
             best = cid
 
-    return best if best_score > 0 else None
+    return best
 
 
 def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int:
@@ -343,6 +354,7 @@ def resolve_dependencies(db: Session, repo_id: uuid.UUID, repo_root: str) -> int
             index_map,
             path_by_id=file_id_to_path,
             language_by_id=language_by_id,
+            importing_file=importing_file,
         )
 
         if not matched_id or matched_id == imp_file_id:

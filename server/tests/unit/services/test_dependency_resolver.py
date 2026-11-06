@@ -343,6 +343,39 @@ class TestDisambiguation:
             == ts[0]
         )
 
+    def test_a_tie_goes_to_the_importers_own_top_level_directory(self):
+        """In a monorepo, an equally good match inside the importer's app wins."""
+        other_app = _row("client/src/lib/apiError.ts", language="typescript")
+        own_app = _row("mobile/src/lib/apiError.ts", language="typescript")
+        items = [other_app, own_app]
+
+        matched = _disambiguate_candidates(
+            [other_app[0], own_app[0]],
+            "typescript",
+            "lib/apiError",
+            _map_by_path(items),
+            _map_by_lang(items),
+            "mobile/src/api/client.ts",
+        )
+
+        assert matched == own_app[0]
+
+    def test_the_importers_directory_never_beats_a_better_match(self):
+        better = _row("app/core/config.py")
+        same_dir = _row("tests/config.py")
+        items = [better, same_dir]
+
+        matched = _disambiguate_candidates(
+            [same_dir[0], better[0]],
+            "python",
+            "core/config",
+            _map_by_path(items),
+            _map_by_lang(items),
+            "tests/test_config.py",
+        )
+
+        assert matched == better[0]
+
     def test_unknown_language_does_not_filter(self):
         py = _row("src/a/thing.py", language="python")
         go = _row("src/b/thing.go", language="go")

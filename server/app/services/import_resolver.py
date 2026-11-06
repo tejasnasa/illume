@@ -13,28 +13,41 @@ from app.services.stack_detector import SKIP_DIRS
 
 logger = logging.getLogger(__name__)
 
+# tsconfig aliases per config directory: the config's repo-relative directory
+# ("" for the repository root) -> alias prefix (e.g. ``@/``) -> repo-relative
+# target prefix.
+TsPaths = dict[str, dict[str, str]]
 
-def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
+
+def load_ts_paths(repo_root: str | Path) -> TsPaths:
     """Collect TypeScript/JavaScript path aliases from tsconfig/jsconfig files.
 
     Recursively finds ``tsconfig.json``/``jsconfig.json`` (excluding
-    ``SKIP_DIRS``) and flattens each ``compilerOptions.paths`` alias to its
-    first target, resolved to a repo-relative directory prefix. Wildcard
-    suffixes are stripped so aliases can be matched by prefix.
+    ``SKIP_DIRS``) and maps each ``compilerOptions.paths`` alias to its first
+    target, resolved to a repo-relative directory prefix. Wildcard suffixes are
+    stripped so aliases can be matched by prefix.
+
+    Aliases are kept per config directory rather than merged, because a
+    monorepo's apps commonly reuse the same alias (``@/*``) for their own
+    ``src/``. Merging them would point every app's ``@/`` imports at whichever
+    app's config was read last.
 
     Args:
         repo_root: Root directory of the cloned repository.
 
     Returns:
-        Mapping of alias prefix (e.g. ``@/``) to repo-relative target prefix.
+        Mapping of config directory to that config's alias map.
     """
     root = Path(repo_root)
-    paths: dict[str, str] = {}
+    resolved_root = root.resolve()
+    paths: TsPaths = {}
 
     for config_name in ("tsconfig.json", "jsconfig.json"):
         for config_file in root.rglob(config_name):
             if any(part in SKIP_DIRS for part in config_file.parts):
                 continue
+            config_dir = str(config_file.parent.relative_to(root)).replace("\\", "/")
+            config_dir = "" if config_dir == "." else config_dir
             try:
                 data = json.loads(config_file.read_text(errors="ignore"))
                 compiler_options = data.get("compilerOptions", {})
@@ -47,14 +60,14 @@ def load_ts_paths(repo_root: str | Path) -> dict[str, str]:
                         ).resolve()
                         try:
                             rel_target = str(
-                                abs_target.relative_to(root.resolve())
+                                abs_target.relative_to(resolved_root)
                             ).replace("\\", "/")
                         except ValueError:
                             # Target resolves outside the repo (e.g. monorepo
                             # sibling); can't be matched against stored paths.
                             continue
                         # Strip wildcard so aliases match by prefix later.
-                        paths[alias.rstrip("*")] = rel_target
+                        paths.setdefault(config_dir, {})[alias.rstrip("*")] = rel_target
             except Exception:
                 pass
 
@@ -168,7 +181,7 @@ def resolve_import(
     import_name: str,
     importing_file: str,
     repo_root: str,
-    ts_paths: dict[str, str] | None = None,
+    ts_paths: TsPaths | None = None,
     workspace_map: dict[str, str] | None = None,
 ) -> str | None:
     """Resolve an import specifier to a repo-relative path stem.
@@ -243,7 +256,7 @@ def _resolve_js_import(
     import_name: str,
     importing_file: str,
     repo_root: str,
-    ts_paths: dict[str, str] | None,
+    ts_paths: TsPaths | None,
     workspace_map: dict[str, str] | None,
 ) -> str | None:
     """Resolve a JS/TS import via workspace map, tsconfig alias, or relative path.
@@ -264,7 +277,7 @@ def _resolve_js_import(
             return (workspace_map[best_key] + remainder).lstrip("/")
 
     if ts_paths:
-        resolved = _resolve_ts_alias(import_name, ts_paths)
+        resolved = _resolve_ts_alias(import_name, importing_file, ts_paths)
         if resolved:
             return resolved
 
@@ -290,16 +303,31 @@ def _resolve_js_import(
     return "/".join(parts)
 
 
-def _resolve_ts_alias(import_name: str, ts_paths: dict[str, str]) -> str | None:
-    """Match an import against tsconfig path aliases by longest prefix."""
-    for prefix, target in ts_paths.items():
-        if not prefix:
-            continue
-        # First matching alias wins; relies on dict insertion order rather
-        # than explicitly comparing prefix lengths.
-        if import_name.startswith(prefix):
+def _resolve_ts_alias(import_name: str, importing_file: str, ts_paths: TsPaths) -> str | None:
+    """Match an import against the aliases of the configs that govern its file.
+
+    Only configs whose directory contains ``importing_file`` apply, nearest
+    first, as TypeScript itself resolves them. Within a config the longest
+    matching alias prefix wins, so ``@/lib/`` beats ``@/``.
+    """
+    importing = importing_file.replace("\\", "/")
+    governing = sorted(
+        (
+            config_dir
+            for config_dir in ts_paths
+            if not config_dir or importing.startswith(config_dir + "/")
+        ),
+        key=len,
+        reverse=True,
+    )
+    for config_dir in governing:
+        matching = [
+            prefix for prefix in ts_paths[config_dir] if prefix and import_name.startswith(prefix)
+        ]
+        if matching:
+            prefix = max(matching, key=len)
             remainder = import_name[len(prefix) :]
-            resolved = Path(target) / remainder
+            resolved = Path(ts_paths[config_dir][prefix]) / remainder
             return str(resolved).replace("\\", "/")
     return None
 

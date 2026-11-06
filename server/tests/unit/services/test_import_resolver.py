@@ -137,7 +137,7 @@ class TestTsConfigAliases:
 
         # The target is a resolved filesystem path, so it carries no trailing slash.
         # Matching works by prefix; `_resolve_ts_alias` joins with Path().
-        assert load_ts_paths(tmp_path) == {"@/": "src"}
+        assert load_ts_paths(tmp_path) == {"": {"@/": "src"}}
 
     def test_node_modules_tsconfig_is_ignored(self, tmp_path):
         write(
@@ -150,7 +150,7 @@ class TestTsConfigAliases:
     def test_unresolvable_alias_falls_through_to_none(self, tmp_path):
         """An alias map that does not match leaves a bare specifier external."""
         resolved = resolve_import(
-            "typescript", "@/thing", "src/index.ts", str(tmp_path), {"$": "src/"}
+            "typescript", "@/thing", "src/index.ts", str(tmp_path), {"": {"$": "src/"}}
         )
 
         assert resolved is None
@@ -166,7 +166,65 @@ class TestTsConfigAliases:
             {"compilerOptions": {"baseUrl": ".", "paths": {"~/*": ["./lib/*"]}}},
         )
 
-        assert load_ts_paths(tmp_path) == {"~/": "lib"}
+        assert load_ts_paths(tmp_path) == {"": {"~/": "lib"}}
+
+    def test_apps_sharing_an_alias_each_resolve_into_their_own_source(self, tmp_path):
+        """Two apps that both map ``@/*`` to their own ``src/`` must not share it."""
+        for app in ("client", "mobile"):
+            write(
+                tmp_path / app / "tsconfig.json",
+                {"compilerOptions": {"paths": {"@/*": ["./src/*"]}}},
+            )
+        ts_paths = load_ts_paths(tmp_path)
+
+        def resolve(importing_file):
+            return resolve_import(
+                "typescript", "@/lib/apiError", importing_file, str(tmp_path), ts_paths
+            )
+
+        assert ts_paths == {"client": {"@/": "client/src"}, "mobile": {"@/": "mobile/src"}}
+        assert resolve("client/src/api/client.ts") == "client/src/lib/apiError"
+        assert resolve("mobile/src/api/client.ts") == "mobile/src/lib/apiError"
+
+    def test_a_file_outside_every_config_gets_no_alias(self, tmp_path):
+        write(
+            tmp_path / "client" / "tsconfig.json",
+            {"compilerOptions": {"paths": {"@/*": ["./src/*"]}}},
+        )
+
+        resolved = resolve_import(
+            "typescript", "@/lib/x", "server/web/index.ts", str(tmp_path), load_ts_paths(tmp_path)
+        )
+
+        assert resolved is None
+
+    def test_a_nested_config_without_the_alias_falls_back_to_an_outer_one(self, tmp_path):
+        write(tmp_path / "tsconfig.json", {"compilerOptions": {"paths": {"~/*": ["./shared/*"]}}})
+        write(
+            tmp_path / "web" / "tsconfig.json", {"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}
+        )
+        ts_paths = load_ts_paths(tmp_path)
+
+        assert (
+            resolve_import("typescript", "~/util", "web/src/a.ts", str(tmp_path), ts_paths)
+            == "shared/util"
+        )
+        assert (
+            resolve_import("typescript", "@/b", "web/src/a.ts", str(tmp_path), ts_paths)
+            == "web/src/b"
+        )
+
+    def test_the_longest_matching_alias_wins(self, tmp_path):
+        write(
+            tmp_path / "tsconfig.json",
+            {"compilerOptions": {"paths": {"@/*": ["./src/*"], "@/lib/*": ["./vendor/lib/*"]}}},
+        )
+
+        resolved = resolve_import(
+            "typescript", "@/lib/x", "src/a.ts", str(tmp_path), load_ts_paths(tmp_path)
+        )
+
+        assert resolved == "vendor/lib/x"
 
 
 class TestWorkspaceMap:
