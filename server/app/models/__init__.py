@@ -4,6 +4,8 @@ SQLAlchemy ORM models for the Illume application.
 This module exposes all database entities used across the application.
 """
 
+from app.models.agent_run import AgentRun
+from app.models.agent_step import AgentStep
 from app.models.ast_symbol import AstSymbol
 from app.models.chat_message import ChatMessage
 from app.models.code_owner import CodeOwner
@@ -20,6 +22,8 @@ from app.models.repository import Repository
 from app.models.user import User
 
 __all__ = [
+    "AgentRun",
+    "AgentStep",
     "AstSymbol",
     "ChatMessage",
     "Dependency",

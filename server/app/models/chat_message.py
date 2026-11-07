@@ -34,6 +34,16 @@ class ChatMessage(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
     sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # The streamed run that produced this turn, when one did. Cleared if the run row goes.
+    agent_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "agent_runs.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_chat_messages_agent_run_id",
+        ),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
