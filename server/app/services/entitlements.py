@@ -102,7 +102,7 @@ def claim_free_ingestion(db: Session, user_id: uuid.UUID) -> bool:
         )
         .values(free_ingestions_used=User.free_ingestions_used + 1)
     )
-    return int(result.rowcount or 0) == 1
+    return int(result.rowcount or 0) == 1  # type: ignore[attr-defined]
 
 
 def claim_free_chat_message(db: Session, user_id: uuid.UUID) -> bool:
@@ -135,7 +135,7 @@ def claim_free_chat_message(db: Session, user_id: uuid.UUID) -> bool:
         .values(free_chat_messages_used=User.free_chat_messages_used + 1)
     )
     db.commit()
-    return int(result.rowcount or 0) == 1
+    return int(result.rowcount or 0) == 1  # type: ignore[attr-defined]
 
 
 async def aclaim_free_ingestion(db: AsyncSession, user_id: uuid.UUID) -> bool:
@@ -154,7 +154,7 @@ async def aclaim_free_ingestion(db: AsyncSession, user_id: uuid.UUID) -> bool:
         )
         .values(free_ingestions_used=User.free_ingestions_used + 1)
     )
-    return int(result.rowcount or 0) == 1
+    return int(result.rowcount or 0) == 1  # type: ignore[attr-defined]
 
 
 async def aclaim_free_chat_message(db: AsyncSession, user_id: uuid.UUID) -> bool:
@@ -172,4 +172,4 @@ async def aclaim_free_chat_message(db: AsyncSession, user_id: uuid.UUID) -> bool
         .values(free_chat_messages_used=User.free_chat_messages_used + 1)
     )
     await db.commit()
-    return int(result.rowcount or 0) == 1
+    return int(result.rowcount or 0) == 1  # type: ignore[attr-defined]

@@ -284,7 +284,13 @@ def make_worker_node(deps: AgentDeps):
         result, evidence = await _run(worker_deps, payload)
         await worker_deps.record("worker", "worker", result.to_dict(), index=step, started=started)
         await worker_deps.event(
-            Event.NODE, {"node": "worker", "phase": "done", "status": result.status}
+            Event.NODE,
+            {
+                "node": "worker",
+                "phase": "done",
+                "status": result.status,
+                "stop_reason": result.stop_reason.value,
+            },
         )
         return {"evidence": evidence, "worker_results": [result]}
 

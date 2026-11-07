@@ -259,6 +259,26 @@ async def _degraded(emit: Emit, stage: str, reason: str) -> None:
         logger.warning("emitting the %s degradation failed", stage, exc_info=True)
 
 
+async def _announce_retrieval(emit: Emit, retrieval: RetrievalResult) -> None:
+    """Reports what the retrieval found, without failing the answer."""
+    channels: dict[str, int] = {}
+    for entry in retrieval.trace.channels:
+        channels[entry.channel] = channels.get(entry.channel, 0) + entry.candidates
+    try:
+        await emit(
+            "retrieval",
+            {
+                "source": "pipeline",
+                "standalone_question": retrieval.question,
+                "channels": channels,
+                "keys": [candidate.key for candidate in retrieval.candidates],
+                "reranker": retrieval.trace.reranker,
+            },
+        )
+    except Exception:
+        logger.warning("emitting the retrieval event failed", exc_info=True)
+
+
 def _evidence(candidates: Sequence[Candidate]) -> dict[str, Evidence]:
     """The retrieved candidates as the evidence map the verifier reads."""
     return {
@@ -431,7 +451,7 @@ async def answer(
             all of them (the caller bounds the list, as the chat route does);
             others replay the last ``config.query.history_messages``.
         llm: The caller's generation credential.
-        emit: Receives ``degraded`` and, when streaming, ``answer_delta`` events.
+        emit: Receives ``retrieval`` and ``degraded`` and, when streaming, ``answer_delta`` events.
             Defaults to ``ctx.emit``.
         stream: Stream the answer, emitting ``answer_delta`` with ``{"text": ...}``
             per text delta, instead of one plain call.
@@ -453,6 +473,7 @@ async def answer(
     config_hash = config.config_hash()
     classic = is_classic_shaped(config)
     candidates = list(retrieval.candidates)
+    await _announce_retrieval(sink, retrieval)
 
     if not candidates:
         return SingleShotAnswer(

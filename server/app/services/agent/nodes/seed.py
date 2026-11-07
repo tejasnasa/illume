@@ -113,7 +113,18 @@ def make_seed_node(deps: AgentDeps):
             index=step,
             started=started,
         )
-        await deps.event(Event.SEED, {"keys": keys, "standalone_question": result.question})
+        channels: dict[str, int] = {}
+        for entry in result.trace.channels:
+            channels[entry.channel] = channels.get(entry.channel, 0) + entry.candidates
+        await deps.event(
+            Event.SEED,
+            {
+                "keys": keys,
+                "standalone_question": result.question,
+                "channels": channels,
+                "reranker": result.trace.reranker,
+            },
+        )
         return {
             "standalone_question": result.question,
             "items": [{"role": "user", "content": seed_message(candidates, withheld)}],

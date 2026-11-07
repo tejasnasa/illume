@@ -50,6 +50,7 @@ def make_verify_node(deps: AgentDeps):
             Event.VERIFY,
             {
                 "counts": report.counts,
+                "claims": [claim.to_dict() for claim in report.claims],
                 "failed": report.failed,
                 "repair": repairing,
                 "defaulted": report.defaulted,

@@ -83,6 +83,9 @@ REPO_ROUTES: list[RepoRoute] = [
     RepoRoute("GET", "/api/v1/repository/{ref}/stats"),
     RepoRoute("POST", "/api/v1/repository/{ref}/chat", body={"question": "What does this do?"}),
     RepoRoute("GET", "/api/v1/repository/{ref}/chat/history"),
+    RepoRoute("POST", "/api/v1/repository/{ref}/chat/stream", body={"question": "What is this?"}),
+    RepoRoute("GET", "/api/v1/repository/{ref}/agent-runs"),
+    RepoRoute("GET", "/api/v1/repository/{ref}/agent-runs/{run_id}"),
     # The odd one out, and deliberately so. Clearing history does not look the
     # repository up at all: it issues a DELETE scoped by `repository_id` *and*
     # `user_id`, so a foreign repository simply matches no rows. The call is therefore
@@ -129,6 +132,14 @@ def stub_rag(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def stub_stream(app, db_session):
+    """Keep the stream route off the network and inside the test transaction."""
+    from tests.fixtures.agent_stream import AnyModel, install
+
+    install(app, db_session, AnyModel())
+
+
+@pytest.fixture(autouse=True)
 def stub_dispatch(monkeypatch):
     """Stop re-ingestion from reaching the Celery broker."""
     import app.api.v1.repository as repository_module
@@ -170,6 +181,24 @@ async def victim(client, db_session):
         reading_order=[{"position": 1, "path": "src/module_0.py", "annotation": "a", "fan_in": 0}],
     )
 
+    # The victim's streamed run, reachable from the message so the matrix can name it.
+    from app.models import AgentRun
+
+    run = AgentRun(
+        user_id=victim_user.id,
+        repository_id=repo.id,
+        question="secret",
+        preset="classic",
+        config={},
+        config_hash="0" * 64,
+        status="done",
+        answer="the victim's answer",
+    )
+    db_session.add(run)
+    await db_session.flush()
+    message.agent_run_id = run.id
+    await db_session.flush()
+
     await authenticate(client, attacker)
     return attacker, victim_user, repo, message
 
@@ -180,6 +209,8 @@ def path_for(route: RepoRoute, repo, message=None) -> str:
     path = route.template.replace("{ref}", ref)
     if "{message_id}" in path:
         path = path.replace("{message_id}", str(message.id))
+    if "{run_id}" in path:
+        path = path.replace("{run_id}", str(message.agent_run_id))
     return path
 
 

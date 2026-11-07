@@ -17,7 +17,12 @@ celery = Celery(
     # home of the per-repository sync task the sweep dispatches. Both must
     # be in ``include`` so the worker process imports them and registers
     # their tasks at startup.
-    include=["app.tasks.ingest", "app.tasks.sync", "app.tasks.autoupdate"],
+    include=[
+        "app.tasks.ingest",
+        "app.tasks.sync",
+        "app.tasks.autoupdate",
+        "app.tasks.agent_retention",
+    ],
 )
 
 # Configure Celery settings (serialization, timezone, SSL).

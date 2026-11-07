@@ -21,6 +21,7 @@ import random
 from datetime import UTC, datetime, timedelta
 from typing import Iterable
 
+from celery.schedules import crontab
 from celery.schedules import schedule as celery_schedule
 from sqlalchemy import or_, select, update
 
@@ -229,5 +230,10 @@ celery.conf.beat_schedule = {
     "sweep-due-repositories": {
         "task": "app.tasks.autoupdate.sweep_due_repositories",
         "schedule": celery_schedule(run_every=SWEEP_INTERVAL_MINUTES * 60.0),
+    },
+    # Step rows of agent runs are deleted after their retention period; the runs stay.
+    "prune-agent-steps": {
+        "task": "app.tasks.agent_retention.prune_agent_steps",
+        "schedule": crontab(hour=3, minute=40),
     },
 }

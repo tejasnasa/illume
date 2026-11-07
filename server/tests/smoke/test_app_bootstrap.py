@@ -24,9 +24,12 @@ pytestmark = pytest.mark.smoke
 # 32 -> 33 with the public contact POST under ``/api/v1/contact``.
 # 33 -> 36 with the push-token GET/POST/DELETE under ``/api/v1/push/token``.
 # 36 -> 38 with the agent settings GET/PUT under ``/api/v1/auth/me``.
-EXPECTED_API_ROUTE_COUNT = 38
+# 38 -> 41 with the chat stream POST and the agent-run list and replay GETs under
+# ``/api/v1/repository/{repo_id}/...``.
+EXPECTED_API_ROUTE_COUNT = 41
 
 EXPECTED_TAGS = {
+    "agent",
     "auth",
     "chat",
     "contact",
@@ -55,6 +58,8 @@ REPRESENTATIVE_PATHS = {
     "/api/v1/repository/{repo_id}/ownership",
     "/api/v1/repository/{repo_id}/stats",
     "/api/v1/repository/{repo_id}/chat",
+    "/api/v1/repository/{repo_id}/chat/stream",
+    "/api/v1/repository/{repo_id}/agent-runs",
     "/api/v1/repository/{repo_id}/export/illume",
     "/api/v1/push/token",
 }

@@ -221,6 +221,12 @@ def make_tools_node(deps: AgentDeps):
                     "truncated": result.truncated,
                     "error_type": result.error_type,
                     "step": step,
+                    "result_count": len(found) if ok else 0,
+                    "summary": (
+                        f"{len(found)} citable item(s)"
+                        if ok
+                        else (result.text.strip().splitlines() or [""])[0][:160]
+                    ),
                 },
             )
             if result.nodes is not None:
