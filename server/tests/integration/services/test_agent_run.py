@@ -37,7 +37,12 @@ from app.services.agent import window as window_module
 from app.services.agent.errors import RunError
 from app.services.agent.events import EventLog
 from app.services.agent.runner import TIMED_OUT_ANSWER, RunResult, run_agent
-from app.services.agent.state import StopReason, VerificationReport
+from app.services.agent.state import (
+    ClaimCheck,
+    ClaimVerdict,
+    StopReason,
+    VerificationReport,
+)
 from app.services.agent.steps import InMemorySteps
 from app.services.agent.tools import REGISTRY, ToolRegistry
 from app.services.agent.tools.context import RepoSnapshot, ToolContext
@@ -307,7 +312,7 @@ class TestHappyPath:
         ran = await run(env, model, config=config)
 
         result = ran.result
-        assert result.prompt_version == "agent-2"
+        assert result.prompt_version == "agent-3"
         assert result.config_hash == config.config_hash()
         assert result.model == "test-model"
         assert result.limits["max_iterations"] == 12
@@ -1141,7 +1146,15 @@ class TestVerifierHook:
 
         async def verifier(state: Any) -> VerificationReport:
             reports.append(state["answer"])
-            return VerificationReport(unsupported=("It uses argon2.",))
+            return VerificationReport(
+                claims=(
+                    ClaimCheck(
+                        index=1,
+                        claim="It uses argon2.",
+                        verdict=ClaimVerdict.UNSUPPORTED,
+                    ),
+                )
+            )
 
         model = ScriptedModel(
             [turn(finish("It uses argon2.")), turn(finish("It uses bcrypt [F:x:1-2]."))]
@@ -1152,7 +1165,7 @@ class TestVerifierHook:
         assert reports == ["It uses argon2.", "It uses bcrypt [F:x:1-2]."]
         repair = model.requests[1]["input"][-1]
         assert "does not support" in repair["content"] and "It uses argon2." in repair["content"]
-        assert ran.result.answer == "It uses bcrypt [F:x:1-2]."
+        assert ran.result.answer == ("It uses bcrypt [F:x:1-2]. [[verify:unsupported]]")
         assert nodes_run(ran).count("verify") == 2
 
     async def test_without_a_verifier_the_answer_passes_through(self, env):

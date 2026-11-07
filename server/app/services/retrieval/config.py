@@ -21,7 +21,6 @@ from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-
 DEFAULT_CONTEXT_WINDOW = 250_000
 """Input tokens one model call may carry unless the user chose another window."""
 

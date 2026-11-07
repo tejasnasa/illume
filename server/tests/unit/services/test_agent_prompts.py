@@ -89,7 +89,7 @@ class TestSystemPrompt:
             assert name in REGISTRY.names()
 
     def test_the_version_is_a_constant_runs_can_record(self):
-        assert PROMPT_VERSION == "agent-2"
+        assert PROMPT_VERSION == "agent-3"
 
     def test_a_brief_with_nothing_known_still_renders(self):
         assert "- Name: x" in RepoBrief(name="x").render()

@@ -23,7 +23,7 @@ from typing import Any
 
 from openai.types.responses import Response
 
-from app.services.decisions.base import NoulResult
+from app.services.decisions.base import ChoiceResult, NoulResult
 from app.services.retrieval.config import (
     HYBRID,
     AgentConfig,
@@ -328,19 +328,36 @@ def _strings(value: Any) -> list[str]:
 
 
 class SufficiencyDecider:
-    """A decider whose ``noul`` answers come from a list, then repeat the last.
+    """A decider whose answers come from lists, then repeat the last.
+
+    The single-call ``noul`` path answers the sufficiency gate. The batched path
+    answers the citation verifier and the injection guard: ``verdicts`` supplies
+    one choice per citation question, ``screening`` one probability per screened
+    result.
 
     Attributes:
-        calls: The state and instructions of every question asked.
+        calls: The state and instructions of every single-call question asked.
+        batches: The state and questions of every batched request, in order.
     """
 
     kind = "fake"
     model_id = "fake-decider"
 
-    def __init__(self, *probabilities: float, defaulted: bool = False) -> None:
+    def __init__(
+        self,
+        *probabilities: float,
+        defaulted: bool = False,
+        verdicts: Sequence[str] = (),
+        screening: float | Sequence[float] = 0.0,
+        fail_batch: bool = False,
+    ) -> None:
         self._probabilities = list(probabilities) or [1.0]
         self.defaulted = defaulted
+        self._verdicts = list(verdicts)
+        self._screening = [screening] if isinstance(screening, int | float) else list(screening)
+        self.fail_batch = fail_batch
         self.calls: list[tuple[Any, str]] = []
+        self.batches: list[tuple[Any, dict[str, Any]]] = []
 
     async def noul(self, state: Any, instructions: str) -> NoulResult:
         self.calls.append((state, instructions))
@@ -363,7 +380,41 @@ class SufficiencyDecider:
         raise AssertionError("the agent asks no score questions")
 
     async def batch(self, state: Any, questions: Any):
-        raise AssertionError("the agent asks no batched questions")
+        """Answers screening and citation batches from the supplied lists."""
+        if self.fail_batch:
+            raise RuntimeError("the decision service is down")
+        self.batches.append((state, dict(questions)))
+        answers: dict[str, Any] = {}
+        for name, question in questions.items():
+            if getattr(question, "type", None) == "noul":
+                probability = (
+                    self._screening.pop(0) if len(self._screening) > 1 else self._screening[0]
+                )
+                answers[name] = NoulResult(
+                    noul=probability,
+                    confidence=0.9,
+                    latency_ms=1.0,
+                    model=self.model_id,
+                    provider="fake",
+                    defaulted=self.defaulted,
+                )
+            else:
+                options = dict(getattr(question, "criteria", {}) or {})
+                choice = (
+                    self._verdicts.pop(0)
+                    if self._verdicts
+                    else ("supports" if "supports" in options else next(iter(options), "supports"))
+                )
+                answers[name] = ChoiceResult(
+                    choice=choice,
+                    probabilities={choice: 0.9},
+                    confidence=0.9,
+                    latency_ms=1.0,
+                    model=self.model_id,
+                    provider="fake",
+                    defaulted=self.defaulted,
+                )
+        return answers
 
 
 # --- configuration -----------------------------------------------------------------------
@@ -372,6 +423,8 @@ class SufficiencyDecider:
 def agent_config(
     *,
     gate: bool = False,
+    verify: bool = False,
+    guard: bool = False,
     seed: bool = True,
     tools: tuple[str, ...] | None = None,
     **limits: Any,
@@ -382,6 +435,8 @@ def agent_config(
 
     Args:
         gate: Turn the sufficiency check on.
+        verify: Turn the citation check on.
+        guard: Turn the injection screen on.
         seed: Run the retrieval before the first model turn.
         tools: Restrict the tools offered.
         **limits: Overrides for the agent's limits.
@@ -392,13 +447,15 @@ def agent_config(
         channels=HYBRID.channels,
         execution="agent",
         agent=AgentConfig(seed=seed, tools=tools, **limits),
-        checks=ChecksConfig(gate=gate),
+        checks=ChecksConfig(gate=gate, verify=verify, guard=guard),
     )
 
 
 def planner_config(
     *,
     gate: bool = False,
+    verify: bool = False,
+    guard: bool = False,
     seed: bool = True,
     max_workers: int = 4,
     worker_iterations: int = 8,
@@ -410,6 +467,8 @@ def planner_config(
 
     Args:
         gate: Turn the sufficiency check on.
+        verify: Turn the citation check on.
+        guard: Turn the injection screen on.
         seed: Run the retrieval before fanning out.
         max_workers: The most sub-questions a plan may hold.
         worker_iterations: Model turns per worker.
@@ -429,7 +488,7 @@ def planner_config(
             min_subquestions=min_subquestions,
             plan_threshold=plan_threshold,
         ),
-        checks=ChecksConfig(gate=gate),
+        checks=ChecksConfig(gate=gate, verify=verify, guard=guard),
     )
 
 

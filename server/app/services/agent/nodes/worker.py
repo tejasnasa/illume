@@ -101,6 +101,7 @@ def _worker_deps(deps: AgentDeps, worker_id: str) -> AgentDeps:
         decider=deps.decider,
         verifier=deps.verifier,
         screen=deps.screen,
+        round_screen=deps.round_screen,
         worker_id=worker_id,
         step_counter=deps.step_counter,
     )

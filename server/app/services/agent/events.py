@@ -36,6 +36,9 @@ class Event(StrEnum):
         NODES: Files a tool looked at, for highlighting in the graph.
         EVIDENCE: New citable evidence was gathered.
         GATE: The sufficiency check answered.
+        VERIFY: The citation check answered, with a count per verdict.
+        QUARANTINE: Repository text was withheld from the model, with its key
+            and the probability that it was an injection attempt.
         COMPACTED: Older tool results were replaced with stubs so the next
             model call fits the context window.
         ANSWER_DELTA: A piece of the answer being written.
@@ -59,6 +62,8 @@ class Event(StrEnum):
     NODES = "nodes"
     EVIDENCE = "evidence"
     GATE = "gate"
+    VERIFY = "verify"
+    QUARANTINE = "quarantine"
     COMPACTED = "compacted"
     ANSWER_DELTA = "answer_delta"
     ANSWER = "answer"

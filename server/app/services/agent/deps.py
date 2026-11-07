@@ -16,6 +16,7 @@ from typing import Any
 
 from app.services.agent.budgets import RunBudget
 from app.services.agent.events import safe_emit
+from app.services.agent.guard import RoundScreen
 from app.services.agent.prompts import RepoBrief
 from app.services.agent.state import AgentState, VerificationReport
 from app.services.agent.steps import StepKind, StepRecord, StepRecorder
@@ -61,7 +62,9 @@ class AgentDeps:
         steps: Where steps go.
         decider: Makes the gate's decision; ``None`` runs without decisions.
         verifier: Checks citations after the answer; ``None`` skips the check.
-        screen: Inspects tool results; ``None`` passes them through.
+        screen: Inspects one tool result; ``None`` passes it through.
+        round_screen: Screens every result of a tools-node round together;
+            ``None`` passes the round through.
         system_prompt: The agent's system prompt.
         worker_id: The worker this collaborator set belongs to, or ``None`` for
             the main agent. Its events and steps are tagged with it.
@@ -83,6 +86,7 @@ class AgentDeps:
     decider: Decider | None = None
     verifier: Verifier | None = None
     screen: ResultScreen | None = None
+    round_screen: RoundScreen | None = None
     worker_id: str | None = None
     step_counter: Iterator[int] | None = None
     _tools: list[dict[str, Any]] = field(default_factory=list, init=False)

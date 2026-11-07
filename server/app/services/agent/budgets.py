@@ -58,6 +58,7 @@ class BudgetSnapshot:
         output_tokens: Output tokens providers reported.
         elapsed_seconds: Wall time since the run began.
         reached: The limits that have been reached, in the order they were.
+        quarantines: Tool results the injection screen withheld.
     """
 
     tool_calls: int
@@ -65,6 +66,7 @@ class BudgetSnapshot:
     output_tokens: int
     elapsed_seconds: float
     reached: tuple[str, ...]
+    quarantines: int = 0
 
 
 async def _discard(event: str, payload: dict[str, Any]) -> None:
@@ -98,6 +100,7 @@ class RunBudget:
         self._tool_calls = 0
         self._input_tokens = 0
         self._output_tokens = 0
+        self._quarantines = 0
         self._announced: list[BudgetLimit] = []
 
     @property
@@ -121,6 +124,11 @@ class RunBudget:
         async with self._lock:
             self._input_tokens += max(input_tokens, 0)
             self._output_tokens += max(output_tokens, 0)
+
+    async def note_quarantine(self) -> None:
+        """Counts one tool result the injection screen withheld."""
+        async with self._lock:
+            self._quarantines += 1
 
     def _reached_locked(self) -> BudgetLimit | None:
         """The first limit that has been reached. The caller holds the lock."""
@@ -183,4 +191,5 @@ class RunBudget:
                 output_tokens=self._output_tokens,
                 elapsed_seconds=round(self.elapsed(), 3),
                 reached=tuple(limit.value for limit in self._announced),
+                quarantines=self._quarantines,
             )

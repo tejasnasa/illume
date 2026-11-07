@@ -25,12 +25,16 @@ from enum import StrEnum
 from typing import Any
 
 from app.services.decisions.base import (
+    NOUL_FALSE,
+    NOUL_TRUE,
     ChoiceResult,
     Decider,
+    NoulResult,
     RecordDecision,
     Result,
     record_decision,
 )
+from app.services.decisions.openrouter import ChoiceQuestion, NoulQuestion
 from app.services.retrieval.config import ChecksConfig, PlannerConfig
 from app.services.retrieval.query import HistoryMessage
 
@@ -396,6 +400,38 @@ def _citation_state(claim: str, key: str, evidence: str) -> str:
     )
 
 
+def citation_state(claim: str, key: str, evidence: str) -> str:
+    """The state of one citation-support question, as the single-call path builds it."""
+    return _citation_state(claim, key, evidence)
+
+
+def citation_question(claim: str, key: str, evidence: str) -> ChoiceQuestion:
+    """The batched form of a citation-support question.
+
+    A batch shares one state, so the claim and the evidence it cites travel in
+    the question's instructions. The wording and the options are the ones
+    :func:`decide_citation_support` uses.
+    """
+    return ChoiceQuestion(
+        instructions=f"{_CITATION_INSTRUCTIONS}\n\n{_citation_state(claim, key, evidence)}",
+        criteria=CITATION_OPTIONS,
+    )
+
+
+def citation_verdict(result: Result) -> CitationVerdict:
+    """The verdict for one decider answer, defaulting to ``does_not_support``.
+
+    An answer that is not a choice, names an option that was not offered, or is
+    a placeholder for unusable output is not evidence that the claim is true.
+    """
+    if not isinstance(result, ChoiceResult) or result.defaulted:
+        return CitationVerdict.DOES_NOT_SUPPORT
+    try:
+        return CitationVerdict(result.choice)
+    except ValueError:
+        return CitationVerdict.DOES_NOT_SUPPORT
+
+
 async def decide_citation_support(
     decider: Decider,
     claim: str,
@@ -462,6 +498,39 @@ class InjectionDecision:
     defaulted: bool = False
 
 
+def injection_state(text: str) -> str:
+    """The state of one injection question, bounded as :func:`decide_injection` bounds it."""
+    return _clip(text, MAX_TOOL_RESULT_CHARS)
+
+
+def injection_question(text: str) -> NoulQuestion:
+    """The batched form of an injection question."""
+    return NoulQuestion(
+        instructions=f"{_INJECTION_INSTRUCTIONS}\n\n{injection_state(text)}",
+        true=NOUL_TRUE,
+        false=NOUL_FALSE,
+    )
+
+
+def injection_decision(result: Result | None, *, threshold: float) -> InjectionDecision:
+    """The decision for one answer, withholding text when nothing usable answered.
+
+    A missing answer, an answer of the wrong kind, or a placeholder for unusable
+    output all quarantine: unscreened text is not cleared text.
+    """
+    if not isinstance(result, NoulResult):
+        return InjectionDecision(
+            suspicious=True, probability=1.0, threshold=threshold, model="", defaulted=True
+        )
+    return InjectionDecision(
+        suspicious=result.defaulted or result.noul >= threshold,
+        probability=result.noul,
+        threshold=threshold,
+        model=result.model,
+        defaulted=result.defaulted,
+    )
+
+
 async def decide_injection(
     decider: Decider,
     text: str,
@@ -477,16 +546,10 @@ async def decide_injection(
         threshold: The probability at or above which the text is withheld.
         record: Where the decision record goes.
     """
-    state = _clip(text, MAX_TOOL_RESULT_CHARS)
+    state = injection_state(text)
     result = await decider.noul(state, _INJECTION_INSTRUCTIONS)
     await _record(record, "injection", state, result)
-    return InjectionDecision(
-        suspicious=result.defaulted or result.noul >= threshold,
-        probability=result.noul,
-        threshold=threshold,
-        model=result.model,
-        defaulted=result.defaulted,
-    )
+    return injection_decision(result, threshold=threshold)
 
 
 # --- relevance --------------------------------------------------------------

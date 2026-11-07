@@ -37,6 +37,7 @@ from app.services.agent.deps import AgentDeps, ResultScreen, Verifier
 from app.services.agent.errors import RunError, describe_error
 from app.services.agent.events import Event, safe_emit
 from app.services.agent.graph import build_graph, recursion_limit
+from app.services.agent.guard import RoundScreen, build_guard
 from app.services.agent.nodes.merge import ordered_results
 from app.services.agent.nodes.synthesize import write_answer
 from app.services.agent.prompts import PROMPT_VERSION, RepoBrief, build_system_prompt, opening_items
@@ -45,6 +46,7 @@ from app.services.agent.state import (
     Evidence,
     Plan,
     StopReason,
+    VerificationReport,
     WorkerResult,
     initial_state,
     resolve_citations,
@@ -53,6 +55,7 @@ from app.services.agent.steps import InMemorySteps, StepRecord, StepRecorder
 from app.services.agent.tools import REGISTRY
 from app.services.agent.tools.context import RepoSnapshot, ToolContext
 from app.services.agent.tools.registry import ToolRegistry
+from app.services.agent.verification import build_verifier
 from app.services.decisions import (
     Decider,
     DeciderUnavailable,
@@ -105,6 +108,9 @@ class RunResult:
         route: The routing decision that chose this graph, when there was one.
         plan: The sub-questions the run was split into, when it was.
         workers: What each worker found, in plan order.
+        verification: What the citation check found, when one ran.
+        repair_rounds: Times a failed check sent the agent back to repair claims.
+        quarantines: Tool results the injection screen withheld.
         error: Why the run failed, when it did.
     """
 
@@ -129,6 +135,9 @@ class RunResult:
     route: RouteDecision | None = None
     plan: Plan | None = None
     workers: tuple[WorkerResult, ...] = ()
+    verification: VerificationReport | None = None
+    repair_rounds: int = 0
+    quarantines: int = 0
     error: RunError | None = None
 
 
@@ -208,8 +217,9 @@ def _build_decider(
     Planning asks its own question even when the sufficiency gate is off, so
     planner execution builds a decider either way.
     """
-    if not config.checks.gate and config.execution != "planner":
-        return None
+    if not (config.checks.gate or config.checks.verify or config.checks.guard):
+        if config.execution != "planner":
+            return None
     try:
         return get_decider(config.decider, llm=llm, emit=emit, session_id=str(run_id))
     except DeciderUnavailable:
@@ -235,6 +245,7 @@ async def run_agent(
     brief: RepoBrief | None = None,
     verifier: Verifier | None = None,
     screen: ResultScreen | None = None,
+    round_screen: RoundScreen | None = None,
     registry: ToolRegistry | None = None,
     client_factory: ClientFactory | None = None,
     clock: Callable[[], float] = time.monotonic,
@@ -261,12 +272,16 @@ async def run_agent(
         steps: Receives the run's steps; an in-memory log by default.
         run_id: The run's id; generated when omitted.
         route: The routing decision that chose this configuration, if one was made.
-        decider: Makes the gate's decisions; built from ``config.decider`` when
-            the gate is on and none is given.
+        decider: Makes the gate's, verifier's and guard's decisions; built from
+            ``config.decider`` when a check that needs one is on and none is given.
         embed: Embeds query text for the tools; the operator's embedding call by default.
         brief: Repository facts for the prompt; read from the database when omitted.
-        verifier: Checks the answer's citations; none by default.
-        screen: Inspects tool results before the model sees them; none by default.
+        verifier: Checks the answer's citations. ``None`` installs the configured
+            verifier when ``config.checks.verify`` is on, and skips the check when
+            it is off.
+        screen: Inspects one tool result before the model sees it; none by default.
+        round_screen: Screens a whole tools-node round in one batch. ``None``
+            installs the configured guard when ``config.checks.guard`` is on.
         registry: The tools; the shared registry by default.
         client_factory: Builds the model client; ``AsyncOpenAI`` by default.
         clock: Monotonic seconds, for the budget.
@@ -323,7 +338,28 @@ async def run_agent(
         decider=the_decider,
         verifier=verifier,
         screen=screen,
+        round_screen=round_screen,
     )
+    if deps.verifier is None and config.checks.verify:
+        if the_decider is None:
+            await safe_emit(
+                sink,
+                Event.DEGRADED,
+                {"stage": "verify", "reason": "no decider is available; citations are not checked"},
+            )
+        else:
+            deps.verifier = build_verifier(deps)
+    if deps.round_screen is None and config.checks.guard:
+        if the_decider is None:
+            await safe_emit(
+                sink,
+                Event.DEGRADED,
+                {
+                    "stage": "guard",
+                    "reason": "no decider is available; repository text is withheld",
+                },
+            )
+        deps.round_screen = build_guard(deps)
     turns = [ChatTurn(role=m.role, content=m.content) for m in history]  # type: ignore[arg-type]
     replayed = turns[-config.query.history_messages :] if config.query.history_messages else []
     state = initial_state(
@@ -493,6 +529,9 @@ async def _result(
         route=state["route"],
         plan=plan,
         workers=workers,
+        verification=state["verification"],
+        repair_rounds=state["repair_rounds"],
+        quarantines=usage.quarantines,
         error=error,
     )
 
@@ -515,5 +554,8 @@ async def _finish(deps: AgentDeps, result: RunResult) -> None:
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
             "elapsed_seconds": result.elapsed_seconds,
+            "repair_rounds": result.repair_rounds,
+            "quarantines": result.quarantines,
+            "verification": result.verification.counts if result.verification else None,
         },
     )

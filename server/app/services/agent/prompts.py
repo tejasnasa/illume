@@ -11,11 +11,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from app.services.agent.state import Evidence, WorkerResult, unanswered
+from app.services.agent.state import (
+    ClaimCheck,
+    ClaimVerdict,
+    Evidence,
+    WorkerResult,
+    unanswered,
+)
 from app.services.retrieval.candidate import Candidate
 from app.services.retrieval.context import escape_fence, render_block
 
-PROMPT_VERSION = "agent-2"
+PROMPT_VERSION = "agent-3"
 
 # The most evidence text the closing answer call is shown.
 SYNTHESIS_CONTEXT_CHARS = 60_000
@@ -357,8 +363,14 @@ def _fenced(item: Evidence) -> str:
     )
 
 
-def seed_message(candidates: Sequence[Candidate]) -> str:
-    """The user-role message that shows the agent the first retrieval results."""
+def seed_message(candidates: Sequence[Candidate], withheld: Mapping[str, str] | None = None) -> str:
+    """The user-role message that shows the agent the first retrieval results.
+
+    Args:
+        candidates: The retrieval results, best first.
+        withheld: The text to show in place of a result, by key, for results
+            the injection screen withheld.
+    """
     if not candidates:
         return (
             "An initial search of the repository for this question found nothing. "
@@ -366,6 +378,9 @@ def seed_message(candidates: Sequence[Candidate]) -> str:
         )
     blocks = []
     for candidate in candidates:
+        if withheld and candidate.key in withheld:
+            blocks.append(withheld[candidate.key])
+            continue
         text = candidate.text
         if len(text) > _SEED_BLOCK_CHARS:
             text = text[:_SEED_BLOCK_CHARS].rstrip() + "…"
@@ -385,9 +400,31 @@ def gate_feedback_message(probability: float) -> str:
     )
 
 
-def repair_feedback_message(claims: Sequence[str]) -> str:
-    """The message that sends the agent back to fix claims their citations do not support."""
-    listed = "\n".join(f"- {claim}" for claim in claims)
+_VERDICT_REASON: dict[ClaimVerdict, str] = {
+    ClaimVerdict.UNSUPPORTED: "which does not support it",
+    ClaimVerdict.CONTRADICTED: "which contradicts it",
+    ClaimVerdict.UNRESOLVED_KEY: "which the investigation never retrieved",
+}
+
+
+def _repair_line(finding: ClaimCheck) -> str:
+    """One failing claim, naming the claim and every key it cited."""
+    keys = dict.fromkeys((*finding.keys, *finding.unresolved))
+    cited = ", ".join(keys) or "no key"
+    reason = _VERDICT_REASON.get(finding.verdict, "which does not support it")
+    return f'- Claim {finding.index} cites {cited}, {reason}: "{finding.claim}"'
+
+
+def repair_feedback_message(claims: Sequence[str | ClaimCheck]) -> str:
+    """The message that sends the agent back to fix claims their citations do not support.
+
+    Args:
+        claims: The failing claims. A ``ClaimCheck`` names its keys and its
+            verdict; a bare string is kept for callers that have only sentences.
+    """
+    listed = "\n".join(
+        _repair_line(claim) if isinstance(claim, ClaimCheck) else f"- {claim}" for claim in claims
+    )
     return (
         "A reviewer found claims in your answer that the cited evidence does not support:\n"
         f"{listed}\n"

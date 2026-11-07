@@ -15,11 +15,17 @@ import pytest
 import respx
 
 from app.core.config import settings
-from app.services.decisions import DECISIONS_URL
+from app.services.decisions import DECISIONS_URL, ChoiceResult
 from app.services.retrieval import query as query_module
 from app.services.retrieval import single_shot
 from app.services.retrieval.citations import code_key
-from app.services.retrieval.config import CLASSIC, HYBRID, HYBRID_RERANK, STRUCTURAL
+from app.services.retrieval.config import (
+    CLASSIC,
+    HYBRID,
+    HYBRID_RERANK,
+    STRUCTURAL,
+    ChecksConfig,
+)
 from app.services.retrieval.single_shot import (
     MAX_OUTPUT_TOKENS,
     NO_CONTEXT_ANSWER,
@@ -89,6 +95,60 @@ def jev(monkeypatch):
     with respx.mock:
         route = respx.post(DECISIONS_URL).mock(side_effect=respond)
         yield route
+
+
+class SupportingDecider:
+    """A decider that says every cited claim's evidence supports it, and never calls out."""
+
+    kind = "fake"
+    model_id = "fake-decider"
+
+    async def choice(self, state, instructions, options):
+        raise AssertionError("verification uses the batch interface")
+
+    async def score(self, state, instructions, levels):
+        raise AssertionError("verification asks no score questions")
+
+    async def noul(self, state, instructions):
+        raise AssertionError("the single-shot verifier asks no noul questions")
+
+    async def batch(self, state, questions):
+        return {
+            name: ChoiceResult(
+                choice="supports",
+                probabilities={"supports": 0.9},
+                confidence=0.9,
+                latency_ms=1.0,
+                model=self.model_id,
+                provider="fake",
+            )
+            for name in questions
+        }
+
+
+class VerdictDecider(SupportingDecider):
+    """A batch decider that gives one fixed verdict to every citation question."""
+
+    def __init__(self, verdict: str) -> None:
+        self.verdict = verdict
+
+    async def batch(self, state, questions):
+        return {
+            name: ChoiceResult(
+                choice=self.verdict,
+                probabilities={self.verdict: 0.9},
+                confidence=0.9,
+                latency_ms=1.0,
+                model=self.model_id,
+                provider="fake",
+            )
+            for name in questions
+        }
+
+
+@pytest.fixture
+def verification() -> SupportingDecider:
+    return SupportingDecider()
 
 
 def context_for(db, seeded, emit=None):
@@ -183,11 +243,15 @@ class TestCitingPresets:
         assert call["max_output_tokens"] == 3000
 
     async def test_hybrid_rerank_uses_jev_when_configured(
-        self, db_session, seeded, generation, jev
+        self, db_session, seeded, generation, jev, verification
     ):
         generation(GENERATED)
         result = await answer(
-            HYBRID_RERANK, QUESTION, ctx=context_for(db_session, seeded), llm=make_llm()
+            HYBRID_RERANK,
+            QUESTION,
+            ctx=context_for(db_session, seeded),
+            llm=make_llm(),
+            decider=verification,
         )
 
         assert jev.called
@@ -198,13 +262,18 @@ class TestCitingPresets:
 
     @pytest.mark.parametrize("preset", [HYBRID_RERANK, STRUCTURAL], ids=lambda p: p.name)
     async def test_without_a_jev_key_the_answer_still_comes_back_degraded(
-        self, db_session, seeded, generation, preset, monkeypatch
+        self, db_session, seeded, generation, preset, monkeypatch, verification
     ):
         monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
         generation(GENERATED)
         emit = RecordingEmit()
         result = await answer(
-            preset, QUESTION, ctx=context_for(db_session, seeded), llm=make_llm(), emit=emit
+            preset,
+            QUESTION,
+            ctx=context_for(db_session, seeded),
+            llm=make_llm(),
+            emit=emit,
+            decider=verification,
         )
 
         assert result.generated is True
@@ -213,17 +282,55 @@ class TestCitingPresets:
         assert [ref.symbol_name for ref in result.sources] == ["verify_password"]
 
     async def test_structural_runs_with_jev_and_every_channel(
-        self, db_session, seeded, generation, jev
+        self, db_session, seeded, generation, jev, verification
     ):
         generation(GENERATED)
         result = await answer(
-            STRUCTURAL, QUESTION, ctx=context_for(db_session, seeded), llm=make_llm()
+            STRUCTURAL,
+            QUESTION,
+            ctx=context_for(db_session, seeded),
+            llm=make_llm(),
+            decider=verification,
         )
 
         assert jev.called
         assert result.generated is True
         assert result.cited_keys == [VERIFY_KEY]
         assert result.unresolved == ["F:app/ghost.py:1-2"]
+
+    @pytest.mark.parametrize(
+        ("choice", "mark"),
+        [
+            ("supports", "[[verify:supported]]"),
+            ("partially_supports", "[[verify:partially_supported]]"),
+            ("does_not_support", "[[verify:unsupported]]"),
+            ("contradicts", "[[verify:contradicted]]"),
+        ],
+    )
+    async def test_a_single_shot_answer_is_marked_without_a_repair_round(
+        self, db_session, seeded, generation, choice, mark
+    ):
+        responses = generation(GENERATED)
+        config = HYBRID.model_copy(
+            update={"name": "single_shot_verify", "checks": ChecksConfig(verify=True)}
+        )
+
+        result = await answer(
+            config,
+            QUESTION,
+            ctx=context_for(db_session, seeded),
+            llm=make_llm(),
+            decider=VerdictDecider(choice),
+        )
+
+        assert result.generated is True
+        assert result.verification is not None
+        assert result.verification.claims[0].verdict.value == mark[9:-2]
+        assert mark in result.answer
+        # No loop exists here, so the mark is applied and the one call stands.
+        assert len(responses.calls) == 1
+        # The answer's own text is still present.
+        assert "verify_password compares with bcrypt" in result.answer
 
     async def test_nothing_retrieved_is_not_charged_for_any_preset(
         self, db_session, seeded, generation

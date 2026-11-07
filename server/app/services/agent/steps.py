@@ -27,6 +27,7 @@ StepKind = Literal[
     "compact",
     "synthesize",
     "verify",
+    "quarantine",
     "error",
 ]
 
