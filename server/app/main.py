@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
+    activity,
     agent,
     auth,
     chat,
@@ -57,6 +58,7 @@ app.include_router(glossary.router)
 app.include_router(ownership.router)
 app.include_router(guide.router)
 app.include_router(stats.router)
+app.include_router(activity.router)
 app.include_router(github_proxy.router)
 app.include_router(contact.router)
 app.include_router(push.router)

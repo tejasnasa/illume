@@ -81,6 +81,7 @@ REPO_ROUTES: list[RepoRoute] = [
     RepoRoute("GET", "/api/v1/repository/{ref}/ownership"),
     RepoRoute("GET", "/api/v1/repository/{ref}/ownership/silos"),
     RepoRoute("GET", "/api/v1/repository/{ref}/stats"),
+    RepoRoute("GET", "/api/v1/repository/{ref}/activity"),
     RepoRoute("POST", "/api/v1/repository/{ref}/chat", body={"question": "What does this do?"}),
     RepoRoute("GET", "/api/v1/repository/{ref}/chat/history"),
     RepoRoute("POST", "/api/v1/repository/{ref}/chat/stream", body={"question": "What is this?"}),

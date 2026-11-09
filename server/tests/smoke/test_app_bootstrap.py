@@ -26,7 +26,7 @@ pytestmark = pytest.mark.smoke
 # 36 -> 38 with the agent settings GET/PUT under ``/api/v1/auth/me``.
 # 38 -> 41 with the chat stream POST and the agent-run list and replay GETs under
 # ``/api/v1/repository/{repo_id}/...``.
-EXPECTED_API_ROUTE_COUNT = 41
+EXPECTED_API_ROUTE_COUNT = 42
 
 EXPECTED_TAGS = {
     "agent",
