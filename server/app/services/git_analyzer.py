@@ -21,6 +21,7 @@ from app.models import CodeOwner, Commit, File
 from app.services._publish import publish_log
 from app.services._stages import Phase, Stage
 from app.services.stack_detector import SKIP_DIRS
+from app.services.test_files import detect_tested_files
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +30,6 @@ GIT_LOG_MAX_COMMITS = 500
 FIELD_SEPARATOR = "\x1f"
 
 GIT_LOG_FORMAT = FIELD_SEPARATOR.join(["%H", "%ae", "%an", "%s", "%ai"])
-
-_TEST_TEMPLATES = [
-    "test_{stem}{suffix}",
-    "{stem}.test{suffix}",
-    "{stem}.spec{suffix}",
-    "{stem}_test{suffix}",
-    "{stem}.test.js",
-    "{stem}.spec.js",
-    "{stem}.test.tsx",
-    "{stem}.spec.tsx",
-    "test_{stem}.py",
-    "{stem}_spec{suffix}",
-]
 
 
 def analyze_git_history(
@@ -96,6 +84,10 @@ def analyze_git_history(
         count=len(parsed),
     )
 
+    # Test coverage is a property of the tree, not of the history, so every
+    # file gets the flag, including ones no commit in the window touched.
+    _update_test_flags(db, repo.id, clone_path)
+
     # ``git_analysis_complete`` fires only on this empty-history return; the
     # populated path completes with ``ownership_written`` below. Both carry
     # the same stage/phase pair, so the stage is done either way.
@@ -125,9 +117,7 @@ def analyze_git_history(
         count=len(file_stats),
     )
 
-    has_tests_map = _detect_test_files(clone_path, list(file_stats.keys()))
-
-    _bulk_update_files(db, repo.id, file_stats, has_tests_map)
+    _bulk_update_files(db, repo.id, file_stats)
     logger.info("repo=%s  Updated %d file rows", repo.id, len(file_stats))
 
     _bulk_insert_code_owners(db, repo.id, file_stats)
@@ -338,70 +328,28 @@ def _aggregate_file_stats(parsed_commits: list[dict]) -> dict[str, dict]:
     return result
 
 
-def _detect_test_files(clone_path: Path, file_paths: list[str]) -> dict[str, bool]:
-    """Map each file path to whether a matching test file exists in the clone."""
-    root = Path(clone_path)
+def _list_clone_files(clone_path: Path) -> list[str]:
+    """Every real file in the clone, repo-relative with forward slashes.
 
-    # Snapshot every real file once up front; membership checks against this
-    # set are far cheaper than probing the filesystem per candidate path.
-    # ``SKIP_DIRS`` mirrors the exclusion set the file walker and stack
-    # detector apply; without it the rglob descends into ``.git``, ``node_modules``
-    # and the other noise directories every sync, which is the O(``.git`` objects)
-    # walk the persistent clone cache makes unbounded over time.
-    all_clone_paths: set[str] = set()
+    ``SKIP_DIRS`` mirrors the exclusion set the file walker and stack detector
+    apply; without it the walk descends into ``.git``, ``node_modules`` and the
+    other noise directories every sync, which is the O(``.git`` objects) walk
+    the persistent clone cache makes unbounded over time.
+    """
+    root = Path(clone_path)
+    paths: list[str] = []
     for p in root.rglob("*"):
         if p.is_file() and not any(part in SKIP_DIRS for part in p.parts):
             try:
-                all_clone_paths.add(str(p.relative_to(root)))
+                paths.append(p.relative_to(root).as_posix())
             except ValueError:
                 pass
-
-    result: dict[str, bool] = {}
-
-    for file_path in file_paths:
-        p = Path(file_path)
-        stem = p.stem
-        suffix = p.suffix
-        parent = p.parent
-
-        candidates = _generate_test_candidates(parent, stem, suffix)
-        result[file_path] = any(c in all_clone_paths for c in candidates)
-
-    return result
+    return paths
 
 
-def _generate_test_candidates(
-    parent: Path,
-    stem: str,
-    suffix: str,
-) -> list[str]:
-    """Generate plausible sibling/standard-dir paths where tests might live."""
-    candidate_names: list[str] = []
-    for template in _TEST_TEMPLATES:
-        try:
-            name = template.format(stem=stem, suffix=suffix)
-            candidate_names.append(name)
-        except KeyError:
-            pass
-
-    # Look beside the source file, then in conventional test directories;
-    # repo-root test dirs are skipped for files already at the root (no-op).
-    search_dirs: list[Path] = [
-        parent,
-        parent / "tests",
-        parent / "__tests__",
-        parent / "spec",
-    ]
-    if parent != Path("."):
-        search_dirs.append(Path("tests"))
-        search_dirs.append(Path("__tests__"))
-
-    candidates: list[str] = []
-    for directory in search_dirs:
-        for name in candidate_names:
-            candidates.append(str(directory / name))
-
-    return candidates
+def _detect_test_files(clone_path: Path, file_paths: list[str]) -> dict[str, bool]:
+    """Map each file path to whether a test for it exists in the clone."""
+    return detect_tested_files(file_paths, _list_clone_files(clone_path))
 
 
 def _bulk_insert_commits(db: Session, repo_id: str, parsed_commits: list[dict]) -> None:
@@ -434,13 +382,26 @@ def _bulk_insert_commits(db: Session, repo_id: str, parsed_commits: list[dict]) 
     db.commit()
 
 
+def _update_test_flags(db: Session, repo_id, clone_path: Path) -> None:
+    """Set ``File.has_tests`` on every file of the repository."""
+    file_rows = db.query(File.id, File.path).filter(File.repository_id == repo_id).all()
+    if not file_rows:
+        return
+    paths = {row.path.replace("\\", "/"): row.id for row in file_rows}
+    flags = _detect_test_files(clone_path, list(paths))
+    db.execute(
+        update(File),
+        [{"id": file_id, "has_tests": flags.get(path, False)} for path, file_id in paths.items()],
+    )
+    db.commit()
+
+
 def _bulk_update_files(
     db: Session,
     repo_id: str,
     file_stats: dict[str, dict],
-    has_tests_map: dict[str, bool],
 ) -> None:
-    """Bulk-update File rows with stats and test flags; skips unknown paths."""
+    """Bulk-update File rows with history stats; skips unknown paths."""
     if not file_stats:
         return
 
@@ -460,7 +421,6 @@ def _bulk_update_files(
                 "id": file_id,
                 "change_frequency": stats["change_frequency"],
                 "git_last_modified": stats["git_last_modified"],
-                "has_tests": has_tests_map.get(path, False),
             }
         )
 

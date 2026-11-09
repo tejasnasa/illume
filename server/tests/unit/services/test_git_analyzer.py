@@ -14,7 +14,6 @@ from app.services.git_analyzer import (
     GIT_LOG_MAX_COMMITS,
     _aggregate_file_stats,
     _detect_test_files,
-    _generate_test_candidates,
     _looks_like_header,
     _normalise_rename_path,
     _parse_git_date,
@@ -343,34 +342,7 @@ class TestAggregateFileStats:
         assert _aggregate_file_stats([]) == {}
 
 
-class TestTestFileCandidates:
-    """
-    Candidates are built with `str(Path / name)`, so they use the OS separator. The
-    comparisons here normalise to forward slashes so the assertions read the same on
-    every platform.
-    """
-
-    def candidates(self) -> list[str]:
-        from pathlib import Path
-
-        generated = _generate_test_candidates(Path("src"), "app", ".py")
-        return [c.replace("\\", "/") for c in generated]
-
-    def test_generates_sibling_variants(self):
-        candidates = self.candidates()
-
-        assert "src/test_app.py" in candidates
-        assert "src/app_test.py" in candidates
-
-    def test_includes_repo_level_test_directories(self):
-        assert any(c.startswith("tests/") for c in self.candidates())
-
-    def test_includes_colocated_test_folders(self):
-        candidates = self.candidates()
-
-        assert any(c.startswith("src/__tests__/") for c in candidates)
-        assert any(c.startswith("src/tests/") for c in candidates)
-
+class TestTestFileDetection:
     def test_detects_a_colocated_test_file(self, tmp_path):
         (tmp_path / "app.py").write_text("x = 1")
         (tmp_path / "test_app.py").write_text("def test(): pass")
@@ -389,6 +361,23 @@ class TestTestFileCandidates:
         (tmp_path / "src" / "tests" / "test_app.py").write_text("def test(): pass")
 
         assert _detect_test_files(tmp_path, ["src/app.py"])["src/app.py"] is True
+
+    def test_detects_a_test_in_a_mirrored_tree(self, tmp_path):
+        (tmp_path / "server" / "app" / "services").mkdir(parents=True)
+        (tmp_path / "server" / "app" / "services" / "scorer.py").write_text("x = 1")
+        tests = tmp_path / "server" / "tests" / "unit" / "services"
+        tests.mkdir(parents=True)
+        (tests / "test_scorer.py").write_text("def test(): pass")
+
+        path = "server/app/services/scorer.py"
+        assert _detect_test_files(tmp_path, [path])[path] is True
+
+    def test_skips_noise_directories(self, tmp_path):
+        (tmp_path / "app.py").write_text("x = 1")
+        (tmp_path / "node_modules").mkdir()
+        (tmp_path / "node_modules" / "test_app.py").write_text("def test(): pass")
+
+        assert _detect_test_files(tmp_path, ["app.py"]) == {"app.py": False}
 
     def test_missing_file_is_not_an_error(self, tmp_path):
         assert _detect_test_files(tmp_path, ["never-existed.py"]) == {"never-existed.py": False}

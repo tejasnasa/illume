@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.factories import make_guide, make_ingested_repo, make_user
+from tests.factories import make_file, make_guide, make_ingested_repo, make_user
 from tests.helpers import authenticate, random_uuid
 
 pytestmark = pytest.mark.integration
@@ -145,6 +145,33 @@ class TestCriticalFiles:
         assert first["reasons"] == ["high fan-in"]
         assert first["fan_in"] == 42
         assert first["has_tests"] is False
+
+    async def test_coverage_and_churn_come_from_the_current_file_rows(self, client, db_session):
+        """
+        The stored list is a snapshot, and older ones never recorded coverage or
+        churn; the file rows are what a later analysis keeps current.
+        """
+        user = await make_user(db_session)
+        repo, _ = await make_ingested_repo(db_session, user)
+        live = await make_file(db_session, repo, path="src/live.py", has_tests=True)
+        live.change_frequency = 7
+        await db_session.commit()
+        await make_guide(
+            db_session,
+            repo,
+            critical_files=[
+                {"path": "src/live.py", "criticality": "critical", "reasons": [], "fan_in": 3},
+                {"path": "src/gone.py", "criticality": "caution", "reasons": [], "fan_in": 1},
+            ],
+        )
+        await authenticate(client, user)
+
+        files = (await client.get(guide_url(repo))).json()["critical_files"]
+
+        assert files[0]["has_tests"] is True
+        assert files[0]["change_frequency"] == 7
+        assert files[1]["has_tests"] is False
+        assert files[1]["change_frequency"] is None
 
     async def test_an_unknown_criticality_sorts_last(self, client, db_session):
         """Anything outside the three known labels must not sort above `critical`."""

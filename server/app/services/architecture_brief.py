@@ -7,6 +7,7 @@ and stores the resulting sections on the repository's OnboardingGuide.
 """
 
 import logging
+import re
 from collections import defaultdict
 from typing import Sequence, cast
 from uuid import UUID
@@ -74,6 +75,8 @@ class _FileProxy:
         "fan_out",
         "criticality",
         "criticality_reasons",
+        "change_frequency",
+        "has_tests",
     )
 
     def __init__(self, row) -> None:
@@ -84,6 +87,8 @@ class _FileProxy:
         self.fan_out = row.fan_out
         self.criticality = row.criticality
         self.criticality_reasons = row.criticality_reasons
+        self.change_frequency = row.change_frequency
+        self.has_tests = row.has_tests
 
 
 class _SymbolProxy:
@@ -146,6 +151,8 @@ def _get_critical_files(files: Sequence[File]) -> list[dict]:
             "criticality": f.criticality,
             "reasons": f.criticality_reasons or [],
             "fan_in": f.fan_in or 0,
+            "change_frequency": f.change_frequency,
+            "has_tests": bool(f.has_tests),
         }
         for f in critical
     ]
@@ -362,8 +369,26 @@ def _build_narrative_prompt(
         "5. External services it integrates with",
         "",
         "Be specific — use actual module and file names from above. Do not speculate beyond what the structure shows.",
+        "",
+        "Format: plain prose paragraphs only. Do not add a title or any markdown headings — "
+        "the summary is shown under its own heading already.",
     ]
     return "\n".join(lines)
+
+
+_LEADING_HEADING = re.compile(
+    r"\A(?:[ \t]*(?:#{1,6}[ \t].*|#{1,6})[ \t]*(?:\r?\n|\Z)|[ \t]*\r?\n)+"
+)
+
+
+def _strip_leading_title(text: str) -> str:
+    """Drop markdown headings (and blank lines) that open the narrative.
+
+    Models often start with a title such as ``# Architecture Summary: Foo``
+    despite being told not to; the page already labels the panel, so the
+    title only repeats it.
+    """
+    return _LEADING_HEADING.sub("", text).strip()
 
 
 def _call_llm_narrative(prompt: str, llm: LLMConfig | None = None) -> str:
@@ -402,7 +427,7 @@ def _call_llm_narrative(prompt: str, llm: LLMConfig | None = None) -> str:
             **response_kwargs,
         )
         content = response.output_text
-        return content.strip() if content else ""
+        return _strip_leading_title(content) if content else ""
     except Exception as exc:
         logger.error("architecture_brief: LLM narrative call failed: %s", exc)
         return ""
@@ -454,6 +479,8 @@ def generate_brief(
             File.fan_out,
             File.criticality,
             File.criticality_reasons,
+            File.change_frequency,
+            File.has_tests,
         ).where(File.repository_id == repo.id)
     ).all()
     files_by_id: dict[UUID, File] = {row.id: _file_proxy(row) for row in file_rows}

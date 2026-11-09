@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.api.deps import get_repo_for_user
 from app.core.database import get_async_db
-from app.models import OnboardingGuide
+from app.models import File, OnboardingGuide
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -129,6 +129,36 @@ def _parse_critical_files(raw: list | None) -> list[CriticalFile]:
     return sorted(items, key=lambda x: order.get(x.criticality, 3))
 
 
+async def _with_live_file_facts(
+    items: list[CriticalFile], repo_id: uuid.UUID, db: AsyncSession
+) -> list[CriticalFile]:
+    """Fill test coverage and change counts from the current file rows.
+
+    The stored list is a snapshot from the last analysis, and older snapshots
+    never recorded these two facts at all; the file rows are always current.
+    """
+    if not items:
+        return items
+    rows = await db.execute(
+        select(File.path, File.has_tests, File.change_frequency).where(
+            File.repository_id == repo_id,
+            File.path.in_([item.file_path for item in items]),
+        )
+    )
+    facts = {row.path: row for row in rows}
+    return [
+        item.model_copy(
+            update={
+                "has_tests": bool(facts[item.file_path].has_tests),
+                "change_frequency": facts[item.file_path].change_frequency,
+            }
+        )
+        if item.file_path in facts
+        else item
+        for item in items
+    ]
+
+
 def _parse_architecture_brief(raw: dict | None) -> ArchitectureBrief | None:
     """Parse the stored architecture-brief JSON blob, if present."""
     if not raw:
@@ -174,10 +204,9 @@ async def get_onboarding_guide(
     return GuideResponse(
         repository_id=repo_id,
         reading_order=_parse_reading_order(guide.reading_order),
-        critical_files=_parse_critical_files(guide.critical_files),
+        critical_files=await _with_live_file_facts(
+            _parse_critical_files(guide.critical_files), repo_id, db
+        ),
         architecture_brief=_parse_architecture_brief(guide.architecture_brief),
         pdf_ready=guide.pdf_path is not None and Path(guide.pdf_path).exists(),
     )
-
-
-

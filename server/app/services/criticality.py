@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models import File
+from app.services.test_files import is_test_path
 
 # Regexes matched against file paths to flag core infrastructure files.
 CRITICAL_PATH_PATTERNS = [
@@ -62,7 +63,9 @@ def _score_file(file: File, repo_has_tests: bool = True) -> tuple[str, list[str]
             score += 1
             reasons.append("untouched for 6+ months")
 
-    if repo_has_tests and not file.has_tests:
+    # A test file is the coverage; asking whether it has tests of its own
+    # would mark every test in the repository as untested.
+    if repo_has_tests and not file.has_tests and not is_test_path(file.path):
         # Untested code is riskier to change, so it scores higher. The penalty
         # is reserved for repos that actually have tests; otherwise *every*
         # file looks untested and the rule stops identifying risk.

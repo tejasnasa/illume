@@ -16,7 +16,7 @@ Stage order, deliberately:
   compute_fan_metrics + detect_stack + entry_points)
 * ``analyze_git_history`` -- must precede ``run_criticality_scoring``
   because criticality reads ``File.git_last_modified`` and ``File.has_tests``
-  written only by ``_bulk_update_files``.
+  written only by ``analyze_git_history``.
 * ``build_cochange`` -- reads the commit rows ``analyze_git_history`` writes
   and the file rows the parse stage writes, so it follows both.
 * ``run_criticality_scoring``.
