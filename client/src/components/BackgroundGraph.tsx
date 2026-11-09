@@ -5,7 +5,7 @@
 "use client";
 import Graph from "@/types/graph";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ssr: false,
@@ -82,6 +82,24 @@ export default function BackgroundGraph({
 
   const contained = variant === "contained";
 
+  // The engine writes positions onto the nodes and swaps each link's ids for
+  // node objects. The graph is shared with the rest of the page, so it gets a
+  // copy of its own.
+  const data = useMemo(() => {
+    if (!graph) return null;
+    const idOf = (end: unknown) =>
+      typeof end === "object" && end !== null ? (end as { id: string }).id : (end as string);
+    return {
+      ...graph,
+      nodes: graph.nodes.map((node) => ({ ...node })),
+      links: graph.links.map((link) => ({
+        ...link,
+        source: idOf(link.source),
+        target: idOf(link.target),
+      })),
+    };
+  }, [graph]);
+
   // Stable identity: the force engine diffs this prop and would otherwise
   // rebuild every node on each render.
   const colorForNode = useCallback(() => nodeColor, [nodeColor]);
@@ -117,7 +135,7 @@ export default function BackgroundGraph({
   const fitToGraph = useCallback(() => {
     const fg = fgRef.current;
     const camera = fg?.camera?.();
-    const nodes = graph?.nodes;
+    const nodes = data?.nodes;
     if (!fg || !camera || !nodes?.length) return;
 
     // The engine positions the very node objects it was handed, so these read
@@ -208,7 +226,7 @@ export default function BackgroundGraph({
       revealedRef.current = true;
       setRevealed(true);
     }
-  }, [graph, nodeRelSize, fitPadding, size.width, size.height]);
+  }, [data, nodeRelSize, fitPadding, size.width, size.height]);
 
   /** Slowly orbits the camera around the graph until unmounted. */
   useEffect(() => {
@@ -242,7 +260,7 @@ export default function BackgroundGraph({
     return () => cancelAnimationFrame(rafId);
   }, []);
 
-  if (!graph) return null;
+  if (!data) return null;
 
   const measured = size.width > 0 && size.height > 0;
 
@@ -258,7 +276,7 @@ export default function BackgroundGraph({
           ref={fgRef}
           width={size.width}
           height={size.height}
-          graphData={graph}
+          graphData={data}
           nodeLabel="label"
           nodeVal={(node: any) => node.loc || 10}
           nodeRelSize={nodeRelSize}
