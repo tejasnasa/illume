@@ -130,7 +130,7 @@ class TestPlannerGraph:
         assert ("planner", "agent") in found
         assert ("planner", "worker") in found
         assert ("worker", "merge") in found
-        assert ("merge", "gate") in found
+        assert ("merge", "synthesize") in found
 
     def test_the_single_agent_graph_is_unchanged(self):
         found = edges(agent_config())
@@ -140,17 +140,11 @@ class TestPlannerGraph:
             ("route", "seed"),
             ("seed", "agent"),
             ("agent", "tools"),
-            ("agent", "gate"),
             ("agent", "agent"),
             ("agent", "synthesize"),
             ("tools", "agent"),
-            ("tools", "gate"),
             ("tools", "synthesize"),
-            ("gate", "agent"),
-            ("gate", "synthesize"),
-            ("synthesize", "verify"),
-            ("verify", "agent"),
-            ("verify", "__end__"),
+            ("synthesize", "__end__"),
         }
 
     def test_workers_take_their_turns_from_the_planner(self):

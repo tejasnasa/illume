@@ -2,9 +2,8 @@
 
 A :class:`PipelineConfig` names one choice for every slot of the pipeline: how
 the question is rewritten, which channels search, how their lists are merged
-and reranked, how the result is narrowed, how the answer is produced, and which
-checks run. A user-facing preset is one of these, and so is an evaluation arm,
-which is what lets a result be traced back to exactly what produced it through
+and reranked, how the result is narrowed, and how the answer is produced. A user-facing preset is one of these, and so is an
+evaluation arm, which is what lets a result be traced back to exactly what produced it through
 :meth:`PipelineConfig.config_hash`.
 
 The model is frozen for the same reason :class:`~app.services.llm_config.LLMConfig`
@@ -243,26 +242,21 @@ class AgentConfig(_Frozen):
             results in the conversation are replaced by short stubs.
         keep_recent_turns: Tool-calling turns at the end of the conversation
             that compaction leaves whole.
-        max_repair_rounds: Rounds spent fixing unsupported citations.
-        max_gate_rejections: Times the sufficiency check may send the agent
-            back before it must answer.
         seed: Run the retrieval pipeline once before the first model turn.
         tools: Tool names the agent may call; ``None`` means every tool.
         effort: The reasoning effort requested from providers that support it.
     """
 
-    max_iterations: int = Field(default=12, ge=1, le=50)
-    max_tool_calls: int = Field(default=60, ge=1, le=300)
-    max_seconds: int = Field(default=120, ge=10, le=600)
-    hard_cancel_seconds: int = Field(default=150, ge=10, le=900)
+    max_iterations: int = Field(default=20, ge=1, le=50)
+    max_tool_calls: int = Field(default=100, ge=1, le=300)
+    max_seconds: int = Field(default=240, ge=10, le=600)
+    hard_cancel_seconds: int = Field(default=300, ge=10, le=900)
     max_input_tokens: int = Field(default=1_500_000, ge=1_000, le=10_000_000)
     context_window: int = Field(
         default=DEFAULT_CONTEXT_WINDOW, ge=MIN_CONTEXT_WINDOW, le=MAX_CONTEXT_WINDOW
     )
     compact_at: float = Field(default=0.8, ge=0.3, le=0.95)
     keep_recent_turns: int = Field(default=2, ge=0, le=10)
-    max_repair_rounds: int = Field(default=1, ge=0, le=3)
-    max_gate_rejections: int = Field(default=2, ge=0, le=5)
     seed: bool = True
     tools: tuple[str, ...] | None = None
     effort: Literal["minimal", "low", "medium", "high"] = "low"
@@ -287,7 +281,7 @@ class PlannerConfig(_Frozen):
     """
 
     max_workers: int = Field(default=4, ge=2, le=6)
-    worker_iterations: int = Field(default=8, ge=1, le=50)
+    worker_iterations: int = Field(default=12, ge=1, le=50)
     min_subquestions: int = Field(default=2, ge=2, le=6)
     plan_threshold: float = Field(default=0.5, ge=0, le=1)
 
@@ -296,32 +290,6 @@ class PlannerConfig(_Frozen):
         if self.min_subquestions > self.max_workers:
             raise ValueError("planner.min_subquestions cannot exceed planner.max_workers")
         return self
-
-
-class ChecksConfig(_Frozen):
-    """The checks that run on the way to an answer, and the decision thresholds.
-
-    Every threshold is a field rather than a constant buried in a node, so an
-    evaluation arm can vary it. The defaults are starting points to be tuned on
-    a held-out slice, never on the slice a result is reported for.
-
-    Attributes:
-        gate: Ask whether the evidence suffices before the agent may answer.
-        verify: Check each cited claim against the text it cites.
-        guard: Screen repository text for instructions aimed at the model.
-        sufficiency_threshold: The probability at which the gate lets the
-            agent answer.
-        injection_threshold: The probability at which the guard withholds text.
-        route_confidence: The confidence at which the router's choice is trusted.
-            Below it, callers take the expensive path rather than guess.
-    """
-
-    gate: bool = False
-    verify: bool = False
-    guard: bool = False
-    sufficiency_threshold: float = Field(default=0.7, ge=0, le=1)
-    injection_threshold: float = Field(default=0.5, ge=0, le=1)
-    route_confidence: float = Field(default=0.6, ge=0, le=1)
 
 
 # --- the whole -------------------------------------------------------------
@@ -345,7 +313,6 @@ class PipelineConfig(_Frozen):
             to parallel workers.
         agent: Required for ``agent`` and ``planner`` execution.
         planner: Required for ``planner`` execution.
-        checks: Which checks run.
         decider: Who makes the narrow yes/no and choice decisions.
     """
 
@@ -359,7 +326,6 @@ class PipelineConfig(_Frozen):
     execution: Literal["single_shot", "agent", "planner"] = "single_shot"
     agent: AgentConfig | None = None
     planner: PlannerConfig | None = None
-    checks: ChecksConfig = ChecksConfig()
     decider: Literal["jev", "llm"] = "jev"
 
     @field_validator("channels", mode="after")
@@ -395,8 +361,6 @@ class PipelineConfig(_Frozen):
         if self.execution == "single_shot":
             if self.agent is not None or self.planner is not None:
                 raise ValueError("single_shot execution takes no agent or planner settings")
-            if self.checks.gate:
-                raise ValueError("the sufficiency gate needs agent or planner execution")
         if self.execution in ("agent", "planner") and self.agent is None:
             raise ValueError(f"{self.execution} execution requires agent settings")
         if self.execution == "planner" and self.planner is None:
@@ -459,7 +423,6 @@ HYBRID_RERANK = PipelineConfig(
     channels=_HYBRID_CHANNELS,
     rerank=RerankConfig(kind="jev"),
     diversify=DiversifyConfig(total=20),
-    checks=ChecksConfig(verify=True),
 )
 
 STRUCTURAL = PipelineConfig(
@@ -468,7 +431,6 @@ STRUCTURAL = PipelineConfig(
     channels=_STRUCTURAL_CHANNELS,
     rerank=RerankConfig(kind="jev"),
     diversify=DiversifyConfig(total=20),
-    checks=ChecksConfig(verify=True),
 )
 
 DEEP_AGENT = PipelineConfig(
@@ -479,7 +441,6 @@ DEEP_AGENT = PipelineConfig(
     diversify=DiversifyConfig(total=20),
     execution="agent",
     agent=AgentConfig(),
-    checks=ChecksConfig(gate=True, verify=True, guard=True),
 )
 
 DEEP_AGENT_WORKERS = PipelineConfig(
@@ -491,7 +452,6 @@ DEEP_AGENT_WORKERS = PipelineConfig(
     execution="planner",
     agent=AgentConfig(),
     planner=PlannerConfig(),
-    checks=ChecksConfig(gate=True, verify=True, guard=True),
 )
 
 PRESETS: dict[str, PipelineConfig] = {

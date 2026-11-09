@@ -16,22 +16,14 @@ from typing import Any
 
 from app.services.agent.budgets import RunBudget
 from app.services.agent.events import safe_emit
-from app.services.agent.guard import RoundScreen
 from app.services.agent.prompts import RepoBrief
-from app.services.agent.state import AgentState, VerificationReport
 from app.services.agent.steps import StepKind, StepRecord, StepRecorder
 from app.services.agent.tools.context import ToolContext
-from app.services.agent.tools.registry import ToolRegistry, ToolResult
+from app.services.agent.tools.registry import ToolRegistry
 from app.services.decisions import Decider, DecisionRecord
 from app.services.llm_config import LLMConfig
 from app.services.retrieval.channels.base import Emit
 from app.services.retrieval.config import AgentConfig, PipelineConfig
-
-Verifier = Callable[[AgentState], Awaitable[VerificationReport | None]]
-"""Checks a finished answer's citations. Returns the claims that failed, or ``None``."""
-
-ResultScreen = Callable[[ToolResult], Awaitable[ToolResult]]
-"""Inspects a tool result before the model sees it, and may replace it."""
 
 AGENT_MAX_OUTPUT_TOKENS = 16_000
 SYNTHESIS_MAX_OUTPUT_TOKENS = 8_000
@@ -60,11 +52,8 @@ class AgentDeps:
         budget: The run's shared limits.
         emit: Where events go.
         steps: Where steps go.
-        decider: Makes the gate's decision; ``None`` runs without decisions.
-        verifier: Checks citations after the answer; ``None`` skips the check.
+        decider: Makes the run's decisions; ``None`` runs without decisions.
         screen: Inspects one tool result; ``None`` passes it through.
-        round_screen: Screens every result of a tools-node round together;
-            ``None`` passes the round through.
         system_prompt: The agent's system prompt.
         worker_id: The worker this collaborator set belongs to, or ``None`` for
             the main agent. Its events and steps are tagged with it.
@@ -84,9 +73,6 @@ class AgentDeps:
     steps: StepRecorder
     system_prompt: str
     decider: Decider | None = None
-    verifier: Verifier | None = None
-    screen: ResultScreen | None = None
-    round_screen: RoundScreen | None = None
     worker_id: str | None = None
     step_counter: Iterator[int] | None = None
     _tools: list[dict[str, Any]] = field(default_factory=list, init=False)

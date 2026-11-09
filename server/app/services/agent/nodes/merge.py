@@ -3,8 +3,8 @@
 The workers ran without seeing each other, so their findings can overlap or
 contradict one another. One tool-free model call reads the original question,
 each worker's part and findings, and the evidence they gathered together, and
-writes a single cited answer. The answer becomes the run's draft, so the normal
-gate and closing path decide what happens to it.
+writes a single cited answer. The answer becomes the run's draft, which the closing path
+then takes as the answer.
 
 A worker that failed is named in the prompt and, when the model does not name
 it, in a closing note, so the gap is visible in the answer rather than silent.
@@ -92,8 +92,7 @@ def make_merge_node(deps: AgentDeps):
             started=started,
         )
         # The workers' conversations stay with them, so the merged answer is
-        # what the main agent has to go on if the gate or the verifier sends
-        # the run back to it.
+        # what the main agent's conversation holds.
         return {
             "draft": text,
             "turn_end": "finish",

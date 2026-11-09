@@ -28,15 +28,12 @@ from openai import AsyncOpenAI
 from openai.types.responses import ResponseInputParam
 
 from app.core.config import settings
-from app.services.agent.state import Evidence, VerificationReport
-from app.services.agent.verification import finalize_answer, verify_answer
-from app.services.decisions import Decider, DeciderUnavailable, get_decider
 from app.services.llm_config import LLMConfig
 from app.services.retrieval.candidate import Candidate
 from app.services.retrieval.channels.base import Emit, RetrievalContext
 from app.services.retrieval.citations import CitationKey, find_keys, normalize_path
 from app.services.retrieval.config import CLASSIC, PipelineConfig
-from app.services.retrieval.context import SOURCE_LABELS, assemble_context
+from app.services.retrieval.context import assemble_context
 from app.services.retrieval.pipeline import RetrievalResult, retrieve
 from app.services.retrieval.query import HistoryMessage
 from app.services.retrieval.resolve import SourceReference
@@ -69,8 +66,6 @@ class SingleShotAnswer:
         retrieval: How retrieval went: candidates, pool and trace.
         config_hash: :meth:`PipelineConfig.config_hash` of the configuration used.
         cited_keys: The keys of ``sources``, parallel to it, for non-Classic shapes.
-        verification: What the citation check found, when one ran. The marks are
-            already in ``answer``; this is the per-claim table behind them.
     """
 
     answer: str
@@ -81,7 +76,6 @@ class SingleShotAnswer:
     retrieval: RetrievalResult
     config_hash: str
     cited_keys: list[str] = field(default_factory=list)
-    verification: VerificationReport | None = None
 
 
 # --- prompts ---------------------------------------------------------------
@@ -131,10 +125,10 @@ If the answer cannot be found in the context, say so clearly.
 
 ## How to cite
 The context is a list of <source key="..." type="..." provenance="..."> blocks.
-Cite the evidence behind every claim by writing the block's key in square
-brackets right after the claim, exactly as it appears in the block's key
-attribute, for example [F:app/main.py:10-24], [C:a1b2c3d4], [PR:142] or
-[D:README#installation]. Several keys may share one pair of brackets, separated
+Back the answer's key points by writing the block's key in square brackets,
+exactly as it appears in the block's key attribute: once at the end of the
+paragraph or bullet a block supports, not after every sentence, for example
+[F:app/main.py:10-24], [C:a1b2c3d4], [PR:142] or [D:README#installation]. Several keys may share one pair of brackets, separated
 by a semicolon. Cite only keys that appear in the context, and do not invent
 line ranges.
 
@@ -279,39 +273,6 @@ async def _announce_retrieval(emit: Emit, retrieval: RetrievalResult) -> None:
         logger.warning("emitting the retrieval event failed", exc_info=True)
 
 
-def _evidence(candidates: Sequence[Candidate]) -> dict[str, Evidence]:
-    """The retrieved candidates as the evidence map the verifier reads."""
-    return {
-        candidate.key: Evidence(
-            key=candidate.key,
-            text=candidate.text,
-            label=SOURCE_LABELS.get(candidate.source_type, candidate.source_type),
-            provenance=candidate.provenance,
-        )
-        for candidate in candidates
-    }
-
-
-async def _verify(
-    text: str,
-    candidates: Sequence[Candidate],
-    config: PipelineConfig,
-    *,
-    llm: LLMConfig | None,
-    decider: Decider | None,
-    emit: Emit,
-) -> VerificationReport | None:
-    """Judges the answer's claims, or reports why it could not."""
-    judge = decider
-    if judge is None:
-        try:
-            judge = get_decider(config.decider, llm=llm, emit=emit)
-        except DeciderUnavailable as error:
-            await _degraded(emit, "verify", str(error))
-            return None
-    return await verify_answer(text, _evidence(candidates), judge)
-
-
 # --- citations -------------------------------------------------------------
 
 
@@ -438,7 +399,6 @@ async def answer(
     emit: Emit | None = None,
     stream: bool = False,
     client_factory: ClientFactory | None = None,
-    decider: Decider | None = None,
 ) -> SingleShotAnswer:
     """Retrieves evidence for ``question`` and answers it in one model call.
 
@@ -458,9 +418,6 @@ async def answer(
         client_factory: Builds the generation client from ``AsyncOpenAI``-style
             keyword arguments. Defaults to ``AsyncOpenAI``; the chat wrapper passes
             its own module's name so that patching it there still takes effect.
-        decider: Judges each cited claim when ``config.checks.verify`` is on. The
-            configuration's decider is built when omitted; a run that cannot
-            build one says so and returns the answer unmarked.
 
     Returns:
         The answer, its sources, and the retrieval that produced them.
@@ -510,11 +467,6 @@ async def answer(
     )
     messages = _messages(build_citing_prompt(assembled.text), question, replayed)
     text = await _generate(client, model, extras, messages, stream=stream, emit=sink)
-    verification: VerificationReport | None = None
-    if config.checks.verify:
-        verification = await _verify(text, candidates, config, llm=llm, decider=decider, emit=sink)
-        if verification is not None:
-            text = finalize_answer(text, verification)
     split = split_by_citations(text, candidates)
     return SingleShotAnswer(
         answer=text,
@@ -525,7 +477,6 @@ async def answer(
         retrieval=retrieval,
         config_hash=config_hash,
         cited_keys=[candidate.key for candidate in split.cited],
-        verification=verification,
     )
 
 

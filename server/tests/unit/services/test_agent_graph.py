@@ -47,37 +47,30 @@ def edges(deps: AgentDeps) -> set[tuple[str, str]]:
 
 
 def test_the_graph_has_the_documented_nodes_and_edges():
-    assert set(NODE_NAMES) == {"route", "seed", "agent", "tools", "gate", "synthesize", "verify"}
+    assert set(NODE_NAMES) == {"route", "seed", "agent", "tools", "synthesize"}
 
     assert edges(make_deps()) == {
         ("__start__", "route"),
         ("route", "seed"),
         ("seed", "agent"),
         ("agent", "tools"),
-        ("agent", "gate"),
         ("agent", "agent"),
         ("agent", "synthesize"),
         ("tools", "agent"),
-        ("tools", "gate"),
         ("tools", "synthesize"),
-        ("gate", "agent"),
-        ("gate", "synthesize"),
-        ("synthesize", "verify"),
-        ("verify", "agent"),
-        ("verify", "__end__"),
+        ("synthesize", "__end__"),
     }
 
 
-def test_the_only_way_to_the_end_is_through_synthesize_then_verify():
+def test_the_only_way_to_the_end_is_through_synthesize():
     found = edges(make_deps())
 
-    assert {source for source, target in found if target == "verify"} == {"synthesize"}
-    assert {source for source, target in found if target == "__end__"} == {"verify"}
+    assert {source for source, target in found if target == "__end__"} == {"synthesize"}
 
 
 def test_the_recursion_limit_scales_with_the_iteration_limit():
-    assert recursion_limit(12) == 4 * 12 + 16
-    assert recursion_limit(1) == 20
+    assert recursion_limit(12) == 2 * 12 + 16
+    assert recursion_limit(1) == 18
 
 
 class TestToolsOffered:

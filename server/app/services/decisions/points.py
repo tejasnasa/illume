@@ -6,39 +6,33 @@ decided. Keeping the prompts in one module means the decision model and the LLM
 stand-in are asked the same question, which is what makes their answers
 comparable, and it keeps every threshold visible instead of buried in a node.
 
-Thresholds are passed in rather than read from a global. They are fields on
-:class:`~app.services.retrieval.config.ChecksConfig` (and ``PlannerConfig`` for
-planning), so an evaluation arm can vary them; the defaults here are read from
-those fields, so the two cannot drift apart.
+Thresholds are passed in rather than read from a global. The planning
+threshold is a field on :class:`~app.services.retrieval.config.PlannerConfig`,
+so an evaluation arm can vary it; the default here is read from that field, so
+the two cannot drift apart.
 
 When the decider's answer is a placeholder for unusable output (``defaulted``),
 each point takes its own safe side rather than trusting it: the route is not
-accepted, planning does not run, the evidence is not sufficient, the citation is
-unsupported, and the tool result is treated as suspicious.
+accepted and planning does not run.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from app.services.decisions.base import (
-    NOUL_FALSE,
-    NOUL_TRUE,
     ChoiceResult,
     Decider,
-    NoulResult,
     RecordDecision,
     Result,
     record_decision,
 )
-from app.services.decisions.openrouter import ChoiceQuestion, NoulQuestion
-from app.services.retrieval.config import ChecksConfig, PlannerConfig
+from app.services.retrieval.config import PlannerConfig
 from app.services.retrieval.query import HistoryMessage
 
-_CHECKS = ChecksConfig()
 _PLANNER = PlannerConfig()
 
 # --- bounds -----------------------------------------------------------------
@@ -48,11 +42,6 @@ MAX_HISTORY_MESSAGES = 6
 MAX_HISTORY_MESSAGE_CHARS = 500
 MAX_STATE_CHARS = 12_000
 
-MAX_EVIDENCE_ITEMS = 20
-MAX_EVIDENCE_LINES = 3
-MAX_EVIDENCE_CHARS = 320
-
-MAX_TOOL_RESULT_CHARS = 24_000
 MAX_PASSAGE_CHARS = 1_500
 MAX_RELEVANCE_QUESTION_CHARS = 1_000
 
@@ -75,7 +64,7 @@ async def _record(recorder: RecordDecision | None, point: str, state: Any, resul
 
 # --- routing ----------------------------------------------------------------
 
-ROUTE_CONFIDENCE = _CHECKS.route_confidence
+ROUTE_CONFIDENCE = 0.6
 """How sure the route decision must be before it is trusted."""
 
 

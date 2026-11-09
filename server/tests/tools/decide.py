@@ -3,13 +3,12 @@
 Run from ``server/``::
 
     uv run python -m tests.tools.decide
-    uv run python -m tests.tools.decide route sufficiency
+    uv run python -m tests.tools.decide route relevance
     uv run python -m tests.tools.decide --decider llm
 
-The default runs every point once: route, plan, sufficiency, citation support,
-injection and relevance. Naming points narrows it. ``--decider llm`` uses the
-LLM stand-in instead of Jev, which is the comparison the evaluation is built
-around; ``jev`` needs ``OPENROUTER_API_KEY`` in ``server/.env``.
+The default runs every point once: route, plan and relevance. Naming points
+narrows it. ``--decider llm`` uses the LLM stand-in instead of Jev, which is the
+comparison the evaluation is built around; ``jev`` needs ``OPENROUTER_API_KEY`` in ``server/.env``.
 
 **This spends real credit.** Every point is one request to OpenRouter (or one
 model call for ``--decider llm``); the script prints each request's reported
@@ -31,12 +30,9 @@ from app.services.decisions import (
     Decider,
     DecisionRecord,
     RecordDecision,
-    decide_citation_support,
-    decide_injection,
     decide_plan,
     decide_relevance,
     decide_route,
-    decide_sufficiency,
     get_decider,
 )
 
@@ -86,17 +82,6 @@ async def _run_point(name: str, decider: Decider, record: RecordDecision) -> str
     if name == "plan":
         plan = await decide_plan(decider, QUESTION, record=record)
         return f"plan={plan.plan} (p={plan.probability:.3f})"
-    if name == "sufficiency":
-        sufficiency = await decide_sufficiency(decider, QUESTION, EVIDENCE, record=record)
-        return f"sufficient={sufficiency.sufficient} (p={sufficiency.probability:.3f})"
-    if name == "citation":
-        citation = await decide_citation_support(
-            decider, CLAIM, CLAIM_KEY, CLAIM_EVIDENCE, record=record
-        )
-        return f"{citation.verdict.value} (failed={citation.failed})"
-    if name == "injection":
-        injection = await decide_injection(decider, INJECTION_TEXT, record=record)
-        return f"suspicious={injection.suspicious} (p={injection.probability:.3f})"
     if name == "relevance":
         relevance = await decide_relevance(
             decider, QUESTION, PASSAGE, key="F:app/auth/security.py:10-14", record=record
@@ -105,7 +90,7 @@ async def _run_point(name: str, decider: Decider, record: RecordDecision) -> str
     raise SystemExit(f"unknown decision point {name!r}")
 
 
-POINTS = ("route", "plan", "sufficiency", "citation", "injection", "relevance")
+POINTS = ("route", "plan", "relevance")
 
 
 async def main(decider_kind: str, points: list[str]) -> int:

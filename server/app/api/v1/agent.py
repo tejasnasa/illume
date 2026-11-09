@@ -159,7 +159,6 @@ class AgentRunDetail(AgentRunSummary):
         answer: The final answer.
         citations: The evidence the answer cites.
         usage: What the run spent.
-        verification: The citation check's report.
         events: The run's events in order, in the shape the live stream sent them.
         events_available: ``False`` when the events have been pruned.
     """
@@ -167,7 +166,6 @@ class AgentRunDetail(AgentRunSummary):
     answer: str | None
     citations: list[dict[str, Any]] | None
     usage: dict[str, Any] | None
-    verification: dict[str, Any] | None
     events: list[StreamEvent]
     events_available: bool
 
@@ -214,12 +212,7 @@ def _model_label(owner: User, model: str) -> str:
 
 def _decider_label(config: PipelineConfig, model: str) -> str | None:
     """``jev:<model id>`` or ``llm:<model>``; ``None`` when the run asks no decisions."""
-    asks = (
-        config.execution != "single_shot"
-        or config.checks.verify
-        or config.checks.guard
-        or config.rerank.kind == "jev"
-    )
+    asks = config.execution != "single_shot" or config.rerank.kind == "jev"
     if not asks:
         return None
     return f"jev:{JEV_MODEL}" if config.decider == "jev" else f"llm:{model}"
@@ -309,9 +302,7 @@ async def stream_chat(
                     "Add one in your account settings to use them."
                 ),
             )
-        supports_tools = owner.ai_supports_tools
-        if supports_tools is None:
-            supports_tools = await ensure_tool_support(db, owner)
+        supports_tools = await ensure_tool_support(db, owner)
         if supports_tools is False:
             raise HTTPException(
                 status_code=400,
@@ -483,7 +474,6 @@ async def get_agent_run(
         answer=run.answer,
         citations=run.citations,
         usage=run.usage,
-        verification=run.verification,
         events=events,
         events_available=bool(events) or run.status == "running",
     )

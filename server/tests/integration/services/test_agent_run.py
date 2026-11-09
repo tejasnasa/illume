@@ -38,23 +38,19 @@ from app.services.agent.errors import RunError
 from app.services.agent.events import EventLog
 from app.services.agent.runner import TIMED_OUT_ANSWER, RunResult, run_agent
 from app.services.agent.state import (
-    ClaimCheck,
-    ClaimVerdict,
     StopReason,
-    VerificationReport,
 )
 from app.services.agent.steps import InMemorySteps
 from app.services.agent.tools import REGISTRY, ToolRegistry
 from app.services.agent.tools.context import RepoSnapshot, ToolContext
 from app.services.agent.tools.output import ToolOutput
-from app.services.agent.tools.registry import Tool, ToolInput, ToolResult
+from app.services.agent.tools.registry import Tool, ToolInput
 from app.services.decisions import Route, RouteDecision
 from app.services.retrieval.config import DEEP_AGENT, DEFAULT_CONTEXT_WINDOW
 from tests.factories import make_user
 from tests.fixtures.agent_run import (
     FakeClock,
     ScriptedModel,
-    SufficiencyDecider,
     agent_config,
     call,
     finish,
@@ -192,9 +188,7 @@ class TestHappyPath:
             "tools",
             "agent",
             "tools",
-            "gate",
             "synthesize",
-            "verify",
         ]
         # The agent's own answer is used: no third model call is made.
         assert len(model.requests) == 2
@@ -312,10 +306,10 @@ class TestHappyPath:
         ran = await run(env, model, config=config)
 
         result = ran.result
-        assert result.prompt_version == "agent-3"
+        assert result.prompt_version == "agent-4"
         assert result.config_hash == config.config_hash()
         assert result.model == "test-model"
-        assert result.limits["max_iterations"] == 12
+        assert result.limits["max_iterations"] == 20
         assert ran.steps.result is result
 
     async def test_the_confidence_note_is_kept(self, env):
@@ -344,15 +338,12 @@ class TestHappyPath:
                 turn(finish(f"It lives in {SECURITY} [{key}].")),
             ]
         )
-        decider = SufficiencyDecider(0.95)
 
-        ran = await run(env, model, config=DEEP_AGENT, decider=decider)
+        ran = await run(env, model, config=DEEP_AGENT)
 
         assert ran.result.status == "completed"
         assert ran.result.stop_reason is StopReason.FINISHED
         assert ran.result.cited == (key,)
-        assert len(decider.calls) == 1
-        assert "gate" in nodes_run(ran)
 
 
 class TestSeed:
@@ -441,7 +432,7 @@ class TestSeed:
         assert ran.result.route is decision
 
 
-# --- the gate ------------------------------------------------------------------------------
+# --- plain-text replies ------------------------------------------------------------------
 
 
 class TestGate:
@@ -549,43 +540,15 @@ class TestGate:
         decider = SufficiencyDecider(0.9)
         model = ScriptedModel([turn(search()), say("It is in security.py."), say("Written up.")])
 
-        ran = await run(env, model, config=agent_config(gate=True), decider=decider)
+        ran = await run(env, model)
 
         assert ran.result.stop_reason is StopReason.TEXT_REPLY
         assert ran.result.answer == "Written up."
-        assert len(decider.calls) == 1
         closing = model.synthesis_requests[0]
         assert closing["input"][0]["role"] == "system"
         assert "<source key=" in closing["input"][0]["content"]
         assert "tools" not in closing or not closing.get("tools")
         assert ran.events.named("answer_delta")
-
-    async def test_a_gate_that_cannot_answer_does_not_block(self, env):
-        class Broken(SufficiencyDecider):
-            async def noul(self, state, instructions):
-                raise RuntimeError("the decision service is down")
-
-        model = ScriptedModel([turn(search()), turn(finish("Done."))])
-
-        ran = await run(env, model, config=agent_config(gate=True), decider=Broken())
-
-        assert ran.result.answer == "Done."
-        assert [p["stage"] for p in ran.events.named("degraded")] == ["gate"]
-
-    async def test_without_a_decider_the_gate_is_off_and_says_so(self, env, monkeypatch):
-        monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
-        monkeypatch.setattr(
-            "app.services.agent.runner.get_decider",
-            lambda *a, **k: (_ for _ in ()).throw(
-                __import__("app.services.decisions", fromlist=["x"]).DeciderUnavailable("none")
-            ),
-        )
-        model = ScriptedModel([turn(search()), turn(finish("Done."))])
-
-        ran = await run(env, model, config=agent_config(gate=True))
-
-        assert ran.result.answer == "Done."
-        assert [p["stage"] for p in ran.events.named("degraded")] == ["gate"]
 
 
 # --- budgets -------------------------------------------------------------------------------
@@ -1121,60 +1084,6 @@ class TestToolsThatFail:
         assert outputs_in(model, 1, first["call_id"]) == "a saw b"
         assert outputs_in(model, 1, second["call_id"]) == "b saw a"
         assert ran.result.answer == "Both ran."
-
-    async def test_a_screen_can_replace_a_result_before_the_model_sees_it(self, env):
-        async def screen(result: ToolResult) -> ToolResult:
-            if result.tool == "search_symbols":
-                return result.model_copy(update={"text": "[withheld]"})
-            return result
-
-        searched = search()
-        model = ScriptedModel([turn(searched), turn(finish("Done."))])
-
-        ran = await run(env, model, screen=screen)
-
-        assert outputs_in(model, 1, searched["call_id"]) == "[withheld]"
-        assert ran.result.status == "completed"
-
-
-# --- a verifier hook -----------------------------------------------------------------------
-
-
-class TestVerifierHook:
-    async def test_failed_claims_send_the_agent_back_once(self, env):
-        reports = []
-
-        async def verifier(state: Any) -> VerificationReport:
-            reports.append(state["answer"])
-            return VerificationReport(
-                claims=(
-                    ClaimCheck(
-                        index=1,
-                        claim="It uses argon2.",
-                        verdict=ClaimVerdict.UNSUPPORTED,
-                    ),
-                )
-            )
-
-        model = ScriptedModel(
-            [turn(finish("It uses argon2.")), turn(finish("It uses bcrypt [F:x:1-2]."))]
-        )
-
-        ran = await run(env, model, verifier=verifier)
-
-        assert reports == ["It uses argon2.", "It uses bcrypt [F:x:1-2]."]
-        repair = model.requests[1]["input"][-1]
-        assert "does not support" in repair["content"] and "It uses argon2." in repair["content"]
-        assert ran.result.answer == ("It uses bcrypt [F:x:1-2]. [[verify:unsupported]]")
-        assert nodes_run(ran).count("verify") == 2
-
-    async def test_without_a_verifier_the_answer_passes_through(self, env):
-        model = ScriptedModel([turn(finish("Done."))])
-
-        ran = await run(env, model)
-
-        assert nodes_run(ran)[-1] == "verify"
-        assert ran.result.answer == "Done."
 
 
 # --- the repository changing under a run ---------------------------------------------------

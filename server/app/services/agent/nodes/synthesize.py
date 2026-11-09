@@ -1,8 +1,8 @@
 """The synthesize node: turns what the run gathered into the final answer.
 
-When the agent called ``finish`` and the gate agreed, its answer is the answer
-and no model call is made. In every other case (a limit was reached, the agent
-wrote text instead of finishing, the gate ran out of patience) one model call
+When the agent called ``finish``, its answer is the answer and no model call is
+made. In every other case (a limit was reached, the agent wrote text instead of
+finishing) one model call
 with no tools writes an answer from the evidence, saying what is missing. The
 call is charged to the budget but never refused by it: it is how a run that has
 used its allowance still answers, and its input is bounded by the evidence cap.

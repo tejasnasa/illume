@@ -217,7 +217,6 @@ def make_agent_node(deps: AgentDeps):
             **conversation.counters(),
             "iteration": state["iteration"] + 1,
             "pending_calls": calls,
-            "gate_feedback": None,
             "last_input_tokens": input_tokens,
             "last_input_chars": conversation.chars if input_tokens else 0,
         }

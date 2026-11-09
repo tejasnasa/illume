@@ -23,11 +23,8 @@ StepKind = Literal[
     "model_call",
     "tool_call",
     "decision",
-    "gate",
     "compact",
     "synthesize",
-    "verify",
-    "quarantine",
     "error",
 ]
 

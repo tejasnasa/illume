@@ -25,10 +25,8 @@ class StopReason(StrEnum):
     """Why a run stopped looping and produced its answer.
 
     Attributes:
-        FINISHED: The agent called ``finish`` and the evidence was judged enough.
+        FINISHED: The agent called ``finish``.
         TEXT_REPLY: The agent answered in plain text instead of calling ``finish``.
-        GATE_EXHAUSTED: The sufficiency check rejected the evidence as often as
-            it is allowed to.
         MAX_ITERATIONS: The agent used all its model turns.
         MAX_TOOL_CALLS: The run used all its tool calls.
         MAX_SECONDS: The run used its wall-clock allowance.
@@ -44,7 +42,6 @@ class StopReason(StrEnum):
 
     FINISHED = "finished"
     TEXT_REPLY = "text_reply"
-    GATE_EXHAUSTED = "gate_exhausted"
     MAX_ITERATIONS = "max_iterations"
     MAX_TOOL_CALLS = "max_tool_calls"
     MAX_SECONDS = "max_seconds"
@@ -147,116 +144,6 @@ def merge_items(
     if isinstance(right, ReplaceItems):
         return list(right.items)
     return [*(left or []), *(right or [])]
-
-
-class ClaimVerdict(StrEnum):
-    """How the citations behind one claim were judged.
-
-    Attributes:
-        SUPPORTED: At least one cited piece of evidence supports the claim.
-        PARTIALLY_SUPPORTED: The evidence is consistent with the claim but
-            establishes only part of it.
-        UNSUPPORTED: Every retrieved piece of evidence the claim cites fails to
-            establish it.
-        CONTRADICTED: At least one cited piece of evidence says the opposite.
-        UNRESOLVED_KEY: The claim cites only keys the run never retrieved, so
-            there is no evidence to judge.
-    """
-
-    SUPPORTED = "supported"
-    PARTIALLY_SUPPORTED = "partially_supported"
-    UNSUPPORTED = "unsupported"
-    CONTRADICTED = "contradicted"
-    UNRESOLVED_KEY = "unresolved_key"
-
-
-FAILING_VERDICTS: frozenset[ClaimVerdict] = frozenset(
-    {ClaimVerdict.UNSUPPORTED, ClaimVerdict.CONTRADICTED, ClaimVerdict.UNRESOLVED_KEY}
-)
-"""The verdicts that send a claim back for repair and mark it in the answer."""
-
-
-@dataclass(frozen=True)
-class ClaimCheck:
-    """The verdict on one sentence of an answer.
-
-    Attributes:
-        index: The claim's position in the answer, from one.
-        claim: The sentence as written, citation keys included.
-        keys: The evidence keys the claim cites, in order of appearance.
-        unresolved: Keys the claim cites that match nothing the run retrieved.
-        verdict: How the citations were judged.
-        probability: The decision model's probability for the winning verdict,
-            when it reported one.
-    """
-
-    index: int
-    claim: str
-    keys: tuple[str, ...] = ()
-    unresolved: tuple[str, ...] = ()
-    verdict: ClaimVerdict = ClaimVerdict.UNSUPPORTED
-    probability: float | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """The claim as JSON-serialisable data, for the step log."""
-        return {
-            "index": self.index,
-            "claim": self.claim,
-            "keys": list(self.keys),
-            "unresolved": list(self.unresolved),
-            "verdict": self.verdict.value,
-            "probability": self.probability,
-        }
-
-
-@dataclass(frozen=True)
-class VerificationReport:
-    """What a verifier found in a finished answer.
-
-    Attributes:
-        claims: The verdict on every sentence that made a claim.
-        uncited: Factual sentences that carried no citation key.
-        defaulted: Whether the decision model's answers were unusable, in which
-            case every claim is judged unsupported rather than trusted.
-    """
-
-    claims: tuple[ClaimCheck, ...] = ()
-    uncited: tuple[str, ...] = ()
-    defaulted: bool = False
-
-    @property
-    def failures(self) -> tuple[ClaimCheck, ...]:
-        """The claims that need repair."""
-        return tuple(claim for claim in self.claims if claim.verdict in FAILING_VERDICTS)
-
-    @property
-    def unsupported(self) -> tuple[str, ...]:
-        """The sentences that need repair, in the order they appear."""
-        return tuple(claim.claim for claim in self.failures)
-
-    @property
-    def failed(self) -> bool:
-        """Whether any claim needs repair."""
-        return bool(self.failures)
-
-    @property
-    def counts(self) -> dict[str, int]:
-        """How many claims reached each verdict, plus the uncited count."""
-        counts = {verdict.value: 0 for verdict in ClaimVerdict}
-        for claim in self.claims:
-            counts[claim.verdict.value] += 1
-        counts["uncited"] = len(self.uncited)
-        return counts
-
-    def to_dict(self) -> dict[str, Any]:
-        """The report as JSON-serialisable data, for the step log and the run."""
-        return {
-            "counts": self.counts,
-            "claims": [claim.to_dict() for claim in self.claims],
-            "uncited": list(self.uncited),
-            "failed": self.failed,
-            "defaulted": self.defaulted,
-        }
 
 
 # --- splitting one question across workers -------------------------------------
@@ -381,8 +268,6 @@ class AgentState(TypedDict):
             compaction replaces older tool results with stubs.
         evidence: Repository text seen so far, by citation key.
         iteration: Model turns taken.
-        gate_feedback: The reviewer's last objection, when the gate rejected.
-        gate_rejections: Times the sufficiency check sent the agent back.
         draft: The answer the agent wrote with ``finish``, until it is accepted.
         confidence_note: What the agent said was uncertain, from ``finish``.
         plan: The sub-questions the question was split into, when it was.
@@ -396,8 +281,6 @@ class AgentState(TypedDict):
             model call, which calibrates the estimate of the next one.
         last_input_chars: The size of the conversation that call was sent.
         compactions: Times the conversation was compacted to fit the window.
-        verification: What the verifier found, when one ran.
-        repair_rounds: Times a failed verification sent the agent back.
         stop_reason: Why the loop ended, once it has.
         answer: The final answer text.
     """
@@ -409,8 +292,6 @@ class AgentState(TypedDict):
     items: Annotated[list[dict[str, Any]], merge_items]
     evidence: Annotated[dict[str, Evidence], merge_evidence]
     iteration: int
-    gate_feedback: str | None
-    gate_rejections: int
     draft: str | None
     confidence_note: str | None
     plan: Plan | None
@@ -421,8 +302,6 @@ class AgentState(TypedDict):
     last_input_tokens: int
     last_input_chars: int
     compactions: int
-    verification: VerificationReport | None
-    repair_rounds: int
     stop_reason: StopReason | None
     answer: str | None
 
@@ -451,8 +330,6 @@ def initial_state(
         items=items,
         evidence={},
         iteration=0,
-        gate_feedback=None,
-        gate_rejections=0,
         draft=None,
         confidence_note=None,
         plan=None,
@@ -463,8 +340,6 @@ def initial_state(
         last_input_tokens=0,
         last_input_chars=0,
         compactions=0,
-        verification=None,
-        repair_rounds=0,
         stop_reason=None,
         answer=None,
     )

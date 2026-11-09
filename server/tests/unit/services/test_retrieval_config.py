@@ -15,7 +15,6 @@ from app.services.retrieval.config import (
     CLASSIC,
     PRESETS,
     AgentConfig,
-    ChecksConfig,
     CochangeChannel,
     DenseChannel,
     GraphChannel,
@@ -80,7 +79,6 @@ class TestPresets:
         }
         assert CLASSIC.diversify.other == 2
         assert CLASSIC.execution == "single_shot"
-        assert not (CLASSIC.checks.gate or CLASSIC.checks.verify or CLASSIC.checks.guard)
 
     def test_unknown_preset_raises(self):
         with pytest.raises(KeyError):
@@ -88,20 +86,22 @@ class TestPresets:
 
 
 class TestDecisionThresholds:
-    def test_every_threshold_is_a_field_with_the_documented_default(self):
-        checks = ChecksConfig()
-        assert checks.sufficiency_threshold == 0.7
-        assert checks.injection_threshold == 0.5
-        assert checks.route_confidence == 0.6
+    def test_the_plan_threshold_is_a_field_with_the_documented_default(self):
+        assert PlannerConfig().plan_threshold == 0.5
 
     def test_a_threshold_outside_zero_to_one_is_refused(self):
-        for field in ("sufficiency_threshold", "injection_threshold", "route_confidence"):
-            with pytest.raises(ValidationError):
-                ChecksConfig(**{field: 1.5})
+        with pytest.raises(ValidationError):
+            PlannerConfig(plan_threshold=1.5)
 
     def test_a_threshold_changes_the_config_hash(self):
-        tuned = _config(checks=ChecksConfig(route_confidence=0.9))
-        assert tuned.config_hash() != _config().config_hash()
+        def planned(threshold: float) -> PipelineConfig:
+            return _config(
+                execution="planner",
+                agent=AgentConfig(),
+                planner=PlannerConfig(plan_threshold=threshold),
+            )
+
+        assert planned(0.9).config_hash() != planned(0.5).config_hash()
 
 
 class TestValidation:
@@ -166,10 +166,6 @@ class TestValidation:
     def test_planner_settings_only_with_planner_execution(self):
         with pytest.raises(ValidationError, match="only apply to planner"):
             _config(execution="agent", agent=AgentConfig(), planner=PlannerConfig())
-
-    def test_the_gate_needs_an_agent(self):
-        with pytest.raises(ValidationError, match="gate"):
-            _config(checks={"gate": True})
 
     @pytest.mark.parametrize(
         "build",

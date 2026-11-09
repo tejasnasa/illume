@@ -9,10 +9,8 @@ from app.services.agent.prompts import (
     RepoBrief,
     build_synthesis_prompt,
     build_system_prompt,
-    gate_feedback_message,
     opening_items,
     render_evidence,
-    repair_feedback_message,
     seed_message,
 )
 from app.services.agent.state import ChatTurn, Evidence
@@ -89,7 +87,7 @@ class TestSystemPrompt:
             assert name in REGISTRY.names()
 
     def test_the_version_is_a_constant_runs_can_record(self):
-        assert PROMPT_VERSION == "agent-3"
+        assert PROMPT_VERSION == "agent-4"
 
     def test_a_brief_with_nothing_known_still_renders(self):
         assert "- Name: x" in RepoBrief(name="x").render()
@@ -148,17 +146,6 @@ class TestEvidenceBound:
 
 
 class TestMessages:
-    def test_the_gate_feedback_names_the_probability(self):
-        message = gate_feedback_message(0.4172)
-
-        assert "insufficient (p = 0.42)" in message
-        assert "State what is missing" in message
-
-    def test_the_repair_feedback_lists_the_claims(self):
-        message = repair_feedback_message(["It uses argon2.", "It retries 5 times."])
-
-        assert "- It uses argon2." in message and "- It retries 5 times." in message
-
     def test_the_seed_lists_results_as_fenced_blocks(self):
         candidates = [make_candidate("F:a.py:1-5", "def a(): ..."), make_candidate("PR:3", "x")]
 

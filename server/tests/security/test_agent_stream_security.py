@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.models import AgentRun, AgentStep
-from tests.fixtures.agent_run import ScriptedModel, SufficiencyDecider, call, finish, turn
+from tests.fixtures.agent_run import PlanDecider, ScriptedModel, call, finish, turn
 from tests.fixtures.agent_stream import (
     QUESTION,
     AnyModel,
@@ -55,7 +55,7 @@ class TestAnotherUsersRepository:
     ):
         stranger, theirs = await make_stranger_repo(db_session)
         model = ScriptedModel([turn(finish("never"))])
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         response = await client.post(
             stream_url(theirs.repo), json={"question": QUESTION, "preset": "deep_agent"}
@@ -199,7 +199,7 @@ class TestNoSecretsInTheOpen:
                 turn(finish(f"Done [{world.symbol_key}].")),
             ]
         )
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         response, events = await stream(client, world.repo, preset="deep_agent")
 

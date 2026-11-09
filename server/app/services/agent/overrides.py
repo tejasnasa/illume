@@ -54,8 +54,6 @@ class AgentOverrides(_Strict):
     max_seconds: int | None = Field(default=None, ge=10, le=600)
     hard_cancel_seconds: int | None = Field(default=None, ge=10, le=900)
     max_input_tokens: int | None = Field(default=None, ge=1_000, le=10_000_000)
-    max_repair_rounds: int | None = Field(default=None, ge=0, le=3)
-    max_gate_rejections: int | None = Field(default=None, ge=0, le=5)
     context_window: int | None = Field(default=None, ge=MIN_CONTEXT_WINDOW, le=MAX_CONTEXT_WINDOW)
     effort: Literal["minimal", "low", "medium", "high"] | None = None
     seed: bool | None = None
@@ -66,14 +64,6 @@ class PlannerOverrides(_Strict):
 
     max_workers: int | None = Field(default=None, ge=2, le=6)
     worker_iterations: int | None = Field(default=None, ge=1, le=50)
-
-
-class ChecksOverrides(_Strict):
-    """Which checks run."""
-
-    gate: bool | None = None
-    verify: bool | None = None
-    guard: bool | None = None
 
 
 class QueryOverrides(_Strict):
@@ -100,7 +90,6 @@ class Overrides(_Strict):
 
     agent: AgentOverrides | None = None
     planner: PlannerOverrides | None = None
-    checks: ChecksOverrides | None = None
     query: QueryOverrides | None = None
     rerank: RerankOverrides | None = None
     diversify: DiversifyOverrides | None = None
@@ -114,11 +103,8 @@ _AGENT_CEILINGS = (
     "max_seconds",
     "hard_cancel_seconds",
     "max_input_tokens",
-    "max_repair_rounds",
-    "max_gate_rejections",
 )
 _PLANNER_CEILINGS = ("max_workers", "worker_iterations")
-_CHECK_FLAGS = ("gate", "verify", "guard")
 
 
 def _most_generous(section: str, fields: tuple[str, ...]) -> dict[str, Any]:
@@ -256,16 +242,6 @@ def apply_overrides(
             own_key=own_key,
             preset=base.name,
         )
-
-    if overrides.checks is not None:
-        given = _set_fields(data["checks"], overrides.checks)
-        if not own_key:
-            for name in _CHECK_FLAGS:
-                if given.get(name) and not getattr(base.checks, name):
-                    raise OverrideError(
-                        f"checks.{name} cannot be switched on for preset {base.name!r} "
-                        "on the free tier"
-                    )
 
     if overrides.query is not None:
         given = _set_fields(data["query"], overrides.query)

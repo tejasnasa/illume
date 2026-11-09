@@ -46,8 +46,6 @@ class TestAllowlist:
             {"agent": {"tools": ["finish"]}},
             {"agent": {"compact_at": 0.5}},
             {"agent": {"keep_recent_turns": 1}},
-            {"checks": {"sufficiency_threshold": 0.1}},
-            {"checks": {"injection_threshold": 0.99}},
             {"planner": {"plan_threshold": 0.0}},
             {"query": {"n_variants": 5}},
             {"diversify": {"symbol": 50}},
@@ -62,7 +60,6 @@ class TestAllowlist:
         parsed = overrides(
             agent={"max_iterations": 5, "context_window": MIN_CONTEXT_WINDOW, "effort": "high"},
             planner={"max_workers": 3},
-            checks={"verify": False},
             query={"history_messages": 2},
             diversify={"total": 8},
         )
@@ -88,8 +85,6 @@ class TestCeilings:
             "max_seconds",
             "hard_cancel_seconds",
             "max_input_tokens",
-            "max_repair_rounds",
-            "max_gate_rejections",
         ],
     )
     def test_a_budget_above_the_presets_is_rejected(self, field):
@@ -121,14 +116,6 @@ class TestCeilings:
         assert tightened.agent.max_iterations == 3
         assert tightened.agent.max_tool_calls == DEEP_AGENT.agent.max_tool_calls
         assert tightened.config_hash() != DEEP_AGENT.config_hash()
-
-    def test_a_check_can_be_switched_off_but_not_on_on_the_free_tier(self):
-        off = apply_overrides(DEEP_AGENT, overrides(checks={"verify": False}))
-        assert off.checks.verify is False and off.checks.gate is True
-
-        for field in ("gate", "verify", "guard"):
-            with pytest.raises(OverrideError, match=f"checks.{field}"):
-                apply_overrides(HYBRID, overrides(checks={field: True}))
 
     def test_seed_cannot_be_switched_on_when_the_preset_has_it_off(self):
         no_seed = DEEP_AGENT.model_copy(
@@ -209,23 +196,13 @@ class TestFreeTier:
 
 
 class TestOwnKey:
-    def test_checks_and_the_seed_can_be_switched_on(self):
+    def test_the_seed_can_be_switched_on(self):
         no_seed = DEEP_AGENT.model_copy(
             update={"agent": DEEP_AGENT.agent.model_copy(update={"seed": False})}
         )
 
-        no_gate = DEEP_AGENT.model_copy(
-            update={"checks": DEEP_AGENT.checks.model_copy(update={"gate": False})}
-        )
-
-        checked = apply_overrides(
-            HYBRID, overrides(checks={"verify": True, "guard": True}), own_key=True
-        )
-        gated = apply_overrides(no_gate, overrides(checks={"gate": True}), own_key=True)
         seeded = apply_overrides(no_seed, overrides(agent={"seed": True}), own_key=True)
 
-        assert checked.checks.verify and checked.checks.guard
-        assert gated.checks.gate
         assert seeded.agent is not None and seeded.agent.seed is True
 
     def test_the_reranker_and_query_rewriting_can_be_chosen(self):

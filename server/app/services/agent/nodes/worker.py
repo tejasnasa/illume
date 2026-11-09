@@ -99,9 +99,6 @@ def _worker_deps(deps: AgentDeps, worker_id: str) -> AgentDeps:
         steps=deps.steps,
         system_prompt=deps.system_prompt,
         decider=deps.decider,
-        verifier=deps.verifier,
-        screen=deps.screen,
-        round_screen=deps.round_screen,
         worker_id=worker_id,
         step_counter=deps.step_counter,
     )
@@ -140,8 +137,7 @@ def build_worker_graph(deps: AgentDeps):
 
     The loop is the same one the single agent runs: a model turn, its tool
     calls, and back. It ends on ``finish``, a limit, a plain-text answer or the
-    graph's step limit; the gate and the closing answer belong to the run, not
-    to a worker.
+    graph's step limit; the closing answer belongs to the run, not to a worker.
 
     Args:
         deps: The worker's own collaborators.

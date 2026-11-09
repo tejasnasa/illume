@@ -15,7 +15,7 @@ import pytest
 import respx
 
 from app.core.config import settings
-from app.services.decisions import DECISIONS_URL, ChoiceResult
+from app.services.decisions import DECISIONS_URL
 from app.services.retrieval import query as query_module
 from app.services.retrieval import single_shot
 from app.services.retrieval.citations import code_key
@@ -24,7 +24,6 @@ from app.services.retrieval.config import (
     HYBRID,
     HYBRID_RERANK,
     STRUCTURAL,
-    ChecksConfig,
 )
 from app.services.retrieval.single_shot import (
     MAX_OUTPUT_TOKENS,
@@ -243,7 +242,7 @@ class TestCitingPresets:
         assert call["max_output_tokens"] == 3000
 
     async def test_hybrid_rerank_uses_jev_when_configured(
-        self, db_session, seeded, generation, jev, verification
+        self, db_session, seeded, generation, jev
     ):
         generation(GENERATED)
         result = await answer(
@@ -251,7 +250,6 @@ class TestCitingPresets:
             QUESTION,
             ctx=context_for(db_session, seeded),
             llm=make_llm(),
-            decider=verification,
         )
 
         assert jev.called
@@ -262,7 +260,7 @@ class TestCitingPresets:
 
     @pytest.mark.parametrize("preset", [HYBRID_RERANK, STRUCTURAL], ids=lambda p: p.name)
     async def test_without_a_jev_key_the_answer_still_comes_back_degraded(
-        self, db_session, seeded, generation, preset, monkeypatch, verification
+        self, db_session, seeded, generation, preset, monkeypatch
     ):
         monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
         generation(GENERATED)
@@ -273,7 +271,6 @@ class TestCitingPresets:
             ctx=context_for(db_session, seeded),
             llm=make_llm(),
             emit=emit,
-            decider=verification,
         )
 
         assert result.generated is True
@@ -282,7 +279,7 @@ class TestCitingPresets:
         assert [ref.symbol_name for ref in result.sources] == ["verify_password"]
 
     async def test_structural_runs_with_jev_and_every_channel(
-        self, db_session, seeded, generation, jev, verification
+        self, db_session, seeded, generation, jev
     ):
         generation(GENERATED)
         result = await answer(
@@ -290,47 +287,12 @@ class TestCitingPresets:
             QUESTION,
             ctx=context_for(db_session, seeded),
             llm=make_llm(),
-            decider=verification,
         )
 
         assert jev.called
         assert result.generated is True
         assert result.cited_keys == [VERIFY_KEY]
         assert result.unresolved == ["F:app/ghost.py:1-2"]
-
-    @pytest.mark.parametrize(
-        ("choice", "mark"),
-        [
-            ("supports", "[[verify:supported]]"),
-            ("partially_supports", "[[verify:partially_supported]]"),
-            ("does_not_support", "[[verify:unsupported]]"),
-            ("contradicts", "[[verify:contradicted]]"),
-        ],
-    )
-    async def test_a_single_shot_answer_is_marked_without_a_repair_round(
-        self, db_session, seeded, generation, choice, mark
-    ):
-        responses = generation(GENERATED)
-        config = HYBRID.model_copy(
-            update={"name": "single_shot_verify", "checks": ChecksConfig(verify=True)}
-        )
-
-        result = await answer(
-            config,
-            QUESTION,
-            ctx=context_for(db_session, seeded),
-            llm=make_llm(),
-            decider=VerdictDecider(choice),
-        )
-
-        assert result.generated is True
-        assert result.verification is not None
-        assert result.verification.claims[0].verdict.value == mark[9:-2]
-        assert mark in result.answer
-        # No loop exists here, so the mark is applied and the one call stands.
-        assert len(responses.calls) == 1
-        # The answer's own text is still present.
-        assert "verify_password compares with bcrypt" in result.answer
 
     async def test_nothing_retrieved_is_not_charged_for_any_preset(
         self, db_session, seeded, generation

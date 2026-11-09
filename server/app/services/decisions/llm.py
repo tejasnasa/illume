@@ -10,16 +10,15 @@ Model output is not trusted. A number outside its range is clamped. A reply that
 is not JSON, misses a field, or names an option that was not offered resolves to
 a placeholder flagged ``defaulted`` rather than raising: the first option with
 zero confidence, the lowest level, or the midpoint probability. The decision
-points read the flag and take their own safe side, since what is safe differs:
-an unjudged citation is unsupported, an unscreened tool result is suspicious. A
-provider error still propagates, because there is nothing to default from.
+points read the flag and take their own safe side, since what is safe differs.
+A provider error still propagates, because there is nothing to default from.
 
 Batching differs from the decision model on purpose. Jev answers many questions
 in one request; this decider makes one call per question, concurrently, since
 one call asking for several differently shaped answers would need a schema that
 providers honour less reliably than the per-primitive ones. At most
-:data:`MAX_PARALLEL_CALLS` run at once, so screening a large round of tool
-results does not burst the user's rate limit.
+:data:`MAX_PARALLEL_CALLS` run at once, so a large batch does not burst the
+user's rate limit.
 """
 
 from __future__ import annotations

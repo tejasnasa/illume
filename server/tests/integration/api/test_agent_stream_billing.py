@@ -11,6 +11,7 @@ Priority tests: these are the money cases.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import httpx
@@ -29,7 +30,7 @@ from app.services.retrieval.config import (
     RerankConfig,
 )
 from tests.factories import fake_vector
-from tests.fixtures.agent_run import ScriptedModel, SufficiencyDecider, finish, turn
+from tests.fixtures.agent_run import PlanDecider, ScriptedModel, finish, turn
 from tests.fixtures.agent_stream import (
     QUESTION,
     AnyModel,
@@ -89,7 +90,7 @@ class TestFreeTier:
         model = ScriptedModel([turn(finish("never"))])
         probe = ScriptedModel()
         monkeypatch.setattr("app.services.tool_support.AsyncOpenAI", probe.factory)
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         for preset in ("deep_agent", "deep_agent_workers"):
             response = await client.post(
@@ -232,9 +233,7 @@ class TestOwnKey:
         assert await used(db_session, world.user) == 3
 
     async def test_an_agent_run_on_the_users_own_key_is_free(self, app, client, db_session, world):
-        install(
-            app, db_session, ScriptedModel([turn(finish("done"))]), decider=SufficiencyDecider(1.0)
-        )
+        install(app, db_session, ScriptedModel([turn(finish("done"))]), decider=PlanDecider(1.0))
 
         _, events = await stream(client, world.repo, preset="deep_agent")
 
@@ -314,9 +313,10 @@ class TestToolSupport:
         self, app, client, db_session, world
     ):
         world.user.ai_supports_tools = False
+        world.user.ai_tools_checked_at = datetime.now(UTC)
         await db_session.flush()
         model = ScriptedModel([turn(finish("never"))])
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         response = await client.post(
             stream_url(world.repo), json={"question": QUESTION, "preset": "deep_agent"}
@@ -329,6 +329,7 @@ class TestToolSupport:
 
     async def test_single_shot_presets_do_not_need_tools(self, app, client, db_session, world):
         world.user.ai_supports_tools = False
+        world.user.ai_tools_checked_at = datetime.now(UTC)
         await db_session.flush()
         install(app, db_session, AnyModel())
 
@@ -347,7 +348,7 @@ class TestToolSupport:
             app,
             db_session,
             ScriptedModel([turn(finish("a")), turn(finish("b"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         for _ in range(2):
@@ -366,7 +367,7 @@ class TestToolSupport:
         await db_session.flush()
         fake, calls = self.probe(False)
         monkeypatch.setattr("app.services.tool_support.AsyncOpenAI", fake)
-        install(app, db_session, ScriptedModel(), decider=SufficiencyDecider(1.0))
+        install(app, db_session, ScriptedModel(), decider=PlanDecider(1.0))
 
         first = await client.post(
             stream_url(world.repo), json={"question": QUESTION, "preset": "deep_agent"}
@@ -392,7 +393,7 @@ class TestToolSupport:
             app,
             db_session,
             ScriptedModel([turn(finish("a")), turn(finish("b"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         for _ in range(2):

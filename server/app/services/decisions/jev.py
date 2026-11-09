@@ -3,8 +3,7 @@
 Each primitive becomes one named question: a ``choice`` for picking among options,
 a ``score`` for placing something on a rubric, and a ``noul`` for the probability
 that a statement is true. :meth:`JevDecider.batch` sends many questions in one
-request, which is what keeps a verifier checking ten claims or a guard screening
-every tool result of a round at one request apiece.
+request, which keeps ten questions at one request.
 
 A batch whose text would push a request over :data:`MAX_REQUEST_BYTES` is split
 into several requests, because Jev switches to a slower, less accurate
@@ -48,7 +47,7 @@ from app.services.decisions.openrouter import (
     submit,
 )
 
-# Batches are sent concurrently; a large verifier fan-out should not open an
+# Batches are sent concurrently; a large fan-out should not open an
 # unbounded number of connections.
 MAX_PARALLEL_REQUESTS = 4
 

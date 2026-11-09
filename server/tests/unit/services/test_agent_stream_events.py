@@ -64,24 +64,6 @@ SAMPLES: dict[Event, dict] = {
     },
     Event.NODES: {"call_id": "c1", "tool": "get_importers", "paths": ["a.py"], "action": "touched"},
     Event.EVIDENCE: {"keys": ["F:a.py:1-2"]},
-    Event.GATE: {"verdict": "insufficient", "probability": 0.2, "threshold": 0.7},
-    Event.VERIFY: {
-        "counts": {"supported": 1},
-        "claims": [
-            {
-                "index": 0,
-                "claim": "x",
-                "keys": ["F:a.py:1-2"],
-                "unresolved": [],
-                "verdict": "supported",
-                "probability": 0.9,
-            }
-        ],
-        "failed": False,
-        "repair": False,
-        "defaulted": False,
-    },
-    Event.QUARANTINE: {"tool": "search_code", "key": "F:a.py:1-2", "keys": [], "probability": 0.9},
     Event.COMPACTED: {
         "trigger": "window",
         "replaced": 4,
@@ -159,20 +141,6 @@ def translate_one(name: Event, payload=None, translator=None):
 
 
 class TestMapping:
-    def test_quarantine_becomes_guard(self):
-        event = translate_one(Event.QUARANTINE)
-
-        assert event.type is EventType.GUARD
-        assert event.data["key"] == "F:a.py:1-2"
-        assert event.data["probability"] == 0.9
-        assert event.data["quarantined"] is True
-
-    def test_verify_becomes_verification_with_each_claim(self):
-        event = translate_one(Event.VERIFY)
-
-        assert event.type is EventType.VERIFICATION
-        assert event.data["claims"][0]["verdict"] == "supported"
-
     def test_seed_becomes_a_retrieval_from_the_seed(self):
         event = translate_one(Event.SEED)
 

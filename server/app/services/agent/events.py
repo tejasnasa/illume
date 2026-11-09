@@ -20,7 +20,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -45,10 +45,6 @@ class Event(StrEnum):
         TOOL_RESULT: A tool call finished, with its status.
         NODES: Files a tool looked at, for highlighting in the graph.
         EVIDENCE: New citable evidence was gathered.
-        GATE: The sufficiency check answered.
-        VERIFY: The citation check answered, with a count per verdict.
-        QUARANTINE: Repository text was withheld from the model, with its key
-            and the probability that it was an injection attempt.
         COMPACTED: Older tool results were replaced with stubs so the next
             model call fits the context window.
         ANSWER_DELTA: A piece of the answer being written.
@@ -71,9 +67,6 @@ class Event(StrEnum):
     TOOL_RESULT = "tool_result"
     NODES = "nodes"
     EVIDENCE = "evidence"
-    GATE = "gate"
-    VERIFY = "verify"
-    QUARANTINE = "quarantine"
     COMPACTED = "compacted"
     ANSWER_DELTA = "answer_delta"
     ANSWER = "answer"
@@ -131,10 +124,7 @@ class EventType(StrEnum):
         TOOL_RESULT: A tool call finished.
         NODES: Files a tool looked at, for highlighting in the graph.
         EVIDENCE: New citable evidence was gathered.
-        GUARD: Repository text was screened and withheld from the model.
-        GATE: The sufficiency check answered.
         ANSWER_DELTA: A piece of the answer being written.
-        VERIFICATION: The citation check answered.
         DEGRADED: A limit was reached or a stage fell back.
         ERROR: The run failed.
         DONE: The run ended with an answer.
@@ -151,10 +141,7 @@ class EventType(StrEnum):
     TOOL_RESULT = "tool_result"
     NODES = "nodes"
     EVIDENCE = "evidence"
-    GUARD = "guard"
-    GATE = "gate"
     ANSWER_DELTA = "answer_delta"
-    VERIFICATION = "verification"
     DEGRADED = "degraded"
     ERROR = "error"
     DONE = "done"
@@ -298,6 +285,7 @@ class ToolResultData(BaseModel):
         truncated: Whether the output was cut to the size limit.
         latency_ms: Wall time of the call.
         error_type: The exception class, when the handler raised one.
+        output: What the tool returned, cut to a readable length.
     """
 
     call_id: str | None = None
@@ -308,6 +296,7 @@ class ToolResultData(BaseModel):
     truncated: bool = False
     latency_ms: float = 0.0
     error_type: str | None = None
+    output: str | None = None
 
 
 class NodesData(BaseModel):
@@ -332,86 +321,18 @@ class EvidenceData(BaseModel):
     keys: list[str]
 
 
-class GuardData(BaseModel):
-    """``guard``: repository text screened for instructions aimed at the model.
-
-    Attributes:
-        key: The citation key of the text.
-        keys: Every key withheld together with it.
-        probability: The probability that it was an injection attempt.
-        quarantined: Whether the text was withheld from the model.
-        tool: The tool or stage that produced it.
-    """
-
-    key: str | None = None
-    keys: list[str] = Field(default_factory=list)
-    probability: float | None = None
-    quarantined: bool = True
-    tool: str | None = None
-
-
-class GateData(BaseModel):
-    """``gate``: whether the evidence was judged enough to answer.
-
-    Attributes:
-        verdict: ``sufficient``, ``insufficient`` or ``exhausted``.
-        probability: The probability that the evidence suffices.
-        threshold: The probability at which it is accepted.
-        evidence_items: How many items were judged.
-        rejections: Times the gate has sent the agent back so far.
-        defaulted: Whether the decider's output was unusable.
-    """
-
-    verdict: str
-    probability: float | None = None
-    threshold: float | None = None
-    evidence_items: int | None = None
-    rejections: int | None = None
-    defaulted: bool = False
-
-
 class AnswerDeltaData(BaseModel):
     """``answer_delta``: a piece of the answer."""
 
     text: str
 
 
-class ClaimData(BaseModel):
-    """One claim of the answer and what the citation check found."""
-
-    index: int
-    claim: str
-    keys: list[str] = Field(default_factory=list)
-    unresolved: list[str] = Field(default_factory=list)
-    verdict: str
-    probability: float | None = None
-
-
-class VerificationData(BaseModel):
-    """``verification``: what the citation check found.
-
-    Attributes:
-        counts: Claims per verdict, plus the uncited count.
-        claims: Each claim and its verdict.
-        failed: Whether any claim failed the check.
-        repair: Whether the agent was sent back to repair claims.
-        defaulted: Whether the decider's output was unusable.
-    """
-
-    counts: dict[str, int] = Field(default_factory=dict)
-    claims: list[ClaimData] = Field(default_factory=list)
-    failed: bool = False
-    repair: bool = False
-    defaulted: bool = False
-
-
 class DegradedData(BaseModel):
     """``degraded``: something worked with less than asked.
 
     Attributes:
-        stage: Where: ``budget``, ``context``, ``gate``, ``guard``, ``seed``,
-            ``planner``, ``verify``, ``worker``, ``decisions``, ``recording`` or
-            a retrieval stage.
+        stage: Where: ``budget``, ``context``, ``seed``, ``planner``,
+            ``worker``, ``decisions``, ``recording`` or a retrieval stage.
         limit: The limit reached, for budget stages.
         used: How much of it was used.
         allowed: How much was allowed.
@@ -486,7 +407,6 @@ class DoneData(BaseModel):
         unresolved: Cited keys, as written, that match nothing the run saw.
         stop_reason: Why the run stopped.
         usage: What the run spent.
-        verification: The citation check's report, when one ran.
         chat_message_id: The saved chat turn, when it was saved.
         steps_dropped: Records past the per-run cap that were not stored.
         limits_reached: The limits the run hit, in order.
@@ -499,7 +419,6 @@ class DoneData(BaseModel):
     unresolved: list[str] = Field(default_factory=list)
     stop_reason: str
     usage: UsageData = Field(default_factory=UsageData)
-    verification: VerificationData | None = None
     chat_message_id: str | None = None
     steps_dropped: int = 0
     limits_reached: list[str] = Field(default_factory=list)
@@ -517,10 +436,7 @@ EVENT_MODELS: dict[EventType, type[BaseModel]] = {
     EventType.TOOL_RESULT: ToolResultData,
     EventType.NODES: NodesData,
     EventType.EVIDENCE: EvidenceData,
-    EventType.GUARD: GuardData,
-    EventType.GATE: GateData,
     EventType.ANSWER_DELTA: AnswerDeltaData,
-    EventType.VERIFICATION: VerificationData,
     EventType.DEGRADED: DegradedData,
     EventType.ERROR: ErrorData,
     EventType.DONE: DoneData,
@@ -600,9 +516,6 @@ class EventTranslator:
     ``tool_result``         ``tool_result`` (``elapsed_ms`` is ``latency_ms``)
     ``nodes``               ``nodes``
     ``evidence``            ``evidence``
-    ``quarantine``          ``guard``
-    ``gate``                ``gate``
-    ``verify``              ``verification``
     ``answer_delta``        ``answer_delta``
     ``compacted``           ``degraded`` (stage ``context``)
     ``degraded``            ``degraded``
@@ -705,12 +618,6 @@ class EventTranslator:
                 return one(EventType.NODES, data)
             case "evidence":
                 return one(EventType.EVIDENCE, data)
-            case "quarantine":
-                return one(EventType.GUARD, {**data, "quarantined": True})
-            case "gate":
-                return one(EventType.GATE, data)
-            case "verify":
-                return one(EventType.VERIFICATION, data)
             case "answer_delta":
                 return one(EventType.ANSWER_DELTA, data)
             case "compacted":

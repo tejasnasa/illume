@@ -4,10 +4,6 @@ The configured pipeline runs once on the question and its best results are put
 in front of the agent, so it starts from what a single-shot answer would have
 seen instead of from nothing. The seed is a head start, never a requirement: if
 retrieval fails the agent begins without it.
-
-With the injection screen on, every result is screened before the agent sees
-it, exactly as tool results are: a withheld result is shown as a quarantine
-block and never becomes evidence.
 """
 
 from __future__ import annotations
@@ -17,7 +13,6 @@ import time
 
 from app.services.agent.deps import AgentDeps
 from app.services.agent.events import Event
-from app.services.agent.guard import judge_texts, quarantine_block
 from app.services.agent.prompts import seed_message
 from app.services.agent.state import AgentState, Evidence
 from app.services.retrieval.candidate import Candidate
@@ -86,7 +81,6 @@ def make_seed_node(deps: AgentDeps):
             return {}
 
         candidates = list(result.candidates)
-        withheld = await _screen(deps, candidates, step)
         evidence = {
             candidate.key: Evidence(
                 key=candidate.key,
@@ -97,7 +91,6 @@ def make_seed_node(deps: AgentDeps):
                 found_by=("seed",),
             )
             for candidate in candidates
-            if candidate.key not in withheld
         }
         keys = list(evidence)
         await deps.record(
@@ -108,7 +101,6 @@ def make_seed_node(deps: AgentDeps):
                 "keys": keys,
                 "degraded": list(result.trace.degraded),
                 "config_hash": result.trace.config_hash,
-                "withheld": list(withheld),
             },
             index=step,
             started=started,
@@ -127,7 +119,7 @@ def make_seed_node(deps: AgentDeps):
         )
         return {
             "standalone_question": result.question,
-            "items": [{"role": "user", "content": seed_message(candidates, withheld)}],
+            "items": [{"role": "user", "content": seed_message(candidates)}],
             "evidence": evidence,
         }
 

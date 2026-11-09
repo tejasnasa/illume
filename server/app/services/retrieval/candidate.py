@@ -8,6 +8,7 @@ it, at what rank, and with what raw score.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID

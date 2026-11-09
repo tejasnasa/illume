@@ -70,9 +70,6 @@ class ToolResult(BaseModel):
         elapsed_ms: Wall time of the call.
         nodes: Files to highlight in the graph, when the tool names any.
         error_type: The exception class, when the handler raised one.
-        carries_repo_text: Whether the text holds repository content, which the
-            injection screen must inspect. A tool that only records the model's
-            own answer, such as ``finish``, sets this false.
     """
 
     tool: str
@@ -83,7 +80,6 @@ class ToolResult(BaseModel):
     elapsed_ms: float = 0.0
     nodes: NodeEvent | None = None
     error_type: str | None = None
-    carries_repo_text: bool = True
 
 
 @dataclass(frozen=True)
@@ -363,7 +359,6 @@ class ToolRegistry:
             data=output.model_dump(mode="json"),
             truncated=truncated,
             nodes=nodes,
-            carries_repo_text=tool.output_model.carries_repo_text,
         )
 
 

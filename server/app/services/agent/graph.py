@@ -1,27 +1,24 @@
-"""The agent graph: a bounded loop of model turns and tool calls, with a gate.
+"""The agent graph: a bounded loop of model turns and tool calls.
 
 The nodes and what leaves each one:
 
 * ``route`` then ``seed`` then ``agent``, always.
-* ``agent`` goes to ``tools`` when the model asked for tools, to ``gate`` when it
-  answered in plain text, back to itself after a nudge, and to ``synthesize``
-  when a limit was reached.
-* ``tools`` goes back to ``agent``, to ``gate`` when ``finish`` was called, or to
-  ``synthesize`` when the run should stop.
-* ``gate`` goes back to ``agent`` when the evidence was judged insufficient, and
-  to ``synthesize`` otherwise.
-* ``synthesize`` goes to ``verify``, which ends the run, or sends it back to
-  ``agent`` to repair unsupported claims.
+* ``agent`` goes to ``tools`` when the model asked for tools, to ``synthesize``
+  when it answered in plain text or a limit was reached, and back to itself
+  after a nudge.
+* ``tools`` goes back to ``agent``, or to ``synthesize`` when ``finish`` was
+  called or the run should stop.
+* ``synthesize`` ends the run.
 
 With parallel execution the question may be split first: ``seed`` leads to
 ``planner`` instead of ``agent``. When the plan says the question is simple,
 ``planner`` leads to ``agent`` and the graph is the one above. Otherwise it
 fans out to one ``worker`` per sub-question, every worker leads to ``merge``,
-and ``merge`` leads to the gate as a finished draft. Each worker is the agent
+and ``merge`` leads to ``synthesize`` as a finished draft. Each worker is the agent
 loop compiled as a subgraph of its own.
 
 ``finish`` is a tool, so the tools node is where a finished answer appears and
-where the loop hands over to the gate. Every way out of the loop passes through
+where the loop hands over to ``synthesize``. Every way out of the loop passes through
 ``synthesize``, so a run always produces an answer.
 """
 
@@ -37,26 +34,24 @@ from app.services.agent.deps import AgentDeps
 from app.services.agent.events import Event
 from app.services.agent.nodes import (
     make_agent_node,
-    make_gate_node,
     make_merge_node,
     make_planner_node,
     make_route_node,
     make_seed_node,
     make_synthesize_node,
     make_tools_node,
-    make_verify_node,
     make_worker_node,
 )
 from app.services.agent.nodes.worker import WorkerInput, worker_items
 from app.services.agent.state import AgentState
 
-NODE_NAMES = ("route", "seed", "agent", "tools", "gate", "synthesize", "verify")
+NODE_NAMES = ("route", "seed", "agent", "tools", "synthesize")
 
 PLANNER_NODE_NAMES = ("planner", "worker", "merge")
 
-# The graph takes this many steps per model turn at most (agent, tools, and the
-# gate that may follow), plus the nodes outside the loop.
-STEPS_PER_ITERATION = 4
+# The graph takes this many steps per model turn at most (agent and tools), plus
+# the nodes outside the loop.
+STEPS_PER_ITERATION = 2
 STEPS_OUTSIDE_LOOP = 16
 
 
@@ -68,7 +63,7 @@ def recursion_limit(max_iterations: int) -> int:
 def _after_agent(state: AgentState) -> str:
     return {
         "tools": "tools",
-        "text": "gate",
+        "text": "synthesize",
         "nudge": "agent",
         "limit": "synthesize",
     }[state["turn_end"] or "limit"]
@@ -77,8 +72,6 @@ def _after_agent(state: AgentState) -> str:
 def _after_tools(state: AgentState) -> str:
     if state["stop_reason"] is not None:
         return "synthesize"
-    if state["turn_end"] == "finish":
-        return "gate"
     return "agent"
 
 
@@ -139,9 +132,7 @@ def build_graph(deps: AgentDeps):
         "seed": make_seed_node(deps),
         "agent": make_agent_node(deps),
         "tools": make_tools_node(deps),
-        "gate": make_gate_node(deps),
         "synthesize": make_synthesize_node(deps),
-        "verify": make_verify_node(deps),
     }
     graph = StateGraph(AgentState)
     for name in NODE_NAMES:
@@ -161,12 +152,10 @@ def build_graph(deps: AgentDeps):
         graph.add_edge("seed", "planner")
         graph.add_conditional_edges("planner", _after_planner, ["agent", "worker"])
         graph.add_edge("worker", "merge")
-        graph.add_edge("merge", "gate")
+        graph.add_edge("merge", "synthesize")
     else:
         graph.add_edge("seed", "agent")
-    graph.add_conditional_edges("agent", _after_agent, ["tools", "gate", "agent", "synthesize"])
-    graph.add_conditional_edges("tools", _after_tools, ["gate", "agent", "synthesize"])
-    graph.add_conditional_edges("gate", _after_gate, ["agent", "synthesize"])
-    graph.add_edge("synthesize", "verify")
-    graph.add_conditional_edges("verify", _after_verify, ["agent", END])
+    graph.add_conditional_edges("agent", _after_agent, ["tools", "agent", "synthesize"])
+    graph.add_conditional_edges("tools", _after_tools, ["agent", "synthesize"])
+    graph.add_edge("synthesize", END)
     return graph.compile()

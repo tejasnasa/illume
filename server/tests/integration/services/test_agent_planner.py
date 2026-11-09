@@ -27,8 +27,8 @@ from app.services.agent.steps import InMemorySteps
 from app.services.agent.tools.context import RepoSnapshot
 from tests.factories import make_user
 from tests.fixtures.agent_run import (
+    PlanDecider,
     RoutedModel,
-    SufficiencyDecider,
     Turn,
     call,
     finish,
@@ -178,9 +178,7 @@ class TestFanOut:
     async def test_a_question_with_two_halves_runs_two_workers_and_merges(self, env):
         model = two_workers(env)
 
-        ran = await run(
-            env, model, config=planner_config(gate=True), decider=SufficiencyDecider(1.0, 0.95)
-        )
+        ran = await run(env, model, config=planner_config(), decider=PlanDecider(1.0, 0.95))
 
         result = ran.result
         assert result.status == "completed"
@@ -206,9 +204,7 @@ class TestFanOut:
     async def test_every_worker_event_carries_its_worker_id(self, env):
         model = two_workers(env)
 
-        ran = await run(
-            env, model, config=planner_config(gate=True), decider=SufficiencyDecider(1.0, 0.95)
-        )
+        ran = await run(env, model, config=planner_config(), decider=PlanDecider(1.0, 0.95))
 
         model_calls = ran.events.named("model_call")
         tool_calls = ran.events.named("tool_call")
@@ -223,9 +219,7 @@ class TestFanOut:
     async def test_workers_start_from_the_shared_seed_plus_their_own_part(self, env):
         model = two_workers(env)
 
-        await run(
-            env, model, config=planner_config(gate=True), decider=SufficiencyDecider(1.0, 0.95)
-        )
+        await run(env, model, config=planner_config(), decider=PlanDecider(1.0, 0.95))
 
         for question in (AUTH_QUESTION, USER_QUESTION):
             request = model.worker_requests(question)[0]
@@ -242,8 +236,8 @@ class TestFanOut:
         ran = await run(
             env,
             model,
-            config=planner_config(gate=True),
-            decider=SufficiencyDecider(1.0, 0.95),
+            config=planner_config(),
+            decider=PlanDecider(1.0, 0.95),
             context_window=128_000,
         )
 
@@ -253,9 +247,7 @@ class TestFanOut:
     async def test_the_merge_sees_both_findings(self, env):
         model = two_workers(env)
 
-        await run(
-            env, model, config=planner_config(gate=True), decider=SufficiencyDecider(1.0, 0.95)
-        )
+        await run(env, model, config=planner_config(), decider=PlanDecider(1.0, 0.95))
 
         merged = model.tagged("merge")[0]
         sent = "\n".join(_strings(merged["input"]))
@@ -313,7 +305,7 @@ class TestPlanningIsOptional:
             ],
         )
 
-        ran = await run(env, model, decider=SufficiencyDecider(0.0))
+        ran = await run(env, model, decider=PlanDecider(0.0))
 
         assert ran.result.plan is None
         assert ran.result.workers == ()
@@ -337,7 +329,7 @@ class TestPlanningIsOptional:
             fallback=[turn(finish("A single answer."))],
         )
 
-        ran = await run(env, model, decider=SufficiencyDecider(1.0))
+        ran = await run(env, model, decider=PlanDecider(1.0))
 
         assert ran.result.plan is None
         assert ran.result.workers == ()
@@ -350,7 +342,7 @@ class TestPlanningIsOptional:
             fallback=[turn(finish("A single answer."))],
         )
 
-        ran = await run(env, model, decider=SufficiencyDecider(1.0))
+        ran = await run(env, model, decider=PlanDecider(1.0))
 
         assert ran.result.status == "completed"
         assert ran.result.plan is None
@@ -366,9 +358,7 @@ class TestWorkerFailure:
         failure = RateLimitError("slow down", response=_response(429), body=None)
         model = two_workers(env, failure=failure)
 
-        ran = await run(
-            env, model, config=planner_config(gate=True), decider=SufficiencyDecider(1.0, 0.95)
-        )
+        ran = await run(env, model, config=planner_config(), decider=PlanDecider(1.0, 0.95))
 
         result = ran.result
         assert result.status == "completed"
@@ -390,9 +380,7 @@ class TestWorkerFailure:
         failure = RateLimitError("slow down", response=_response(429), body=None)
         model = two_workers(env, failure=failure)
 
-        ran = await run(
-            env, model, config=planner_config(gate=True), decider=SufficiencyDecider(1.0, 0.95)
-        )
+        ran = await run(env, model, config=planner_config(), decider=PlanDecider(1.0, 0.95))
 
         errors = ran.steps.of_kind("error")
         assert [step.worker_id for step in errors] == ["w2"]
@@ -413,9 +401,7 @@ class TestWorkerFailure:
             merge=say(message_answer(env)),
         )
 
-        ran = await run(
-            env, model, config=planner_config(gate=True), decider=SufficiencyDecider(1.0, 0.95)
-        )
+        ran = await run(env, model, config=planner_config(), decider=PlanDecider(1.0, 0.95))
 
         assert ran.result.status == "completed"
         statuses = {worker.question: worker.status for worker in ran.result.workers}
@@ -549,8 +535,8 @@ class TestWorkerSessions:
         ran = await run(
             env,
             model,
-            config=planner_config(gate=True),
-            decider=SufficiencyDecider(1.0, 0.95),
+            config=planner_config(),
+            decider=PlanDecider(1.0, 0.95),
             session_factory=recording,
         )
 

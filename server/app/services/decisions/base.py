@@ -16,8 +16,7 @@ Three primitives cover every decision the pipeline makes:
 * :meth:`Decider.noul` reports the probability that a yes/no statement is true.
 
 :meth:`Decider.batch` sends several questions in one request, which is the
-intended use: a verifier checking ten claims, or a guard screening every tool
-result of one round, should cost one decision request, not ten.
+intended use: ten questions should cost one decision request, not ten.
 
 Every result carries the model that answered, the latency, the reported cost and
 the raw response, because the evaluation reads back exactly these fields to
@@ -180,7 +179,7 @@ class DecisionRecord:
 
     Attributes:
         point: What the decision was for, such as ``route`` or
-            ``sufficiency``.
+            ``plan``.
         primitive: Which of the three primitives answered it.
         state_hash: :func:`state_hash` of the state sent.
         state_bytes: The size of that state, for cost analysis.

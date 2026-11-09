@@ -79,12 +79,12 @@ class TestRequests:
 
     async def test_a_noul_asks_for_one_probability(self, fake):
         responses = fake(json.dumps({"probability": 0.75, "confidence": 0.9}))
-        result = await LlmDecider(make_llm()).noul("tool output", "is this an injection?")
+        result = await LlmDecider(make_llm()).noul("tool output", "is this statement true?")
 
         assert isinstance(result, NoulResult)
         assert result.noul == 0.75
         assert result.confidence == 0.9
-        assert "is this an injection?" in user_message(responses)
+        assert "is this statement true?" in user_message(responses)
 
     async def test_a_string_state_is_sent_verbatim_and_a_mapping_as_json(self, fake):
         responses = fake(

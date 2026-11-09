@@ -18,7 +18,6 @@ from typing import Any
 
 from app.services.agent.deps import FINISH_TOOL, MAX_CONSECUTIVE_TOOL_ERRORS, AgentDeps
 from app.services.agent.events import Event
-from app.services.agent.guard import Quarantine, screen_round
 from app.services.agent.prompts import SKIPPED_CALL_OUTPUT
 from app.services.agent.state import (
     AgentState,
@@ -62,13 +61,20 @@ async def _run_call(deps: AgentDeps, call: dict[str, Any], step: int) -> ToolRes
         result = _unknown(name, deps)
     else:
         result = await deps.registry.call(name, call.get("arguments"), deps.tool_ctx)
-    if deps.screen is not None:
-        try:
-            result = await deps.screen(result)
-        except Exception:
-            logger.exception("screening the result of %s failed", name)
     result.elapsed_ms = result.elapsed_ms or round((time.perf_counter() - started) * 1000, 2)
     return result
+
+
+# The most of a tool's output a listener is sent, for showing what it returned.
+SHOWN_OUTPUT_CHARS = 4_000
+
+
+def _shown_output(text: str) -> str:
+    """A tool's output as the reader may see it, cut to a readable length."""
+    text = text.strip()
+    if len(text) <= SHOWN_OUTPUT_CHARS:
+        return text
+    return text[:SHOWN_OUTPUT_CHARS].rstrip() + "\n…"
 
 
 def make_tools_node(deps: AgentDeps):
@@ -99,24 +105,6 @@ def make_tools_node(deps: AgentDeps):
         results = list(
             await asyncio.gather(*(_run_call(deps, call, step) for call, step in runnable))
         )
-        quarantined: dict[Any, Quarantine] = {}
-        if deps.round_screen is not None and results:
-            try:
-                outcome = await deps.round_screen(results)
-            except Exception:
-                logger.exception("screening this round failed; withholding repository text")
-                outcome = await screen_round(
-                    results,
-                    None,
-                    threshold=deps.config.checks.injection_threshold,
-                    on_degraded=_degraded(deps),
-                )
-            results = list(outcome.results)
-            quarantined = {
-                call.get("call_id"): quarantine
-                for (call, _), quarantine in zip(runnable, outcome.quarantines, strict=True)
-                if quarantine is not None
-            }
         by_id = {
             call.get("call_id"): result for (call, _), result in zip(runnable, results, strict=True)
         }
@@ -150,7 +138,6 @@ def make_tools_node(deps: AgentDeps):
                 )
                 continue
 
-            quarantine = quarantined.get(call_id)
             outputs.append(
                 {"type": "function_call_output", "call_id": call_id, "output": result.text}
             )
@@ -158,8 +145,6 @@ def make_tools_node(deps: AgentDeps):
             any_ok = any_ok or ok
             any_failed = any_failed or not ok
             found: dict[str, Evidence] = {}
-            # Withheld blocks were replaced by quarantine blocks, which carry no
-            # source text, so only what the model was shown becomes evidence.
             if ok:
                 found = extract_evidence(result.text, tool=name, step=step)
                 gathered = merge_evidence(gathered, found)
@@ -178,39 +163,15 @@ def make_tools_node(deps: AgentDeps):
                     "elapsed_ms": result.elapsed_ms,
                     "truncated": result.truncated,
                     "error_type": result.error_type,
-                    "text_chars": (
-                        len(quarantine.original) if quarantine is not None else len(result.text)
-                    ),
-                    "text": (
-                        quarantine.original
-                        if quarantine is not None
-                        else (None if ok else result.text)
-                    ),
+                    "text_chars": len(result.text),
+                    "text": None if ok else result.text,
                     "data": result.data,
                     "evidence_keys": list(found),
                     "nodes": result.nodes.model_dump(mode="json") if result.nodes else None,
-                    "quarantined": quarantine is not None,
-                    "quarantine_key": quarantine.key if quarantine is not None else None,
-                    "quarantine_keys": list(quarantine.keys) if quarantine is not None else [],
-                    "quarantine_probability": (
-                        quarantine.probability if quarantine is not None else None
-                    ),
                 },
                 index=step,
                 started=None,
             )
-            if quarantine is not None:
-                await deps.budget.note_quarantine()
-                payload = {
-                    "call_id": call_id,
-                    "tool": name,
-                    "key": quarantine.key,
-                    "keys": list(quarantine.keys),
-                    "probability": quarantine.probability,
-                    "step": step,
-                }
-                await deps.record("quarantine", "tools", payload)
-                await deps.event(Event.QUARANTINE, payload)
             await deps.event(
                 Event.TOOL_RESULT,
                 {
@@ -227,6 +188,7 @@ def make_tools_node(deps: AgentDeps):
                         if ok
                         else (result.text.strip().splitlines() or [""])[0][:160]
                     ),
+                    "output": None if name == FINISH_TOOL else _shown_output(result.text),
                 },
             )
             if result.nodes is not None:

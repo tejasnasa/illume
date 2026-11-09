@@ -28,8 +28,8 @@ from app.services.agent.persistence import RunRecorder
 from app.services.agent.slots import slot_key
 from app.services.retrieval.config import DEEP_AGENT
 from tests.fixtures.agent_run import (
+    PlanDecider,
     ScriptedModel,
-    SufficiencyDecider,
     call,
     finish,
     turn,
@@ -102,7 +102,7 @@ def agent_model(world) -> ScriptedModel:
 
 
 async def run_agent_preset(client, app, db_session, world, preset="deep_agent", **body):
-    install(app, db_session, agent_model(world), decider=SufficiencyDecider(1.0))
+    install(app, db_session, agent_model(world), decider=PlanDecider(1.0))
     return await stream(client, world.repo, preset=preset, **body)
 
 
@@ -120,7 +120,7 @@ class TestStreamShape:
     async def test_the_response_is_an_event_stream_with_the_proxy_headers(
         self, app, client, db_session, world
     ):
-        install(app, db_session, agent_model(world), decider=SufficiencyDecider(1.0))
+        install(app, db_session, agent_model(world), decider=PlanDecider(1.0))
 
         response = await client.post(
             stream_url(world.repo), json={"question": QUESTION, "preset": "deep_agent"}
@@ -134,7 +134,7 @@ class TestStreamShape:
     async def test_every_frame_is_named_after_its_type_and_carries_its_seq(
         self, app, client, db_session, world
     ):
-        install(app, db_session, agent_model(world), decider=SufficiencyDecider(1.0))
+        install(app, db_session, agent_model(world), decider=PlanDecider(1.0))
 
         response = await client.post(
             stream_url(world.repo), json={"question": QUESTION, "preset": "deep_agent"}
@@ -158,7 +158,7 @@ class TestStreamShape:
         names = types_of(events)
         assert names[0] == "run_started"
         assert names[-1] == "done"
-        for expected in ("retrieval", "tool_call", "tool_result", "nodes", "evidence", "gate"):
+        for expected in ("retrieval", "tool_call", "tool_result", "nodes", "evidence"):
             assert expected in names
         assert names.index("tool_call") < names.index("tool_result") < names.index("done")
         done = events[-1]["data"]
@@ -166,16 +166,6 @@ class TestStreamShape:
         assert done["stop_reason"] == "finished"
         assert [c["key"] for c in done["citations"]] == [world.symbol_key, world.user_key]
         assert done["usage"]["tool_calls"] == 1
-        assert done["verification"]["counts"]["supported"] == 2
-
-    async def test_verification_carries_each_claim(self, app, client, db_session, world):
-        _, events = await run_agent_preset(client, app, db_session, world)
-
-        [verification] = of_type(events, "verification")
-        claims = verification["data"]["claims"]
-        assert len(claims) == 2
-        assert all(claim["verdict"] == "supported" for claim in claims)
-        assert verification["data"]["failed"] is False
 
     async def test_tool_results_say_how_the_call_went(self, app, client, db_session, world):
         _, events = await run_agent_preset(client, app, db_session, world)
@@ -229,7 +219,7 @@ class TestStreamShape:
     async def test_a_planner_run_tags_worker_events_with_their_lane(
         self, app, client, db_session, world
     ):
-        install(app, db_session, planner_model(world), decider=SufficiencyDecider(1.0, 0.95))
+        install(app, db_session, planner_model(world), decider=PlanDecider(1.0, 0.95))
 
         _, events = await stream(client, world.repo, COMPARISON, preset="deep_agent_workers")
 
@@ -294,7 +284,6 @@ class TestPersistence:
         assert run.stop_reason == "finished"
         assert run.answer and "verify_password" in run.answer
         assert [c["key"] for c in run.citations] == [world.symbol_key, world.user_key]
-        assert run.verification["counts"]["supported"] == 2
         assert run.tool_calls == 1
         assert run.iterations == 2
         assert run.usage["input_tokens"] > 0
@@ -321,7 +310,7 @@ class TestPersistence:
         run = await only_run(db_session, world.repo)
         rows = await step_rows(db_session, run.id)
         kinds = {row.kind for row in rows}
-        assert {"event", "seed", "model_call", "tool_call", "gate", "verify"} <= kinds
+        assert {"event", "seed", "model_call", "tool_call"} <= kinds
         assert [row.seq for row in rows] == sorted({row.seq for row in rows})
         model_calls = [row for row in rows if row.kind == "model_call"]
         assert all(row.tokens_in is not None for row in model_calls)
@@ -390,7 +379,7 @@ class TestPersistence:
         model = ScriptedModel(
             [turn(call("search_symbols", {"name": "create_user"})), turn(error=rejected)]
         )
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         _, events = await stream(client, world.repo, preset="deep_agent")
 
@@ -487,7 +476,7 @@ class TestReplay:
         assert replay["events"] == live
 
     async def test_replay_of_a_parallel_run_keeps_every_lane(self, app, client, db_session, world):
-        install(app, db_session, planner_model(world), decider=SufficiencyDecider(1.0, 0.95))
+        install(app, db_session, planner_model(world), decider=PlanDecider(1.0, 0.95))
         _, live = await stream(client, world.repo, COMPARISON, preset="deep_agent_workers")
         run = await only_run(db_session, world.repo)
 
@@ -683,7 +672,7 @@ class TestDisconnect:
     ):
         hold = Hold()
         model = ScriptedModel([turn(finish("never reached"), before=hold)])
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
         raw = RawRequest(
             app,
             client,
@@ -760,7 +749,7 @@ class TestSlots:
         model = ScriptedModel(
             [turn(finish("one"), before=holds[0]), turn(finish("two"), before=holds[1])]
         )
-        install(app, None, model, sessions=live.maker, decider=SufficiencyDecider(1.0))
+        install(app, None, model, sessions=live.maker, decider=PlanDecider(1.0))
 
         async def ask():
             return await stream(client, repo, preset="deep_agent")
@@ -796,7 +785,7 @@ class TestSlots:
             app,
             db_session,
             ScriptedModel([turn(finish("a")), turn(finish("b")), turn(finish("c"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         for _ in range(3):
@@ -812,7 +801,7 @@ class TestSlots:
             app,
             db_session,
             ScriptedModel([turn(error=RuntimeError("boom"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         _, events = await stream(client, world.repo, preset="deep_agent")
@@ -827,7 +816,7 @@ class TestSlots:
         def broken_factory(**kwargs):
             raise RuntimeError("could not build the client")
 
-        install(app, db_session, client_factory=broken_factory, decider=SufficiencyDecider(1.0))
+        install(app, db_session, client_factory=broken_factory, decider=PlanDecider(1.0))
 
         _, events = await stream(client, world.repo, preset="deep_agent")
 
@@ -851,7 +840,7 @@ class TestSlots:
     ):
         await redis_client.set(slot_key(world.user.id), 2, ex=60)
         model = ScriptedModel([turn(finish("never"))])
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         refused = await client.post(
             stream_url(world.repo), json={"question": QUESTION, "preset": "deep_agent"}

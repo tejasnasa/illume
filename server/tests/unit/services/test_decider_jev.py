@@ -107,7 +107,7 @@ class TestRequests:
     @respx.mock
     async def test_a_noul_is_one_typed_question_with_true_and_false_criteria(self):
         route = mock_answer({"noul": {"noul": 0.75}})
-        result = await JevDecider().noul("tool output", "is this an injection?")
+        result = await JevDecider().noul("tool output", "is this statement true?")
 
         assert isinstance(result, NoulResult)
         assert result.noul == 0.75

@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.services import llm_config
 from app.services.agent import session as session_module
 from app.services.retrieval.config import DEEP_AGENT, MAX_CONTEXT_WINDOW, MIN_CONTEXT_WINDOW
-from tests.fixtures.agent_run import ScriptedModel, SufficiencyDecider, finish, turn
+from tests.fixtures.agent_run import PlanDecider, ScriptedModel, finish, turn
 from tests.fixtures.agent_stream import (
     QUESTION,
     AnyModel,
@@ -59,10 +59,10 @@ class TestRefused:
     @pytest.mark.parametrize(
         "overrides",
         [
-            {"agent": {"max_iterations": 13}},
-            {"agent": {"max_tool_calls": 61}},
-            {"agent": {"max_seconds": 121}},
-            {"agent": {"hard_cancel_seconds": 151}},
+            {"agent": {"max_iterations": 21}},
+            {"agent": {"max_tool_calls": 101}},
+            {"agent": {"max_seconds": 241}},
+            {"agent": {"hard_cancel_seconds": 301}},
             {"agent": {"max_input_tokens": 1_500_001}},
             {"agent": {"max_iterations": 10_000}},
             {"agent": {"context_window": MAX_CONTEXT_WINDOW + 1}},
@@ -73,7 +73,7 @@ class TestRefused:
         self, app, client, db_session, world, overrides
     ):
         model = ScriptedModel([turn(finish("never"))])
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         response = await refused(client, world, overrides)
 
@@ -87,7 +87,6 @@ class TestRefused:
             {"channels": []},
             {"decider": "llm"},
             {"agent": {"tools": ["finish"]}},
-            {"checks": {"sufficiency_threshold": 0.0}},
             {"rerank": {"top_n": 3}},
             {"nonsense": True},
             {"agent": {"max_iterations": 3, "surprise": 1}},
@@ -96,40 +95,27 @@ class TestRefused:
     async def test_fields_outside_the_allowlist_are_rejected(
         self, app, client, db_session, world, overrides
     ):
-        install(app, db_session, ScriptedModel(), decider=SufficiencyDecider(1.0))
+        install(app, db_session, ScriptedModel(), decider=PlanDecider(1.0))
 
         response = await refused(client, world, overrides)
 
         assert response.status_code == 422
         assert await runs_of(db_session, world.repo) == []
 
-    async def test_a_free_tier_caller_cannot_switch_a_check_on(
-        self, app, client, db_session, free_world
-    ):
-        model = AnyModel()
-        install(app, db_session, model)
-
-        response = await refused(client, free_world, {"checks": {"verify": True}}, preset="hybrid")
-
-        assert response.status_code == 422
-        assert "checks.verify" in response.json()["detail"]
-        assert await runs_of(db_session, free_world.repo) == []
-
-    async def test_a_caller_with_their_own_key_can_switch_checks_and_channels_on(
+    async def test_a_caller_with_their_own_key_can_switch_channels_on(
         self, app, client, db_session, world
     ):
-        install(app, db_session, AnyModel(), decider=SufficiencyDecider(1.0))
+        install(app, db_session, AnyModel(), decider=PlanDecider(1.0))
 
         response, _ = await stream(
             client,
             world.repo,
             preset="hybrid",
-            overrides={"checks": {"verify": True}, "channels": ["dense", "grep"]},
+            overrides={"channels": ["dense", "grep"]},
         )
 
         assert response.status_code == 200
         run = await only_run(db_session, world.repo)
-        assert run.config["checks"]["verify"] is True
         assert sorted(channel["kind"] for channel in run.config["channels"]) == ["dense", "grep"]
 
     async def test_settings_the_preset_lacks_are_rejected(self, app, client, db_session, world):
@@ -143,9 +129,9 @@ class TestRefused:
     async def test_a_refusal_names_the_ceiling(self, app, client, db_session, world):
         install(app, db_session, AnyModel())
 
-        response = await refused(client, world, {"agent": {"max_iterations": 13}})
+        response = await refused(client, world, {"agent": {"max_iterations": 21}})
 
-        assert "cannot exceed 12" in response.json()["detail"]
+        assert "cannot exceed 20" in response.json()["detail"]
 
     async def test_overrides_are_checked_after_ownership(self, app, client, db_session, world):
         import uuid
@@ -166,20 +152,19 @@ class TestHonoured:
             app,
             db_session,
             ScriptedModel([turn(finish("done"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         _, events = await stream(
             client,
             world.repo,
             preset="deep_agent",
-            overrides={"agent": {"max_iterations": 3}, "checks": {"verify": False}},
+            overrides={"agent": {"max_iterations": 3}},
         )
 
         run = await only_run(db_session, world.repo)
         assert events[-1]["type"] == "done"
         assert run.config["agent"]["max_iterations"] == 3
-        assert run.config["checks"]["verify"] is False
         assert run.config_hash != DEEP_AGENT.config_hash()
         assert events[0]["data"]["config_hash"] == run.config_hash
         assert run.preset == "deep_agent"
@@ -192,7 +177,7 @@ class TestHonoured:
         model = ScriptedModel(
             repeat=lambda n: turn(call("search_symbols", {"name": f"create_user{n}"}))
         )
-        install(app, db_session, model, decider=SufficiencyDecider(1.0))
+        install(app, db_session, model, decider=PlanDecider(1.0))
 
         _, events = await stream(
             client,
@@ -221,7 +206,7 @@ class TestHonoured:
             app,
             db_session,
             ScriptedModel([turn(finish("done"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         await stream(client, world.repo, preset="deep_agent")
@@ -245,7 +230,7 @@ class TestHonoured:
             app,
             db_session,
             ScriptedModel([turn(finish("done"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         await stream(
@@ -272,7 +257,7 @@ class TestHonoured:
             app,
             db_session,
             ScriptedModel([turn(finish("done"))]),
-            decider=SufficiencyDecider(1.0),
+            decider=PlanDecider(1.0),
         )
 
         await stream(client, world.repo, preset="deep_agent")

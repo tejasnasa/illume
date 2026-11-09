@@ -32,16 +32,13 @@ from typing import Any
 import anyio
 from sse_starlette import ServerSentEvent
 
-from app.services.agent.deps import ResultScreen, Verifier
 from app.services.agent.errors import describe_error
 from app.services.agent.events import (
     CitationData,
     DoneData,
     EventType,
     UsageData,
-    VerificationData,
 )
-from app.services.agent.guard import RoundScreen
 from app.services.agent.persistence import (
     RunRecorder,
     SessionOpener,
@@ -79,18 +76,12 @@ class RunKit:
         client_factory: Builds the generation client from ``AsyncOpenAI``-style
             keyword arguments.
         embed: Embeds query text.
-        decider: Makes the gate's, verifier's and guard's decisions.
-        verifier: Checks the answer's citations.
-        round_screen: Screens a round of tool results for injected instructions.
-        screen: Inspects one tool result.
+        decider: Makes the run's decisions.
     """
 
     client_factory: Any = None
     embed: Embedder | None = None
     decider: Decider | None = None
-    verifier: Verifier | None = None
-    round_screen: RoundScreen | None = None
-    screen: ResultScreen | None = None
 
 
 @dataclass(frozen=True)
@@ -137,7 +128,6 @@ class Outcome:
         stop_reason: Why the run stopped.
         citations: The evidence the answer cites.
         unresolved: Cited keys that match nothing the run saw.
-        verification: The citation check's report, when one ran.
         standalone_question: The question the channels searched with.
         usage: What the run spent.
         limits_reached: The limits the run hit, in order.
@@ -149,7 +139,6 @@ class Outcome:
     stop_reason: str = ""
     citations: list[CitationData] = field(default_factory=list)
     unresolved: list[str] = field(default_factory=list)
-    verification: dict[str, Any] | None = None
     standalone_question: str | None = None
     usage: UsageData = field(default_factory=UsageData)
     limits_reached: list[str] = field(default_factory=list)
@@ -313,9 +302,6 @@ class RunSession:
             run_id=request.run_id,
             decider=kit.decider,
             embed=kit.embed,
-            verifier=kit.verifier,
-            screen=kit.screen,
-            round_screen=kit.round_screen,
             client_factory=kit.client_factory,
         )
         return self._agent_outcome(result)
@@ -344,7 +330,6 @@ class RunSession:
                 citation_from_evidence(key, result.evidence.get(key)) for key in result.cited
             ],
             unresolved=list(result.unresolved),
-            verification=result.verification.to_dict() if result.verification else None,
             standalone_question=None,
             usage=usage,
             limits_reached=list(result.limits_reached),
@@ -368,7 +353,6 @@ class RunSession:
                 emit=self.recorder.emit,
                 stream=True,
                 client_factory=kit.client_factory,
-                decider=kit.decider,
             )
         if request.on_free_tier and result.generated:
             await self._charge()
@@ -388,7 +372,6 @@ class RunSession:
             stop_reason="answered" if result.generated else "no_context",
             citations=citations,
             unresolved=list(result.unresolved),
-            verification=result.verification.to_dict() if result.verification else None,
             standalone_question=result.retrieval.question,
             usage=UsageData(elapsed_seconds=round(time.monotonic() - self._started, 3)),
         )
@@ -419,11 +402,6 @@ class RunSession:
                 )
             except Exception:
                 logger.warning("could not save the turn of run %s", request.run_id, exc_info=True)
-            verification = (
-                VerificationData.model_validate(outcome.verification)
-                if outcome.verification
-                else None
-            )
             recorder.publish(
                 EventType.DONE,
                 DoneData(
@@ -433,7 +411,6 @@ class RunSession:
                     unresolved=outcome.unresolved,
                     stop_reason=outcome.stop_reason,
                     usage=outcome.usage,
-                    verification=verification,
                     chat_message_id=str(message_id) if message_id else None,
                     steps_dropped=recorder.dropped,
                     limits_reached=outcome.limits_reached,
@@ -443,7 +420,6 @@ class RunSession:
         await self._finalize(outcome, message_id)
 
     async def _finalize(self, outcome: Outcome, message_id: uuid.UUID | None) -> None:
-        verification = outcome.verification
         try:
             await finalize_run(
                 self._sessions,
@@ -452,7 +428,6 @@ class RunSession:
                 stop_reason=outcome.stop_reason or None,
                 answer=outcome.answer if outcome.status == "done" else None,
                 citations=[c.model_dump(mode="json") for c in outcome.citations],
-                verification=verification,
                 usage=outcome.usage.model_dump(mode="json"),
                 tool_calls=outcome.usage.tool_calls,
                 iterations=outcome.usage.iterations,

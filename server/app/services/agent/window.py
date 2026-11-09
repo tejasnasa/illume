@@ -7,7 +7,7 @@ call. When the prediction nears the window, :func:`compact` replaces the outputs
 of older tool calls with short stubs naming what they contained.
 
 Nothing is lost by compacting. Every citable block a tool returned is already in
-the run's evidence, which the synthesis and the citation checks read; the stub
+the run's evidence, which the synthesis reads; the stub
 tells the model which keys it holds, and the model can call the tool again to
 see the text. Each tool call keeps its output item, only shortened, because the
 Responses API rejects a call without one.

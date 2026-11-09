@@ -23,11 +23,10 @@ from typing import Any
 
 from openai.types.responses import Response
 
-from app.services.decisions.base import ChoiceResult, NoulResult
+from app.services.decisions.base import NoulResult
 from app.services.retrieval.config import (
     HYBRID,
     AgentConfig,
-    ChecksConfig,
     PipelineConfig,
     PlannerConfig,
     QueryConfig,
@@ -109,6 +108,7 @@ class Turn:
     error: BaseException | None = None
     before: Callable[[], Awaitable[None]] | None = None
     status: str = "completed"
+    stall_after_text: bool = False
 
 
 def turn(*output: dict[str, Any], **fields: Any) -> Turn:
@@ -227,6 +227,8 @@ class ScriptedModel:
                     yield SimpleNamespace(
                         type="response.output_text.delta", delta=text[start : start + 7]
                     )
+        if reply.stall_after_text:
+            await never()
         yield SimpleNamespace(type="response.completed", response=build_response(reply))
 
 
@@ -327,37 +329,23 @@ def _strings(value: Any) -> list[str]:
 # --- a decider that answers from a list -----------------------------------------------
 
 
-class SufficiencyDecider:
-    """A decider whose answers come from lists, then repeat the last.
+class PlanDecider:
+    """A decider whose probabilities come from a list, then repeat the last.
 
-    The single-call ``noul`` path answers the sufficiency gate. The batched path
-    answers the citation verifier and the injection guard: ``verdicts`` supplies
-    one choice per citation question, ``screening`` one probability per screened
-    result.
+    Only the single-call ``noul`` path is answered, which is the one the planner
+    asks.
 
     Attributes:
-        calls: The state and instructions of every single-call question asked.
-        batches: The state and questions of every batched request, in order.
+        calls: The state and instructions of every question asked.
     """
 
     kind = "fake"
     model_id = "fake-decider"
 
-    def __init__(
-        self,
-        *probabilities: float,
-        defaulted: bool = False,
-        verdicts: Sequence[str] = (),
-        screening: float | Sequence[float] = 0.0,
-        fail_batch: bool = False,
-    ) -> None:
+    def __init__(self, *probabilities: float, defaulted: bool = False) -> None:
         self._probabilities = list(probabilities) or [1.0]
         self.defaulted = defaulted
-        self._verdicts = list(verdicts)
-        self._screening = [screening] if isinstance(screening, int | float) else list(screening)
-        self.fail_batch = fail_batch
         self.calls: list[tuple[Any, str]] = []
-        self.batches: list[tuple[Any, dict[str, Any]]] = []
 
     async def noul(self, state: Any, instructions: str) -> NoulResult:
         self.calls.append((state, instructions))
@@ -422,9 +410,6 @@ class SufficiencyDecider:
 
 def agent_config(
     *,
-    gate: bool = False,
-    verify: bool = False,
-    guard: bool = False,
     seed: bool = True,
     tools: tuple[str, ...] | None = None,
     **limits: Any,
@@ -434,9 +419,6 @@ def agent_config(
     It searches with the hybrid channels, so the seed needs no model key.
 
     Args:
-        gate: Turn the sufficiency check on.
-        verify: Turn the citation check on.
-        guard: Turn the injection screen on.
         seed: Run the retrieval before the first model turn.
         tools: Restrict the tools offered.
         **limits: Overrides for the agent's limits.
@@ -447,15 +429,11 @@ def agent_config(
         channels=HYBRID.channels,
         execution="agent",
         agent=AgentConfig(seed=seed, tools=tools, **limits),
-        checks=ChecksConfig(gate=gate, verify=verify, guard=guard),
     )
 
 
 def planner_config(
     *,
-    gate: bool = False,
-    verify: bool = False,
-    guard: bool = False,
     seed: bool = True,
     max_workers: int = 4,
     worker_iterations: int = 8,
@@ -466,9 +444,6 @@ def planner_config(
     """A pipeline configuration for parallel execution over the retrieval fixture.
 
     Args:
-        gate: Turn the sufficiency check on.
-        verify: Turn the citation check on.
-        guard: Turn the injection screen on.
         seed: Run the retrieval before fanning out.
         max_workers: The most sub-questions a plan may hold.
         worker_iterations: Model turns per worker.
@@ -488,7 +463,6 @@ def planner_config(
             min_subquestions=min_subquestions,
             plan_threshold=plan_threshold,
         ),
-        checks=ChecksConfig(gate=gate, verify=verify, guard=guard),
     )
 
 
