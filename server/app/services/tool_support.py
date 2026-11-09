@@ -1,9 +1,11 @@
 """Record whether a credential can call function tools.
 
 Generation only needs text output, and a key that produces text is valid. The
-agent additionally needs function calling, and providers differ: some accept
-``tool_choice: "required"`` and return a ``function_call`` item, others ignore
-the field or reject it outright. A credential that fails the tool probe must
+agent additionally needs function calling, which it asks for with
+``tool_choice: "auto"``. The probe asks the same way: some providers reject
+``"required"`` outright (DeepSeek in thinking mode does) while calling tools
+normally under ``"auto"``, so probing with ``"required"`` would report a working
+model as unable to call tools. A credential that fails the tool probe must
 not be rejected at save time -- it is still a working key -- so the answer is
 recorded on the user row and the agent presets read it instead of discovering
 the limitation mid-run.
@@ -12,7 +14,7 @@ the limitation mid-run.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from openai import APIConnectionError, AsyncOpenAI, InternalServerError, RateLimitError
 from openai.types.responses import FunctionToolParam
@@ -36,7 +38,15 @@ PING_TOOL: FunctionToolParam = {
 }
 
 _PROBE_INPUT = "Call the ping tool."
-_PROBE_MAX_OUTPUT_TOKENS = 16
+# Reasoning models spend output tokens thinking before they call the tool; too
+# small a cap ends the response before the call and reads as "no tools".
+_PROBE_MAX_OUTPUT_TOKENS = 512
+
+# A "no tools" verdict is measured again after this long, and any recorded
+# before the probe last changed is not trusted at all: an earlier probe could
+# answer "no" for models that call tools fine.
+NEGATIVE_VERDICT_TTL = timedelta(days=1)
+PROBE_REVISED_AT = datetime(2026, 11, 7, tzinfo=UTC)
 
 
 async def check_tool_support(client: AsyncOpenAI, config: LLMConfig) -> bool | None:
@@ -64,7 +74,7 @@ async def check_tool_support(client: AsyncOpenAI, config: LLMConfig) -> bool | N
             **config.response_kwargs("minimal"),
             input=_PROBE_INPUT,
             tools=[PING_TOOL],
-            tool_choice="required",
+            tool_choice="auto",
             max_output_tokens=_PROBE_MAX_OUTPUT_TOKENS,
         )
     except (APIConnectionError, RateLimitError, InternalServerError) as exc:
@@ -92,6 +102,35 @@ async def check_tool_support(client: AsyncOpenAI, config: LLMConfig) -> bool | N
     )
 
 
+def cached_tool_support(user: User, *, now: datetime | None = None) -> bool | None:
+    """The recorded verdict, or ``None`` when it should be measured again.
+
+    A ``True`` is kept. A ``False`` expires after :data:`NEGATIVE_VERDICT_TTL`
+    and is discarded outright when it predates :data:`PROBE_REVISED_AT` or has
+    no timestamp, so a model that gains tool calling, or one an older probe
+    misjudged, is not locked out for good.
+
+    Args:
+        user: The owner of the credential.
+        now: The current time, for tests.
+
+    Returns:
+        The trusted verdict, or ``None`` when there is none.
+    """
+    verdict = user.ai_supports_tools
+    if verdict is not False:
+        return verdict
+    checked_at = user.ai_tools_checked_at
+    if checked_at is None:
+        return None
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=UTC)
+    now = now or datetime.now(UTC)
+    if checked_at < PROBE_REVISED_AT or now - checked_at > NEGATIVE_VERDICT_TTL:
+        return None
+    return False
+
+
 async def ensure_tool_support(db: AsyncSession, user: User) -> bool | None:
     """Checks and caches tool support for a stored credential, at most once.
 
@@ -107,8 +146,9 @@ async def ensure_tool_support(db: AsyncSession, user: User) -> bool | None:
         The cached or newly measured support, or ``None`` for a keyless user
         or when the provider gave no answer this time.
     """
-    if user.ai_supports_tools is not None:
-        return user.ai_supports_tools
+    cached = cached_tool_support(user)
+    if cached is not None:
+        return cached
 
     try:
         config = LLMConfig.from_user(user)

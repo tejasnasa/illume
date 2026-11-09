@@ -38,7 +38,7 @@ from app.services.retrieval.config import (
     MAX_CONTEXT_WINDOW,
     MIN_CONTEXT_WINDOW,
 )
-from app.services.tool_support import check_tool_support
+from app.services.tool_support import cached_tool_support, check_tool_support
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +226,7 @@ async def me(current_user: User = Depends(get_current_user)):
         ai_provider=current_user.ai_provider,
         ai_model=current_user.ai_model,
         has_ai_key=bool(current_user.ai_api_key),
-        ai_supports_tools=current_user.ai_supports_tools,
+        ai_supports_tools=cached_tool_support(current_user),
         ai_context_window=current_user.ai_context_window,
         free_ingestions_used=current_user.free_ingestions_used,
         free_chat_messages_used=current_user.free_chat_messages_used,
@@ -685,7 +685,7 @@ async def get_ai_credentials(current_user: User = Depends(get_current_user)):
         model=current_user.ai_model,
         has_key=bool(current_user.ai_api_key),
         validated_at=current_user.ai_key_validated_at,
-        supports_tools=current_user.ai_supports_tools,
+        supports_tools=cached_tool_support(current_user),
         tools_checked_at=current_user.ai_tools_checked_at,
     )
 
@@ -740,7 +740,7 @@ async def put_ai_credentials(
         model=current_user.ai_model,
         has_key=bool(current_user.ai_api_key),
         validated_at=current_user.ai_key_validated_at,
-        supports_tools=current_user.ai_supports_tools,
+        supports_tools=cached_tool_support(current_user),
         tools_checked_at=current_user.ai_tools_checked_at,
     )
 

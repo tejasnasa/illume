@@ -21,6 +21,7 @@ Pins the five things the save flow can do wrong:
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -32,6 +33,7 @@ from sqlalchemy import select
 from app.models.user import User
 from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_providers import PROVIDERS
+from app.services.tool_support import NEGATIVE_VERDICT_TTL, PROBE_REVISED_AT
 from tests.factories import make_user
 from tests.helpers import authenticate
 
@@ -802,8 +804,9 @@ class TestToolSupportProbe:
     """The second probe records function-calling support; it never rejects a key.
 
     The shape of the request is asserted from the wire body, which also pins
-    the tool definition and ``tool_choice: "required"`` -- the two details a
-    provider needs in order to answer the question at all.
+    the tool definition and ``tool_choice: "auto"`` -- the way the agent asks
+    for tools, since some providers refuse ``"required"`` but call tools under
+    ``"auto"``.
     """
 
     @respx.mock
@@ -835,11 +838,11 @@ class TestToolSupportProbe:
         assert stored.ai_supports_tools is True
         assert stored.ai_tools_checked_at is not None
 
-        # The second request is the tool probe: one ping function, required.
+        # The second request is the tool probe: one ping function, asked as the agent asks.
         requests = [json.loads(call.request.content) for call in route.calls]
         assert len(requests) == 2
         tool_request = requests[1]
-        assert tool_request["tool_choice"] == "required"
+        assert tool_request["tool_choice"] == "auto"
         assert tool_request["tools"][0]["type"] == "function"
         assert tool_request["tools"][0]["name"] == "ping"
 
@@ -960,7 +963,7 @@ class TestLazyToolSupport:
         assert route.call_count == 1
 
     @respx.mock
-    async def test_a_measured_false_is_not_reprobed(self, db_session):
+    async def test_a_recent_false_is_not_reprobed(self, db_session):
         from app.services.tool_support import ensure_tool_support
 
         route = respx.post(OPENAI_RESPONSES_URL).mock(
@@ -973,10 +976,39 @@ class TestLazyToolSupport:
             ai_model="gpt-4o-mini",
         )
         user.ai_supports_tools = False
+        user.ai_tools_checked_at = datetime.now(UTC)
         await db_session.flush()
 
         assert await ensure_tool_support(db_session, user) is False
         assert route.call_count == 0
+
+    @respx.mock
+    @pytest.mark.parametrize(
+        "checked_at",
+        [None, PROBE_REVISED_AT - timedelta(days=1), "expired"],
+        ids=["no-timestamp", "before-the-probe-changed", "expired"],
+    )
+    async def test_a_stale_false_is_measured_again(self, db_session, checked_at):
+        from app.services.tool_support import ensure_tool_support
+
+        route = respx.post(OPENAI_RESPONSES_URL).mock(
+            return_value=httpx.Response(200, json=_responses_payload(function_call=True))
+        )
+        user = await make_user(
+            db_session,
+            ai_api_key="sk-test-key-12345",
+            ai_provider="openai",
+            ai_model="gpt-4o-mini",
+        )
+        if checked_at == "expired":
+            checked_at = datetime.now(UTC) - NEGATIVE_VERDICT_TTL - timedelta(hours=1)
+        user.ai_supports_tools = False
+        user.ai_tools_checked_at = checked_at
+        await db_session.flush()
+
+        assert await ensure_tool_support(db_session, user) is True
+        assert route.call_count == 1
+        assert user.ai_supports_tools is True
 
     @respx.mock
     async def test_a_server_error_is_retried_on_the_next_request(self, db_session):
