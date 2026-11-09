@@ -72,3 +72,15 @@ export interface Stats {
   knowledge_silo_count: number;
   total_dependencies: number;
 }
+
+/** One merged pull request or commit on the overview's activity list. */
+export interface ActivityItem {
+  kind: "pull_request" | "commit";
+  title: string;
+  author: string;
+  /** ISO timestamp of the merge or the commit. */
+  at: string;
+  number: number | null;
+  hash: string | null;
+  files_changed: number;
+}

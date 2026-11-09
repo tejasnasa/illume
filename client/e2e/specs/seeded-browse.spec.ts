@@ -98,10 +98,14 @@ test.describe("the repository overview", () => {
     await expect(page.getByText(/A small fixture repository used by the end-to-end/)).toBeVisible();
   });
 
-  test("renders the chat panel", async ({ page }) => {
+  test("links to the chat page instead of embedding the chat", async ({ page }) => {
     await page.goto(home);
 
-    await expect(page.getByRole("heading", { name: /Chat with Codebase/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Chat with Codebase/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Chat", exact: true })).toHaveAttribute(
+      "href",
+      `${home}/chat`,
+    );
   });
 });
 

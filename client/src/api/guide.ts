@@ -3,7 +3,7 @@
  * @module GuideApi
  */
 
-import Guide, { Stats } from "@/types/guide";
+import Guide, { ActivityItem, Stats } from "@/types/guide";
 import { headers } from "next/headers";
 
 /**
@@ -50,4 +50,28 @@ export async function GetGuideStats(id: string): Promise<Stats> {
   const data = await res.json();
 
   return data;
+}
+
+/**
+ * Fetches the latest merged pull requests and commits for a repository.
+ *
+ * @param id - ID of the repository.
+ * @param limit - The most items to return.
+ * @returns Activity items, newest first.
+ * @throws Error if the fetch fails.
+ */
+export async function GetRecentActivity(id: string, limit = 6): Promise<ActivityItem[]> {
+  const res = await fetch(
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/activity?limit=${limit}`,
+    {
+      headers: { cookie: (await headers()).get("cookie") ?? "" },
+      cache: "no-store",
+    },
+  );
+
+  if (!res.ok) throw new Error("Failed to fetch recent activity");
+
+  const data: { items: ActivityItem[] } = await res.json();
+
+  return data.items;
 }
