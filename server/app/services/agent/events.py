@@ -589,8 +589,9 @@ class EventTranslator:
                 return one(EventType.RETRIEVAL, data)
             case "plan":
                 translated = one(EventType.PLAN, data)
-                for position, sub in enumerate(translated[0].data["subquestions"], start=1):
-                    self._questions[f"w{position}"] = sub["question"]
+                # Each sub-question's id is the id of the worker that takes it.
+                for sub in translated[0].data["subquestions"]:
+                    self._questions[sub["id"]] = sub["question"]
                 return translated
             case "node":
                 if data.get("node") != "worker" or worker_id is None:

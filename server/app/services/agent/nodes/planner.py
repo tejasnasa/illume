@@ -38,11 +38,10 @@ PLAN_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "id": {"type": "string"},
                     "question": {"type": "string"},
                     "focus": {"type": "string", "enum": ["code", "graph", "history"]},
                 },
-                "required": ["id", "question", "focus"],
+                "required": ["question", "focus"],
                 "additionalProperties": False,
             },
         },
@@ -53,12 +52,21 @@ PLAN_SCHEMA: dict[str, Any] = {
 }
 
 
+def worker_id(position: int) -> str:
+    """The id of the worker that takes the sub-question at ``position`` (from 1)."""
+    return f"w{position}"
+
+
 def parse_plan(value: Any, *, max_workers: int, min_subquestions: int) -> Plan | None:
     """Turns a parsed model answer into a plan, or ``None`` when it is unusable.
 
-    Empty questions are dropped, an unknown focus becomes ``code``, missing ids
-    are numbered, and a plan longer than ``max_workers`` is cut to it. A plan
-    with fewer than ``min_subquestions`` entries is not worth fanning out.
+    Empty questions are dropped, an unknown focus becomes ``code``, and a plan
+    longer than ``max_workers`` is cut to it. A plan with fewer than
+    ``min_subquestions`` entries is not worth fanning out.
+
+    Each sub-question is numbered ``w1``, ``w2``, ... in order, which is the id
+    of the worker that will take it, so the plan and the workers' own events
+    name the same lane.
 
     Args:
         value: The parsed JSON value the model returned.
@@ -72,24 +80,16 @@ def parse_plan(value: Any, *, max_workers: int, min_subquestions: int) -> Plan |
         return None
 
     subquestions: list[SubQuestion] = []
-    seen: set[str] = set()
-    for index, entry in enumerate(raw):
+    for entry in raw:
         if not isinstance(entry, dict):
             continue
         question = entry.get("question")
         if not isinstance(question, str) or not question.strip():
             continue
-        identifier = entry.get("id")
-        if not isinstance(identifier, str) or not identifier.strip():
-            identifier = f"q{index + 1}"
-        identifier = identifier.strip()
-        if identifier in seen:
-            identifier = f"{identifier}_{index + 1}"
-        seen.add(identifier)
         focus = entry.get("focus")
         subquestions.append(
             SubQuestion(
-                id=identifier,
+                id=worker_id(len(subquestions) + 1),
                 question=question.strip(),
                 focus=focus if focus in FOCUSES else "code",
             )

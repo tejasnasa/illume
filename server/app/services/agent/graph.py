@@ -42,6 +42,7 @@ from app.services.agent.nodes import (
     make_tools_node,
     make_worker_node,
 )
+from app.services.agent.nodes.planner import worker_id
 from app.services.agent.nodes.worker import WorkerInput, worker_items
 from app.services.agent.state import AgentState
 
@@ -85,7 +86,7 @@ def _after_planner(state: AgentState) -> str | list[Send]:
         Send(
             "worker",
             WorkerInput(
-                worker_id=f"w{index}",
+                worker_id=worker_id(index),
                 subquestion=subquestion,
                 items=worker_items(state["items"], subquestion, question),
                 evidence=dict(state["evidence"]),

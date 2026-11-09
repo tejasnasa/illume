@@ -45,7 +45,7 @@ SAMPLES: dict[Event, dict] = {
     Event.SEED: {"keys": ["F:a.py:1-2"], "standalone_question": "q", "channels": {"dense": 3}},
     Event.PLAN: {
         "skipped": False,
-        "subquestions": [{"id": "a", "question": "first?", "focus": "code"}],
+        "subquestions": [{"id": "w1", "question": "first?", "focus": "code"}],
         "synthesis_hint": "",
         "model": "m",
     },

@@ -186,7 +186,7 @@ class TestFanOut:
         assert result.answer.startswith("Passwords are checked")
         assert result.cited == (env.auth_key, env.user_key)
         assert result.plan is not None
-        assert [sub.id for sub in result.plan.subquestions] == ["auth", "users"]
+        assert [sub.id for sub in result.plan.subquestions] == ["w1", "w2"]
         assert [worker.status for worker in result.workers] == ["completed", "completed"]
         assert [worker.question for worker in result.workers] == [AUTH_QUESTION, USER_QUESTION]
 

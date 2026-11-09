@@ -228,8 +228,11 @@ class TestStreamShape:
 
         [plan] = of_type(events, "plan")
         assert plan["data"]["skipped"] is False
-        assert [sub["id"] for sub in plan["data"]["subquestions"]] == ["auth", "users"]
+        assert [sub["id"] for sub in plan["data"]["subquestions"]] == ["w1", "w2"]
         started = of_type(events, "worker_started")
+        # The plan names each lane by the id its worker reports, so a client
+        # draws one lane per sub-question, not one per id it has seen.
+        assert {e["data"]["worker_id"] for e in started} == {"w1", "w2"}
         done = of_type(events, "worker_done")
         assert {e["worker_id"] for e in started} == {"w1", "w2"}
         assert {e["worker_id"] for e in done} == {"w1", "w2"}

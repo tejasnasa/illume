@@ -47,7 +47,7 @@ class TestParsePlan:
         )
 
         assert plan is not None
-        assert [sub.id for sub in plan.subquestions] == ["a", "b"]
+        assert [sub.id for sub in plan.subquestions] == ["w1", "w2"]
         assert [sub.focus for sub in plan.subquestions] == ["code", "graph"]
         assert plan.synthesis_hint == "Lead with the flow."
 
@@ -85,7 +85,7 @@ class TestParsePlan:
         assert plan is not None
         assert [sub.question for sub in plan.subquestions] == ["first", "second"]
         assert all(sub.focus == "code" for sub in plan.subquestions)
-        assert plan.subquestions[1].id == "q3"
+        assert [sub.id for sub in plan.subquestions] == ["w1", "w2"]
         assert plan.synthesis_hint == ""
 
     @pytest.mark.parametrize("value", [None, [], "plan", {"subquestions": "two"}, {}])
