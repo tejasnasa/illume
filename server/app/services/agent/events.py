@@ -239,6 +239,19 @@ class WorkerDoneData(BaseModel):
     stop_reason: str | None = None
 
 
+class QueryData(BaseModel):
+    """One phrasing of the question a retrieval searched with.
+
+    Attributes:
+        text: The text searched for.
+        kind: How it was produced: the question itself, a rewrite, or a
+            hypothetical snippet.
+    """
+
+    text: str
+    kind: str
+
+
 class RetrievalData(BaseModel):
     """``retrieval``: a retrieval ran.
 
@@ -249,6 +262,7 @@ class RetrievalData(BaseModel):
         channels: Candidates returned per channel.
         keys: The citation keys kept after fusion and reranking, best first.
         reranker: The reranker that ran.
+        queries: Every phrasing the channels searched with, the question first.
     """
 
     source: str = "pipeline"
@@ -256,13 +270,15 @@ class RetrievalData(BaseModel):
     channels: dict[str, int] = Field(default_factory=dict)
     keys: list[str] = Field(default_factory=list)
     reranker: str | None = None
+    queries: list[QueryData] = Field(default_factory=list)
 
 
 class ThinkingData(BaseModel):
-    """``thinking``: interim model text."""
+    """``thinking``: interim model text, or its reasoning when ``kind`` says so."""
 
     iteration: int | None = None
     text: str
+    kind: Literal["text", "reasoning"] = "text"
 
 
 class ToolCallData(BaseModel):

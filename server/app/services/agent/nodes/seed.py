@@ -15,45 +15,11 @@ from app.services.agent.deps import AgentDeps
 from app.services.agent.events import Event
 from app.services.agent.prompts import seed_message
 from app.services.agent.state import AgentState, Evidence
-from app.services.retrieval.candidate import Candidate
-from app.services.retrieval.context import SOURCE_LABELS, render_block
+from app.services.retrieval.candidate import query_payload
+from app.services.retrieval.context import SOURCE_LABELS
 from app.services.retrieval.pipeline import retrieve
 
 logger = logging.getLogger(__name__)
-
-
-async def _screen(deps: AgentDeps, candidates: list[Candidate], step: int) -> dict[str, str]:
-    """Screens the retrieval results; returns the replacement text of each withheld one."""
-    if not deps.config.checks.guard or not candidates:
-        return {}
-
-    async def degraded(reason: str) -> None:
-        await deps.event(Event.DEGRADED, {"stage": "guard", "reason": reason})
-
-    decisions = await judge_texts(
-        [render_block(candidate) for candidate in candidates],
-        deps.decider,
-        threshold=deps.config.checks.injection_threshold,
-        record=deps.decision_sink("guard"),
-        on_degraded=degraded,
-    )
-    withheld: dict[str, str] = {}
-    for candidate, decision in zip(candidates, decisions, strict=True):
-        if not decision.suspicious:
-            continue
-        withheld[candidate.key] = quarantine_block(candidate.key, decision.probability)
-        await deps.budget.note_quarantine()
-        payload = {
-            "tool": "seed",
-            "key": candidate.key,
-            "keys": [candidate.key],
-            "probability": decision.probability,
-            "step": step,
-        }
-        # The original goes to the step log only; the event never carries it.
-        await deps.record("quarantine", "seed", {**payload, "text": candidate.text})
-        await deps.event(Event.QUARANTINE, payload)
-    return withheld
 
 
 def make_seed_node(deps: AgentDeps):
@@ -115,6 +81,7 @@ def make_seed_node(deps: AgentDeps):
                 "standalone_question": result.question,
                 "channels": channels,
                 "reranker": result.trace.reranker,
+                "queries": query_payload(result.variants),
             },
         )
         return {

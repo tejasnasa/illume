@@ -100,6 +100,7 @@ class Turn:
         error: Raised from the call instead of replying.
         before: Awaited before replying, to hold the call or change the world.
         status: The response status.
+        stall_after_text: Stream the text, then never finish the response.
     """
 
     output: list[dict[str, Any]] = field(default_factory=list)
@@ -368,41 +369,7 @@ class PlanDecider:
         raise AssertionError("the agent asks no score questions")
 
     async def batch(self, state: Any, questions: Any):
-        """Answers screening and citation batches from the supplied lists."""
-        if self.fail_batch:
-            raise RuntimeError("the decision service is down")
-        self.batches.append((state, dict(questions)))
-        answers: dict[str, Any] = {}
-        for name, question in questions.items():
-            if getattr(question, "type", None) == "noul":
-                probability = (
-                    self._screening.pop(0) if len(self._screening) > 1 else self._screening[0]
-                )
-                answers[name] = NoulResult(
-                    noul=probability,
-                    confidence=0.9,
-                    latency_ms=1.0,
-                    model=self.model_id,
-                    provider="fake",
-                    defaulted=self.defaulted,
-                )
-            else:
-                options = dict(getattr(question, "criteria", {}) or {})
-                choice = (
-                    self._verdicts.pop(0)
-                    if self._verdicts
-                    else ("supports" if "supports" in options else next(iter(options), "supports"))
-                )
-                answers[name] = ChoiceResult(
-                    choice=choice,
-                    probabilities={choice: 0.9},
-                    confidence=0.9,
-                    latency_ms=1.0,
-                    model=self.model_id,
-                    provider="fake",
-                    defaulted=self.defaulted,
-                )
-        return answers
+        raise AssertionError("the agent asks no batched questions")
 
 
 # --- configuration -----------------------------------------------------------------------

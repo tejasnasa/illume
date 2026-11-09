@@ -256,24 +256,6 @@ class TestFanOut:
         assert "`create_user` is defined" in sent
         assert env.auth_key in sent and env.user_key in sent
 
-    async def test_a_rejected_merge_is_continued_not_restarted(self, env):
-        # The gate turns the merged answer down once; the agent that picks the
-        # run up must see what the workers concluded, not just the seed.
-        model = two_workers(env)
-
-        ran = await run(
-            env,
-            model,
-            config=planner_config(gate=True),
-            decider=SufficiencyDecider(1.0, 0.0, 0.95),
-        )
-
-        assert ran.result.stop_reason is StopReason.FINISHED
-        assert ran.result.answer == "A single agent answered."
-        [resumed] = model.tagged("fallback")
-        sent = "\n".join(_strings(resumed["input"]))
-        assert message_answer(env) in sent
-
 
 def _strings(value: Any) -> list[str]:
     found: list[str] = []

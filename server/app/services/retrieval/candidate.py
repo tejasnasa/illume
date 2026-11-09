@@ -40,6 +40,11 @@ class QueryVariant:
     index: int = 0
 
 
+def query_payload(variants: Sequence[QueryVariant]) -> list[dict[str, str]]:
+    """The variants a retrieval searched with, in the shape its event reports them."""
+    return [{"text": variant.text, "kind": variant.kind} for variant in variants]
+
+
 @dataclass(frozen=True)
 class ChannelHit:
     """Where one channel ranked one candidate.

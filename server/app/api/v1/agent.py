@@ -130,6 +130,8 @@ class AgentRunSummary(BaseModel):
         tool_calls: Tool calls made.
         iterations: Model turns taken.
         latency_ms: Wall time of the run.
+        input_tokens: Tokens the model read across the run.
+        output_tokens: Tokens the model wrote across the run.
         error: Why it failed, when it did.
         created_at: When it started.
         finished_at: When it ended.
@@ -147,6 +149,8 @@ class AgentRunSummary(BaseModel):
     tool_calls: int | None
     iterations: int | None
     latency_ms: int | None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     error: str | None
     created_at: datetime
     finished_at: datetime | None
@@ -184,6 +188,8 @@ def _summary_fields(run: AgentRun, status: str) -> dict[str, Any]:
         "tool_calls": run.tool_calls,
         "iterations": run.iterations,
         "latency_ms": run.latency_ms,
+        "input_tokens": (run.usage or {}).get("input_tokens"),
+        "output_tokens": (run.usage or {}).get("output_tokens"),
         "error": run.error,
         "created_at": run.created_at,
         "finished_at": run.finished_at,

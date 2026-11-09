@@ -66,9 +66,13 @@ def make_merge_node(deps: AgentDeps):
         async def delta(text: str) -> None:
             await deps.event(Event.ANSWER_DELTA, {"text": text})
 
+        async def reasoning(text: str) -> None:
+            await deps.event(Event.THINKING, {"text": text, "kind": "reasoning"})
+
         response = await stream_response(
             deps.client,
             delta,
+            on_reasoning=reasoning,
             model=deps.llm.model,
             input=items,
             max_output_tokens=SYNTHESIS_MAX_OUTPUT_TOKENS,

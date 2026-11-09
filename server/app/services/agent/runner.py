@@ -282,19 +282,30 @@ async def run_agent(
         ValueError: When ``config`` has no agent settings.
     """
     run_id = run_id or uuid.uuid4()
-    sink: Emit = emit if emit is not None else _discard
+    outer: Emit = emit if emit is not None else _discard
+    hard_limit: asyncio.Timeout | None = None
+    partial: list[str] = []
+
+    async def sink(event: str, payload: dict[str, Any]) -> None:
+        # Watches the main agent's answer: what has been written so far is kept
+        # for a timeout, and starting to write buys the answer time to finish.
+        if "worker_id" not in payload:
+            if event == Event.NODE and payload.get("node") in _ANSWER_NODES:
+                if payload.get("phase") == "started":
+                    partial.clear()
+                    if hard_limit is not None and hard_limit.when() is not None:
+                        grace = asyncio.get_running_loop().time() + FINAL_ANSWER_GRACE_SECONDS
+                        hard_limit.reschedule(max(hard_limit.when() or 0, grace))
+            elif event == Event.ANSWER_DELTA:
+                partial.append(str(payload.get("text") or ""))
+        await outer(event, payload)
+
     recorder: StepRecorder = steps if steps is not None else InMemorySteps()
     agent_config = _effective_agent(config, context_window)
 
     budget = RunBudget(agent_config, emit=sink, clock=clock)
     the_brief = brief or await load_repo_brief(session_factory, repository)
     the_decider = decider if decider is not None else _build_decider(config, llm, sink, run_id)
-    if config.checks.gate and the_decider is None:
-        await safe_emit(
-            sink,
-            Event.DEGRADED,
-            {"stage": "gate", "reason": "no decider is available; the sufficiency check is off"},
-        )
 
     tool_ctx = ToolContext(
         run_id=run_id,
@@ -323,26 +334,6 @@ async def run_agent(
         system_prompt=build_system_prompt(the_brief),
         decider=the_decider,
     )
-    if deps.verifier is None and config.checks.verify:
-        if the_decider is None:
-            await safe_emit(
-                sink,
-                Event.DEGRADED,
-                {"stage": "verify", "reason": "no decider is available; citations are not checked"},
-            )
-        else:
-            deps.verifier = build_verifier(deps)
-    if deps.round_screen is None and config.checks.guard:
-        if the_decider is None:
-            await safe_emit(
-                sink,
-                Event.DEGRADED,
-                {
-                    "stage": "guard",
-                    "reason": "no decider is available; repository text is withheld",
-                },
-            )
-        deps.round_screen = build_guard(deps)
     turns = [ChatTurn(role=m.role, content=m.content) for m in history]  # type: ignore[arg-type]
     replayed = turns[-config.query.history_messages :] if config.query.history_messages else []
     state = initial_state(
@@ -517,9 +508,6 @@ async def _result(
         route=state["route"],
         plan=plan,
         workers=workers,
-        verification=state["verification"],
-        repair_rounds=state["repair_rounds"],
-        quarantines=usage.quarantines,
         error=error,
     )
 

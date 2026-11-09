@@ -11,6 +11,12 @@ TextSink = Callable[[str], Awaitable[None]]
 
 _TERMINAL = frozenset({"response.completed", "response.incomplete"})
 
+# Providers stream reasoning under one of these, depending on whether they
+# expose the raw chain of thought or a summary of it.
+_REASONING_DELTAS = frozenset(
+    {"response.reasoning_text.delta", "response.reasoning_summary_text.delta"}
+)
+
 
 def output_item(item: Any) -> dict[str, Any]:
     """One output item as a plain dict, ready to be sent back as input.
@@ -35,11 +41,18 @@ def message_text(items: list[dict[str, Any]]) -> str:
     return "".join(parts)
 
 
-async def stream_response(client: Any, on_text: TextSink | None = None, **request: Any) -> Any:
+async def stream_response(
+    client: Any,
+    on_text: TextSink | None = None,
+    *,
+    on_reasoning: TextSink | None = None,
+    **request: Any,
+) -> Any:
     """Calls ``client.responses.create`` with streaming and returns the final response.
 
-    Text deltas are passed to ``on_text`` as they arrive, so a listener can show
-    the model thinking aloud. The response returned is the provider's own final
+    Text deltas are passed to ``on_text`` as they arrive, and reasoning deltas,
+    from providers that stream them, to ``on_reasoning``, so a listener can show
+    the model thinking. The response returned is the provider's own final
     object, whose ``output`` and ``usage`` are the source of truth.
 
     Raises:
@@ -54,6 +67,10 @@ async def stream_response(client: Any, on_text: TextSink | None = None, **reques
             delta = getattr(event, "delta", "") or ""
             if delta and on_text is not None:
                 await on_text(delta)
+        elif kind in _REASONING_DELTAS:
+            delta = getattr(event, "delta", "") or ""
+            if delta and on_reasoning is not None:
+                await on_reasoning(delta)
         elif kind in _TERMINAL:
             final = event.response
         elif kind == "response.failed":

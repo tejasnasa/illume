@@ -215,6 +215,9 @@ class TestStreamShape:
         assert retrieval["source"] == "pipeline"
         assert retrieval["keys"]
         assert set(retrieval["channels"]) >= {"lexical", "symbol"}
+        # The question itself is always the first phrasing searched.
+        assert retrieval["queries"][0]["kind"] in ("original", "condensed")
+        assert retrieval["queries"][0]["text"]
 
     async def test_a_planner_run_tags_worker_events_with_their_lane(
         self, app, client, db_session, world
@@ -241,24 +244,6 @@ class TestStreamShape:
         assert events[-1]["type"] == "done"
         assert events[-1]["data"]["answer"].startswith("Passwords are checked")
         assert events[-1]["worker_id"] is None
-
-    async def test_withheld_text_is_reported_as_a_guard_event_without_its_content(
-        self, app, client, db_session, world
-    ):
-        install(
-            app,
-            db_session,
-            agent_model(world),
-            decider=SufficiencyDecider(1.0, screening=0.99),
-        )
-
-        _, events = await stream(client, world.repo, preset="deep_agent")
-
-        guards = [e["data"] for e in of_type(events, "guard")]
-        assert guards
-        assert all(g["quarantined"] is True and g["probability"] == 0.99 for g in guards)
-        assert all(g["key"] for g in guards)
-        assert "text" not in guards[0]
 
 
 # --- what is stored ------------------------------------------------------------------
@@ -557,6 +542,21 @@ class TestListing:
         assert [r["question"] for r in everything] == ["newest", "middle", "oldest"]
         assert [r["question"] for r in limited] == ["newest", "middle"]
         assert "events" not in everything[0] and "answer" not in everything[0]
+
+    async def test_each_run_carries_the_tokens_it_spent(self, client, db_session, world):
+        await insert_run(
+            db_session,
+            world,
+            status="done",
+            usage={"input_tokens": 1200, "output_tokens": 340, "tool_calls": 3},
+        )
+        await insert_run(db_session, world, status="done", question="no usage")
+
+        listed = {r["question"]: r for r in (await client.get(runs_url(world.repo))).json()}
+
+        assert listed["q"]["input_tokens"] == 1200
+        assert listed["q"]["output_tokens"] == 340
+        assert listed["no usage"]["input_tokens"] is None
 
     async def test_the_limit_is_bounded(self, client, world):
         assert (await client.get(runs_url(world.repo), params={"limit": 0})).status_code == 422

@@ -396,46 +396,6 @@ def seed_message(candidates: Sequence[Candidate]) -> str:
     )
 
 
-def gate_feedback_message(probability: float) -> str:
-    """The message that sends the agent back after the sufficiency check rejects."""
-    return (
-        f"A reviewer judged the evidence insufficient (p = {probability:.2f}). "
-        "State what is missing, then continue with the tools to find it."
-    )
-
-
-_VERDICT_REASON: dict[ClaimVerdict, str] = {
-    ClaimVerdict.UNSUPPORTED: "which does not support it",
-    ClaimVerdict.CONTRADICTED: "which contradicts it",
-    ClaimVerdict.UNRESOLVED_KEY: "which the investigation never retrieved",
-}
-
-
-def _repair_line(finding: ClaimCheck) -> str:
-    """One failing claim, naming the claim and every key it cited."""
-    keys = dict.fromkeys((*finding.keys, *finding.unresolved))
-    cited = ", ".join(keys) or "no key"
-    reason = _VERDICT_REASON.get(finding.verdict, "which does not support it")
-    return f'- Claim {finding.index} cites {cited}, {reason}: "{finding.claim}"'
-
-
-def repair_feedback_message(claims: Sequence[str | ClaimCheck]) -> str:
-    """The message that sends the agent back to fix claims their citations do not support.
-
-    Args:
-        claims: The failing claims. A ``ClaimCheck`` names its keys and its
-            verdict; a bare string is kept for callers that have only sentences.
-    """
-    listed = "\n".join(
-        _repair_line(claim) if isinstance(claim, ClaimCheck) else f"- {claim}" for claim in claims
-    )
-    return (
-        "A reviewer found claims in your answer that the cited evidence does not support:\n"
-        f"{listed}\n"
-        "Find evidence for them or remove them, then finish again."
-    )
-
-
 NO_TOOL_CALL_NUDGE = (
     "You replied without calling a tool and have gathered no evidence yet. Use the tools to "
     "look at the repository, then call finish with your answer."

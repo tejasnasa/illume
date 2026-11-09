@@ -96,60 +96,6 @@ def jev(monkeypatch):
         yield route
 
 
-class SupportingDecider:
-    """A decider that says every cited claim's evidence supports it, and never calls out."""
-
-    kind = "fake"
-    model_id = "fake-decider"
-
-    async def choice(self, state, instructions, options):
-        raise AssertionError("verification uses the batch interface")
-
-    async def score(self, state, instructions, levels):
-        raise AssertionError("verification asks no score questions")
-
-    async def noul(self, state, instructions):
-        raise AssertionError("the single-shot verifier asks no noul questions")
-
-    async def batch(self, state, questions):
-        return {
-            name: ChoiceResult(
-                choice="supports",
-                probabilities={"supports": 0.9},
-                confidence=0.9,
-                latency_ms=1.0,
-                model=self.model_id,
-                provider="fake",
-            )
-            for name in questions
-        }
-
-
-class VerdictDecider(SupportingDecider):
-    """A batch decider that gives one fixed verdict to every citation question."""
-
-    def __init__(self, verdict: str) -> None:
-        self.verdict = verdict
-
-    async def batch(self, state, questions):
-        return {
-            name: ChoiceResult(
-                choice=self.verdict,
-                probabilities={self.verdict: 0.9},
-                confidence=0.9,
-                latency_ms=1.0,
-                model=self.model_id,
-                provider="fake",
-            )
-            for name in questions
-        }
-
-
-@pytest.fixture
-def verification() -> SupportingDecider:
-    return SupportingDecider()
-
-
 def context_for(db, seeded, emit=None):
     ctx = make_context(db, seeded.repo, {QUESTION: VERIFY_VECTOR})
     if emit is not None:

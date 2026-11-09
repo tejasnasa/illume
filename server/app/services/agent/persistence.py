@@ -79,6 +79,9 @@ MAX_CITATION_CHARS = 4000
 
 EVENT_KIND = "event"
 
+# Event types whose text arrives a token at a time and is coalesced.
+_STREAMED_TEXT = frozenset({EventType.ANSWER_DELTA, EventType.THINKING})
+
 _PREVIEW_BYTES = MAX_PAYLOAD_BYTES - 1024
 
 
@@ -147,6 +150,8 @@ class RunRecorder:
         self._events_dropped = 0
         self._delta: list[str] = []
         self._delta_worker: str | None = None
+        self._delta_type = EventType.ANSWER_DELTA
+        self._delta_meta: dict[str, Any] = {}
         self._delta_since = 0.0
 
     @property
@@ -169,12 +174,12 @@ class RunRecorder:
         return self._publish(event_type, data, worker_id)
 
     def flush_deltas(self) -> None:
-        """Publishes any buffered answer text."""
+        """Publishes any buffered answer or thinking text."""
         if not self._delta:
             return
         text, worker = "".join(self._delta), self._delta_worker
         self._delta = []
-        self._publish(EventType.ANSWER_DELTA, {"text": text}, worker)
+        self._publish(self._delta_type, {**self._delta_meta, "text": text}, worker)
 
     def end_stream(self) -> None:
         """Tells the streaming response there is nothing more."""
@@ -182,20 +187,27 @@ class RunRecorder:
         self.stream.put_nowait(None)
 
     def _accept(self, translated: Translated) -> None:
-        if translated.type is EventType.ANSWER_DELTA:
+        if translated.type in _STREAMED_TEXT:
             self._buffer_delta(translated)
             return
         self.flush_deltas()
         self._publish(translated.type, translated.data, translated.worker_id)
 
     def _buffer_delta(self, translated: Translated) -> None:
-        """Coalesces answer text so a token stream does not become a row per token."""
-        if self._delta and self._delta_worker != translated.worker_id:
+        """Coalesces streamed text so a token stream does not become a row per token."""
+        meta = {key: value for key, value in translated.data.items() if key != "text"}
+        if self._delta and (
+            self._delta_worker != translated.worker_id
+            or self._delta_type is not translated.type
+            or self._delta_meta != meta
+        ):
             self.flush_deltas()
         now = time.monotonic()
         if not self._delta:
             self._delta_since = now
             self._delta_worker = translated.worker_id
+            self._delta_type = translated.type
+            self._delta_meta = meta
         self._delta.append(str(translated.data.get("text", "")))
         if (
             sum(len(piece) for piece in self._delta) >= DELTA_FLUSH_CHARS

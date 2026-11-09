@@ -237,9 +237,3 @@ class TestOwnKey:
     def test_the_server_maximum_is_the_most_generous_presets(self):
         assert SERVER_AGENT_CEILINGS["max_iterations"] >= DEEP_AGENT.agent.max_iterations
         assert SERVER_AGENT_CEILINGS["max_tool_calls"] >= DEEP_AGENT.agent.max_tool_calls
-
-    def test_a_gate_on_a_single_shot_preset_is_refused_with_the_reason(self):
-        with pytest.raises(OverrideError, match="needs agent or planner") as raised:
-            apply_overrides(HYBRID, overrides(checks={"gate": True}), own_key=True)
-
-        assert not str(raised.value).startswith(":")

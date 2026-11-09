@@ -49,9 +49,13 @@ async def write_answer(deps: AgentDeps, state: AgentState, reason: StopReason) -
     async def delta(text: str) -> None:
         await deps.event(Event.ANSWER_DELTA, {"text": text})
 
+    async def reasoning(text: str) -> None:
+        await deps.event(Event.THINKING, {"text": text, "kind": "reasoning"})
+
     response = await stream_response(
         deps.client,
         delta,
+        on_reasoning=reasoning,
         model=deps.llm.model,
         input=items,
         max_output_tokens=SYNTHESIS_MAX_OUTPUT_TOKENS,
@@ -80,7 +84,9 @@ def make_synthesize_node(deps: AgentDeps):
     """Builds the synthesize node."""
 
     async def synthesize(state: AgentState) -> dict[str, Any]:
-        reason = state["stop_reason"] or StopReason.TEXT_REPLY
+        reason = state["stop_reason"] or (
+            StopReason.FINISHED if state["turn_end"] == "finish" else StopReason.TEXT_REPLY
+        )
         if reason is StopReason.FINISHED and state["draft"]:
             answer = state["draft"]
         else:

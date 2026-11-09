@@ -133,9 +133,16 @@ def make_agent_node(deps: AgentDeps):
         async def thinking(text: str) -> None:
             await deps.event(Event.THINKING, {"iteration": state["iteration"], "text": text})
 
+        async def reasoning(text: str) -> None:
+            await deps.event(
+                Event.THINKING,
+                {"iteration": state["iteration"], "text": text, "kind": "reasoning"},
+            )
+
         return await stream_response(
             deps.client,
             thinking,
+            on_reasoning=reasoning,
             model=deps.llm.model,
             input=items,
             tools=deps.tools,

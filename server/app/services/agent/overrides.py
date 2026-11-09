@@ -7,13 +7,13 @@ is a 422, because the models reject unknown fields.
 What a request may change depends on who pays for the extra calls:
 
 * On the free tier the operator pays, so a request may only make a run cheaper:
-  a budget may not exceed the preset's own, a check or the seed may be switched
-  off but not on, the channels may only be narrowed, and the reranker and query
+  a budget may not exceed the preset's own, the seed may be switched off but
+  not on, the channels may only be narrowed, and the reranker and query
   rewriting may only be turned off.
-* With the caller's own key, the drawer's switches are open: checks and the seed
-  may be switched on, channels added, and the reranker and query rewriting
-  chosen. Budgets may be raised only as far as the most generous preset allows,
-  never to the bounds the configuration models accept.
+* With the caller's own key, the drawer's switches are open: the seed may be
+  switched on, channels added, and the reranker and query rewriting chosen.
+  Budgets may be raised only as far as the most generous preset allows, never
+  to the bounds the configuration models accept.
 
 The context window stays inside the range a user may set in their account.
 """

@@ -2,7 +2,7 @@
   "envelope": {
     "$defs": {
       "EventType": {
-        "description": "The public event types, in the order a run usually produces them.\n\nAttributes:\n    RUN_STARTED: The run began.\n    ROUTE: The routing decision that chose the configuration.\n    PLAN: The question was split into sub-questions, or planning was skipped.\n    WORKER_STARTED: A parallel worker began a sub-question.\n    WORKER_DONE: A parallel worker ended.\n    RETRIEVAL: A retrieval ran: counts per channel and the keys it kept.\n    THINKING: A piece of the model's interim text.\n    TOOL_CALL: A tool call is about to run.\n    TOOL_RESULT: A tool call finished.\n    NODES: Files a tool looked at, for highlighting in the graph.\n    EVIDENCE: New citable evidence was gathered.\n    GUARD: Repository text was screened and withheld from the model.\n    GATE: The sufficiency check answered.\n    ANSWER_DELTA: A piece of the answer being written.\n    VERIFICATION: The citation check answered.\n    DEGRADED: A limit was reached or a stage fell back.\n    ERROR: The run failed.\n    DONE: The run ended with an answer.",
+        "description": "The public event types, in the order a run usually produces them.\n\nAttributes:\n    RUN_STARTED: The run began.\n    ROUTE: The routing decision that chose the configuration.\n    PLAN: The question was split into sub-questions, or planning was skipped.\n    WORKER_STARTED: A parallel worker began a sub-question.\n    WORKER_DONE: A parallel worker ended.\n    RETRIEVAL: A retrieval ran: counts per channel and the keys it kept.\n    THINKING: A piece of the model's interim text.\n    TOOL_CALL: A tool call is about to run.\n    TOOL_RESULT: A tool call finished.\n    NODES: Files a tool looked at, for highlighting in the graph.\n    EVIDENCE: New citable evidence was gathered.\n    ANSWER_DELTA: A piece of the answer being written.\n    DEGRADED: A limit was reached or a stage fell back.\n    ERROR: The run failed.\n    DONE: The run ended with an answer.",
         "enum": [
           "run_started",
           "route",
@@ -15,10 +15,7 @@
           "tool_result",
           "nodes",
           "evidence",
-          "guard",
-          "gate",
           "answer_delta",
-          "verification",
           "degraded",
           "error",
           "done"
@@ -88,7 +85,7 @@
       "type": "object"
     },
     "degraded": {
-      "description": "``degraded``: something worked with less than asked.\n\nAttributes:\n    stage: Where: ``budget``, ``context``, ``gate``, ``guard``, ``seed``,\n        ``planner``, ``verify``, ``worker``, ``decisions``, ``recording`` or\n        a retrieval stage.\n    limit: The limit reached, for budget stages.\n    used: How much of it was used.\n    allowed: How much was allowed.\n    reason: Why, when a stage fell back.\n    detail: Anything else the stage reported, such as a channel name.",
+      "description": "``degraded``: something worked with less than asked.\n\nAttributes:\n    stage: Where: ``budget``, ``context``, ``seed``, ``planner``,\n        ``worker``, ``decisions``, ``recording`` or a retrieval stage.\n    limit: The limit reached, for budget stages.\n    used: How much of it was used.\n    allowed: How much was allowed.\n    reason: Why, when a stage fell back.\n    detail: Anything else the stage reported, such as a channel name.",
       "properties": {
         "allowed": {
           "anyOf": [
@@ -283,56 +280,6 @@
           "title": "CitationData",
           "type": "object"
         },
-        "ClaimData": {
-          "description": "One claim of the answer and what the citation check found.",
-          "properties": {
-            "claim": {
-              "title": "Claim",
-              "type": "string"
-            },
-            "index": {
-              "title": "Index",
-              "type": "integer"
-            },
-            "keys": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Keys",
-              "type": "array"
-            },
-            "probability": {
-              "anyOf": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Probability"
-            },
-            "unresolved": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Unresolved",
-              "type": "array"
-            },
-            "verdict": {
-              "title": "Verdict",
-              "type": "string"
-            }
-          },
-          "required": [
-            "index",
-            "claim",
-            "verdict"
-          ],
-          "title": "ClaimData",
-          "type": "object"
-        },
         "UsageData": {
           "description": "What a run spent.\n\nAttributes:\n    input_tokens: Input tokens the providers reported.\n    output_tokens: Output tokens the providers reported.\n    tool_calls: Tool calls started.\n    iterations: Model turns taken.\n    elapsed_seconds: Wall time of the run.",
           "properties": {
@@ -364,45 +311,9 @@
           },
           "title": "UsageData",
           "type": "object"
-        },
-        "VerificationData": {
-          "description": "``verification``: what the citation check found.\n\nAttributes:\n    counts: Claims per verdict, plus the uncited count.\n    claims: Each claim and its verdict.\n    failed: Whether any claim failed the check.\n    repair: Whether the agent was sent back to repair claims.\n    defaulted: Whether the decider's output was unusable.",
-          "properties": {
-            "claims": {
-              "items": {
-                "$ref": "#/$defs/ClaimData"
-              },
-              "title": "Claims",
-              "type": "array"
-            },
-            "counts": {
-              "additionalProperties": {
-                "type": "integer"
-              },
-              "title": "Counts",
-              "type": "object"
-            },
-            "defaulted": {
-              "default": false,
-              "title": "Defaulted",
-              "type": "boolean"
-            },
-            "failed": {
-              "default": false,
-              "title": "Failed",
-              "type": "boolean"
-            },
-            "repair": {
-              "default": false,
-              "title": "Repair",
-              "type": "boolean"
-            }
-          },
-          "title": "VerificationData",
-          "type": "object"
         }
       },
-      "description": "``done``: the run ended with an answer.\n\nAttributes:\n    run_id: The run.\n    status: ``done``.\n    answer: The final answer.\n    citations: The evidence the answer cites.\n    unresolved: Cited keys, as written, that match nothing the run saw.\n    stop_reason: Why the run stopped.\n    usage: What the run spent.\n    verification: The citation check's report, when one ran.\n    chat_message_id: The saved chat turn, when it was saved.\n    steps_dropped: Records past the per-run cap that were not stored.\n    limits_reached: The limits the run hit, in order.",
+      "description": "``done``: the run ended with an answer.\n\nAttributes:\n    run_id: The run.\n    status: ``done``.\n    answer: The final answer.\n    citations: The evidence the answer cites.\n    unresolved: Cited keys, as written, that match nothing the run saw.\n    stop_reason: Why the run stopped.\n    usage: What the run spent.\n    chat_message_id: The saved chat turn, when it was saved.\n    steps_dropped: Records past the per-run cap that were not stored.\n    limits_reached: The limits the run hit, in order.",
       "properties": {
         "answer": {
           "title": "Answer",
@@ -461,17 +372,6 @@
         },
         "usage": {
           "$ref": "#/$defs/UsageData"
-        },
-        "verification": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/VerificationData"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
         }
       },
       "required": [
@@ -521,128 +421,6 @@
         "keys"
       ],
       "title": "EvidenceData",
-      "type": "object"
-    },
-    "gate": {
-      "description": "``gate``: whether the evidence was judged enough to answer.\n\nAttributes:\n    verdict: ``sufficient``, ``insufficient`` or ``exhausted``.\n    probability: The probability that the evidence suffices.\n    threshold: The probability at which it is accepted.\n    evidence_items: How many items were judged.\n    rejections: Times the gate has sent the agent back so far.\n    defaulted: Whether the decider's output was unusable.",
-      "properties": {
-        "defaulted": {
-          "default": false,
-          "title": "Defaulted",
-          "type": "boolean"
-        },
-        "evidence_items": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Evidence Items"
-        },
-        "probability": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Probability"
-        },
-        "rejections": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Rejections"
-        },
-        "threshold": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Threshold"
-        },
-        "verdict": {
-          "title": "Verdict",
-          "type": "string"
-        }
-      },
-      "required": [
-        "verdict"
-      ],
-      "title": "GateData",
-      "type": "object"
-    },
-    "guard": {
-      "description": "``guard``: repository text screened for instructions aimed at the model.\n\nAttributes:\n    key: The citation key of the text.\n    keys: Every key withheld together with it.\n    probability: The probability that it was an injection attempt.\n    quarantined: Whether the text was withheld from the model.\n    tool: The tool or stage that produced it.",
-      "properties": {
-        "key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Key"
-        },
-        "keys": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Keys",
-          "type": "array"
-        },
-        "probability": {
-          "anyOf": [
-            {
-              "type": "number"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Probability"
-        },
-        "quarantined": {
-          "default": true,
-          "title": "Quarantined",
-          "type": "boolean"
-        },
-        "tool": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Tool"
-        }
-      },
-      "title": "GuardData",
       "type": "object"
     },
     "nodes": {
@@ -794,7 +572,28 @@
       "type": "object"
     },
     "retrieval": {
-      "description": "``retrieval``: a retrieval ran.\n\nAttributes:\n    source: ``seed`` for the retrieval before an agent's first turn,\n        ``pipeline`` for a single-shot answer's.\n    standalone_question: The question the channels searched with.\n    channels: Candidates returned per channel.\n    keys: The citation keys kept after fusion and reranking, best first.\n    reranker: The reranker that ran.",
+      "$defs": {
+        "QueryData": {
+          "description": "One phrasing of the question a retrieval searched with.\n\nAttributes:\n    text: The text searched for.\n    kind: How it was produced: the question itself, a rewrite, or a\n        hypothetical snippet.",
+          "properties": {
+            "kind": {
+              "title": "Kind",
+              "type": "string"
+            },
+            "text": {
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "kind"
+          ],
+          "title": "QueryData",
+          "type": "object"
+        }
+      },
+      "description": "``retrieval``: a retrieval ran.\n\nAttributes:\n    source: ``seed`` for the retrieval before an agent's first turn,\n        ``pipeline`` for a single-shot answer's.\n    standalone_question: The question the channels searched with.\n    channels: Candidates returned per channel.\n    keys: The citation keys kept after fusion and reranking, best first.\n    reranker: The reranker that ran.\n    queries: Every phrasing the channels searched with, the question first.",
       "properties": {
         "channels": {
           "additionalProperties": {
@@ -808,6 +607,13 @@
             "type": "string"
           },
           "title": "Keys",
+          "type": "array"
+        },
+        "queries": {
+          "items": {
+            "$ref": "#/$defs/QueryData"
+          },
+          "title": "Queries",
           "type": "array"
         },
         "reranker": {
@@ -923,7 +729,7 @@
       "type": "object"
     },
     "thinking": {
-      "description": "``thinking``: interim model text.",
+      "description": "``thinking``: interim model text, or its reasoning when ``kind`` says so.",
       "properties": {
         "iteration": {
           "anyOf": [
@@ -936,6 +742,15 @@
           ],
           "default": null,
           "title": "Iteration"
+        },
+        "kind": {
+          "default": "text",
+          "enum": [
+            "text",
+            "reasoning"
+          ],
+          "title": "Kind",
+          "type": "string"
         },
         "text": {
           "title": "Text",
@@ -980,7 +795,7 @@
       "type": "object"
     },
     "tool_result": {
-      "description": "``tool_result``: a call finished.\n\nAttributes:\n    call_id: The call it answers.\n    tool: The tool.\n    status: ``ok``, or why the call produced no output.\n    summary: A one-line description of the result, when the tool gives one.\n    result_count: How many items the result held, when it is a list.\n    truncated: Whether the output was cut to the size limit.\n    latency_ms: Wall time of the call.\n    error_type: The exception class, when the handler raised one.",
+      "description": "``tool_result``: a call finished.\n\nAttributes:\n    call_id: The call it answers.\n    tool: The tool.\n    status: ``ok``, or why the call produced no output.\n    summary: A one-line description of the result, when the tool gives one.\n    result_count: How many items the result held, when it is a list.\n    truncated: Whether the output was cut to the size limit.\n    latency_ms: Wall time of the call.\n    error_type: The exception class, when the handler raised one.\n    output: What the tool returned, cut to a readable length.",
       "properties": {
         "call_id": {
           "anyOf": [
@@ -1010,6 +825,18 @@
           "default": 0.0,
           "title": "Latency Ms",
           "type": "number"
+        },
+        "output": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output"
         },
         "result_count": {
           "anyOf": [
@@ -1054,94 +881,6 @@
         "status"
       ],
       "title": "ToolResultData",
-      "type": "object"
-    },
-    "verification": {
-      "$defs": {
-        "ClaimData": {
-          "description": "One claim of the answer and what the citation check found.",
-          "properties": {
-            "claim": {
-              "title": "Claim",
-              "type": "string"
-            },
-            "index": {
-              "title": "Index",
-              "type": "integer"
-            },
-            "keys": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Keys",
-              "type": "array"
-            },
-            "probability": {
-              "anyOf": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Probability"
-            },
-            "unresolved": {
-              "items": {
-                "type": "string"
-              },
-              "title": "Unresolved",
-              "type": "array"
-            },
-            "verdict": {
-              "title": "Verdict",
-              "type": "string"
-            }
-          },
-          "required": [
-            "index",
-            "claim",
-            "verdict"
-          ],
-          "title": "ClaimData",
-          "type": "object"
-        }
-      },
-      "description": "``verification``: what the citation check found.\n\nAttributes:\n    counts: Claims per verdict, plus the uncited count.\n    claims: Each claim and its verdict.\n    failed: Whether any claim failed the check.\n    repair: Whether the agent was sent back to repair claims.\n    defaulted: Whether the decider's output was unusable.",
-      "properties": {
-        "claims": {
-          "items": {
-            "$ref": "#/$defs/ClaimData"
-          },
-          "title": "Claims",
-          "type": "array"
-        },
-        "counts": {
-          "additionalProperties": {
-            "type": "integer"
-          },
-          "title": "Counts",
-          "type": "object"
-        },
-        "defaulted": {
-          "default": false,
-          "title": "Defaulted",
-          "type": "boolean"
-        },
-        "failed": {
-          "default": false,
-          "title": "Failed",
-          "type": "boolean"
-        },
-        "repair": {
-          "default": false,
-          "title": "Repair",
-          "type": "boolean"
-        }
-      },
-      "title": "VerificationData",
       "type": "object"
     },
     "worker_done": {

@@ -34,15 +34,6 @@ logger = logging.getLogger(__name__)
 _ARGUMENT_CHARS = 2_000
 
 
-def _degraded(deps: AgentDeps):
-    """An async reporter for a screening failure, so the node need not close over it twice."""
-
-    async def report(reason: str) -> None:
-        await deps.event(Event.DEGRADED, {"stage": "guard", "reason": reason})
-
-    return report
-
-
 def _unknown(name: str, deps: AgentDeps) -> ToolResult:
     """The result for a tool that exists nowhere, or is not offered in this run."""
     offered = ", ".join(deps.tool_names)

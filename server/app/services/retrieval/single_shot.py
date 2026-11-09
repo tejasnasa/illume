@@ -29,7 +29,7 @@ from openai.types.responses import ResponseInputParam
 
 from app.core.config import settings
 from app.services.llm_config import LLMConfig
-from app.services.retrieval.candidate import Candidate
+from app.services.retrieval.candidate import Candidate, query_payload
 from app.services.retrieval.channels.base import Emit, RetrievalContext
 from app.services.retrieval.citations import CitationKey, find_keys, normalize_path
 from app.services.retrieval.config import CLASSIC, PipelineConfig
@@ -245,14 +245,6 @@ async def _generate(
     return "".join(parts).strip()
 
 
-async def _degraded(emit: Emit, stage: str, reason: str) -> None:
-    """Reports a check that could not run, without failing the answer."""
-    try:
-        await emit("degraded", {"stage": stage, "reason": reason[:300]})
-    except Exception:
-        logger.warning("emitting the %s degradation failed", stage, exc_info=True)
-
-
 async def _announce_retrieval(emit: Emit, retrieval: RetrievalResult) -> None:
     """Reports what the retrieval found, without failing the answer."""
     channels: dict[str, int] = {}
@@ -267,6 +259,7 @@ async def _announce_retrieval(emit: Emit, retrieval: RetrievalResult) -> None:
                 "channels": channels,
                 "keys": [candidate.key for candidate in retrieval.candidates],
                 "reranker": retrieval.trace.reranker,
+                "queries": query_payload(retrieval.variants),
             },
         )
     except Exception:

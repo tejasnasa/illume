@@ -364,6 +364,7 @@ class TestSeed:
         for key in keys:
             assert ran.result.evidence[key].found_by[0] == "seed"
         assert ran.events.named("seed")[0]["keys"] == keys
+        assert ran.events.named("seed")[0]["queries"][0]["text"]
 
     async def test_the_seed_can_be_turned_off(self, env):
         model = ScriptedModel([turn(finish("done"))])
@@ -435,109 +436,8 @@ class TestSeed:
 # --- plain-text replies ------------------------------------------------------------------
 
 
-class TestGate:
-    async def test_a_sufficient_verdict_lets_the_finish_answer_through(self, env):
-        decider = SufficiencyDecider(0.9)
-        model = ScriptedModel([turn(search()), turn(finish("The answer."))])
-
-        ran = await run(env, model, config=agent_config(gate=True), decider=decider)
-
-        assert ran.result.answer == "The answer."
-        assert ran.result.stop_reason is StopReason.FINISHED
-        assert len(model.requests) == 2
-        assert len(decider.calls) == 1
-        assert "Question:" in decider.calls[0][0] and "<source key=" in decider.calls[0][0]
-        verdicts = [p["verdict"] for p in ran.events.named("gate")]
-        assert verdicts == ["sufficient"]
-
-    async def test_an_insufficient_verdict_sends_the_agent_back_with_feedback(self, env):
-        decider = SufficiencyDecider(0.42, 0.9)
-        model = ScriptedModel(
-            [
-                turn(search()),
-                turn(finish("A thin answer.")),
-                turn(call("get_importers", {"path": SECURITY})),
-                turn(finish("A better answer.")),
-            ]
-        )
-
-        ran = await run(env, model, config=agent_config(gate=True), decider=decider)
-
-        assert ran.result.answer == "A better answer."
-        assert ran.result.stop_reason is StopReason.FINISHED
-        assert len(model.requests) == 4
-        feedback = model.requests[2]["input"][-1]
-        assert feedback["role"] == "user"
-        assert "insufficient (p = 0.42)" in feedback["content"]
-        assert "State what is missing" in feedback["content"]
-        assert [p["verdict"] for p in ran.events.named("gate")] == ["insufficient", "sufficient"]
-        assert nodes_run(ran).count("gate") == 2
-
-    async def test_the_gate_cannot_trap_the_loop(self, env):
-        decider = SufficiencyDecider(0.1)
-        model = ScriptedModel(
-            [
-                turn(search()),
-                turn(finish("First.")),
-                turn(finish("Second.")),
-                turn(finish("Third.")),
-                say("Closing answer from the evidence."),
-            ]
-        )
-
-        ran = await run(env, model, config=agent_config(gate=True), decider=decider)
-
-        assert ran.result.stop_reason is StopReason.GATE_EXHAUSTED
-        assert ran.result.answer == "Closing answer from the evidence."
-        assert len(decider.calls) == 2
-        assert len(model.synthesis_requests) == 1
-        assert [p["verdict"] for p in ran.events.named("gate")][-1] == "exhausted"
-
-    async def test_a_placeholder_answer_fails_safe(self, env):
-        decider = SufficiencyDecider(0.99, defaulted=True)
-        model = ScriptedModel(
-            [turn(search()), turn(finish("Thin.")), turn(finish("Thinner.")), turn(finish("Z."))]
-            + [say("Closing.")]
-        )
-
-        ran = await run(env, model, config=agent_config(gate=True), decider=decider)
-
-        assert [p["verdict"] for p in ran.events.named("gate")][:2] == [
-            "insufficient",
-            "insufficient",
-        ]
-        assert ran.result.stop_reason is StopReason.GATE_EXHAUSTED
-
-    async def test_a_gate_that_is_off_never_asks(self, env):
-        decider = SufficiencyDecider(0.0)
-        model = ScriptedModel([turn(search()), turn(finish("Fine."))])
-
-        ran = await run(env, model, config=agent_config(gate=False), decider=decider)
-
-        assert ran.result.answer == "Fine."
-        assert decider.calls == []
-        assert ran.events.named("gate") == []
-
-    async def test_decisions_are_written_to_the_step_log(self, env):
-        decider = SufficiencyDecider(0.3, 0.8)
-        model = ScriptedModel(
-            [turn(search()), turn(finish("A.")), turn(search("hash_password")), turn(finish("B."))]
-        )
-
-        ran = await run(env, model, config=agent_config(gate=True), decider=decider)
-
-        decisions = ran.steps.of_kind("decision")
-        assert [d.payload["point"] for d in decisions] == ["sufficiency", "sufficiency"]
-        assert [d.payload["answer"] for d in decisions] == [0.3, 0.8]
-        assert decisions[0].payload["model"] == "fake-decider"
-        assert len(decisions[0].payload["state_hash"]) == 64
-        assert [s.payload["verdict"] for s in ran.steps.of_kind("gate")] == [
-            "insufficient",
-            "sufficient",
-        ]
-
-    async def test_a_text_reply_goes_through_the_gate_then_is_written_up(self, env):
-        decider = SufficiencyDecider(0.9)
+class TestTextReply:
+    async def test_a_text_reply_is_written_up_from_the_evidence(self, env):
         model = ScriptedModel([turn(search()), say("It is in security.py."), say("Written up.")])
 
         ran = await run(env, model)
@@ -678,6 +578,30 @@ class TestBudgets:
         assert len(model.requests) == 1
         hard = [p for p in ran.events.named("degraded") if p.get("limit") == "hard_cancel_seconds"]
         assert len(hard) == 1
+
+    async def test_the_hard_limit_keeps_an_answer_already_being_written(self, env, monkeypatch):
+        monkeypatch.setattr("app.services.agent.runner.FINAL_ANSWER_GRACE_SECONDS", 0.2)
+        model = ScriptedModel(
+            [turn(search()), say("The answer so far, nearly done", stall_after_text=True)]
+        )
+        config = with_hard_cancel(agent_config(max_iterations=1), 1)
+
+        ran = await run(env, model, config=config)
+
+        assert ran.result.stop_reason is StopReason.HARD_TIMEOUT
+        assert ran.result.answer == "The answer so far, nearly done"
+
+    async def test_writing_the_answer_buys_it_time_past_the_hard_limit(self, env):
+        async def slow() -> None:
+            await asyncio.sleep(1.5)
+
+        model = ScriptedModel([turn(search()), say("The whole answer.", before=slow)])
+        config = with_hard_cancel(agent_config(max_iterations=1), 1)
+
+        ran = await run(env, model, config=config)
+
+        assert ran.result.stop_reason is StopReason.MAX_ITERATIONS
+        assert ran.result.answer == "The whole answer."
 
     async def test_a_limit_is_announced_once(self, env):
         model = ScriptedModel([turn(search()), say("Closing.")])

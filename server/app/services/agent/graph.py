@@ -70,17 +70,9 @@ def _after_agent(state: AgentState) -> str:
 
 
 def _after_tools(state: AgentState) -> str:
-    if state["stop_reason"] is not None:
+    if state["stop_reason"] is not None or state["turn_end"] == "finish":
         return "synthesize"
     return "agent"
-
-
-def _after_gate(state: AgentState) -> str:
-    return "synthesize" if state["stop_reason"] is not None else "agent"
-
-
-def _after_verify(state: AgentState) -> str:
-    return "agent" if state["answer"] is None else END
 
 
 def _after_planner(state: AgentState) -> str | list[Send]:
