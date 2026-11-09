@@ -24,6 +24,8 @@ export default interface User {
   ai_provider: string | null;
   ai_model: string | null;
   has_ai_key: boolean;
+  /** `false` when the key's model was measured unable to call tools; null when unmeasured. */
+  ai_supports_tools?: boolean | null;
   /** The user's own agent context window; null or absent means the default. */
   ai_context_window?: number | null;
   /** The server's default agent context window. */

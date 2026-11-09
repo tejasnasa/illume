@@ -5,8 +5,8 @@
 import { getRepoGraph } from "@/api/graph";
 import { GetRepository } from "@/api/repository";
 import AnimatedLayout from "@/components/AnimatedLayout";
-import BackgroundGraph from "@/components/BackgroundGraph";
 import RepoNavbar from "@/components/RepoNavbar";
+import { AmbientBackground, RepoGraphProvider } from "@/components/RepoGraphContext";
 import RepoStatusPoller from "@/components/RepoStatusPoller";
 import RepoNavSkel from "@/components/ui/RepoNavSkel";
 import type { Metadata, ResolvingMetadata } from "next";
@@ -43,8 +43,8 @@ export async function generateMetadata(
 }
 
 /**
- * Wraps repo pages with navbar, ambient background graph, transitions, and a
- * background-sync poller.
+ * Wraps repo pages with navbar, ambient background graph (skipped on the chat
+ * page, which draws its own), transitions, and a background-sync poller.
  *
  * The poller is the layout's responsibility because it must outlive the
  * settings modal: when the modal closes the page should still keep repainting
@@ -82,13 +82,15 @@ export default async function RootLayout({
 
   return (
     <main className="relative min-h-screen">
-      <BackgroundGraph graph={graph} />
-      <Suspense fallback={<RepoNavSkel />}>
-        <RepoNavbar repo={repo} />
-      </Suspense>
-      <RepoStatusPoller sync_status={repo.sync_status} status={repo.status} />
+      <RepoGraphProvider graph={graph}>
+        <AmbientBackground />
+        <Suspense fallback={<RepoNavSkel />}>
+          <RepoNavbar repo={repo} />
+        </Suspense>
+        <RepoStatusPoller sync_status={repo.sync_status} status={repo.status} />
 
-      <AnimatedLayout>{children}</AnimatedLayout>
+        <AnimatedLayout>{children}</AnimatedLayout>
+      </RepoGraphProvider>
     </main>
   );
 }

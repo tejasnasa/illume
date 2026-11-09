@@ -19,7 +19,11 @@ what makes retrieval return anything at all.
 Two endpoints, both of which the SDK parses from the wire:
 
 - ``POST /v1/responses`` -- ``client.responses.create``, returning ``output_text``. The
-  SDK derives ``output_text`` by concatenating the text parts of ``output``.
+  SDK derives ``output_text`` by concatenating the text parts of ``output``. With
+  ``stream: true`` it answers as server-sent events instead, which is how the streaming
+  chat route generates its answer. When the request carries ``tools`` it plays a short
+  tool-calling script: one ``grep_code`` call, then the fixed sentence once a tool output
+  is in the conversation.
 - ``POST /v1/embeddings`` -- ``client.embeddings.create``, 1536 dimensions to match the
   ``Vector(1536)`` column, carrying the value the seed stored.
 
@@ -27,10 +31,13 @@ Not a general emulator: it answers a fixed sentence for any prompt and ignores t
 name. It exists so the E2E suite has no external dependency, not to be faithful.
 """
 
+import json
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 # Running this as a script puts `scripts/` on sys.path, not the server root.
@@ -65,6 +72,8 @@ class _ResponsesRequest(BaseModel):
     model: str | None = None
     input: object | None = None
     max_output_tokens: int | None = None
+    stream: bool | None = None
+    tools: list[dict] | None = None
 
 
 class _EmbeddingsRequest(BaseModel):
@@ -80,33 +89,102 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/v1/responses")
-async def responses(_body: _ResponsesRequest) -> dict:
-    """
-    Answer a Responses API call.
-
-    The `output` shape is what the SDK's `output_text` helper walks: a list of items, each
-    with a list of content parts, of which only the `output_text` parts contribute.
-    """
+def _response_object(output: list[dict], status: str = "completed") -> dict:
+    """The response envelope the SDK parses, around the given output items."""
     return {
         "id": "resp_stub",
         "object": "response",
         "created_at": 0,
         "model": "stub",
-        "status": "completed",
-        "output": [
-            {
-                "type": "message",
-                "id": "msg_stub",
-                "role": "assistant",
-                "status": "completed",
-                "content": [{"type": "output_text", "text": ANSWER, "annotations": []}],
-            }
-        ],
+        "status": status,
+        "output": output,
         "parallel_tool_calls": False,
         "tool_choice": "none",
         "tools": [],
+        "usage": {
+            "input_tokens": 12,
+            "output_tokens": 8,
+            "total_tokens": 20,
+            "input_tokens_details": {"cached_tokens": 0},
+            "output_tokens_details": {"reasoning_tokens": 0},
+        },
     }
+
+
+def _message_item(text: str) -> dict:
+    return {
+        "type": "message",
+        "id": "msg_stub",
+        "role": "assistant",
+        "status": "completed",
+        "content": [{"type": "output_text", "text": text, "annotations": []}],
+    }
+
+
+def _tool_call_item() -> dict:
+    """The one tool call the scripted run makes before it answers."""
+    return {
+        "type": "function_call",
+        "id": "fc_stub",
+        "call_id": "call_stub_1",
+        "name": "grep_code",
+        "arguments": json.dumps({"pattern": "func_0"}),
+        "status": "completed",
+    }
+
+
+def _wants_tool_call(body: _ResponsesRequest) -> bool:
+    """Whether this turn of a tool-calling conversation should call a tool.
+
+    The first request has tools and no tool output in its input; once a
+    ``function_call_output`` is in the conversation the script answers instead.
+    """
+    return bool(body.tools) and "function_call_output" not in json.dumps(body.input)
+
+
+def _event(kind: str, sequence: int, **fields: object) -> str:
+    payload = {"type": kind, "sequence_number": sequence, **fields}
+    return "event: " + kind + "\ndata: " + json.dumps(payload) + "\n\n"
+
+
+def _stream(output: list[dict]) -> Iterator[str]:
+    """The Responses API's event stream for the given output items."""
+    sequence = 0
+    yield _event("response.created", sequence, response=_response_object([], "in_progress"))
+    for index, item in enumerate(output):
+        if item["type"] != "message":
+            continue
+        text = item["content"][0]["text"]
+        words = text.split(" ")
+        for position, word in enumerate(words):
+            sequence += 1
+            delta = word if position == len(words) - 1 else word + " "
+            yield _event(
+                "response.output_text.delta",
+                sequence,
+                item_id=item["id"],
+                output_index=index,
+                content_index=0,
+                delta=delta,
+                logprobs=[],
+            )
+    sequence += 1
+    yield _event("response.completed", sequence, response=_response_object(output))
+
+
+@app.post("/v1/responses")
+async def responses(body: _ResponsesRequest):
+    """
+    Answer a Responses API call.
+
+    The `output` shape is what the SDK's `output_text` helper walks: a list of items, each
+    with a list of content parts, of which only the `output_text` parts contribute. A
+    streamed call gets the same items as server-sent events.
+    """
+    output = [_tool_call_item()] if _wants_tool_call(body) else [_message_item(ANSWER)]
+    if body.stream:
+        return StreamingResponse(_stream(output), media_type="text/event-stream")
+    return _response_object(output)
 
 
 @app.post("/v1/embeddings")

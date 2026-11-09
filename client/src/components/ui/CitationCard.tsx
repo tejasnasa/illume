@@ -89,7 +89,7 @@ function resolvePrimaryLabel(type: SourceType, src: Source): string {
     case "commit":
       return src.commit_hash
         ? src.commit_hash.slice(0, 7)
-        : (src.author_name ?? "");
+        : (src.author_name ?? "Commit");
     case "pull_request":
       return `PR #${src.pr_number}`;
     case "file":
@@ -110,7 +110,9 @@ function resolveSubLabel(type: SourceType, src: Source): string {
     case "symbol":
       return src.file_path ?? "";
     case "commit":
-      return src.author_name ? `by ${src.author_name}` : "";
+      return src.author_name
+        ? `by ${src.author_name}`
+        : (src.chunk_text.split("\n")[0] ?? "");
     case "pull_request":
       return src.pr_title ?? "";
     case "file":
@@ -138,7 +140,8 @@ function resolveGithubHref(
   if (src.source_type === "symbol")
     return `${url}/blob/${ref}/${src.file_path}#L${src.start_line}-L${src.end_line}`;
   if (src.source_type === "file") return `${url}/blob/${ref}/${src.file_path}`;
-  if (src.source_type === "commit") return `${url}/commit/${src.commit_hash}`;
+  if (src.source_type === "commit")
+    return src.commit_hash ? `${url}/commit/${src.commit_hash}` : null;
   if (src.source_type === "pull_request") return `${url}/pull/${src.pr_number}`;
   return null;
 }
@@ -167,6 +170,7 @@ function GithubLink({ href }: { href: string }) {
  * @param url The repository base URL for GitHub links.
  * @param commitSha The ingested commit, which the link pins to when set.
  * @param branch The repository's ingested branch, used when the SHA is missing.
+ * @param defaultExpanded Whether the card starts open, as when a chip opened it.
  * @returns The rendered citation card element.
  */
 export default function CitationCard({
@@ -174,13 +178,15 @@ export default function CitationCard({
   url,
   commitSha,
   branch,
+  defaultExpanded = false,
 }: {
   src: Source;
   url: string;
   commitSha?: string | null;
   branch?: string | null;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   const type = resolveType(src);
   const config = TYPE_CONFIG[type];

@@ -36,7 +36,7 @@ export default function RepoNavbar({ repo }: { repo: Repository }) {
 
   return (
     <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10 print:hidden">
-      <section className="flex items-center">
+      <section className="flex min-w-0 shrink-0 items-center">
         <Link
           href={"/dashboard"}
           className="relative h-12 w-12 flex items-center justify-center m-2"
@@ -50,8 +50,8 @@ export default function RepoNavbar({ repo }: { repo: Repository }) {
             size={24}
           />
         </Link>
-        <h1 className="text-xl font-medium mx-2">{name}</h1>
-        <div className="bg-green-500 text-(--background) rounded-full px-3 py-1 text-xs font-medium inline-flex items-center gap-1.5">
+        <h1 className="mx-2 hidden truncate text-xl font-medium sm:block">{name}</h1>
+        <div className="hidden bg-green-500 text-(--background) rounded-full px-3 py-1 text-xs font-medium items-center gap-1.5 sm:inline-flex">
           {isSyncing && (
             <CircleDashedIcon
               size={11}
@@ -64,34 +64,40 @@ export default function RepoNavbar({ repo }: { repo: Repository }) {
       </section>
 
       {status === "ready" && (
-        <section className="flex items-center">
+        <section className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
           <Link
             href={`/repo/${repo_number}`}
-            className={`m-2 mx-4  ${path === `/repo/${repo_number}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Home
           </Link>
+          <Link
+            href={`/repo/${repo_number}/chat`}
+            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/chat` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          >
+            Chat
+          </Link>
           {/* <Link
           href={`/repo/${repo_number}/onboarding-guide`}
-          className={`m-2 mx-4  ${path === `/repo/${repo_number}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+          className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
         >
           Onboarding Guide
         </Link> */}
           <Link
             href={`/repo/${repo_number}/glossary`}
-            className={`m-2 mx-4  ${path === `/repo/${repo_number}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Glossary
           </Link>
           <Link
             href={`/repo/${repo_number}/explorer`}
-            className={`m-2 mx-4  ${path === `/repo/${repo_number}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Explorer
           </Link>
           <Link
             href={`/repo/${repo_number}/graph`}
-            className={`m-2 mx-4  ${path === `/repo/${repo_number}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
           >
             Graph
           </Link>
@@ -100,7 +106,7 @@ export default function RepoNavbar({ repo }: { repo: Repository }) {
             trigger={
               <GearFineIcon
                 size={24}
-                className="m-2 mx-4 mr-6 text-(--muted-foreground) hover:cursor-pointer"
+                className="m-2 mx-2 mr-4 shrink-0 text-(--muted-foreground) hover:cursor-pointer md:mx-4 md:mr-6"
               />
             }
           >
@@ -110,15 +116,18 @@ export default function RepoNavbar({ repo }: { repo: Repository }) {
       )}
 
       {status !== "ready" && (
-        <section className="flex items-center">
-          <div className="m-2 mx-4 font-semibold">Home</div>
-          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
+        <section className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
+          <div className="m-2 mx-2 shrink-0 text-sm font-semibold md:mx-4 md:text-base">Home</div>
+          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
+            Chat
+          </div>
+          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
             Glossary
           </div>
-          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
+          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
             Explorer
           </div>
-          <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
+          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
             Graph
           </div>
           <Modal
@@ -126,7 +135,7 @@ export default function RepoNavbar({ repo }: { repo: Repository }) {
             trigger={
               <GearFineIcon
                 size={24}
-                className="m-2 mx-4 mr-6 text-(--muted-foreground) hover:cursor-pointer"
+                className="m-2 mx-2 mr-4 shrink-0 text-(--muted-foreground) hover:cursor-pointer md:mx-4 md:mr-6"
               />
             }
           >

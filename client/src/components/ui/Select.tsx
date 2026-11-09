@@ -11,6 +11,10 @@ import { useEffect, useRef, useState } from "react";
 export type SelectOption = {
   value: string;
   label: string;
+  /** Shown but not choosable. */
+  disabled?: boolean;
+  /** Why a disabled choice is unavailable, shown on hover. */
+  reason?: string;
 };
 
 type Props = {
@@ -26,6 +30,8 @@ type Props = {
   options: readonly SelectOption[];
   /** Shown on the trigger while nothing is selected. */
   placeholder?: string;
+  /** A smaller control with a smaller label, for dense panels. */
+  compact?: boolean;
 };
 
 /**
@@ -51,6 +57,7 @@ type Props = {
  * @param onChange - Called with the newly chosen value.
  * @param options - The choices, in display order.
  * @param placeholder - Shown on the trigger while nothing is selected.
+ * @param compact - A smaller control with a smaller label, for dense panels.
  * @returns The rendered field.
  */
 export default function Select({
@@ -60,6 +67,7 @@ export default function Select({
   onChange,
   options,
   placeholder = "Select an option",
+  compact = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -89,10 +97,19 @@ export default function Select({
     setOpen(true);
   }
 
-  /** Takes a choice and closes. */
+  /** Takes a choice and closes; a disabled choice is ignored. */
   function choose(next: string) {
+    if (options.find((option) => option.value === next)?.disabled) return;
     onChange(next);
     setOpen(false);
+  }
+
+  /** The next choosable row from `from` in direction `step`, or `from` when none. */
+  function nextEnabled(from: number, step: 1 | -1) {
+    for (let i = from + step; i >= 0 && i < options.length; i += step) {
+      if (!options[i].disabled) return i;
+    }
+    return from;
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
@@ -116,11 +133,11 @@ export default function Select({
         break;
       case "ArrowDown":
         event.preventDefault();
-        setActiveIndex((index) => Math.min(index + 1, options.length - 1));
+        setActiveIndex((index) => nextEnabled(index, 1));
         break;
       case "ArrowUp":
         event.preventDefault();
-        setActiveIndex((index) => Math.max(index - 1, 0));
+        setActiveIndex((index) => nextEnabled(index, -1));
         break;
       case "Enter":
       case " ":
@@ -134,7 +151,7 @@ export default function Select({
 
   return (
     <div className="flex flex-col gap-1" ref={wrapperRef}>
-      <span id={labelId} className="text-sm">
+      <span id={labelId} className={compact ? "text-xs font-medium" : "text-sm"}>
         {label}
       </span>
 
@@ -150,7 +167,7 @@ export default function Select({
           aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
           onClick={() => (open ? setOpen(false) : openList())}
           onKeyDown={handleKeyDown}
-          className="w-full h-11 rounded-sm pl-4 pr-10 text-sm text-left border border-(--border) bg-(--muted)/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:border-(--primary)/30 transition-all duration-200"
+          className={`w-full ${compact ? "h-8 rounded-md pl-2.5 pr-8 text-xs" : "h-11 rounded-sm pl-4 pr-10 text-sm"} text-left border border-(--border) bg-(--muted)/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:border-(--primary)/30 transition-all duration-200`}
         >
           <span className={selected ? "text-(--foreground)" : "text-(--muted-foreground)/50"}>
             {selected?.label ?? placeholder}
@@ -159,8 +176,8 @@ export default function Select({
 
         <CaretDownIcon
           aria-hidden="true"
-          size={16}
-          className={`pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-(--muted-foreground) transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          size={compact ? 12 : 16}
+          className={`pointer-events-none absolute ${compact ? "right-2.5" : "right-4"} top-1/2 -translate-y-1/2 text-(--muted-foreground) transition-transform duration-200 ${open ? "rotate-180" : ""}`}
         />
 
         {open && (
@@ -177,11 +194,13 @@ export default function Select({
                 id={optionId(index)}
                 role="option"
                 aria-selected={option.value === value}
-                onMouseEnter={() => setActiveIndex(index)}
+                aria-disabled={option.disabled || undefined}
+                title={option.disabled ? option.reason : undefined}
+                onMouseEnter={() => !option.disabled && setActiveIndex(index)}
                 onClick={() => choose(option.value)}
-                className={`flex w-full items-center justify-between gap-2.5 rounded-xs px-3 py-2 text-sm cursor-pointer transition-all duration-150 ${
-                  index === activeIndex ? "bg-(--muted)/60" : ""
-                }`}
+                className={`flex w-full items-center justify-between gap-2.5 rounded-xs ${compact ? "px-2.5 py-1.5 text-xs" : "px-3 py-2 text-sm"} transition-all duration-150 ${
+                  option.disabled ? "cursor-not-allowed opacity-40" : "cursor-pointer"
+                } ${index === activeIndex && !option.disabled ? "bg-(--muted)/60" : ""}`}
               >
                 {option.label}
                 {option.value === value && (
