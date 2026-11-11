@@ -17,7 +17,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypedDict
 
-from app.services.decisions import RouteDecision
 from app.services.retrieval.citations import CitationKey, find_keys, normalize_path, parse_key
 
 
@@ -262,13 +261,13 @@ class AgentState(TypedDict):
         standalone_question: The question with follow-up references resolved;
             equal to ``question`` until retrieval has condensed it.
         history: Earlier turns, oldest first.
-        route: The routing decision that chose this graph, when there was one.
         items: The Responses API input so far, sent whole on every model call;
             model output is appended verbatim. It only grows, except when
             compaction replaces older tool results with stubs.
         evidence: Repository text seen so far, by citation key.
         iteration: Model turns taken.
-        draft: The answer the agent wrote with ``finish``, until it is accepted.
+        draft: The answer the agent wrote with ``finish``, or the merge wrote, which
+            the closing path takes as the final answer.
         confidence_note: What the agent said was uncertain, from ``finish``.
         plan: The sub-questions the question was split into, when it was.
         worker_results: What each worker found, however it ended.
@@ -288,7 +287,6 @@ class AgentState(TypedDict):
     question: str
     standalone_question: str
     history: list[ChatTurn]
-    route: RouteDecision | None
     items: Annotated[list[dict[str, Any]], merge_items]
     evidence: Annotated[dict[str, Evidence], merge_evidence]
     iteration: int
@@ -310,8 +308,6 @@ def initial_state(
     question: str,
     history: list[ChatTurn],
     items: list[dict[str, Any]],
-    *,
-    route: RouteDecision | None = None,
 ) -> AgentState:
     """The state a run starts from.
 
@@ -320,13 +316,11 @@ def initial_state(
         history: Earlier turns, oldest first.
         items: The opening input items: the system prompt, the replayed
             history and the question.
-        route: The routing decision, when one was made.
     """
     return AgentState(
         question=question,
         standalone_question=question,
         history=history,
-        route=route,
         items=items,
         evidence={},
         iteration=0,

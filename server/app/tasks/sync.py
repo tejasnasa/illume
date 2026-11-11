@@ -25,6 +25,7 @@ navbar and the live-log panel all keep working while the update runs.
 from __future__ import annotations
 
 import logging
+import subprocess
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -61,6 +62,7 @@ from app.services.scanner import (
     walk_source_files,
 )
 from app.services.stack_detector import detect_entry_points, detect_stack
+from app.services.staleness import mark_stale_answers
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +211,52 @@ def _release_lease(
     except Exception as exc:
         logger.warning("Failed to release lease for %s: %s", repo_id, exc)
         db.rollback()
+
+
+def _changed_paths(repo_root: Path, old_sha: str | None, new_sha: str) -> set[str] | None:
+    """Files that differ between two commits, or ``None`` when git cannot say.
+
+    Used by the rebuild path, which has no file list of its own. With
+    ``--no-renames`` a rename lists both its old and new path, which is what staleness
+    needs: an answer may have cited either.
+    """
+    if not old_sha:
+        return None
+    try:
+        output = subprocess.run(
+            ["git", "diff", "--name-only", "--no-renames", old_sha, new_sha],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
+        ).stdout
+    except subprocess.SubprocessError, OSError:
+        logger.warning("sync: could not list the files changed since %s", old_sha, exc_info=True)
+        return None
+    return {line.strip() for line in output.splitlines() if line.strip()}
+
+
+def _mark_stale_answers(
+    db: Session, repo_id: uuid.UUID, changed_paths: set[str] | None, head_sha: str
+) -> None:
+    """Flags chat answers whose cited files changed; never fails the sync.
+
+    Runs after the deterministic transaction has committed, in a savepoint, so a
+    failure rolls back only the marking.
+    """
+    try:
+        with db.begin_nested():
+            marked = mark_stale_answers(db, repo_id, changed_paths, head_sha)
+        db.commit()
+        if marked:
+            logger.info("sync: marked %d chat answers stale for %s", marked, repo_id)
+    except Exception:
+        logger.warning("sync: could not mark stale chat answers for %s", repo_id, exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            logger.warning("sync: rollback after a marking failure failed", exc_info=True)
 
 
 def _set_sync_status(db: Session, repo_id: uuid.UUID, status: str) -> None:
@@ -578,7 +626,16 @@ def _do_sync(
             # The full path is identical to a fresh ingest -- it deletes
             # every ``File`` row, re-parses, re-resolves, re-scores.
             # ``manage_status=False`` keeps ``status='ready'`` throughout.
-            return _run_full_sync(db, repo, repo_root, new_sha, generation, now, llm_config)
+            return _run_full_sync(
+                db,
+                repo,
+                repo_root,
+                new_sha,
+                generation,
+                now,
+                llm_config,
+                changed_paths=_changed_paths(repo_root, old_sha, new_sha),
+            )
 
         diff = compute_delta(repo_root, old_sha, new_sha)
         # The ratio cap compares the diff against the repository's size, so
@@ -590,13 +647,23 @@ def _do_sync(
         # counts as a source file.
         total_files = len(walk_source_files(repo_root))
         if should_escalate(diff, total_files, max_files=max_files, max_ratio=max_ratio):
-            return _run_full_sync(db, repo, repo_root, new_sha, generation, now, llm_config)
+            return _run_full_sync(
+                db,
+                repo,
+                repo_root,
+                new_sha,
+                generation,
+                now,
+                llm_config,
+                changed_paths={path for _status, path in diff},
+            )
 
         upserted, deleted, changed_file_ids = _run_step_a(db, repo, repo_root, diff)
 
         # Write the deterministic watermark.
         repo.ingested_commit_sha = new_sha
         db.commit()
+        _mark_stale_answers(db, repo_id_value, {path for _status, path in diff}, new_sha)
     else:
         diff = []
 
@@ -665,6 +732,7 @@ def _run_full_sync(
     generation: uuid.UUID,
     now: datetime,
     llm_config: LLMConfig | None = None,
+    changed_paths: set[str] | None = None,
 ) -> dict:
     """Escalation path: behave like a fresh ingest, but without changing status.
 
@@ -680,6 +748,9 @@ def _run_full_sync(
         llm_config: Resolved credential bundle forwarded to
             ``run_full_analysis`` for every LLM stage. ``None`` falls
             through to the server key on each call.
+        changed_paths: Files that differ from the previously ingested commit,
+            used to flag chat answers that cited them. ``None`` means the
+            difference is unknown, and every answer with cited files is flagged.
     """
     try:
         # Step A: delete every File row (cascade clears symbols,
@@ -705,6 +776,7 @@ def _run_full_sync(
         )
         repo.ingested_commit_sha = new_sha
         db.commit()
+        _mark_stale_answers(db, repo.id, changed_paths, new_sha)
 
         # Step B is the LLM pass; the embedder + brief already ran as
         # part of ``run_full_analysis`` above, so we just need to stamp

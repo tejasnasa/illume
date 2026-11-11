@@ -56,11 +56,10 @@ from app.services.agent.tools.registry import ToolRegistry
 from app.services.decisions import (
     Decider,
     DeciderUnavailable,
-    RouteDecision,
     get_decider,
 )
 from app.services.llm_config import LLMConfig
-from app.services.retrieval.channels.base import Embedder, Emit
+from app.services.retrieval.channels.base import Embedder, Emit, no_emit
 from app.services.retrieval.config import AgentConfig, PipelineConfig
 from app.services.retrieval.embedding import embed_texts
 from app.services.retrieval.query import HistoryMessage
@@ -108,7 +107,6 @@ class RunResult:
         config_hash: :meth:`PipelineConfig.config_hash` of the configuration.
         limits: The limits in force, including the caller's input token limit.
         model: The generation model.
-        route: The routing decision that chose this graph, when there was one.
         plan: The sub-questions the run was split into, when it was.
         workers: What each worker found, in plan order.
         error: Why the run failed, when it did.
@@ -132,7 +130,6 @@ class RunResult:
     config_hash: str = ""
     limits: dict[str, int] = field(default_factory=dict)
     model: str = ""
-    route: RouteDecision | None = None
     plan: Plan | None = None
     workers: tuple[WorkerResult, ...] = ()
     error: RunError | None = None
@@ -234,7 +231,6 @@ async def run_agent(
     emit: Emit | None = None,
     steps: StepRecorder | None = None,
     run_id: uuid.UUID | None = None,
-    route: RouteDecision | None = None,
     decider: Decider | None = None,
     embed: Embedder | None = None,
     brief: RepoBrief | None = None,
@@ -256,14 +252,11 @@ async def run_agent(
         llm: The generation credential.
         config: The configuration; it must use agent execution.
         context_window: Input tokens one model call may carry. Callers pass the
-            user's own window (see
-            :func:`~app.services.agent.budgets.context_window_for`); ``None``
-            keeps the configuration's.
+            user's own window; ``None`` keeps the configuration's.
         github_token: The repository owner's GitHub token, for ``read_file``.
         emit: Receives the run's events.
         steps: Receives the run's steps; an in-memory log by default.
         run_id: The run's id; generated when omitted.
-        route: The routing decision that chose this configuration, if one was made.
         decider: Makes the planner's decision; built from ``config.decider``
             for planner execution when none is given.
         embed: Embeds query text for the tools; the operator's embedding call by default.
@@ -282,7 +275,7 @@ async def run_agent(
         ValueError: When ``config`` has no agent settings.
     """
     run_id = run_id or uuid.uuid4()
-    outer: Emit = emit if emit is not None else _discard
+    outer: Emit = emit if emit is not None else no_emit
     hard_limit: asyncio.Timeout | None = None
     partial: list[str] = []
 
@@ -314,10 +307,10 @@ async def run_agent(
         llm=llm,
         pipeline=config,
         github_token=github_token,
-        decider=the_decider,
         budget=budget,
         emit=sink,
         embed=embed or embed_texts,
+        question=question,
     )
     factory = client_factory if client_factory is not None else AsyncOpenAI
     deps = AgentDeps(
@@ -340,7 +333,6 @@ async def run_agent(
         question,
         turns,
         opening_items(deps.system_prompt, replayed, question),
-        route=route,
     )
     limits = {
         "max_iterations": agent_config.max_iterations,
@@ -458,10 +450,6 @@ async def run_agent(
     return result
 
 
-async def _discard(event: str, payload: dict[str, Any]) -> None:
-    """The default emitter, for callers that do not stream progress."""
-
-
 def _timed_out_answer(state: Any) -> str:
     """The answer of a run cancelled at the hard limit: the evidence, unsummarised."""
     keys = list(state["evidence"])
@@ -505,7 +493,6 @@ async def _result(
         config_hash=config.config_hash(),
         limits=limits,
         model=deps.llm.model,
-        route=state["route"],
         plan=plan,
         workers=workers,
         error=error,

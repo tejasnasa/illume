@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -26,6 +27,7 @@ from app.services.retrieval.channels.history import HistorySearch
 from app.services.retrieval.citations import code_key, normalize_path
 from app.services.retrieval.config import HistoryChannel
 from app.services.retrieval.context import SOURCE_LABELS
+from app.services.retrieval.dates import DateRange, parse_day, resolve_date_range
 from app.services.retrieval.pipeline import retrieve
 
 SourceKind = Literal["symbol", "file", "commit", "pull_request", "document"]
@@ -313,6 +315,19 @@ class SearchHistoryInput(ToolInput):
         max_length=1024,
         description="Only commits that changed this file. Pull requests are left out when set.",
     )
+    since: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description=(
+            "Only history on or after this date (YYYY-MM-DD). Pass it for time-bounded "
+            "questions such as 'in the last two weeks', working the date out from today."
+        ),
+    )
+    until: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description="Only history on or before this date (YYYY-MM-DD). Pass it with since.",
+    )
     k: int = Field(default=10, ge=1, le=30, description="How many results to return (1 to 30).")
 
 
@@ -335,7 +350,26 @@ class SearchHistoryOutput(ListOutput):
         return "\n\n".join(blocks)
 
 
+def _history_range(ctx: ToolContext, args: SearchHistoryInput) -> DateRange | None:
+    """The time span a history search is restricted to.
+
+    Dates the model passes win. Without them, a span named in the run's question
+    is used, so a time-bounded question is filtered even when the model forgets
+    the arguments.
+    """
+    since = parse_day(args.since) if args.since else None
+    until = parse_day(args.until) if args.until else None
+    if since is not None or until is not None:
+        # ``until`` names a day, so the whole day is included.
+        end = until.replace(hour=23, minute=59, second=59, microsecond=999999) if until else None
+        return DateRange(since, end, "tool arguments")
+    if ctx.question:
+        return resolve_date_range(ctx.question, datetime.now(UTC))
+    return None
+
+
 async def _search_history(ctx: ToolContext, args: SearchHistoryInput) -> SearchHistoryOutput:
+    date_range = _history_range(ctx, args)
     wanted = {
         "commit": {"commit"},
         "pr": {"pull_request"},
@@ -344,7 +378,7 @@ async def _search_history(ctx: ToolContext, args: SearchHistoryInput) -> SearchH
     note = None
     async with ctx.session_factory() as db:
         found = await HistorySearch().search(
-            ctx.retrieval(db), QueryVariant(args.query), HistoryChannel(k=_HISTORY_POOL)
+            ctx.retrieval(db, date_range), QueryVariant(args.query), HistoryChannel(k=_HISTORY_POOL)
         )
         found = [candidate for candidate in found if candidate.source_type in wanted]
 
@@ -362,6 +396,9 @@ async def _search_history(ctx: ToolContext, args: SearchHistoryInput) -> SearchH
             found = [c for c in found if c.source_id in touching]
             if "pull_request" in wanted:
                 note = "A path filter applies to commits only, so pull requests were left out."
+    if date_range is not None:
+        span = f"Restricted to commits and pull requests {date_range.describe(datetime.now(UTC))}."
+        note = f"{span} {note}" if note else span
 
     items = [
         HistoryHit(
@@ -436,7 +473,9 @@ REGISTRY.register(
         description=(
             "Search commit messages and merged pull requests by meaning. Use it for why and "
             "when questions: why something was changed, who introduced it, what a pull "
-            "request was for. Results are history, not the current code."
+            "request was for. For a time-bounded question ('in the last two weeks', "
+            "'since March') pass since and until as YYYY-MM-DD dates. Results are "
+            "history, not the current code."
         ),
         input_model=SearchHistoryInput,
         output_model=SearchHistoryOutput,

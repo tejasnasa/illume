@@ -18,6 +18,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from app.services.llm_config import LLMConfig
@@ -25,6 +26,7 @@ from app.services.retrieval.candidate import Candidate, QueryVariant
 from app.services.retrieval.channels import get_channel, get_expansion_channel
 from app.services.retrieval.channels.base import RetrievalContext
 from app.services.retrieval.config import EXPANSION_CHANNELS, PipelineConfig
+from app.services.retrieval.dates import resolve_date_range
 from app.services.retrieval.diversify import diversify
 from app.services.retrieval.fusion import RankedList, fuse, reciprocal_rank_fusion
 from app.services.retrieval.query import HistoryMessage, build_variants
@@ -68,6 +70,9 @@ class RetrievalTrace:
         reranker_degraded: Whether the reranker failed and the fused order was used.
         degraded: The payload of every ``degraded`` event raised, in order.
         config_hash: :meth:`PipelineConfig.config_hash` of the config that ran.
+        date_range: The time span the history channel was restricted to, as
+            :meth:`~app.services.retrieval.dates.DateRange.to_dict` records it,
+            or ``None`` when the question named none.
         rerank_calls: The provider requests the reranker made, raw responses
             included, as :meth:`RerankCall.to_dict` records. Kept for the log
             and the evaluation; empty when no provider was called.
@@ -79,6 +84,7 @@ class RetrievalTrace:
     degraded: tuple[dict[str, Any], ...]
     config_hash: str
     rerank_calls: tuple[dict[str, Any], ...] = ()
+    date_range: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -241,6 +247,11 @@ async def retrieve(
     """
     run = _Run(ctx)
 
+    # A time span in the question narrows the history channel. It is resolved
+    # from the question as typed, because a rewrite may drop the words.
+    if ctx.date_range is None and any(spec.kind == "history" for spec in config.channels):
+        ctx.date_range = resolve_date_range(question, datetime.now(UTC))
+
     standalone, variants = await build_variants(
         question, history, config.query, llm=llm, emit=run.emit
     )
@@ -311,5 +322,11 @@ async def retrieve(
             degraded=tuple(run.degraded),
             config_hash=config.config_hash(),
             rerank_calls=rerank_calls,
+            date_range=(
+                ctx.date_range.to_dict(datetime.now(UTC))
+                if ctx.date_range is not None
+                and any(spec.kind == "history" for spec in config.channels)
+                else None
+            ),
         ),
     )

@@ -2,7 +2,7 @@
   "envelope": {
     "$defs": {
       "EventType": {
-        "description": "The public event types, in the order a run usually produces them.\n\nAttributes:\n    RUN_STARTED: The run began.\n    ROUTE: The routing decision that chose the configuration.\n    PLAN: The question was split into sub-questions, or planning was skipped.\n    WORKER_STARTED: A parallel worker began a sub-question.\n    WORKER_DONE: A parallel worker ended.\n    RETRIEVAL: A retrieval ran: counts per channel and the keys it kept.\n    THINKING: A piece of the model's interim text.\n    TOOL_CALL: A tool call is about to run.\n    TOOL_RESULT: A tool call finished.\n    NODES: Files a tool looked at, for highlighting in the graph.\n    EVIDENCE: New citable evidence was gathered.\n    ANSWER_DELTA: A piece of the answer being written.\n    DEGRADED: A limit was reached or a stage fell back.\n    ERROR: The run failed.\n    DONE: The run ended with an answer.",
+        "description": "The public event types, in the order a run usually produces them.\n\nAttributes:\n    RUN_STARTED: The run began.\n    ROUTE: An ``auto`` request was resolved to a preset.\n    PLAN: The question was split into sub-questions, or planning was skipped.\n    WORKER_STARTED: A parallel worker began a sub-question.\n    WORKER_DONE: A parallel worker ended.\n    RETRIEVAL: A retrieval ran: counts per channel and the keys it kept.\n    THINKING: A piece of the model's interim text.\n    TOOL_CALL: A tool call is about to run.\n    TOOL_RESULT: A tool call finished.\n    NODES: Files a tool looked at, for highlighting in the graph.\n    EVIDENCE: New citable evidence was gathered.\n    ANSWER_DELTA: A piece of the answer being written.\n    DEGRADED: A limit was reached or a stage fell back.\n    ERROR: The run failed.\n    DONE: The run ended with an answer.",
         "enum": [
           "run_started",
           "route",
@@ -593,7 +593,7 @@
           "type": "object"
         }
       },
-      "description": "``retrieval``: a retrieval ran.\n\nAttributes:\n    source: ``seed`` for the retrieval before an agent's first turn,\n        ``pipeline`` for a single-shot answer's.\n    standalone_question: The question the channels searched with.\n    channels: Candidates returned per channel.\n    keys: The citation keys kept after fusion and reranking, best first.\n    reranker: The reranker that ran.\n    queries: Every phrasing the channels searched with, the question first.",
+      "description": "``retrieval``: a retrieval ran.\n\nAttributes:\n    source: ``seed`` for the retrieval before an agent's first turn,\n        ``pipeline`` for a single-shot answer's.\n    standalone_question: The question the channels searched with.\n    channels: Candidates returned per channel.\n    keys: The citation keys kept after fusion and reranking, best first.\n    reranker: The reranker that ran.\n    queries: Every phrasing the channels searched with, the question first.\n    date_range: The time span the history channel was restricted to, in\n        words, when the question named one.",
       "properties": {
         "channels": {
           "additionalProperties": {
@@ -601,6 +601,18 @@
           },
           "title": "Channels",
           "type": "object"
+        },
+        "date_range": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Date Range"
         },
         "keys": {
           "items": {
@@ -650,7 +662,7 @@
       "type": "object"
     },
     "route": {
-      "description": "``route``: how the question was classified.\n\nAttributes:\n    route: The class the router chose.\n    probabilities: The probability of each class, when reported.\n    confidence: The router's confidence, when reported.\n    fell_back: Whether the router was not confident enough to be trusted, so\n        the general path was taken.\n    model: The model that answered.",
+      "description": "``route``: how an ``auto`` request was resolved to a preset.\n\nAttributes:\n    route: The kind of question the decision chose, or ``None`` when no\n        decision was made.\n    confidence: The probability of that route, when known.\n    probabilities: The probability of every route, when reported.\n    resolved_preset: The preset the run uses.\n    fallback_reason: Why the fallback preset was used instead of the\n        route's own: ``unavailable``, ``timeout``, ``error``,\n        ``low_confidence`` or ``no_tool_support``. ``None`` when the route\n        was followed.",
       "properties": {
         "confidence": {
           "anyOf": [
@@ -664,12 +676,7 @@
           "default": null,
           "title": "Confidence"
         },
-        "fell_back": {
-          "default": false,
-          "title": "Fell Back",
-          "type": "boolean"
-        },
-        "model": {
+        "fallback_reason": {
           "anyOf": [
             {
               "type": "string"
@@ -679,7 +686,7 @@
             }
           ],
           "default": null,
-          "title": "Model"
+          "title": "Fallback Reason"
         },
         "probabilities": {
           "additionalProperties": {
@@ -688,13 +695,25 @@
           "title": "Probabilities",
           "type": "object"
         },
-        "route": {
-          "title": "Route",
+        "resolved_preset": {
+          "title": "Resolved Preset",
           "type": "string"
+        },
+        "route": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Route"
         }
       },
       "required": [
-        "route"
+        "resolved_preset"
       ],
       "title": "RouteData",
       "type": "object"

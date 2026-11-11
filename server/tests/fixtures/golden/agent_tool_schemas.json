@@ -535,7 +535,7 @@
     "type": "function"
   },
   {
-    "description": "Search commit messages and merged pull requests by meaning. Use it for why and when questions: why something was changed, who introduced it, what a pull request was for. Results are history, not the current code.",
+    "description": "Search commit messages and merged pull requests by meaning. Use it for why and when questions: why something was changed, who introduced it, what a pull request was for. For a time-bounded question ('in the last two weeks', 'since March') pass since and until as YYYY-MM-DD dates. Results are history, not the current code.",
     "name": "search_history",
     "parameters": {
       "additionalProperties": false,
@@ -579,12 +579,38 @@
           "maxLength": 500,
           "minLength": 1,
           "type": "string"
+        },
+        "since": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only history on or after this date (YYYY-MM-DD). Pass it for time-bounded questions such as 'in the last two weeks', working the date out from today."
+        },
+        "until": {
+          "anyOf": [
+            {
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Only history on or before this date (YYYY-MM-DD). Pass it with since."
         }
       },
       "required": [
         "query",
         "kind",
         "path",
+        "since",
+        "until",
         "k"
       ],
       "type": "object"

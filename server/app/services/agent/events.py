@@ -35,7 +35,6 @@ class Event(StrEnum):
     Attributes:
         RUN_STARTED: The run began. Carries the run id, model and limits.
         NODE: A graph node started or finished (``phase``).
-        ROUTE: The routing decision that chose this graph.
         SEED: Retrieval results were put in front of the agent.
         PLAN: The question was split into sub-questions, or planning was
             skipped.
@@ -58,7 +57,6 @@ class Event(StrEnum):
 
     RUN_STARTED = "run_started"
     NODE = "node"
-    ROUTE = "route"
     SEED = "seed"
     PLAN = "plan"
     THINKING = "thinking"
@@ -114,7 +112,7 @@ class EventType(StrEnum):
 
     Attributes:
         RUN_STARTED: The run began.
-        ROUTE: The routing decision that chose the configuration.
+        ROUTE: An ``auto`` request was resolved to a preset.
         PLAN: The question was split into sub-questions, or planning was skipped.
         WORKER_STARTED: A parallel worker began a sub-question.
         WORKER_DONE: A parallel worker ended.
@@ -168,22 +166,25 @@ class RunStartedData(BaseModel):
 
 
 class RouteData(BaseModel):
-    """``route``: how the question was classified.
+    """``route``: how an ``auto`` request was resolved to a preset.
 
     Attributes:
-        route: The class the router chose.
-        probabilities: The probability of each class, when reported.
-        confidence: The router's confidence, when reported.
-        fell_back: Whether the router was not confident enough to be trusted, so
-            the general path was taken.
-        model: The model that answered.
+        route: The kind of question the decision chose, or ``None`` when no
+            decision was made.
+        confidence: The probability of that route, when known.
+        probabilities: The probability of every route, when reported.
+        resolved_preset: The preset the run uses.
+        fallback_reason: Why the fallback preset was used instead of the
+            route's own: ``unavailable``, ``timeout``, ``error``,
+            ``low_confidence`` or ``no_tool_support``. ``None`` when the route
+            was followed.
     """
 
-    route: str
-    probabilities: dict[str, float] = Field(default_factory=dict)
+    route: str | None = None
     confidence: float | None = None
-    fell_back: bool = False
-    model: str | None = None
+    probabilities: dict[str, float] = Field(default_factory=dict)
+    resolved_preset: str
+    fallback_reason: str | None = None
 
 
 class SubQuestionData(BaseModel):
@@ -263,6 +264,8 @@ class RetrievalData(BaseModel):
         keys: The citation keys kept after fusion and reranking, best first.
         reranker: The reranker that ran.
         queries: Every phrasing the channels searched with, the question first.
+        date_range: The time span the history channel was restricted to, in
+            words, when the question named one.
     """
 
     source: str = "pipeline"
@@ -271,6 +274,7 @@ class RetrievalData(BaseModel):
     keys: list[str] = Field(default_factory=list)
     reranker: str | None = None
     queries: list[QueryData] = Field(default_factory=list)
+    date_range: str | None = None
 
 
 class ThinkingData(BaseModel):
@@ -522,7 +526,6 @@ class EventTranslator:
     ======================= ==================================================
     internal                public
     ======================= ==================================================
-    ``route``               ``route`` (``accepted`` becomes ``fell_back``)
     ``seed``, ``retrieval`` ``retrieval``
     ``plan``                ``plan``
     ``node`` (a worker)     ``worker_started`` / ``worker_done``
@@ -539,7 +542,7 @@ class EventTranslator:
     ======================= ==================================================
 
     Not translated, because another record already says it: ``run_started``
-    (the route announces the run with the preset), ``node`` for the main
+    (the stream's first frame announces the run), ``node`` for the main
     agent's graph nodes, ``model_call`` (kept as a step; usage arrives in
     ``done``), ``answer`` and ``run_finished`` (superseded by ``done``).
 
@@ -572,17 +575,6 @@ class EventTranslator:
             return [Translated(kind, validated.model_dump(mode="json"), worker_id)]
 
         match name:
-            case "route":
-                return one(
-                    EventType.ROUTE,
-                    {
-                        "route": data.get("route"),
-                        "probabilities": data.get("probabilities") or {},
-                        "confidence": data.get("confidence"),
-                        "fell_back": not data.get("accepted", True),
-                        "model": data.get("model"),
-                    },
-                )
             case "seed":
                 return one(EventType.RETRIEVAL, {"source": "seed", **data})
             case "retrieval":

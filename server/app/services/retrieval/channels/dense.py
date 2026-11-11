@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
@@ -25,6 +25,7 @@ async def dense_rows(
     k: int,
     max_distance: float,
     source_types: Sequence[str] | None = None,
+    where: Sequence[ColumnElement[bool]] = (),
 ) -> list[tuple[Embedding, float]]:
     """The nearest chunks of one repository, with their cosine distances.
 
@@ -39,6 +40,7 @@ async def dense_rows(
         k: How many rows to return at most.
         max_distance: Exclusive upper bound on cosine distance.
         source_types: When given, only chunks of these types are searched.
+        where: Further conditions every returned chunk must meet.
 
     Returns:
         ``(row, distance)`` pairs, nearest first. The stored vector is not loaded.
@@ -54,6 +56,8 @@ async def dense_rows(
     )
     if source_types is not None:
         statement = statement.where(Embedding.source_type.in_(list(source_types)))
+    for condition in where:
+        statement = statement.where(condition)
     rows = (await db.execute(statement.order_by(distance).limit(k))).all()
     return [(row[0], float(row[1])) for row in rows]
 

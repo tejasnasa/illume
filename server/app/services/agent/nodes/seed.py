@@ -82,6 +82,11 @@ def make_seed_node(deps: AgentDeps):
                 "channels": channels,
                 "reranker": result.trace.reranker,
                 "queries": query_payload(result.variants),
+                "date_range": (
+                    f"commits {result.trace.date_range['description']}"
+                    if result.trace.date_range
+                    else None
+                ),
             },
         )
         return {

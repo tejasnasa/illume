@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.retrieval.candidate import Candidate, QueryVariant
 from app.services.retrieval.config import ChannelSpec
+from app.services.retrieval.dates import DateRange
 
 Embedder = Callable[[Sequence[str]], Awaitable[list[list[float]]]]
 """Embeds a batch of texts, one vector per text, in input order."""
@@ -35,8 +36,8 @@ Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 """Publishes one named event with a JSON-serialisable payload."""
 
 
-async def _no_emit(event: str, payload: dict[str, Any]) -> None:
-    """The default emitter, for callers that do not stream progress."""
+async def no_emit(event: str, payload: dict[str, Any]) -> None:
+    """The emitter every caller defaults to when it does not stream progress."""
 
 
 @dataclass
@@ -49,12 +50,15 @@ class RetrievalContext:
         embed: How query text becomes vectors. Production passes the operator
             key's embedding call; tests pass a deterministic fake.
         emit: Where progress and degradation events go.
+        date_range: When the question names a time span, the range the history
+            channel restricts commits and pull requests to.
     """
 
     repository_id: UUID
     db: AsyncSession
     embed: Embedder
-    emit: Emit = _no_emit
+    emit: Emit = no_emit
+    date_range: DateRange | None = None
     _vectors: dict[str, list[float]] = field(default_factory=dict, repr=False)
 
     async def prefetch_embeddings(self, texts: Sequence[str]) -> None:

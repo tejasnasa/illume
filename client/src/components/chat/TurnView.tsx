@@ -12,6 +12,7 @@ import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import ActivityBlock from "./ActivityBlock";
 import AnswerView, { type RepoRef } from "./AnswerView";
+import StaleNotice from "./StaleNotice";
 
 /** `1234` as `1.2k`, so token counts stay short. */
 export function compactCount(value: number): string {
@@ -76,6 +77,8 @@ export function RunStats({ run }: { run: RunState }) {
  *
  * @param turn - The turn, with the run state to show.
  * @param repo - Link data for citations.
+ * @param repoId - Repository id, for loading what changed under a stale answer.
+ * @param onReask - Asks the turn's question again as a new turn.
  * @param onDelete - Removes the turn.
  * @param onPulse - Reports the file a hovered citation chip points at.
  * @returns The turn's markup.
@@ -83,11 +86,15 @@ export function RunStats({ run }: { run: RunState }) {
 export default function TurnView({
   turn,
   repo,
+  repoId,
+  onReask,
   onDelete,
   onPulse,
 }: {
   turn: Turn;
   repo: RepoRef;
+  repoId?: string;
+  onReask?: (question: string) => void;
   onDelete: (turnId: string) => void;
   onPulse: (path: string | null) => void;
 }) {
@@ -161,6 +168,15 @@ export default function TurnView({
             <WarningIcon size={14} weight="fill" />
             <span>Connection lost before the answer finished. Ask again to retry.</span>
           </div>
+        )}
+
+        {run.status === "done" && turn.stale && turn.chatMessageId && repoId && (
+          <StaleNotice
+            repoId={repoId}
+            messageId={turn.chatMessageId}
+            stale={turn.stale}
+            onReask={onReask ? () => onReask(turn.question) : undefined}
+          />
         )}
 
         {run.status === "done" && run.answer && (

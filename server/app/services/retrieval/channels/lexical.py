@@ -6,7 +6,7 @@ import re
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import func, literal, select
+from sqlalchemy import ColumnElement, func, literal, select
 from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
@@ -70,6 +70,7 @@ async def lexical_rows(
     *,
     k: int,
     source_types: Sequence[str] | None = None,
+    where: Sequence[ColumnElement[bool]] = (),
 ) -> list[tuple[Embedding, float]]:
     """The chunks of one repository matching any term of the query, best first.
 
@@ -82,6 +83,7 @@ async def lexical_rows(
         query_text: The query variant's text.
         k: How many rows to return at most.
         source_types: When given, only chunks of these types are searched.
+        where: Further conditions every returned chunk must meet.
 
     Returns:
         ``(row, rank)`` pairs; empty when the query has no usable terms.
@@ -98,6 +100,8 @@ async def lexical_rows(
     )
     if source_types is not None:
         statement = statement.where(Embedding.source_type.in_(list(source_types)))
+    for condition in where:
+        statement = statement.where(condition)
     rows = (await db.execute(statement.order_by(rank.desc(), Embedding.id).limit(k))).all()
     return [(row[0], float(row[1])) for row in rows]
 

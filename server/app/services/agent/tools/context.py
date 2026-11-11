@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models import Repository
-from app.services.decisions.base import Decider
 from app.services.llm_config import LLMConfig
-from app.services.retrieval.channels.base import Embedder, Emit, RetrievalContext
+from app.services.retrieval.channels.base import Embedder, Emit, RetrievalContext, no_emit
 from app.services.retrieval.config import PipelineConfig
+from app.services.retrieval.dates import DateRange
 from app.services.retrieval.embedding import embed_texts
 
 
@@ -79,10 +79,6 @@ class RepoSnapshot:
         )
 
 
-async def _discard(event: str, payload: dict[str, Any]) -> None:
-    """The default emitter, for callers that do not stream progress."""
-
-
 @dataclass(frozen=True)
 class ToolContext:
     """Everything a tool call may use.
@@ -102,10 +98,11 @@ class ToolContext:
         github_token: The repository owner's GitHub token, or ``None``.
         llm: Credentials for the calls tools make to a model.
         pipeline: The retrieval settings ``search_code`` runs.
-        decider: The run's decision maker, if there is one.
         budget: The run's shared limits, if there are any.
         emit: Where progress and degradation events go.
         embed: How query text becomes vectors.
+        question: The run's question as typed, which ``search_history`` reads a
+            time span from when the model gives none.
     """
 
     run_id: UUID
@@ -115,13 +112,23 @@ class ToolContext:
     pipeline: PipelineConfig
     worker_id: str | None = None
     github_token: str | None = None
-    decider: Decider | None = None
     budget: SharedBudget | None = None
-    emit: Emit = field(default=_discard)
+    emit: Emit = field(default=no_emit)
     embed: Embedder = field(default=embed_texts)
+    question: str | None = None
 
-    def retrieval(self, db: AsyncSession) -> RetrievalContext:
-        """A retrieval context over this repository for one call's session."""
+    def retrieval(self, db: AsyncSession, date_range: DateRange | None = None) -> RetrievalContext:
+        """A retrieval context over this repository for one call's session.
+
+        Args:
+            db: The call's own session.
+            date_range: A time span to restrict history to; ``None`` lets the
+                pipeline read one from the question.
+        """
         return RetrievalContext(
-            repository_id=self.repository.id, db=db, embed=self.embed, emit=self.emit
+            repository_id=self.repository.id,
+            db=db,
+            embed=self.embed,
+            emit=self.emit,
+            date_range=date_range,
         )

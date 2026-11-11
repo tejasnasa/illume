@@ -17,6 +17,7 @@ from sqlalchemy import delete, select
 from app.api.validation import MultiLineText
 from app.core.database import AsyncSession, get_async_db
 from app.models.chat_message import ChatMessage as ChatMessageModel
+from app.models.commit import Commit
 from app.models.repository import Repository
 from app.models.user import User
 from app.services.entitlements import (
@@ -25,6 +26,7 @@ from app.services.entitlements import (
     llm_config_for,
 )
 from app.services.rag import ChatMessage, answer_question
+from app.services.staleness import cited_file_paths, compare_url
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,10 @@ class ChatMessageHistoryResponse(BaseModel):
     answer: str
     sources: list[SourceReferenceResponse] | None
     created_at: datetime
+    answered_commit_sha: str | None = None
+    stale_at: datetime | None = None
+    stale_paths: list[str] | None = None
+    stale_commit_sha: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -130,6 +136,10 @@ async def chat(
             status_code=400,
             detail=f"Repository is not ready for querying (status: {repo.status})",
         )
+
+    # The snapshot the question is answered against, read before anything can
+    # expire the row.
+    asked_at_sha = repo.ingested_commit_sha
 
     # Cap forwarded history so long sessions don't blow up the LLM prompt.
     history = payload.history[-5:]
@@ -176,9 +186,7 @@ async def chat(
         # quota message is a 402 with a stable ``detail``.
         raise HTTPException(
             status_code=402,
-            detail=(
-                "You've used all of your free chat questions. "
-            ),
+            detail=("You've used all of your free chat questions. "),
         )
 
     try:
@@ -249,6 +257,8 @@ async def chat(
         question=payload.question,
         answer=result.answer,
         sources=serialized_sources,
+        answered_commit_sha=asked_at_sha,
+        cited_paths=cited_file_paths(s.file_path for s in result.sources),
     )
     db.add(chat_record)
     await db.commit()
@@ -322,6 +332,127 @@ async def get_chat_history(
     )
 
     return messages
+
+
+class StaleCommitResponse(BaseModel):
+    """A mined commit that touched a file an answer cited."""
+
+    hash: str
+    message: str
+    author_name: str
+    authored_at: datetime
+    files: list[str]
+
+
+class ChatChangesResponse(BaseModel):
+    """What changed under a stale answer.
+
+    Attributes:
+        stale_paths: The cited files that changed.
+        commits: Mined commits that touched any of them after the answer was
+            given, newest first, at most :data:`MAX_CHANGE_COMMITS`.
+        compare_url: GitHub's comparison of the answered and current commits,
+            when both are known.
+        answered_commit_sha: The commit the answer was given against.
+        stale_commit_sha: The commit that changed the cited files.
+    """
+
+    stale_paths: list[str]
+    commits: list[StaleCommitResponse]
+    compare_url: str | None = None
+    answered_commit_sha: str | None = None
+    stale_commit_sha: str | None = None
+
+
+MAX_CHANGE_COMMITS = 20
+
+
+@router.get("/{repo_id}/chat/{message_id}/changes", response_model=ChatChangesResponse)
+async def get_chat_message_changes(
+    repo_id: uuid.UUID,
+    message_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db),
+):
+    """List what changed under a stale answer.
+
+    Args:
+        repo_id: ID of the repository the message belongs to.
+        message_id: ID of the chat message.
+        request: Request carrying the authenticated user ID in state.
+        db: Async database session.
+
+    Returns:
+        The changed cited files, the commits that touched them since the answer
+        was given, and a GitHub compare link. A message that is not stale has
+        no paths and no commits.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 404 if the repository or the
+            message is not the caller's.
+    """
+    user_id = getattr(request.state, "user_id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    repo = (
+        await db.execute(
+            select(Repository).filter(Repository.id == repo_id, Repository.user_id == user_id)
+        )
+    ).scalar_one_or_none()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
+
+    message = (
+        await db.execute(
+            select(ChatMessageModel).filter(
+                ChatMessageModel.id == message_id,
+                ChatMessageModel.repository_id == repo_id,
+                ChatMessageModel.user_id == user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if not message:
+        raise HTTPException(status_code=404, detail="Chat message not found")
+
+    stale_paths = list(message.stale_paths or [])
+    commits: list[StaleCommitResponse] = []
+    if stale_paths:
+        # Newest first, then filtered in Python: a commit's file list is JSONB
+        # and a repository's mined history is bounded, so one pass is cheap.
+        wanted = set(stale_paths)
+        rows = (
+            await db.execute(
+                select(Commit)
+                .where(Commit.repository_id == repo_id, Commit.authored_at > message.created_at)
+                .order_by(Commit.authored_at.desc())
+            )
+        ).scalars()
+        for commit in rows:
+            touched = [path for path in (commit.changed_files_list or []) if path in wanted]
+            if not touched:
+                continue
+            commits.append(
+                StaleCommitResponse(
+                    hash=commit.hash,
+                    message=commit.message,
+                    author_name=commit.author_name,
+                    authored_at=commit.authored_at,
+                    files=touched,
+                )
+            )
+            if len(commits) >= MAX_CHANGE_COMMITS:
+                break
+
+    return ChatChangesResponse(
+        stale_paths=stale_paths,
+        commits=commits,
+        compare_url=compare_url(
+            repo.github_url, message.answered_commit_sha, message.stale_commit_sha
+        ),
+        answered_commit_sha=message.answered_commit_sha,
+        stale_commit_sha=message.stale_commit_sha,
+    )
 
 
 @router.delete("/{repo_id}/chat/{message_id}", status_code=204)

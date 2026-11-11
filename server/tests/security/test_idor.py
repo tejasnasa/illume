@@ -84,9 +84,9 @@ REPO_ROUTES: list[RepoRoute] = [
     RepoRoute("GET", "/api/v1/repository/{ref}/activity"),
     RepoRoute("POST", "/api/v1/repository/{ref}/chat", body={"question": "What does this do?"}),
     RepoRoute("GET", "/api/v1/repository/{ref}/chat/history"),
+    RepoRoute("GET", "/api/v1/repository/{ref}/chat/{message_id}/changes"),
     RepoRoute("POST", "/api/v1/repository/{ref}/chat/stream", body={"question": "What is this?"}),
     RepoRoute("GET", "/api/v1/repository/{ref}/agent-runs"),
-    RepoRoute("GET", "/api/v1/repository/{ref}/agent-runs/{run_id}"),
     # The odd one out, and deliberately so. Clearing history does not look the
     # repository up at all: it issues a DELETE scoped by `repository_id` *and*
     # `user_id`, so a foreign repository simply matches no rows. The call is therefore

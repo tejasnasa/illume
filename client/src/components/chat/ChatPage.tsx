@@ -11,9 +11,9 @@ import {
   buildOverrides,
   defaultSettings,
   isCustom,
+  defaultPreset,
   loadChoice,
   presetAvailability,
-  resolveAuto,
   saveChoice,
   type Capabilities,
   type DrawerSettings,
@@ -80,7 +80,9 @@ export default function ChatPage({
   const { turns, busy, focusState, loaded } = conversation;
 
   const [input, setInput] = useState("");
-  const [choice, setChoice] = useState<PresetChoice>("auto");
+  const [choice, setChoice] = useState<PresetChoice>(() =>
+    defaultPreset(caps),
+  );
   const [settings, setSettings] = useState<DrawerSettings | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -96,17 +98,19 @@ export default function ChatPage({
   useEffect(() => {
     const stored = loadChoice(repoId);
     if (!stored) return;
-    const target = stored.preset === "auto" ? null : stored.preset;
-    if (target && !presetAvailability(target, caps).available) return;
+    if (!presetAvailability(stored.preset, caps).available) return;
     setChoice(stored.preset);
     setSettings(stored.settings);
     // Only on first load for this repository.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoId]);
 
-  const preset: PresetId = choice === "auto" ? resolveAuto(caps) : choice;
+  // The drawer tunes a concrete preset; under Auto it starts from the account's
+  // default one, and Auto itself sends no overrides because the server has not
+  // yet chosen the preset they would apply to.
+  const preset: PresetId = choice === "auto" ? defaultPreset(caps) : choice;
   const effective = settings ?? defaultSettings(preset);
-  const custom = isCustom(preset, effective);
+  const custom = choice !== "auto" && isCustom(preset, effective);
 
   const remember = useCallback(
     (nextChoice: PresetChoice, nextSettings: DrawerSettings | null) => {
@@ -144,11 +148,15 @@ export default function ChatPage({
       const text = (question ?? input).trim();
       if (!text || busy || quotaExhausted) return;
       stickRef.current = true;
-      conversation.send(text, preset, buildOverrides(preset, effective));
+      conversation.send(
+        text,
+        choice,
+        choice === "auto" ? undefined : buildOverrides(preset, effective),
+      );
       setInput("");
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [input, busy, quotaExhausted, preset, effective, conversation.send],
+    [input, busy, quotaExhausted, choice, preset, effective, conversation.send],
   );
 
   // Follow the newest content until the reader scrolls away.
@@ -319,6 +327,8 @@ export default function ChatPage({
               key={turn.id}
               turn={turn}
               repo={repoRef}
+              repoId={repoId}
+              onReask={busy ? undefined : (question) => send(question)}
               onDelete={conversation.remove}
               onPulse={setPulsePath}
             />

@@ -5,13 +5,14 @@
 "use client";
 
 import { stripMarks } from "@/lib/agent/answer";
-import type { Overrides, PresetId } from "@/lib/agent/presets";
+import type { Overrides, PresetChoice } from "@/lib/agent/presets";
 import {
   initialRunState,
   settledRunState,
   type RunState,
 } from "@/lib/agent/reducer";
 import type { AgentRunSummary, Citation, Usage } from "@/lib/agent/types";
+import type { StaleInfo } from "@/components/chat/StaleNotice";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgentStream, type HistoryMessage } from "./useAgentStream";
 
@@ -24,6 +25,8 @@ export interface Turn {
   chatMessageId: string | null;
   /** True while the stream is driving this turn's run. */
   inFocus: boolean;
+  /** Set when files the answer cited have changed since it was given. */
+  stale: StaleInfo | null;
 }
 
 interface StoredTurn {
@@ -31,6 +34,7 @@ interface StoredTurn {
   question: string;
   run: RunState;
   chatMessageId: string | null;
+  stale?: StaleInfo | null;
 }
 
 interface HistoryRow {
@@ -38,6 +42,8 @@ interface HistoryRow {
   question: string;
   answer: string;
   sources: Partial<Citation>[] | null;
+  stale_at?: string | null;
+  stale_paths?: string[] | null;
 }
 
 const BACKEND = () => process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -103,6 +109,9 @@ export function useConversation(repoId: string) {
             usageByMessage.get(row.id) ?? null,
           ),
           chatMessageId: row.id,
+          stale: row.stale_at
+            ? { paths: row.stale_paths ?? [] }
+            : null,
         }));
         // A question asked before the history landed stays after it.
         setStored((current) => [...mapped, ...current]);
@@ -141,12 +150,13 @@ export function useConversation(repoId: string) {
           run: stream.state.status === "idle" ? turn.run : stream.state,
           chatMessageId: stream.state.chatMessageId ?? turn.chatMessageId,
           inFocus: true,
+          stale: null,
         }
-      : { ...turn, inFocus: false },
+      : { ...turn, inFocus: false, stale: turn.stale ?? null },
   );
 
   const send = useCallback(
-    (question: string, preset: PresetId, overrides?: Overrides) => {
+    (question: string, preset: PresetChoice, overrides?: Overrides) => {
       if (liveRef.current) return;
       const frozen = freeze(storedRef.current);
       const history: HistoryMessage[] = frozen

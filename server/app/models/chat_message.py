@@ -3,10 +3,11 @@ Chat message model definition.
 
 Stores user interactions (questions and AI answers) for repository-scoped chats.
 """
+
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Text, text
+from sqlalchemy import DateTime, ForeignKey, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -16,10 +17,11 @@ from app.core.database import Base
 class ChatMessage(Base):
     """
     SQLAlchemy model representing a chat message.
-    
+
     Stores the user's question, the AI's answer, and any code sources referenced.
     Messages are scoped to a specific user and repository.
     """
+
     __tablename__ = "chat_messages"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -47,3 +49,10 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
+    # The snapshot the question was answered against, and the files the answer cited.
+    answered_commit_sha: Mapped[str | None] = mapped_column(String, nullable=True)
+    cited_paths: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Set by a sync that changed any cited file: when, which of them, and the new head.
+    stale_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    stale_paths: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    stale_commit_sha: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -298,9 +298,13 @@ async def make_chat_message(
     question: str = "What does this do?",
     answer: str = "It does the thing.",
     sources: list[dict] | None = None,
+    **fields: Any,
 ) -> ChatMessage:
     """
     Insert one persisted chat turn.
+
+    Any other column of the message, such as ``cited_paths`` or ``stale_paths``,
+    can be given by keyword.
 
     `created_at` is server-generated, and the history endpoint orders on it, so tests
     that care about ordering insert in sequence and rely on `now()` advancing.
@@ -311,6 +315,7 @@ async def make_chat_message(
         question=question,
         answer=answer,
         sources=sources,
+        **fields,
     )
     db.add(message)
     await db.flush()

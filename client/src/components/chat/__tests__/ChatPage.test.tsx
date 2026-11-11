@@ -151,11 +151,51 @@ describe("ChatPage request", () => {
     stream.close();
   });
 
+  it("starts on the account's default, not on Auto, and sends Auto as `auto` when chosen", async () => {
+    const stream = streamResponse();
+    const { requests } = installFetch({ onStream: () => stream.response });
+    const user = userEvent.setup();
+    renderPage();
+    expect(await screen.findByTestId("preset-label")).toHaveTextContent("Deep agent");
+
+    await user.click(screen.getByRole("button", { name: /Deep agent/ }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^Auto/ }));
+    expect(screen.getByTestId("preset-label")).toHaveTextContent("Auto");
+    await ask("Where is login handled?");
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0].body.preset).toBe("auto");
+    expect(requests[0].body).not.toHaveProperty("overrides");
+    stream.close();
+  });
+
+  it("lands on the account default when an old `auto` was remembered", async () => {
+    window.localStorage.setItem(
+      "illume.chat.preset.repo-1",
+      JSON.stringify({ preset: "auto", settings: null }),
+    );
+    installFetch({});
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByTestId("preset-label")).toHaveTextContent("Deep agent"),
+    );
+  });
+
+  it("keeps a remembered Auto once it is stored in the current format", async () => {
+    window.localStorage.setItem(
+      "illume.chat.preset.repo-1",
+      JSON.stringify({ preset: "auto", settings: null, version: 2 }),
+    );
+    installFetch({});
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("preset-label")).toHaveTextContent("Auto"));
+  });
+
   it("remembers a preset choice per repository", async () => {
     installFetch({});
     const user = userEvent.setup();
     const first = renderPage();
-    await user.click(await screen.findByRole("button", { name: /Auto/ }));
+    await user.click(await screen.findByRole("button", { name: /Deep agent/ }));
     await user.click(screen.getByRole("menuitemradio", { name: /Hybrid/ }));
     expect(screen.getByTestId("preset-label")).toHaveTextContent("Hybrid");
     expect(JSON.parse(window.localStorage.getItem("illume.chat.preset.repo-1")!)).toMatchObject({
@@ -395,7 +435,71 @@ describe("ChatPage graph", () => {
   });
 });
 
+describe("ChatPage stale answers", () => {
+  const STALE_HISTORY = [
+    {
+      id: "msg-1",
+      question: "How is a password checked?",
+      answer: "In app/auth.py.",
+      sources: [],
+      stale_at: "2026-02-01T00:00:00Z",
+      stale_paths: ["app/auth.py"],
+      stale_commit_sha: "def456",
+      answered_commit_sha: "abc123",
+    },
+    {
+      id: "msg-2",
+      question: "What is the license?",
+      answer: "MIT.",
+      sources: [],
+      stale_at: null,
+      stale_paths: null,
+    },
+  ];
+
+  it("flags only the answers whose cited files changed", async () => {
+    installFetch({ history: STALE_HISTORY });
+    renderPage();
+    await screen.findByText("MIT.");
+    expect(screen.getAllByTestId("stale-notice")).toHaveLength(1);
+    const turns = screen.getAllByTestId("turn");
+    expect(within(turns[0]).getByText("May be out of date")).toBeInTheDocument();
+    expect(within(turns[1]).queryByText("May be out of date")).not.toBeInTheDocument();
+  });
+
+  it("re-asks the same question as a new turn with the selected preset", async () => {
+    const stream = streamResponse();
+    const { requests } = installFetch({
+      history: STALE_HISTORY,
+      onStream: () => stream.response,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText("MIT.");
+    await user.click(screen.getByRole("button", { name: /Deep agent/ }));
+    await user.click(screen.getByRole("menuitemradio", { name: /Hybrid/ }));
+
+    await user.click(screen.getByRole("button", { name: "Re-ask" }));
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0].body.question).toBe("How is a password checked?");
+    expect(requests[0].body.preset).toBe("hybrid");
+    expect(screen.getAllByTestId("turn")).toHaveLength(3);
+    stream.close();
+  });
+});
+
 describe("ChatPage free tier", () => {
+  it("offers Classic by default and disables Auto", async () => {
+    installFetch({});
+    renderPage({ caps: { hasOwnKey: false, supportsTools: null }, freeChatRemaining: 5 });
+    const user = userEvent.setup();
+    const label = await screen.findByTestId("preset-label");
+    expect(label).toHaveTextContent("Classic");
+    await user.click(label);
+    expect(screen.getByRole("menuitemradio", { name: /^Auto/ })).toBeDisabled();
+  });
+
   it("disables the composer once the allowance is spent", async () => {
     installFetch({});
     renderPage({ caps: { hasOwnKey: false, supportsTools: null }, freeChatRemaining: 0 });

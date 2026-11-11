@@ -32,6 +32,7 @@ from typing import Any
 import anyio
 from sse_starlette import ServerSentEvent
 
+from app.services.agent.auto import AutoRoute
 from app.services.agent.errors import describe_error
 from app.services.agent.events import (
     CitationData,
@@ -48,6 +49,7 @@ from app.services.agent.persistence import (
 )
 from app.services.agent.runner import RunResult, run_agent
 from app.services.agent.slots import RunSlots
+from app.services.agent.steps import StepRecord
 from app.services.agent.tools.context import RepoSnapshot
 from app.services.decisions import Decider
 from app.services.entitlements import aclaim_free_chat_message
@@ -94,7 +96,8 @@ class RunRequest:
         repository: The repository, copied out of its row.
         question: The question as typed.
         history: Earlier turns, oldest first, already bounded.
-        preset: The preset the request named.
+        preset: The preset the run uses; for an ``auto`` request, the one it
+            resolved to.
         config: The effective configuration, overrides applied.
         llm: The generation credential.
         model_label: ``provider:model`` for the run's record.
@@ -102,6 +105,7 @@ class RunRequest:
         context_window: The input window one model call may carry, or ``None``
             for the configuration's.
         on_free_tier: Whether a generated answer is charged to the free tier.
+        auto: How an ``auto`` request was resolved, or ``None`` for any other preset.
     """
 
     run_id: uuid.UUID
@@ -116,6 +120,7 @@ class RunRequest:
     github_token: str | None
     context_window: int | None
     on_free_tier: bool
+    auto: AutoRoute | None = None
 
 
 @dataclass
@@ -282,9 +287,25 @@ class RunSession:
                 "execution": request.config.execution,
             },
         )
+        if request.auto is not None:
+            await self._announce_route(request.auto)
         if request.config.execution == "single_shot":
             return await self._single_shot()
         return await self._agent()
+
+    async def _announce_route(self, route: AutoRoute) -> None:
+        """Streams the routing decision and records it as a step of the run."""
+        data = route.event_data()
+        self.recorder.publish(EventType.ROUTE, data)
+        await self.recorder.record(
+            StepRecord(
+                index=-1,
+                kind="decision",
+                node="route",
+                payload={"requested_preset": "auto", **data, "decision": route.decision},
+                duration_ms=(route.decision or {}).get("latency_ms") or 0.0,
+            )
+        )
 
     async def _agent(self) -> Outcome:
         request, kit = self.request, self._kit
@@ -399,6 +420,7 @@ class RunSession:
                     question=request.question,
                     answer=outcome.answer,
                     sources=outcome.citations,
+                    answered_commit_sha=request.repository.ingested_commit_sha,
                 )
             except Exception:
                 logger.warning("could not save the turn of run %s", request.run_id, exc_info=True)

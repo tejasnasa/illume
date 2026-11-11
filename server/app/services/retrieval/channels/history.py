@@ -1,18 +1,50 @@
-"""Commits and pull requests, found by meaning and by keyword together."""
+"""Commits and pull requests, found by meaning and by keyword together.
+
+When the question names a time span ("over the last two weeks"), the search is
+restricted to commits authored, and pull requests merged, inside it.
+"""
 
 from __future__ import annotations
 
 from uuid import UUID
 
-from app.models import Embedding
+from sqlalchemy import ColumnElement, and_, or_, select
+
+from app.models import Commit, Embedding, PullRequest
 from app.services.retrieval.candidate import Candidate, QueryVariant
 from app.services.retrieval.channels._common import HISTORY_SOURCE_TYPES
 from app.services.retrieval.channels.base import RetrievalContext
 from app.services.retrieval.channels.dense import dense_rows
 from app.services.retrieval.channels.lexical import lexical_rows
 from app.services.retrieval.config import ChannelSpec, HistoryChannel
+from app.services.retrieval.dates import DateRange
 from app.services.retrieval.keys import candidate_from_embedding
 from app.services.retrieval.resolve import resolve_sources
+
+
+def date_conditions(repository_id: UUID, date_range: DateRange | None) -> list[ColumnElement[bool]]:
+    """The SQL conditions that keep only history inside ``date_range``.
+
+    A commit counts by its authored date and a pull request by its merge date;
+    a pull request that was never merged has no date and is left out.
+    """
+    if date_range is None or (date_range.since is None and date_range.until is None):
+        return []
+    commits = select(Commit.id).where(Commit.repository_id == repository_id)
+    pulls = select(PullRequest.id).where(PullRequest.repository_id == repository_id)
+    if date_range.since is not None:
+        commits = commits.where(Commit.authored_at >= date_range.since)
+        pulls = pulls.where(PullRequest.merged_at >= date_range.since)
+    if date_range.until is not None:
+        commits = commits.where(Commit.authored_at <= date_range.until)
+        pulls = pulls.where(PullRequest.merged_at <= date_range.until)
+    return [
+        or_(
+            and_(Embedding.source_type == "commit", Embedding.source_id.in_(commits)),
+            and_(Embedding.source_type == "pull_request", Embedding.source_id.in_(pulls)),
+        )
+    ]
+
 
 # The rank offset of the fusion inside this channel. Fixed, not configurable: it
 # only merges the channel's own two lists, and the pipeline's fusion has its own.
@@ -32,7 +64,8 @@ class HistorySearch:
         Both halves search only history chunks. Their lists are merged by
         reciprocal rank fusion, so a chunk found by both rises above one found by
         either alone. The lexical half is skipped for a ``hyde`` variant. The
-        reported score is the fused score.
+        reported score is the fused score. When the context carries a date range,
+        only history inside it is searched.
 
         Raises:
             TypeError: When ``spec`` is not a :class:`HistoryChannel`.
@@ -41,6 +74,7 @@ class HistorySearch:
             raise TypeError(f"history channel given a {type(spec).__name__}")
 
         vector = await ctx.embedding(variant.text)
+        within = date_conditions(ctx.repository_id, ctx.date_range)
         dense = await dense_rows(
             ctx.db,
             ctx.repository_id,
@@ -48,6 +82,7 @@ class HistorySearch:
             k=spec.k,
             max_distance=spec.max_distance,
             source_types=HISTORY_SOURCE_TYPES,
+            where=within,
         )
         lexical = (
             []
@@ -58,6 +93,7 @@ class HistorySearch:
                 variant.text,
                 k=spec.k,
                 source_types=HISTORY_SOURCE_TYPES,
+                where=within,
             )
         )
 

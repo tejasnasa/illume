@@ -245,6 +245,12 @@ async def _generate(
     return "".join(parts).strip()
 
 
+def _date_range_text(retrieval: RetrievalResult) -> str | None:
+    """The time span the history channel searched, in words, or ``None``."""
+    found = retrieval.trace.date_range
+    return f"commits {found['description']}" if found else None
+
+
 async def _announce_retrieval(emit: Emit, retrieval: RetrievalResult) -> None:
     """Reports what the retrieval found, without failing the answer."""
     channels: dict[str, int] = {}
@@ -260,6 +266,7 @@ async def _announce_retrieval(emit: Emit, retrieval: RetrievalResult) -> None:
                 "keys": [candidate.key for candidate in retrieval.candidates],
                 "reranker": retrieval.trace.reranker,
                 "queries": query_payload(retrieval.variants),
+                "date_range": _date_range_text(retrieval),
             },
         )
     except Exception:
