@@ -1,12 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { SMOKE_API_URL } from "../env";
-import { chatUrls, readSmokeInfo, repoHome, type SmokeInfo } from "../fixtures";
+import { chatUrls, readSmokeInfo, repoChat, type SmokeInfo } from "../fixtures";
 
 /**
  * The critical path, and the only project that writes anything in production.
  *
- * Exactly one thing is written: a single chat turn, which is deleted again afterwards. No
+ * Exactly one thing is written: a single chat turn, which is deleted again afterwards. The
+ * chat is the streaming page at `/repo/[id]/chat`; the turn is saved by the stream route when
+ * its run ends, so the spec waits on the stored history rather than on the stream. No
  * repository is created, re-ingested, or reconfigured -- re-ingest in particular destroys
  * and rebuilds the row, and the one free ingestion the account has is not something a
  * nightly job may spend.
@@ -24,12 +26,16 @@ import { chatUrls, readSmokeInfo, repoHome, type SmokeInfo } from "../fixtures";
 
 let info: SmokeInfo;
 
+function composer(page: Page) {
+  return page.getByRole("textbox", { name: /Ask about the codebase/ });
+}
+
 const QUESTION = "What does this repository do?";
 
 test.beforeEach(async ({ page }) => {
   info = readSmokeInfo();
-  await page.goto(repoHome(info));
-  await expect(page.getByRole("heading", { name: /Chat with Codebase/i })).toBeVisible();
+  await page.goto(repoChat(info));
+  await expect(composer(page)).toBeVisible();
 });
 
 /**
@@ -72,12 +78,22 @@ async function waitForPersistedTurn(page: Page) {
 }
 
 test("answers from the indexed sources and keeps the turn", async ({ page }) => {
-  const composer = page.getByPlaceholder(/Ask about the codebase/);
-  await composer.fill(QUESTION);
-  await page.getByRole("button", { name: /^Send$/ }).click();
+  // Pinned to Classic: with the account's own key, Auto picks the agent, which would spend
+  // many times the tokens of a single retrieval and generation on every nightly run.
+  await page.getByTestId("preset-label").click();
+  await page.getByRole("menuitemradio", { name: /^Classic/ }).click();
+  await expect(page.getByTestId("preset-label")).toHaveText("Classic");
 
-  // The optimistic bubble, asserted before the round trip.
+  await composer(page).fill(QUESTION);
+  const [request] = await Promise.all([
+    page.waitForRequest((req) => req.url().endsWith("/chat/stream") && req.method() === "POST"),
+    page.getByRole("button", { name: "Send" }).click(),
+  ]);
+  expect(request.postDataJSON()).toMatchObject({ preset: "classic", question: QUESTION });
+
+  // The question shows at once and the composer empties, before the run has finished.
   await expect(page.getByText(QUESTION).last()).toBeVisible();
+  await expect(composer(page)).toHaveValue("");
 
   await waitForPersistedTurn(page);
 
@@ -100,21 +116,24 @@ test("answers from the indexed sources and keeps the turn", async ({ page }) => 
       "an empty embedding table or an embedding/query mismatch, not a normal answer.",
   ).toBeGreaterThan(0);
 
-  // The citation card is rendered from the persisted `sources` column.
-  await expect(page.getByText(/Sources Cited/).last()).toBeVisible({ timeout: 30_000 });
+  // The cited sources are listed under the answer once the run has finished.
+  await expect(page.getByRole("region", { name: "Sources cited" }).last()).toBeVisible({
+    timeout: 30_000,
+  });
 
   await page.reload();
 
-  // Read back from the database rather than from client state, which is what makes this a
-  // persistence assertion and not a rendering one.
+  // The thread is loaded from the stored history on mount, not from client state, which is
+  // what makes this a persistence assertion and not a rendering one.
   await expect(page.getByText(QUESTION).last()).toBeVisible({ timeout: 30_000 });
 });
 
 test("does not spend the account's free-tier allowance", async ({ page }) => {
   // Guards the premise the whole suite is built on: the account holds its own key, so chat
-  // is unmetered. Without it the free path takes over and the ten-message lifetime
-  // allowance would be gone within a week of nightly runs -- and the failure would be a 402
-  // in some later run, pointing nowhere near the cause.
+  // is unmetered. This runs after the billed question, whose run is what would claim an
+  // allowance slot on the free path. Without it the free path takes over and the ten-message
+  // lifetime allowance would be gone within a week of nightly runs -- and the failure would
+  // be a 402 in some later run, pointing nowhere near the cause.
   const response = await page.context().request.get(`${SMOKE_API_URL}/api/v1/auth/me`);
   expect(response.status()).toBe(200);
 
@@ -123,5 +142,5 @@ test("does not spend the account's free-tier allowance", async ({ page }) => {
 });
 
 test("disables the composer for an empty question", async ({ page }) => {
-  await expect(page.getByRole("button", { name: /^Send$/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
 });

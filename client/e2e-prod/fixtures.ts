@@ -3,7 +3,7 @@
  *
  * The setup project resolves the smoke repository once and writes it here, so the specs
  * read identifiers rather than each re-querying the API. It also records the account's
- * free-tier counter, which the chat spec compares against after its one billed-by-BYOU
+ * free-tier counter, which the journey spec compares against after its one billed-by-BYOK
  * question.
  */
 
@@ -51,8 +51,19 @@ export function repoHome(info: SmokeInfo): string {
   return `/repo/${info.repo.repoNumber}`;
 }
 
-/** The chat endpoints for the smoke repository, on the API origin. */
+/** The chat route for the smoke repository. */
+export function repoChat(info: SmokeInfo): string {
+  return `${repoHome(info)}/chat`;
+}
+
+/**
+ * The chat endpoints for the smoke repository, on the API origin.
+ *
+ * A turn is written by the streaming route when its run ends, so `stream` is the only
+ * endpoint that creates one. `history` and `clear` are the stored thread's read and
+ * delete-all, which the chat page itself uses to load and to clear the thread.
+ */
 export function chatUrls(apiUrl: string, info: SmokeInfo) {
   const base = `${apiUrl}/api/v1/repository/${info.repo.id}/chat`;
-  return { history: `${base}/history`, send: base, clear: base };
+  return { history: `${base}/history`, stream: `${base}/stream`, clear: base };
 }

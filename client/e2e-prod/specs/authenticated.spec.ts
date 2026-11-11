@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { readSmokeInfo, repoHome, type SmokeInfo } from "../fixtures";
+import { readSmokeInfo, repoChat, repoHome, type SmokeInfo } from "../fixtures";
 
 /**
  * The product surfaces, browsed with a real session against real data.
@@ -98,10 +98,17 @@ test.describe("the repository overview", () => {
     await expect(page.getByText("AI Architecture Overview")).toBeVisible();
   });
 
-  test("renders the chat panel", async ({ page }) => {
+  test("links to the chat page, which renders its composer", async ({ page }) => {
     await page.goto(home);
+    await settle(page);
 
-    await expect(page.getByRole("heading", { name: /Chat with Codebase/i })).toBeVisible();
+    // The chat is its own route and no longer a panel on the overview. It is entered from
+    // the navbar link, so the rendered href is what is under test. Nothing is sent: the
+    // composer's presence is the assertion, and the billed question lives in the journey.
+    await page.getByRole("link", { name: "Chat", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`${repoChat(info)}$`));
+    await expect(page.getByRole("textbox", { name: /Ask about the codebase/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 });
 
