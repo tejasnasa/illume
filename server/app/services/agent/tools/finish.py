@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 from pydantic import Field
 
 from app.services.agent.tools.context import ToolContext
@@ -28,8 +26,6 @@ class FinishInput(ToolInput):
 
 
 class FinishOutput(ToolOutput):
-    carries_repo_text: ClassVar[bool] = False
-
     answer: str
     confidence_note: str | None = None
 

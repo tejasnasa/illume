@@ -12,7 +12,7 @@ import { PRIMARY_REPO_NAME, readSeed, repoNamed, type SeededRepo } from "../fixt
  * Two paths are covered, for different reasons:
  *
  * - **Classic through the real stream route.** The seeded user is on the free tier, so
- *   `Auto` resolves to Classic and the question goes through `POST /chat/stream`, the
+ *   the picker starts on Classic and the question goes through `POST /chat/stream`, the
  *   retrieval pipeline against real pgvector, and out to `scripts/openai_stub_server.py`
  *   for the answer. Nothing about the text is asserted beyond the stub's fixed sentence.
  * - **Deep agent through a scripted stream.** An agent run needs a model that can call
@@ -156,7 +156,12 @@ function scriptedRun(runId: string): string {
     return `event: ${type}\ndata: ${JSON.stringify(event)}\n\n`;
   };
   return [
-    frame("route", { route: "general", fell_back: false }),
+    frame("run_started", {
+      preset: "deep_agent",
+      config_hash: "e2e",
+      model: "scripted",
+      execution: "agent",
+    }),
     frame("tool_call", {
       call_id: "c1",
       tool: "grep_code",

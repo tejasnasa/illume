@@ -47,11 +47,10 @@ def edges(deps: AgentDeps) -> set[tuple[str, str]]:
 
 
 def test_the_graph_has_the_documented_nodes_and_edges():
-    assert set(NODE_NAMES) == {"route", "seed", "agent", "tools", "synthesize"}
+    assert set(NODE_NAMES) == {"seed", "agent", "tools", "synthesize"}
 
     assert edges(make_deps()) == {
-        ("__start__", "route"),
-        ("route", "seed"),
+        ("__start__", "seed"),
         ("seed", "agent"),
         ("agent", "tools"),
         ("agent", "agent"),

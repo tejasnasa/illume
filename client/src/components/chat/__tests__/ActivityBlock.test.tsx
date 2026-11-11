@@ -19,6 +19,45 @@ function stateOf(...events: StreamEvent[]): RunState {
   return actions.reduce(runReducer, initialRunState);
 }
 
+describe("the route row", () => {
+  it("says where Auto sent the question", () => {
+    render(
+      <ActivityBlock
+        run={stateOf(
+          ev("route", {
+            route: "relational",
+            confidence: 0.82,
+            resolved_preset: "structural",
+            fallback_reason: null,
+          }),
+          ev("done", { run_id: "run-1", answer: "Answer" }),
+        )}
+      />,
+    );
+    const row = document.querySelector('[data-row="route"]');
+    expect(row).toHaveTextContent("Routed to Structural \u00b7 relational \u00b7 82%");
+  });
+
+  it("says why it fell back", () => {
+    render(
+      <ActivityBlock
+        run={stateOf(
+          ev("route", {
+            route: "global",
+            confidence: 0.4,
+            resolved_preset: "structural",
+            fallback_reason: "low_confidence",
+          }),
+          ev("done", { run_id: "run-1", answer: "Answer" }),
+        )}
+      />,
+    );
+    expect(document.querySelector('[data-row="route"]')).toHaveTextContent(
+      "Fell back to Structural (low confidence)",
+    );
+  });
+});
+
 describe("ActivityBlock", () => {
   it("shows the steps inline with a live status line under them", () => {
     render(
@@ -301,7 +340,7 @@ describe("ActivityBlock", () => {
           ev("worker_started", { worker_id: "w1" }, "w1"),
           ev("tool_call", { call_id: "a", tool: "grep_code", arguments: '{"pattern":"login"}' }, "w1"),
           ev("tool_result", { call_id: "a", tool: "grep_code", status: "ok" }, "w1"),
-          ev("worker_done", { worker_id: "w1", status: "done" }, "w1"),
+          ev("worker_done", { worker_id: "w1", status: "completed" }, "w1"),
           ev("worker_done", { worker_id: "w2", status: "failed" }, "w2"),
         )}
       />,

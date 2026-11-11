@@ -53,7 +53,6 @@ class AgentDeps:
         emit: Where events go.
         steps: Where steps go.
         decider: Makes the run's decisions; ``None`` runs without decisions.
-        screen: Inspects one tool result; ``None`` passes it through.
         system_prompt: The agent's system prompt.
         worker_id: The worker this collaborator set belongs to, or ``None`` for
             the main agent. Its events and steps are tagged with it.

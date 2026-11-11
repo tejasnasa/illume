@@ -33,6 +33,8 @@ export function installFetch(options: {
   history?: unknown[];
   runs?: unknown[];
   onStream?: (request: StreamRequest) => Response | Promise<Response>;
+  /** Answers any other URL; return `undefined` to leave it unmocked. */
+  onOther?: (url: string, init?: RequestInit) => Response | undefined;
 }) {
   const requests: StreamRequest[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -48,6 +50,8 @@ export function installFetch(options: {
       requests.push(request);
       return options.onStream(request);
     }
+    const other = options.onOther?.(url, init);
+    if (other) return other;
     return new Response("not mocked", { status: 500 });
   });
   vi.stubGlobal("fetch", fetchMock);

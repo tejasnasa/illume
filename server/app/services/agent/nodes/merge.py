@@ -8,8 +8,8 @@ then takes as the answer.
 
 A worker that failed is named in the prompt and, when the model does not name
 it, in a closing note, so the gap is visible in the answer rather than silent.
-The merged answer is also added to the main conversation, so an answer sent
-back for more work is continued rather than started over.
+The merged answer is also added to the main conversation as the assistant's
+turn.
 """
 
 from __future__ import annotations

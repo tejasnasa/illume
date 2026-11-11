@@ -45,7 +45,6 @@ from app.services.agent.tools import REGISTRY, ToolRegistry
 from app.services.agent.tools.context import RepoSnapshot, ToolContext
 from app.services.agent.tools.output import ToolOutput
 from app.services.agent.tools.registry import Tool, ToolInput
-from app.services.decisions import Route, RouteDecision
 from app.services.retrieval.config import DEEP_AGENT, DEFAULT_CONTEXT_WINDOW
 from tests.factories import make_user
 from tests.fixtures.agent_run import (
@@ -93,7 +92,6 @@ async def env(engine):
     with pytest.MonkeyPatch.context() as patch:
         # A key in a developer's environment must not turn on the model-backed stages.
         patch.setattr(settings, "OPENROUTER_API_KEY", "")
-        patch.setattr(settings, "COHERE_API_KEY", "")
         async with rolled_back_session(engine) as db:
             repos = await seed_tool_repos(db, await make_user(db))
             yield Env(factory=serialized(session_factory_for(db.bind)), repos=repos, db=db)
@@ -182,7 +180,6 @@ class TestHappyPath:
         assert key in result.evidence
         assert "search_symbols" in result.evidence[key].found_by
         assert nodes_run(ran) == [
-            "route",
             "seed",
             "agent",
             "tools",
@@ -409,29 +406,6 @@ class TestSeed:
         assert [p["stage"] for p in degraded] == ["seed"]
         assert "search is down" in degraded[0]["reason"]
 
-    async def test_the_route_decision_is_reported(self, env):
-        decision = RouteDecision(
-            route=Route.RELATIONAL,
-            accepted=True,
-            confidence=0.8,
-            probabilities={"relational": 0.8},
-            model="fake",
-        )
-        model = ScriptedModel([turn(finish("done"))])
-
-        ran = await run(env, model, route=decision)
-
-        assert ran.events.named("route") == [
-            {
-                "route": "relational",
-                "accepted": True,
-                "confidence": 0.8,
-                "probabilities": {"relational": 0.8},
-                "model": "fake",
-            }
-        ]
-        assert ran.result.route is decision
-
 
 # --- plain-text replies ------------------------------------------------------------------
 
@@ -612,7 +586,7 @@ class TestBudgets:
         assert len(budget) == 1
 
     async def test_the_graph_step_limit_still_produces_an_answer(self, env, monkeypatch):
-        monkeypatch.setattr("app.services.agent.runner.recursion_limit", lambda iterations: 6)
+        monkeypatch.setattr("app.services.agent.runner.recursion_limit", lambda iterations: 5)
         model = ScriptedModel(
             [
                 turn(search()),
@@ -877,7 +851,7 @@ class TestModelMisbehaviour:
         nudge = model.requests[1]["input"][-1]
         assert nudge["role"] == "user" and "without calling a tool" in nudge["content"]
         assert ran.result.stop_reason is StopReason.FINISHED
-        assert nodes_run(ran)[:5] == ["route", "seed", "agent", "agent", "tools"]
+        assert nodes_run(ran)[:4] == ["seed", "agent", "agent", "tools"]
 
     async def test_three_text_replies_in_a_row_end_the_run(self, env):
         model = ScriptedModel([say("a"), say("b"), say("c"), say("Closing.")])

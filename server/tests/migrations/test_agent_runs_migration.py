@@ -48,13 +48,14 @@ def chat_columns(engine) -> set[str]:
     return {column["name"] for column in inspect(engine).get_columns("chat_messages")}
 
 
-def test_the_new_revision_follows_the_previous_head(alembic_config):
+def test_the_revision_follows_the_previous_one_on_a_single_line_of_history(alembic_config):
     from alembic.script import ScriptDirectory
 
     script = ScriptDirectory.from_config(alembic_config)
 
     assert script.get_revision(REVISION).down_revision == PARENT
-    assert script.get_current_head() == REVISION
+    assert REVISION in {r.revision for r in script.walk_revisions()}
+    assert len(script.get_heads()) == 1
 
 
 def test_upgrade_downgrade_and_upgrade_again(alembic_config, scratch_database):

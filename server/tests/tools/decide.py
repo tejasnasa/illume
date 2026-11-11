@@ -3,11 +3,11 @@
 Run from ``server/``::
 
     uv run python -m tests.tools.decide
-    uv run python -m tests.tools.decide route relevance
+    uv run python -m tests.tools.decide plan
     uv run python -m tests.tools.decide --decider llm
 
-The default runs every point once: route, plan and relevance. Naming points
-narrows it. ``--decider llm`` uses the LLM stand-in instead of Jev, which is the
+The default runs every point once; at present that is the planning decision.
+Naming points narrows it. ``--decider llm`` uses the LLM stand-in instead of Jev, which is the
 comparison the evaluation is built around; ``jev`` needs ``OPENROUTER_API_KEY`` in ``server/.env``.
 
 **This spends real credit.** Every point is one request to OpenRouter (or one
@@ -31,8 +31,6 @@ from app.services.decisions import (
     DecisionRecord,
     RecordDecision,
     decide_plan,
-    decide_relevance,
-    decide_route,
     get_decider,
 )
 
@@ -50,21 +48,13 @@ PASSAGE = (
 
 async def _run_point(name: str, decider: Decider, record: RecordDecision) -> str:
     """Runs one named point and returns a one-line description of the answer."""
-    if name == "route":
-        route = await decide_route(decider, QUESTION, record=record)
-        return f"{route.route.value} (accepted={route.accepted}, confidence={route.confidence})"
     if name == "plan":
         plan = await decide_plan(decider, QUESTION, record=record)
         return f"plan={plan.plan} (p={plan.probability:.3f})"
-    if name == "relevance":
-        relevance = await decide_relevance(
-            decider, QUESTION, PASSAGE, key="F:app/auth/security.py:10-14", record=record
-        )
-        return f"{relevance.level} (score={relevance.score:.2f})"
     raise SystemExit(f"unknown decision point {name!r}")
 
 
-POINTS = ("route", "plan", "relevance")
+POINTS = ("plan",)
 
 
 async def main(decider_kind: str, points: list[str]) -> int:

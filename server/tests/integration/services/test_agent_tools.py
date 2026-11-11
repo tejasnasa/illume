@@ -71,7 +71,6 @@ async def env(engine):
     with pytest.MonkeyPatch.context() as patch:
         # A key in a developer's environment must not turn on the model-backed stages.
         patch.setattr(settings, "OPENROUTER_API_KEY", "")
-        patch.setattr(settings, "COHERE_API_KEY", "")
         async with rolled_back_session(engine) as db:
             repos = await seed_tool_repos(db, await make_user(db))
             yield Env(factory=session_factory_for(db.bind), repos=repos)
@@ -350,14 +349,13 @@ async def test_the_second_repository_really_holds_the_marker(env):
 @pytest.mark.parametrize("name", sorted(EXAMPLES))
 async def test_repository_text_is_fenced_and_every_block_is_closed(name, ctx_a):
     result = await call(ctx_a, name, **EXAMPLES[name])
-    output = REGISTRY.get(name).output_model
-
     opened = re.findall(
         r'<source key="[^"]+" type="[^"]+" provenance="(repo|history)">', result.text
     )
     assert result.text.count("<source ") == len(opened)
     assert result.text.count("</source>") == len(opened)
-    assert bool(opened) == output.carries_repo_text, name
+    # Every tool but ``finish`` returns text from the repository.
+    assert bool(opened) == (name != "finish"), name
 
 
 @pytest.mark.parametrize("name", LIST_TOOLS)

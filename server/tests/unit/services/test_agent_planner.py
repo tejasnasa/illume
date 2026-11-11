@@ -23,6 +23,7 @@ from app.services.agent.state import (
 )
 from app.services.agent.steps import InMemorySteps
 from app.services.agent.tools import REGISTRY
+from app.services.retrieval.channels.base import no_emit
 from tests.fixtures.agent_run import agent_config, planner_config
 from tests.fixtures.retrieval import make_llm
 
@@ -107,14 +108,10 @@ def make_deps(config: Any) -> AgentDeps:
         registry=REGISTRY,
         brief=SimpleNamespace(render=lambda: "brief"),  # type: ignore[arg-type]
         budget=RunBudget(config.agent),
-        emit=_discard,
+        emit=no_emit,
         steps=InMemorySteps(),
         system_prompt="system",
     )
-
-
-async def _discard(event: str, payload: dict[str, Any]) -> None:
-    return None
 
 
 def edges(config: Any) -> set[tuple[str, str]]:
@@ -136,8 +133,7 @@ class TestPlannerGraph:
         found = edges(agent_config())
 
         assert found == {
-            ("__start__", "route"),
-            ("route", "seed"),
+            ("__start__", "seed"),
             ("seed", "agent"),
             ("agent", "tools"),
             ("agent", "agent"),

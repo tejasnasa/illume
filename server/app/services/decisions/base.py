@@ -42,7 +42,7 @@ from typing import Any, Literal, Protocol, TypeVar
 
 from app.services.decisions.openrouter import DecisionError, Question
 from app.services.llm_config import LLMConfig
-from app.services.retrieval.channels.base import Emit
+from app.services.retrieval.channels.base import Emit, no_emit
 
 logger = logging.getLogger(__name__)
 
@@ -178,8 +178,7 @@ class DecisionRecord:
     """One decision, as the step log and the evaluation read it back.
 
     Attributes:
-        point: What the decision was for, such as ``route`` or
-            ``plan``.
+        point: What the decision was for, such as ``plan``.
         primitive: Which of the three primitives answered it.
         state_hash: :func:`state_hash` of the state sent.
         state_bytes: The size of that state, for cost analysis.
@@ -331,10 +330,6 @@ _T = TypeVar("_T")
 _RUN_ENDING_REASONS = frozenset({"unauthorized", "out_of_credit", "timeout", "server", "transport"})
 
 
-async def _discard(event: str, payload: dict[str, Any]) -> None:
-    """The default emitter, for callers that do not stream progress."""
-
-
 class FallbackDecider:
     """Prefers ``primary`` and answers with ``fallback`` whenever it fails.
 
@@ -360,7 +355,7 @@ class FallbackDecider:
         primary: Decider | None,
         fallback: Decider,
         *,
-        emit: Emit = _discard,
+        emit: Emit = no_emit,
         unavailable: str | None = None,
     ) -> None:
         """
@@ -504,5 +499,5 @@ def get_decider(
     from app.services.decisions.llm import LlmDecider
 
     return FallbackDecider(
-        primary, LlmDecider(resolved), emit=emit or _discard, unavailable=unavailable
+        primary, LlmDecider(resolved), emit=emit or no_emit, unavailable=unavailable
     )

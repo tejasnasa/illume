@@ -13,7 +13,6 @@ from app.services.agent.tools import (  # noqa: F401  (each module registers its
     search,
 )
 from app.services.agent.tools.context import (
-    Decider,
     NodeEvent,
     RepoSnapshot,
     SharedBudget,
@@ -31,7 +30,6 @@ from app.services.agent.tools.registry import (
 
 __all__ = [
     "REGISTRY",
-    "Decider",
     "NodeEvent",
     "RepoSnapshot",
     "SharedBudget",

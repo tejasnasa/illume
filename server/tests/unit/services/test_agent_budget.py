@@ -7,7 +7,7 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from app.services.agent.budgets import BudgetLimit, RunBudget, context_window_for
+from app.services.agent.budgets import BudgetLimit, RunBudget
 from app.services.retrieval.config import (
     DEFAULT_CONTEXT_WINDOW,
     MAX_CONTEXT_WINDOW,
@@ -32,12 +32,6 @@ class TestDefaults:
 
     def test_the_run_total_is_a_runaway_guard_well_above_one_window(self):
         assert AgentConfig().max_input_tokens == 1_500_000
-
-    def test_a_user_without_a_window_gets_the_default(self):
-        assert context_window_for(None) == 250_000
-
-    def test_a_user_window_wins(self):
-        assert context_window_for(400_000) == 400_000
 
     def test_the_window_range_is_32k_to_1m(self):
         for window in (MIN_CONTEXT_WINDOW, MAX_CONTEXT_WINDOW):

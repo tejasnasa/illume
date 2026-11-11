@@ -17,7 +17,10 @@ export type PresetId =
   | "deep_agent"
   | "deep_agent_workers";
 
-/** The picker's choices: `auto` resolves to one of the presets at send time. */
+/**
+ * The picker's choices. `auto` is sent to the server as `preset: "auto"`, and one
+ * routing decision there picks the preset that answers each question.
+ */
 export type PresetChoice = "auto" | PresetId;
 
 export type ChannelId =
@@ -85,7 +88,7 @@ export const PRESET_DEFAULTS: Record<PresetId, PresetDefaults> = {
     agent: false,
     workers: false,
     channels: HYBRID_CHANNELS,
-    rerank: "jev",
+    rerank: "cohere",
     transform: "identity",
     maxIterations: null,
     maxWorkers: null,
@@ -96,7 +99,7 @@ export const PRESET_DEFAULTS: Record<PresetId, PresetDefaults> = {
     agent: false,
     workers: false,
     channels: ALL_CHANNELS,
-    rerank: "jev",
+    rerank: "cohere",
     transform: "identity",
     maxIterations: null,
     maxWorkers: null,
@@ -107,7 +110,7 @@ export const PRESET_DEFAULTS: Record<PresetId, PresetDefaults> = {
     agent: true,
     workers: false,
     channels: ALL_CHANNELS,
-    rerank: "jev",
+    rerank: "cohere",
     transform: "identity",
     maxIterations: 20,
     maxWorkers: null,
@@ -118,7 +121,7 @@ export const PRESET_DEFAULTS: Record<PresetId, PresetDefaults> = {
     agent: true,
     workers: true,
     channels: ALL_CHANNELS,
-    rerank: "jev",
+    rerank: "cohere",
     transform: "identity",
     maxIterations: 20,
     maxWorkers: 4,
@@ -133,6 +136,15 @@ export const PICKER_PRESETS: PresetChoice[] = [
   "deep_agent",
   "deep_agent_workers",
 ];
+
+/** The button's short name for the routed choice. */
+export const AUTO_LABEL = "Auto";
+
+/** The menu's name for it, which says what it does. */
+export const AUTO_MENU_LABEL = "Auto \u2014 picks per question";
+
+/** What the routed choice does, shown under its name. */
+export const AUTO_BLURB = "Picks per question: one decision chooses the preset.";
 
 /** What the picker needs to know about the account. */
 export interface Capabilities {
@@ -159,7 +171,16 @@ export function presetAvailability(
   preset: PresetChoice,
   caps: Capabilities,
 ): Availability {
-  if (preset === "auto") return { available: true, reason: null };
+  if (preset === "auto") {
+    if (!caps.hasOwnKey) {
+      return {
+        available: false,
+        reason:
+          "Auto picks a preset per question and runs on your own API key. Add one in settings to use it.",
+      };
+    }
+    return { available: true, reason: null };
+  }
   if (!PRESET_DEFAULTS[preset].agent) return { available: true, reason: null };
   if (!caps.hasOwnKey) {
     return {
@@ -179,12 +200,13 @@ export function presetAvailability(
 }
 
 /**
- * Chooses the preset `auto` stands for.
+ * The preset an account starts on: the strongest one it can run.
  *
  * @param caps - Account capabilities.
- * @returns The strongest preset this account can run.
+ * @returns `deep_agent` with an own key whose model can call tools, `hybrid`
+ *   with one that cannot, and `classic` on the free tier.
  */
-export function resolveAuto(caps: Capabilities): PresetId {
+export function defaultPreset(caps: Capabilities): PresetId {
   if (!caps.hasOwnKey) return "classic";
   if (caps.supportsTools === false) return "hybrid";
   return "deep_agent";
@@ -276,6 +298,13 @@ export interface StoredChoice {
   settings: DrawerSettings | null;
 }
 
+/**
+ * Version of the stored shape. Before version 2, `auto` meant "the account's
+ * default preset"; it now means routing by question, so an older `auto` must not
+ * be read as the new one.
+ */
+const STORAGE_VERSION = 2;
+
 const STORAGE_PREFIX = "illume.chat.preset.";
 
 const VALID_CHOICES = new Set<string>(["auto", ...Object.keys(PRESET_DEFAULTS)]);
@@ -284,7 +313,8 @@ const VALID_CHOICES = new Set<string>(["auto", ...Object.keys(PRESET_DEFAULTS)])
  * Reads the choice remembered for a repository.
  *
  * @param repoId - Repository id.
- * @returns The stored choice, or `null` when none is stored or storage fails.
+ * @returns The stored choice, or `null` when none is stored, storage fails, or
+ *   the record is an unversioned `auto` (the caller then uses the account default).
  */
 export function loadChoice(repoId: string): StoredChoice | null {
   try {
@@ -292,6 +322,8 @@ export function loadChoice(repoId: string): StoredChoice | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<StoredChoice>;
     if (!parsed.preset || !VALID_CHOICES.has(parsed.preset)) return null;
+    const version = (parsed as { version?: number }).version ?? 1;
+    if (version < STORAGE_VERSION && parsed.preset === "auto") return null;
     return { preset: parsed.preset, settings: parsed.settings ?? null };
   } catch {
     return null;
@@ -306,19 +338,18 @@ export function loadChoice(repoId: string): StoredChoice | null {
  */
 export function saveChoice(repoId: string, choice: StoredChoice): void {
   try {
-    window.localStorage.setItem(STORAGE_PREFIX + repoId, JSON.stringify(choice));
+    window.localStorage.setItem(
+      STORAGE_PREFIX + repoId,
+      JSON.stringify({ ...choice, version: STORAGE_VERSION }),
+    );
   } catch {
     // Storage can be blocked or full; the choice then lasts for the visit only.
   }
 }
 
 /** The label the picker shows for a choice. */
-export function choiceLabel(
-  choice: PresetChoice,
-  caps: Capabilities,
-  custom: boolean,
-): string {
+export function choiceLabel(choice: PresetChoice, custom: boolean): string {
   if (custom) return "Custom";
-  if (choice === "auto") return `Auto · ${PRESET_DEFAULTS[resolveAuto(caps)].label}`;
+  if (choice === "auto") return AUTO_LABEL;
   return PRESET_DEFAULTS[choice].label;
 }

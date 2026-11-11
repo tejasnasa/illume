@@ -40,7 +40,6 @@ export type RunStatus =
 /** What the run is doing right now; drives the header's status line. */
 export type RunPhase =
   | "starting"
-  | "routing"
   | "planning"
   | "retrieving"
   | "thinking"
@@ -83,6 +82,17 @@ export interface PlanRow extends RowBase {
   subquestions: { id: string; question: string }[];
 }
 
+export interface RouteRow extends RowBase {
+  kind: "route";
+  /** The kind of question the decision chose; `null` when no decision was made. */
+  route: string | null;
+  /** The chosen route's probability, from 0 to 1. */
+  confidence: number | null;
+  resolvedPreset: string;
+  /** Why the fallback preset was used instead of the route's own, if it was. */
+  fallbackReason: string | null;
+}
+
 export interface RetrievalRow extends RowBase {
   kind: "retrieval";
   source: string;
@@ -102,7 +112,12 @@ export interface ThinkingRow extends RowBase {
   text: string;
 }
 
-export type ActivityRow = ToolRow | PlanRow | RetrievalRow | ThinkingRow;
+export type ActivityRow =
+  | ToolRow
+  | PlanRow
+  | RouteRow
+  | RetrievalRow
+  | ThinkingRow;
 
 export interface Lane {
   id: string;
@@ -141,7 +156,6 @@ export interface RunState {
   phase: RunPhase;
   runId: string | null;
   meta: RunStartedData | null;
-  route: RouteData | null;
   plan: PlanData | null;
   lanes: Record<string, Lane>;
   laneOrder: string[];
@@ -186,7 +200,6 @@ export const initialRunState: RunState = {
   phase: "starting",
   runId: null,
   meta: null,
-  route: null,
   plan: null,
   lanes: {},
   laneOrder: [],
@@ -401,10 +414,19 @@ function applyEvent(
   switch (event.type) {
     case "run_started": {
       const meta = data as RunStartedData;
-      return { ...state, runId: event.run_id, meta, phase: "routing" };
+      return { ...state, runId: event.run_id, meta, phase: "starting" };
     }
-    case "route":
-      return { ...state, route: data as RouteData, phase: "routing" };
+    case "route": {
+      const route = data as RouteData;
+      return pushRow(state, {
+        ...base,
+        kind: "route",
+        route: route.route ?? null,
+        confidence: route.confidence ?? null,
+        resolvedPreset: route.resolved_preset,
+        fallbackReason: route.fallback_reason ?? null,
+      });
+    }
     case "plan": {
       const plan = data as PlanData;
       let next: RunState = { ...state, plan, phase: "planning" };
@@ -438,7 +460,8 @@ function applyEvent(
     }
     case "worker_done": {
       const worker = data as WorkerData;
-      const failed = worker.status != null && worker.status !== "done";
+      const failed =
+        worker.status === "failed" || worker.status === "timed_out";
       return ensureLane(
         state,
         worker.worker_id,

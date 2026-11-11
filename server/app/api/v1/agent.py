@@ -1,10 +1,10 @@
-"""Streaming answers and their replay.
+"""Streaming answers and the list of a repository's runs.
 
 ``POST /{repo_id}/chat/stream`` answers a question with any preset and streams
 what happens as server-sent events. It makes the same ownership, readiness and
 quota checks as ``POST /{repo_id}/chat``, then hands the run to a
 :class:`~app.services.agent.session.RunSession`, which records it so that
-``GET /{repo_id}/agent-runs/{run_id}`` can return the same events later.
+``GET /{repo_id}/agent-runs`` can list it afterwards.
 
 The request is authenticated by the session cookie like every other route:
 there is no token in the URL, which is why the stream is a ``POST`` read with
@@ -31,12 +31,11 @@ from app.core.database import AsyncSessionLocal, get_async_db
 from app.models.agent_run import AgentRun
 from app.models.repository import Repository
 from app.models.user import User
-from app.services.agent.events import StreamEvent
+from app.services.agent.auto import AUTO, AutoRoute, resolve_auto
 from app.services.agent.overrides import OverrideError, Overrides, apply_overrides
 from app.services.agent.persistence import (
     create_run,
     last_activity,
-    load_events,
     public_status,
 )
 from app.services.agent.prompts import PROMPT_VERSION
@@ -93,8 +92,10 @@ class StreamRequest(BaseModel):
     Attributes:
         question: The question; multi-line, like the chat composer's.
         history: Earlier turns, oldest first.
-        preset: A preset name.
-        overrides: Settings changed for this run only; see
+        preset: A preset name, or ``auto`` to have one decision pick the preset
+            from the question. ``auto`` needs the caller's own key.
+        overrides: Settings changed for this run only; they apply to the preset
+            ``auto`` resolves to. See
             :mod:`app.services.agent.overrides` for what is accepted.
     """
 
@@ -108,8 +109,8 @@ class StreamRequest(BaseModel):
     @field_validator("preset")
     @classmethod
     def _known_preset(cls, value: str) -> str:
-        if value not in PRESETS:
-            raise ValueError(f"unknown preset {value!r}; choose one of {sorted(PRESETS)}")
+        if value != AUTO and value not in PRESETS:
+            raise ValueError(f"unknown preset {value!r}; choose one of {sorted([AUTO, *PRESETS])}")
         return value
 
 
@@ -154,24 +155,6 @@ class AgentRunSummary(BaseModel):
     error: str | None
     created_at: datetime
     finished_at: datetime | None
-
-
-class AgentRunDetail(AgentRunSummary):
-    """One run with the events it streamed.
-
-    Attributes:
-        answer: The final answer.
-        citations: The evidence the answer cites.
-        usage: What the run spent.
-        events: The run's events in order, in the shape the live stream sent them.
-        events_available: ``False`` when the events have been pruned.
-    """
-
-    answer: str | None
-    citations: list[dict[str, Any]] | None
-    usage: dict[str, Any] | None
-    events: list[StreamEvent]
-    events_available: bool
 
 
 def _summary_fields(run: AgentRun, status: str) -> dict[str, Any]:
@@ -224,6 +207,11 @@ def _decider_label(config: PipelineConfig, model: str) -> str | None:
     return f"jev:{JEV_MODEL}" if config.decider == "jev" else f"llm:{model}"
 
 
+async def _known(value: bool | None) -> bool | None:
+    """A tool-support verdict that was already measured, as an awaitable."""
+    return value
+
+
 # --- routes --------------------------------------------------------------------------
 
 
@@ -244,6 +232,12 @@ async def stream_chat(
     key of the caller's own (402) whose model can call tools (400); the free-tier
     allowance is not spent (402); the caller has a free run slot (429). Nothing
     that costs a model call happens before all of them pass.
+
+    ``auto`` needs the caller's own key (402 on the free tier). Once a slot is
+    held, one routing decision on the operator's key picks the preset, which then
+    runs as if it had been requested; the overrides are checked against that
+    preset (422). The decision itself never fails the request: it falls back to
+    ``structural``.
 
     Each event is ``event: <type>`` with the envelope as JSON in ``data``. The
     stream ends with ``done`` or ``error``. A client that disconnects cancels the
@@ -283,10 +277,13 @@ async def stream_chat(
     )
     # What the drawer may change depends on who pays for the extra calls.
     own_key = owner is not None and owner.ai_api_key is not None
-    try:
-        config = apply_overrides(PRESETS[payload.preset], payload.overrides, own_key=own_key)
-    except OverrideError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
+    is_auto = payload.preset == AUTO
+    config: PipelineConfig | None = None
+    if not is_auto:
+        try:
+            config = apply_overrides(PRESETS[payload.preset], payload.overrides, own_key=own_key)
+        except OverrideError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     llm_config = llm_config_for(owner)
     if owner is None or llm_config is None:
@@ -299,7 +296,18 @@ async def stream_chat(
         )
 
     on_free_tier = owner.ai_api_key is None
-    if config.execution != "single_shot":
+    supports_tools: bool | None = None
+    if is_auto:
+        if on_free_tier:
+            raise HTTPException(
+                status_code=402,
+                detail=(
+                    "Auto picks a preset per question and runs on your own API key. "
+                    "Add one in your account settings to use it."
+                ),
+            )
+        supports_tools = await ensure_tool_support(db, owner)
+    elif config is not None and config.execution != "single_shot":
         if on_free_tier:
             raise HTTPException(
                 status_code=402,
@@ -335,9 +343,6 @@ async def stream_chat(
     model_label = _model_label(owner, llm_config.model)
     await db.commit()
 
-    bound = CLASSIC_HISTORY_MESSAGES if is_classic_shaped(config) else MAX_HISTORY_MESSAGES
-    history = [ChatMessage(role=m.role, content=m.content) for m in payload.history[-bound:]]
-
     if not await slots.acquire(user_id):
         raise HTTPException(
             status_code=429,
@@ -345,14 +350,32 @@ async def stream_chat(
         )
 
     run_id = uuid.uuid4()
+    auto: AutoRoute | None = None
     try:
+        if is_auto:
+            auto = await resolve_auto(
+                payload.question,
+                [ChatMessage(role=m.role, content=m.content) for m in payload.history],
+                decider=kit.decider,
+                supports_tools=lambda: _known(supports_tools),
+            )
+            try:
+                config = apply_overrides(
+                    PRESETS[auto.resolved_preset], payload.overrides, own_key=own_key
+                )
+            except OverrideError as error:
+                raise HTTPException(status_code=422, detail=str(error)) from error
+        assert config is not None
+        resolved_preset = auto.resolved_preset if auto is not None else payload.preset
+        bound = CLASSIC_HISTORY_MESSAGES if is_classic_shaped(config) else MAX_HISTORY_MESSAGES
+        history = [ChatMessage(role=m.role, content=m.content) for m in payload.history[-bound:]]
         await create_run(
             sessions,
             run_id=run_id,
             user_id=user_id,
             repository_id=repo_id,
             question=payload.question,
-            preset=payload.preset,
+            preset=resolved_preset,
             config=config.model_dump(mode="json"),
             config_hash=config.config_hash(),
             prompt_version=PROMPT_VERSION if config.execution != "single_shot" else None,
@@ -371,13 +394,14 @@ async def stream_chat(
             repository=snapshot,
             question=payload.question,
             history=history,
-            preset=payload.preset,
+            preset=resolved_preset,
             config=config,
             llm=llm_config,
             model_label=model_label,
             github_token=github_token,
             context_window=context_window,
             on_free_tier=on_free_tier,
+            auto=auto,
         ),
         sessions,
         slots,
@@ -432,54 +456,3 @@ async def list_agent_runs(
         AgentRunSummary(**_summary_fields(run, public_status(run, seen.get(run.id))))
         for run in runs
     ]
-
-
-@router.get("/{repo_id}/agent-runs/{run_id}", response_model=AgentRunDetail)
-async def get_agent_run(
-    repo_id: uuid.UUID,
-    run_id: uuid.UUID,
-    request: Request,
-    db: AsyncSession = Depends(get_async_db),
-):
-    """Return one run with the events it streamed, for replay.
-
-    The events have the same shape and order as the live stream. A run whose
-    process died before it finished has status ``interrupted`` and holds whatever
-    was recorded.
-
-    Args:
-        repo_id: ID of the repository.
-        run_id: ID of the run.
-        request: Request carrying the authenticated user ID in state.
-        db: Async database session.
-
-    Returns:
-        The run and its events.
-
-    Raises:
-        HTTPException: 404 if the repository or the run is not the caller's.
-    """
-    user_id = getattr(request.state, "user_id", None)
-    await _owned_repository(db, repo_id, user_id)
-    run = (
-        await db.execute(
-            select(AgentRun).where(
-                AgentRun.id == run_id,
-                AgentRun.repository_id == repo_id,
-                AgentRun.user_id == user_id,
-            )
-        )
-    ).scalar_one_or_none()
-    if run is None:
-        raise HTTPException(status_code=404, detail="Run not found")
-
-    seen = await last_activity(db, [run.id])
-    events = await load_events(db, run.id)
-    return AgentRunDetail(
-        **_summary_fields(run, public_status(run, seen.get(run.id))),
-        answer=run.answer,
-        citations=run.citations,
-        usage=run.usage,
-        events=events,
-        events_available=bool(events) or run.status == "running",
-    )

@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from app.services.retrieval.channels.base import Emit
-from app.services.retrieval.config import DEFAULT_CONTEXT_WINDOW, AgentConfig
+from app.services.retrieval.channels.base import Emit, no_emit
+from app.services.retrieval.config import AgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +33,6 @@ class BudgetLimit(StrEnum):
     TOOL_CALLS = "max_tool_calls"
     SECONDS = "max_seconds"
     INPUT_TOKENS = "max_input_tokens"
-
-
-def context_window_for(user_window: int | None) -> int:
-    """The context window a user's runs use.
-
-    Args:
-        user_window: The value stored on the user, or ``None`` when they have
-            not chosen one.
-
-    Returns:
-        The user's window, or the default when they have none.
-    """
-    return DEFAULT_CONTEXT_WINDOW if user_window is None else user_window
 
 
 @dataclass(frozen=True)
@@ -67,10 +54,6 @@ class BudgetSnapshot:
     reached: tuple[str, ...]
 
 
-async def _discard(event: str, payload: dict[str, Any]) -> None:
-    """The default emitter, for callers that do not stream progress."""
-
-
 class RunBudget:
     """Counts tool calls, tokens and wall clock for one run.
 
@@ -81,7 +64,7 @@ class RunBudget:
         self,
         config: AgentConfig,
         *,
-        emit: Emit = _discard,
+        emit: Emit = no_emit,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         """

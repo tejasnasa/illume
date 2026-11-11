@@ -65,7 +65,6 @@ class AgentRun(Base):
     stop_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     citations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    verification: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     tool_calls: Mapped[int | None] = mapped_column(Integer, nullable=True)
     iterations: Mapped[int | None] = mapped_column(Integer, nullable=True)

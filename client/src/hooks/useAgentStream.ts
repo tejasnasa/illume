@@ -11,7 +11,7 @@ import {
   runReducer,
   type RunState,
 } from "@/lib/agent/reducer";
-import type { Overrides, PresetId } from "@/lib/agent/presets";
+import type { Overrides, PresetChoice } from "@/lib/agent/presets";
 import { SseParser } from "@/lib/agent/sse";
 import type { StreamEvent } from "@/lib/agent/types";
 import { useCallback, useEffect, useReducer, useRef } from "react";
@@ -25,7 +25,7 @@ export interface HistoryMessage {
 export interface StartArgs {
   repoId: string;
   question: string;
-  preset: PresetId;
+  preset: PresetChoice;
   overrides?: Overrides;
   history: HistoryMessage[];
 }

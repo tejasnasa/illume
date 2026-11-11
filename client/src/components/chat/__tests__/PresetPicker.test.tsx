@@ -1,13 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AdvancedDrawer from "@/components/chat/AdvancedDrawer";
 import PresetPicker from "@/components/chat/PresetPicker";
 import {
   buildOverrides,
   defaultSettings,
+  defaultPreset,
+  loadChoice,
   presetAvailability,
-  resolveAuto,
+  saveChoice,
   type Capabilities,
 } from "@/lib/agent/presets";
 
@@ -55,6 +57,39 @@ describe("PresetPicker", () => {
     expect(screen.getByRole("menuitemradio", { name: /^Classic/ })).toBeEnabled();
   });
 
+  it("lists Auto first, named for what it does", () => {
+    open(KEYED);
+    const [first] = screen.getAllByRole("menuitemradio");
+    expect(first).toHaveTextContent("Auto \u2014 picks per question");
+    expect(first).toBeEnabled();
+  });
+
+  it("disables Auto on the free tier and says why", () => {
+    open(FREE);
+    const auto = screen.getByRole("menuitemradio", { name: /^Auto/ });
+    expect(auto).toBeDisabled();
+    expect(auto).toHaveAttribute("title", expect.stringMatching(/own API key/));
+  });
+
+  it("reports Auto as the chosen preset", () => {
+    const onChoice = open(KEYED);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /^Auto/ }));
+    expect(onChoice).toHaveBeenCalledWith("auto");
+  });
+
+  it("starts on the account's own default rather than on Auto", () => {
+    render(
+      <PresetPicker
+        choice={defaultPreset(KEYED)}
+        caps={KEYED}
+        custom={false}
+        onChoice={() => {}}
+        onOpenDrawer={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("preset-label")).toHaveTextContent("Deep agent");
+  });
+
   it("reports the chosen preset", () => {
     const onChoice = open(KEYED);
     fireEvent.click(screen.getByRole("menuitemradio", { name: /Hybrid/ }));
@@ -92,10 +127,44 @@ describe("PresetPicker", () => {
 });
 
 describe("preset logic", () => {
-  it("auto resolves by account", () => {
-    expect(resolveAuto(FREE)).toBe("classic");
-    expect(resolveAuto(NO_TOOLS)).toBe("hybrid");
-    expect(resolveAuto(KEYED)).toBe("deep_agent");
+  it("the account default is explicit: the strongest preset it can run", () => {
+    expect(defaultPreset(FREE)).toBe("classic");
+    expect(defaultPreset(NO_TOOLS)).toBe("hybrid");
+    expect(defaultPreset(KEYED)).toBe("deep_agent");
+  });
+
+  it("auto is a choice of its own, available only with an own key", () => {
+    expect(presetAvailability("auto", KEYED).available).toBe(true);
+    expect(presetAvailability("auto", NO_TOOLS).available).toBe(true);
+    const free = presetAvailability("auto", FREE);
+    expect(free.available).toBe(false);
+    expect(free.reason).toMatch(/own API key/);
+  });
+
+  describe("the remembered choice", () => {
+    beforeEach(() => window.localStorage.clear());
+
+    it("round-trips and is stamped with a version", () => {
+      saveChoice("r1", { preset: "auto", settings: null });
+      expect(loadChoice("r1")).toEqual({ preset: "auto", settings: null });
+      expect(JSON.parse(window.localStorage.getItem("illume.chat.preset.r1")!).version).toBe(2);
+    });
+
+    it("an unversioned auto, which meant the account default, is not read as the new auto", () => {
+      window.localStorage.setItem(
+        "illume.chat.preset.r1",
+        JSON.stringify({ preset: "auto", settings: null }),
+      );
+      expect(loadChoice("r1")).toBeNull();
+    });
+
+    it("an unversioned concrete preset is kept", () => {
+      window.localStorage.setItem(
+        "illume.chat.preset.r1",
+        JSON.stringify({ preset: "hybrid", settings: null }),
+      );
+      expect(loadChoice("r1")?.preset).toBe("hybrid");
+    });
   });
 
   it("agent presets are available only with a tool-capable own key", () => {

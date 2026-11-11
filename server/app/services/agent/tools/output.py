@@ -9,7 +9,7 @@ tell evidence from instructions, and a result never exceeds
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, computed_field
 
@@ -88,8 +88,6 @@ class ToolOutput(BaseModel):
         note: A sentence for the model when something needs saying, such as a
             path that does not exist.
     """
-
-    carries_repo_text: ClassVar[bool] = True
 
     note: str | None = None
 

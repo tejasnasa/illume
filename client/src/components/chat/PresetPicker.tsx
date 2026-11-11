@@ -5,11 +5,12 @@
 "use client";
 
 import {
+  AUTO_BLURB,
+  AUTO_MENU_LABEL,
   PICKER_PRESETS,
   PRESET_DEFAULTS,
   choiceLabel,
   presetAvailability,
-  resolveAuto,
   type Capabilities,
   type PresetChoice,
 } from "@/lib/agent/presets";
@@ -80,7 +81,7 @@ export default function PresetPicker({
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-(--muted-foreground) hover:bg-(--secondary)/50 hover:text-(--foreground) disabled:opacity-50 disabled:cursor-default cursor-pointer"
       >
-        <span data-testid="preset-label">{choiceLabel(choice, caps, custom)}</span>
+        <span data-testid="preset-label">{choiceLabel(choice, custom)}</span>
         <CaretUpIcon size={11} weight="bold" />
       </button>
 
@@ -91,8 +92,7 @@ export default function PresetPicker({
         >
           {PICKER_PRESETS.map((preset) => {
             const availability = presetAvailability(preset, caps);
-            const target = preset === "auto" ? resolveAuto(caps) : preset;
-            const info = PRESET_DEFAULTS[target];
+            const info = preset === "auto" ? null : PRESET_DEFAULTS[preset];
             const selected = choice === preset;
             return (
               <button
@@ -116,15 +116,13 @@ export default function PresetPicker({
                 />
                 <span className="min-w-0">
                   <span className="block text-xs font-medium text-(--foreground)">
-                    {preset === "auto" ? "Auto" : info.label}
+                    {info ? info.label : AUTO_MENU_LABEL}
                   </span>
                   {availability.reason && (
                     <span className="sr-only">{availability.reason}</span>
                   )}
                   <span className="block text-[11px] leading-snug text-(--muted-foreground)">
-                    {preset === "auto"
-                      ? `Picks the best your account can run (${info.label}).`
-                      : info.blurb}
+                    {info ? info.blurb : AUTO_BLURB}
                   </span>
                 </span>
               </button>

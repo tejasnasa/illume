@@ -6,10 +6,12 @@
 
 import { decorateAnswer, keysFromHref, shortKeyLabel, trimPartialMarkup } from "@/lib/agent/answer";
 import { laneColor } from "@/lib/agent/palette";
+import { PRESET_DEFAULTS, type PresetId } from "@/lib/agent/presets";
 import {
   type ActivityRow,
   type Lane,
   type PlanRow,
+  type RouteRow,
   type RetrievalRow,
   type RunState,
   type ThinkingRow,
@@ -30,6 +32,7 @@ import {
   InfoIcon,
   ListChecksIcon,
   RobotIcon,
+  SignpostIcon,
   MagnifyingGlassIcon,
   TerminalWindowIcon,
   TreeStructureIcon,
@@ -334,6 +337,36 @@ function NoteRow({
   );
 }
 
+const FALLBACK_REASONS: Record<string, string> = {
+  low_confidence: "low confidence",
+  unavailable: "router unavailable",
+  timeout: "router timed out",
+  error: "routing failed",
+  no_tool_support: "model cannot call tools",
+};
+
+/** One line saying which preset an Auto request ran with, and why. */
+export function routeSummary(row: RouteRow): string {
+  const preset =
+    PRESET_DEFAULTS[row.resolvedPreset as PresetId]?.label ?? row.resolvedPreset;
+  if (row.fallbackReason) {
+    const why = FALLBACK_REASONS[row.fallbackReason] ?? row.fallbackReason;
+    return `Fell back to ${preset} (${why})`;
+  }
+  const parts = [`Routed to ${preset}`];
+  if (row.route) parts.push(row.route.replace(/_/g, " "));
+  if (row.confidence !== null) parts.push(`${Math.round(row.confidence * 100)}%`);
+  return parts.join(" \u00b7 ");
+}
+
+function RouteRowView({ row, index }: { row: RouteRow; index: number }) {
+  return (
+    <NoteRow icon={SignpostIcon} tone="text-(--chart-1)" index={index} kind="route">
+      <span className="font-medium">{routeSummary(row)}</span>
+    </NoteRow>
+  );
+}
+
 function PlanRowView({ row, index }: { row: PlanRow; index: number }) {
   return (
     <NoteRow icon={ListChecksIcon} tone="text-(--chart-2)" index={index} kind="plan">
@@ -580,6 +613,8 @@ function RowView({ row, index, live }: { row: ActivityRow; index: number; live: 
   switch (row.kind) {
     case "tool":
       return <ToolRowView row={row} index={index} />;
+    case "route":
+      return <RouteRowView row={row} index={index} />;
     case "plan":
       return <PlanRowView row={row} index={index} />;
     case "retrieval":

@@ -27,7 +27,7 @@ pytestmark = pytest.mark.unit
 
 # Internal events that are deliberately not public, with the record that says it instead.
 NOT_PUBLIC = {
-    Event.RUN_STARTED: "the route announces the run, with the preset",
+    Event.RUN_STARTED: "the stream's first frame announces the run",
     Event.NODE: "main-agent nodes are internal; worker nodes are translated",
     Event.MODEL_CALL: "kept as a step; usage arrives in done",
     Event.ANSWER: "superseded by done",
@@ -35,13 +35,6 @@ NOT_PUBLIC = {
 }
 
 SAMPLES: dict[Event, dict] = {
-    Event.ROUTE: {
-        "route": "local",
-        "accepted": False,
-        "confidence": 0.4,
-        "probabilities": {"local": 0.4, "global": 0.3},
-        "model": "jev",
-    },
     Event.SEED: {"keys": ["F:a.py:1-2"], "standalone_question": "q", "channels": {"dense": 3}},
     Event.PLAN: {
         "skipped": False,
@@ -147,13 +140,6 @@ class TestMapping:
         assert event.type is EventType.RETRIEVAL
         assert event.data["source"] == "seed"
         assert event.data["channels"] == {"dense": 3}
-
-    def test_route_reports_whether_it_fell_back(self):
-        event = translate_one(Event.ROUTE)
-
-        assert event.type is EventType.ROUTE
-        assert event.data["fell_back"] is True
-        assert event.data["probabilities"]["local"] == 0.4
 
     def test_a_tool_result_carries_latency_summary_and_count(self):
         event = translate_one(Event.TOOL_RESULT)

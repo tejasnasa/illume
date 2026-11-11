@@ -2,7 +2,7 @@
 
 The nodes and what leaves each one:
 
-* ``route`` then ``seed`` then ``agent``, always.
+* ``seed`` then ``agent``, always.
 * ``agent`` goes to ``tools`` when the model asked for tools, to ``synthesize``
   when it answered in plain text or a limit was reached, and back to itself
   after a nudge.
@@ -36,7 +36,6 @@ from app.services.agent.nodes import (
     make_agent_node,
     make_merge_node,
     make_planner_node,
-    make_route_node,
     make_seed_node,
     make_synthesize_node,
     make_tools_node,
@@ -46,7 +45,7 @@ from app.services.agent.nodes.planner import worker_id
 from app.services.agent.nodes.worker import WorkerInput, worker_items
 from app.services.agent.state import AgentState
 
-NODE_NAMES = ("route", "seed", "agent", "tools", "synthesize")
+NODE_NAMES = ("seed", "agent", "tools", "synthesize")
 
 PLANNER_NODE_NAMES = ("planner", "worker", "merge")
 
@@ -121,7 +120,6 @@ def build_graph(deps: AgentDeps):
         deps: The run's collaborators, closed over by each node.
     """
     nodes = {
-        "route": make_route_node(deps),
         "seed": make_seed_node(deps),
         "agent": make_agent_node(deps),
         "tools": make_tools_node(deps),
@@ -131,8 +129,7 @@ def build_graph(deps: AgentDeps):
     for name in NODE_NAMES:
         graph.add_node(name, cast(Any, _instrumented(deps, name, nodes[name])))
 
-    graph.add_edge(START, "route")
-    graph.add_edge("route", "seed")
+    graph.add_edge(START, "seed")
     if deps.config.execution == "planner":
         planner = _instrumented(deps, "planner", make_planner_node(deps))
         graph.add_node("planner", cast(Any, planner))

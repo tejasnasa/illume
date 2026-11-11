@@ -47,12 +47,18 @@ export interface RunStartedData {
   execution: string;
 }
 
+/**
+ * How an `auto` request was resolved to a preset.
+ *
+ * `fallback_reason` is `unavailable`, `timeout`, `error`, `low_confidence` or
+ * `no_tool_support` when the fallback preset was used instead of the route's own.
+ */
 export interface RouteData {
-  route: string;
-  probabilities?: Record<string, number>;
+  route?: string | null;
   confidence?: number | null;
-  fell_back?: boolean;
-  model?: string | null;
+  probabilities?: Record<string, number>;
+  resolved_preset: string;
+  fallback_reason?: string | null;
 }
 
 export interface SubQuestion {
@@ -71,10 +77,16 @@ export interface PlanData {
   synthesis_hint?: string;
 }
 
+/**
+ * How a worker ended. `partial` finished with an incomplete result, and
+ * `failed` and `timed_out` are the two ways a worker stops without one.
+ */
+export type WorkerStatus = "completed" | "partial" | "failed" | "timed_out";
+
 export interface WorkerData {
   worker_id: string;
   question?: string | null;
-  status?: string | null;
+  status?: WorkerStatus | null;
   stop_reason?: string | null;
 }
 

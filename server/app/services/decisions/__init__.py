@@ -2,8 +2,8 @@
 
 ``base`` holds the contract and the fallback between implementations, ``jev``
 asks OpenRouter's Decisions API, ``llm`` asks the caller's model for its own
-probability, and ``points`` holds the six decisions the pipeline makes together
-with the wording and thresholds each uses.
+probability, and ``points`` holds the planning decision the pipeline makes, with
+its wording and threshold, and the relevance rubric the Jev reranker shares.
 """
 
 from __future__ import annotations
@@ -49,13 +49,10 @@ from app.services.decisions.openrouter import (
 from app.services.decisions.points import (
     RELEVANCE_LEVELS,
     ROUTE_CONFIDENCE,
-    ROUTE_OPTIONS,
     PlanDecision,
-    RelevanceDecision,
     Route,
     RouteDecision,
     decide_plan,
-    decide_relevance,
     decide_route,
 )
 
@@ -67,7 +64,6 @@ __all__ = [
     "NOUL_TRUE",
     "RELEVANCE_LEVELS",
     "ROUTE_CONFIDENCE",
-    "ROUTE_OPTIONS",
     "Answer",
     "ChoiceAnswer",
     "ChoiceQuestion",
@@ -88,7 +84,6 @@ __all__ = [
     "PlanDecision",
     "Question",
     "RecordDecision",
-    "RelevanceDecision",
     "Result",
     "Route",
     "RouteDecision",
@@ -96,7 +91,6 @@ __all__ = [
     "ScoreQuestion",
     "ScoreResult",
     "decide_plan",
-    "decide_relevance",
     "decide_route",
     "get_decider",
     "make_record",

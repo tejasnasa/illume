@@ -20,12 +20,73 @@ function run(...events: StreamEvent[]): RunState {
   return actions.reduce(runReducer, initialRunState);
 }
 
+/** The first event of a run. */
+function startedEvent() {
+  return ev("run_started", {
+    preset: "deep_agent",
+    config_hash: "h",
+    model: "m",
+    execution: "agent",
+  });
+}
+
+describe("the route event", () => {
+  it("adds a row saying where an Auto request went", () => {
+    const state = run(
+      ev("route", {
+        route: "relational",
+        confidence: 0.82,
+        probabilities: { relational: 0.82, local: 0.18 },
+        resolved_preset: "structural",
+        fallback_reason: null,
+      }),
+    );
+    const [row] = state.rows;
+    expect(row).toMatchObject({
+      kind: "route",
+      route: "relational",
+      confidence: 0.82,
+      resolvedPreset: "structural",
+      fallbackReason: null,
+    });
+  });
+
+  it("keeps the fallback reason", () => {
+    const state = run(
+      ev("route", {
+        route: "global",
+        confidence: 0.4,
+        resolved_preset: "structural",
+        fallback_reason: "low_confidence",
+      }),
+    );
+    expect(state.rows[0]).toMatchObject({ kind: "route", fallbackReason: "low_confidence" });
+  });
+
+  it("tolerates a route event with no decision at all", () => {
+    const state = run(
+      ev("route", { resolved_preset: "structural", fallback_reason: "unavailable" }),
+    );
+    expect(state.rows[0]).toMatchObject({ route: null, confidence: null });
+  });
+
+  it("leaves the run live and the rows after it in order", () => {
+    const state = run(
+      startedEvent(),
+      ev("route", { route: "local", confidence: 0.9, resolved_preset: "hybrid_rerank" }),
+      ev("retrieval", { keys: ["F:a"] }),
+    );
+    expect(state.status).toBe("live");
+    expect(state.rows.map((row) => row.kind)).toEqual(["route", "retrieval"]);
+  });
+});
+
 describe("runReducer", () => {
   it("starts connecting and goes live on the first event", () => {
     const started = runReducer(initialRunState, { type: "start", at: 5 });
     expect(started.status).toBe("connecting");
     expect(started.startedAt).toBe(5);
-    expect(run(ev("route", { route: "general" })).status).toBe("live");
+    expect(run(startedEvent()).status).toBe("live");
   });
 
   it("records run_started metadata", () => {
@@ -39,12 +100,6 @@ describe("runReducer", () => {
     );
     expect(state.meta?.execution).toBe("agent");
     expect(state.runId).toBe("run-1");
-  });
-
-  it("stores the route", () => {
-    expect(run(ev("route", { route: "overview" })).route?.route).toBe(
-      "overview",
-    );
   });
 
   it("adds a plan row and lanes for sub-questions", () => {
@@ -76,19 +131,33 @@ describe("runReducer", () => {
     expect(planned.lanes.w1.status).toBe("running");
     const done = runReducer(planned, {
       type: "event",
-      event: ev("worker_done", { worker_id: "w1", status: "done" }, "w1"),
+      event: ev("worker_done", { worker_id: "w1", status: "completed" }, "w1"),
     });
     expect(done.lanes.w1.status).toBe("done");
     expect(done.lanes.w1.question).toBe("Q");
   });
 
-  it("marks a lane failed when its worker did not finish cleanly", () => {
-    const state = run(
-      ev("worker_started", { worker_id: "w1" }, "w1"),
-      ev("worker_done", { worker_id: "w1", status: "error" }, "w1"),
-    );
-    expect(state.lanes.w1.status).toBe("failed");
-  });
+  it.each(["failed", "timed_out"] as const)(
+    "marks a lane failed when its worker ended %s",
+    (status) => {
+      const state = run(
+        ev("worker_started", { worker_id: "w1" }, "w1"),
+        ev("worker_done", { worker_id: "w1", status }, "w1"),
+      );
+      expect(state.lanes.w1.status).toBe("failed");
+    },
+  );
+
+  it.each(["completed", "partial"] as const)(
+    "marks a lane done when its worker ended %s",
+    (status) => {
+      const state = run(
+        ev("worker_started", { worker_id: "w1" }, "w1"),
+        ev("worker_done", { worker_id: "w1", status }, "w1"),
+      );
+      expect(state.lanes.w1.status).toBe("done");
+    },
+  );
 
   it("adds a retrieval row and counts its keys as sources", () => {
     const state = run(
@@ -137,7 +206,11 @@ describe("runReducer", () => {
       ev("tool_call", { call_id: "c1", tool: "grep_code" }, "w1"),
       ev("thinking", { text: "After.", kind: "reasoning" }, "w1"),
     );
-    expect(state.rows.map((row) => row.kind)).toEqual(["thinking", "tool", "thinking"]);
+    expect(state.rows.map((row) => row.kind)).toEqual([
+      "thinking",
+      "tool",
+      "thinking",
+    ]);
   });
 
   it("keeps reasoning apart from what the model said", () => {
@@ -214,7 +287,11 @@ describe("runReducer", () => {
   it("highlights nodes, attaches paths to the call and tracks the trail", () => {
     const state = run(
       ev("tool_call", { call_id: "c1", tool: "grep_code" }),
-      ev("nodes", { call_id: "c1", tool: "grep_code", paths: ["a.py", "b.py"] }),
+      ev("nodes", {
+        call_id: "c1",
+        tool: "grep_code",
+        paths: ["a.py", "b.py"],
+      }),
       ev("tool_call", { call_id: "c2", tool: "read_file" }),
       ev("nodes", { call_id: "c2", tool: "read_file", paths: ["c.py"] }, "w1"),
     );
@@ -229,7 +306,11 @@ describe("runReducer", () => {
 
   it("follows a reported path edge by edge", () => {
     const state = run(
-      ev("nodes", { tool: "find_path", action: "path", paths: ["a", "b", "c"] }),
+      ev("nodes", {
+        tool: "find_path",
+        action: "path",
+        paths: ["a", "b", "c"],
+      }),
     );
     expect(state.highlight.edges).toEqual([
       ["a", "b"],
@@ -238,7 +319,7 @@ describe("runReducer", () => {
   });
 
   it("ignores a nodes event with no paths", () => {
-    const before = run(ev("route", { route: "x" }));
+    const before = run(startedEvent());
     const after = runReducer(before, {
       type: "event",
       event: ev("nodes", { paths: [] }),
@@ -256,7 +337,12 @@ describe("runReducer", () => {
 
   it("adds no row for a degradation", () => {
     const state = run(
-      ev("degraded", { stage: "budget", limit: "max_seconds", used: 120, allowed: 120 }),
+      ev("degraded", {
+        stage: "budget",
+        limit: "max_seconds",
+        used: 120,
+        allowed: 120,
+      }),
     );
     expect(state.rows).toEqual([]);
   });
@@ -309,7 +395,7 @@ describe("runReducer", () => {
   });
 
   it("ignores an unknown event type without crashing or changing anything", () => {
-    const before = run(ev("route", { route: "x" }));
+    const before = run(startedEvent());
     const after = runReducer(before, {
       type: "event",
       event: ev("brand_new_event", { anything: true }),
@@ -327,7 +413,7 @@ describe("runReducer", () => {
   });
 
   it("cancels a live run but not a finished one", () => {
-    const live = run(ev("route", { route: "x" }));
+    const live = run(startedEvent());
     expect(runReducer(live, { type: "cancelled", at: 9 })).toMatchObject({
       status: "cancelled",
       endedAt: 9,
@@ -365,8 +451,8 @@ describe("runReducer", () => {
   });
 
   it("resets", () => {
-    expect(
-      runReducer(run(ev("route", { route: "x" })), { type: "reset" }),
-    ).toBe(initialRunState);
+    expect(runReducer(run(startedEvent()), { type: "reset" })).toBe(
+      initialRunState,
+    );
   });
 });
