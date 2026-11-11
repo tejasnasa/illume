@@ -48,6 +48,7 @@ from app.services.agent.events import (
 from app.services.agent.state import Evidence
 from app.services.agent.steps import StepRecord
 from app.services.retrieval.citations import parse_key
+from app.services.staleness import cited_file_paths
 
 if TYPE_CHECKING:
     from app.services.agent.runner import RunResult
@@ -85,6 +86,21 @@ _STREAMED_TEXT = frozenset({EventType.ANSWER_DELTA, EventType.THINKING})
 _PREVIEW_BYTES = MAX_PAYLOAD_BYTES - 1024
 
 
+def _strip_nul(value: Any) -> Any:
+    """Copies a JSON-like value with every NUL character removed from its text.
+
+    Dict keys, dict values, list and tuple items and strings are walked, so the
+    literal backslash-u-zero text that source code may contain is left alone.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {_strip_nul(key): _strip_nul(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_strip_nul(item) for item in value]
+    return value
+
+
 def sanitize_payload(payload: Any) -> Any:
     """Makes a payload storable as JSONB and no larger than the per-row cap.
 
@@ -98,7 +114,7 @@ def sanitize_payload(payload: Any) -> Any:
     Returns:
         A JSON-compatible value that fits the cap.
     """
-    text = json.dumps(payload, default=str, ensure_ascii=False).replace("\\u0000", "")
+    text = json.dumps(_strip_nul(payload), default=str, ensure_ascii=False)
     encoded = text.encode("utf-8")
     if len(encoded) <= MAX_PAYLOAD_BYTES:
         return json.loads(text)
@@ -233,13 +249,21 @@ class RunRecorder:
             self._events_dropped += 1
             return event
         self._event_rows += 1
+        try:
+            payload = sanitize_payload(data)
+        except Exception:
+            self._events_dropped += 1
+            logger.warning(
+                "run %s: could not record a %s event", self.run_id, event_type.value, exc_info=True
+            )
+            return event
         self._enqueue(
             {
                 "seq": event.seq,
                 "worker_id": worker_id,
                 "kind": EVENT_KIND,
                 "name": event_type.value,
-                "payload": sanitize_payload(data),
+                "payload": payload,
                 "tokens_in": None,
                 "tokens_out": None,
                 "latency_ms": 0,
@@ -260,13 +284,21 @@ class RunRecorder:
         payload = {**step.payload, "step_index": step.index}
         tokens_in = payload.get("input_tokens")
         tokens_out = payload.get("output_tokens")
+        try:
+            stored = sanitize_payload(payload)
+        except Exception:
+            self._steps_dropped += 1
+            logger.warning(
+                "run %s: could not record step %s", self.run_id, step.node, exc_info=True
+            )
+            return
         self._enqueue(
             {
                 "seq": self._seq,
                 "worker_id": step.worker_id,
                 "kind": step.kind,
                 "name": step.node,
-                "payload": sanitize_payload(payload),
+                "payload": stored,
                 "tokens_in": tokens_in if isinstance(tokens_in, int) else None,
                 "tokens_out": tokens_out if isinstance(tokens_out, int) else None,
                 "latency_ms": int(step.duration_ms or 0),
@@ -410,8 +442,12 @@ async def save_turn(
     question: str,
     answer: str,
     sources: Sequence[CitationData],
+    answered_commit_sha: str | None = None,
 ) -> uuid.UUID:
     """Writes the chat turn for a finished run and links it to the run.
+
+    The turn records the commit it was answered against and the distinct files
+    its sources cite, which is what a later sync compares changes with.
 
     The turn and the link are committed together, so history never holds a turn
     whose run does not point back at it.
@@ -443,6 +479,8 @@ async def save_turn(
             answer=answer,
             sources=serialized,
             agent_run_id=run_id,
+            answered_commit_sha=answered_commit_sha,
+            cited_paths=cited_file_paths(source.file_path for source in sources),
         )
         db.add(message)
         await db.flush()
@@ -521,29 +559,3 @@ async def last_activity(
         .group_by(AgentStep.run_id)
     )
     return {run_id: moment for run_id, moment in rows.all()}
-
-
-async def load_events(db: AsyncSession, run_id: uuid.UUID) -> list[StreamEvent]:
-    """A run's recorded events in the shape the live stream sent them."""
-    rows = (
-        (
-            await db.execute(
-                select(AgentStep)
-                .where(AgentStep.run_id == run_id, AgentStep.kind == EVENT_KIND)
-                .order_by(AgentStep.seq)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [
-        StreamEvent(
-            seq=row.seq,
-            ts=_iso(row.created_at),
-            run_id=str(run_id),
-            worker_id=row.worker_id,
-            type=EventType(row.name),
-            data=row.payload,
-        )
-        for row in rows
-    ]

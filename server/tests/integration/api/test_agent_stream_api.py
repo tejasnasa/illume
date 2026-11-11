@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import UTC, datetime, timedelta
 from functools import partial
 
@@ -64,7 +65,6 @@ pytestmark = pytest.mark.integration
 def no_model_backed_stages(monkeypatch):
     """A key in a developer's environment must not turn on the model-backed stages."""
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
-    monkeypatch.setattr(settings, "COHERE_API_KEY", "")
 
 
 @pytest.fixture
@@ -109,8 +109,21 @@ async def run_agent_preset(client, app, db_session, world, preset="deep_agent", 
 COMPARISON = "Compare how a password is checked with how a user is created."
 
 
-def detail_url(repo, run) -> str:
-    return f"{runs_url(repo)}/{run.id}"
+async def recorded_events(db, run) -> list[dict]:
+    """The event rows a run left behind, shaped like the frames the stream sent."""
+    rows = [row for row in await step_rows(db, run.id) if row.kind == "event"]
+    return [{"seq": row.seq, "type": row.name, "data": row.payload} for row in rows]
+
+
+def as_recorded(events: list[dict]) -> list[dict]:
+    """The fields of streamed frames that are stored with each event row."""
+    return [{"seq": e["seq"], "type": e["type"], "data": e["data"]} for e in events]
+
+
+async def listed_run(client, repo) -> dict:
+    """The only run in the repository's run list."""
+    [run] = (await client.get(runs_url(repo))).json()
+    return run
 
 
 # --- what is streamed ----------------------------------------------------------------
@@ -442,72 +455,50 @@ class TestPersistence:
         assert run.status == "done"
 
 
-# --- replay --------------------------------------------------------------------------
+# --- what is recorded ---------------------------------------------------------------
 
 
-class TestReplay:
-    async def test_replay_returns_the_live_sequence_exactly(self, app, client, db_session, world):
+class TestRecording:
+    async def test_the_recorded_events_are_the_live_sequence_exactly(
+        self, app, client, db_session, world
+    ):
         _, live = await run_agent_preset(client, app, db_session, world)
         run = await only_run(db_session, world.repo)
 
-        replay = (await client.get(detail_url(world.repo, run))).json()
+        assert await recorded_events(db_session, run) == as_recorded(live)
 
-        assert replay["events"] == live
-
-    async def test_replay_of_a_single_shot_run_matches_too(self, app, client, db_session, world):
+    async def test_a_single_shot_run_is_recorded_the_same_way(self, app, client, db_session, world):
         install(app, db_session, AnyModel("Answer."))
         _, live = await stream(client, world.repo, preset="hybrid")
         run = await only_run(db_session, world.repo)
 
-        replay = (await client.get(detail_url(world.repo, run))).json()
+        assert await recorded_events(db_session, run) == as_recorded(live)
 
-        assert replay["events"] == live
-
-    async def test_replay_of_a_parallel_run_keeps_every_lane(self, app, client, db_session, world):
+    async def test_a_parallel_run_keeps_every_lane(self, app, client, db_session, world):
         install(app, db_session, planner_model(world), decider=PlanDecider(1.0, 0.95))
         _, live = await stream(client, world.repo, COMPARISON, preset="deep_agent_workers")
         run = await only_run(db_session, world.repo)
 
-        replay = (await client.get(detail_url(world.repo, run))).json()
+        recorded = await step_rows(db_session, run.id)
 
-        assert replay["events"] == live
-        assert {e["worker_id"] for e in replay["events"]} >= {"w1", "w2", None}
+        assert await recorded_events(db_session, run) == as_recorded(live)
+        assert {row.worker_id for row in recorded if row.kind == "event"} >= {"w1", "w2", None}
 
-    async def test_the_detail_carries_the_run_and_its_outcome(self, app, client, db_session, world):
+    async def test_the_run_row_carries_the_run_and_its_outcome(
+        self, app, client, db_session, world
+    ):
         _, live = await run_agent_preset(client, app, db_session, world)
         run = await only_run(db_session, world.repo)
+        listed = await listed_run(client, world.repo)
 
-        detail = (await client.get(detail_url(world.repo, run))).json()
-
-        assert detail["id"] == str(run.id)
-        assert detail["status"] == "done"
-        assert detail["preset"] == "deep_agent"
-        assert detail["question"] == QUESTION
-        assert detail["answer"] == live[-1]["data"]["answer"]
-        assert detail["config_hash"] == DEEP_AGENT.config_hash()
-        assert detail["chat_message_id"] == live[-1]["data"]["chat_message_id"]
-        assert detail["events_available"] is True
-        assert detail["usage"]["tool_calls"] == 1
-
-    async def test_a_run_whose_steps_were_pruned_says_so(self, app, client, db_session, world):
-        await run_agent_preset(client, app, db_session, world)
-        run = await only_run(db_session, world.repo)
-        from sqlalchemy import delete
-
-        await db_session.execute(delete(AgentStep).where(AgentStep.run_id == run.id))
-        await db_session.flush()
-
-        detail = (await client.get(detail_url(world.repo, run))).json()
-
-        assert detail["events"] == [] and detail["events_available"] is False
-        assert detail["status"] == "done" and detail["answer"]
-
-    async def test_an_unknown_run_is_not_found(self, client, world):
-        import uuid
-
-        response = await client.get(f"{runs_url(world.repo)}/{uuid.uuid4()}")
-
-        assert response.status_code == 404
+        assert listed["id"] == str(run.id)
+        assert listed["status"] == "done"
+        assert listed["preset"] == "deep_agent"
+        assert listed["question"] == QUESTION
+        assert run.answer == live[-1]["data"]["answer"]
+        assert listed["config_hash"] == DEEP_AGENT.config_hash()
+        assert listed["chat_message_id"] == live[-1]["data"]["chat_message_id"]
+        assert run.usage["tool_calls"] == 1
 
 
 async def insert_run(db, world, *, status="running", created=None, **fields) -> AgentRun:
@@ -623,11 +614,8 @@ class TestInterruptedRuns:
         )
         await db_session.flush()
 
-        detail = (await client.get(detail_url(world.repo, run))).json()
         listed = (await client.get(runs_url(world.repo))).json()
 
-        assert detail["status"] == "interrupted"
-        assert [e["type"] for e in detail["events"]] == ["run_started"]
         assert listed[0]["status"] == "interrupted"
 
     async def test_a_run_that_is_still_writing_reads_as_running(self, client, db_session, world):
@@ -645,23 +633,23 @@ class TestInterruptedRuns:
         )
         await db_session.flush()
 
-        detail = (await client.get(detail_url(world.repo, run))).json()
+        detail = await listed_run(client, world.repo)
 
         assert detail["status"] == "running"
 
     async def test_a_fresh_run_is_running(self, client, db_session, world):
-        run = await insert_run(db_session, world)
+        await insert_run(db_session, world)
 
-        detail = (await client.get(detail_url(world.repo, run))).json()
+        detail = await listed_run(client, world.repo)
 
         assert detail["status"] == "running"
 
     async def test_a_finished_run_is_never_interrupted(self, client, db_session, world):
-        run = await insert_run(
+        await insert_run(
             db_session, world, status="failed", created=datetime.now(UTC) - timedelta(days=2)
         )
 
-        detail = (await client.get(detail_url(world.repo, run))).json()
+        detail = await listed_run(client, world.repo)
 
         assert detail["status"] == "failed"
 
@@ -841,7 +829,9 @@ class TestSlots:
     async def test_a_refused_request_leaves_no_run_behind(
         self, app, client, db_session, world, redis_client
     ):
-        await redis_client.set(slot_key(world.user.id), 2, ex=60)
+        expiry = time.time() + 60
+        await redis_client.zadd(slot_key(world.user.id), {"a": expiry, "b": expiry})
+        await redis_client.expire(slot_key(world.user.id), 60)
         model = ScriptedModel([turn(finish("never"))])
         install(app, db_session, model, decider=PlanDecider(1.0))
 
@@ -852,7 +842,7 @@ class TestSlots:
         assert refused.status_code == 429
         assert model.requests == []
         assert await runs_of_user(db_session, world) == []
-        # The refusal gave back the slot it briefly took.
+        # The refusal took nothing.
         assert await slot_count(redis_client, world.user) == 2
         await redis_client.delete(slot_key(world.user.id))
 

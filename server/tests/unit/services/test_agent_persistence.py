@@ -54,6 +54,18 @@ class TestPayloadCap:
     def test_nul_characters_that_jsonb_cannot_hold_are_removed(self):
         assert sanitize_payload({"t": "a\x00b"}) == {"t": "ab"}
 
+    def test_the_literal_text_backslash_u_zero_survives_while_a_real_nul_goes(self):
+        literal = "x = '\\u0000'"
+        payload = {
+            "t": "a\x00b " + literal,
+            "n\x00k": ["\x00", (literal, "c\x00")],
+        }
+
+        stored = sanitize_payload(payload)
+
+        assert stored == {"t": "ab " + literal, "nk": ["", [literal, "c"]]}
+        assert "\x00" not in json.dumps(stored, ensure_ascii=False)
+
     def test_values_that_are_not_json_are_stringified(self):
         identifier = uuid.uuid4()
 

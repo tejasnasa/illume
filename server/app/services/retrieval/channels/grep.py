@@ -7,7 +7,6 @@ statements, imports, constants and configuration files are not searchable here.
 from __future__ import annotations
 
 import logging
-import re
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal
@@ -142,19 +141,42 @@ def _sqlstate(error: DBAPIError) -> str | None:
     return None
 
 
-def _matching_lines(row: SymbolRow, matcher: re.Pattern[str] | str) -> list[tuple[int, str]]:
+# Lines of the given symbols that match, with their 1-based position in the body.
+# Postgres does the matching, so the pattern is run by the same engine, under the
+# same statement timeout, that already accepted it. A regular-expression engine
+# that backtracks cannot be interrupted from Python, so no pattern a caller
+# supplies is ever run on the event loop.
+_REGEX_LINES_SQL = """
+    SELECT s.id AS symbol_id, t.ord AS ord, t.line AS line
+    FROM ast_symbols s
+    CROSS JOIN LATERAL regexp_split_to_table(s.source_code, '\n')
+        WITH ORDINALITY AS t(line, ord)
+    WHERE s.id = ANY(CAST(:ids AS uuid[]))
+      AND t.line ~ :pattern
+    ORDER BY s.id, t.ord
+"""
+
+
+def _matching_lines(
+    row: SymbolRow, literal: str | None, regex_lines: list[tuple[int, str]] | None = None
+) -> list[tuple[int, str]]:
     """The lines of a symbol's body that match, as ``(file line, text)`` pairs.
 
     Postgres decided the symbol matched. When no single line does (the pattern
-    spans lines, or uses a construct Python reads differently), the symbol is
-    still reported, at its first line.
+    spans lines), the symbol is still reported, at its first line.
+
+    Args:
+        row: The symbol.
+        literal: The text to find, for a literal search.
+        regex_lines: For a regular-expression search, the ``(position, text)``
+            pairs Postgres reported, with positions counted from 1 in the body.
     """
     start = row.start_line or 1
     lines = (row.source_code or "").splitlines()
-    if isinstance(matcher, str):
-        found = [(start + i, line) for i, line in enumerate(lines) if matcher in line]
+    if literal is not None:
+        found = [(start + i, line) for i, line in enumerate(lines) if literal in line]
     else:
-        found = [(start + i, line) for i, line in enumerate(lines) if matcher.search(line)]
+        found = [(start + ordinal - 1, line.rstrip("\r")) for ordinal, line in regex_lines or []]
     if not found:
         found = [(start, lines[0] if lines else "")]
     return found
@@ -170,6 +192,10 @@ async def grep_symbols(
     timeout_ms: int = DEFAULT_TIMEOUT_MS,
 ) -> GrepResult:
     """Searches the stored function, class and method bodies of one repository.
+
+    A regular expression is run only by Postgres, both to pick the symbols and to
+    find the matching lines inside them, so a pattern that backtracks is cut off
+    by the statement timeout instead of blocking the event loop.
 
     The query runs inside a savepoint with a statement timeout. A timeout or an
     invalid regular expression aborts the surrounding Postgres transaction, and
@@ -197,13 +223,6 @@ async def grep_symbols(
             "Search for a shorter, more specific part of it.",
         )
 
-    matcher: re.Pattern[str] | str = pattern
-    if regex:
-        try:
-            matcher = re.compile(pattern)
-        except re.error:
-            # Postgres has the final say on validity; Python only finds lines.
-            matcher = re.compile(re.escape(pattern))
     parameters = {
         "repo": repository_id,
         "pattern": pattern if regex else f"%{escape_like(pattern)}%",
@@ -221,6 +240,14 @@ async def grep_symbols(
             )
             result = await db.execute(text(_REGEX_SQL if regex else _LITERAL_SQL), parameters)
             rows = result.all()
+            regex_lines: dict[UUID, list[tuple[int, str]]] = defaultdict(list)
+            if regex and rows:
+                line_rows = await db.execute(
+                    text(_REGEX_LINES_SQL),
+                    {"ids": [row.id for row in rows], "pattern": pattern},
+                )
+                for line_row in line_rows.all():
+                    regex_lines[line_row.symbol_id].append((line_row.ord, line_row.line))
             # A setting made inside a savepoint outlives it unless it is undone,
             # and this one would otherwise cut off the rest of the request.
             await db.execute(
@@ -270,7 +297,9 @@ async def grep_symbols(
                 symbol_end_line=symbol.end_line,
                 fan_in=symbol.fan_in,
             )
-            for line, line_text in _matching_lines(symbol, matcher)
+            for line, line_text in _matching_lines(
+                symbol, None if regex else pattern, regex_lines.get(symbol.id)
+            )
         )
     return GrepResult(matches=tuple(matches), total_symbols=total, truncated=total > max_results)
 

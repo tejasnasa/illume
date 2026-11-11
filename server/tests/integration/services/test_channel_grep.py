@@ -7,6 +7,9 @@ same session to show the savepoint contained the failure.
 
 from __future__ import annotations
 
+import asyncio
+import time
+
 import pytest
 from sqlalchemy import select, text
 
@@ -306,3 +309,45 @@ async def test_hyde_text_is_left_to_the_dense_channel(db_session):
     seeded = await seed_repo(db_session, await make_user(db_session))
 
     assert await _search(db_session, seeded.repo, "hash_password", kind="hyde") == []
+
+
+async def test_a_backtracking_pattern_over_a_long_line_cannot_block_the_event_loop(db_session):
+    user = await make_user(db_session)
+    repo = await make_repo(db_session, user)
+    file = await make_file(db_session, repo, path="hostile.py")
+    # In a backtracking engine the first line takes exponential time to reject;
+    # the second makes Postgres report the symbol as a match.
+    await make_symbol(
+        db_session,
+        file,
+        name="hostile",
+        start_line=5,
+        source_code="x" * 60 + "\nxxy\n",
+    )
+
+    started = time.monotonic()
+    result = await asyncio.wait_for(
+        grep_symbols(db_session, repo.id, "(x+x+)+y", regex=True), timeout=10
+    )
+
+    assert time.monotonic() - started < 5
+    assert result.ok
+    assert [(m.line, m.text) for m in result.matches] == [(6, "xxy")]
+    await _assert_session_usable(db_session)
+
+
+async def test_regex_matches_report_every_matching_line_with_file_line_numbers(db_session):
+    user = await make_user(db_session)
+    repo = await make_repo(db_session, user)
+    file = await make_file(db_session, repo, path="lines.py")
+    await make_symbol(
+        db_session,
+        file,
+        name="lines",
+        start_line=20,
+        source_code="def lines():\n    a = 1\n    b = 22\n    return a + b\n",
+    )
+
+    result = await grep_symbols(db_session, repo.id, r"= \d+", regex=True)
+
+    assert [(m.line, m.text) for m in result.matches] == [(21, "    a = 1"), (22, "    b = 22")]

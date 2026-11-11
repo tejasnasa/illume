@@ -210,3 +210,37 @@ class TestFailures:
 
         items = drained(rec)
         assert items[0].data["text"] == "tail" and items[-1] is None
+
+
+class TestRecordingNeverFailsTheRun:
+    async def test_a_step_whose_payload_cannot_be_stored_is_logged_not_raised(self):
+        rec, opener = recorder()
+        loop: dict = {}
+        loop["self"] = loop
+
+        await rec.record(step(0, result=loop))
+        await rec.record(step(1, result="fine"))
+        await rec.close()
+
+        assert [r["payload"]["result"] for r in opener.rows] == ["fine"]
+        assert rec.dropped == 1
+
+    async def test_an_event_whose_payload_cannot_be_stored_still_reaches_the_stream(self):
+        rec, opener = recorder()
+        loop: dict = {}
+        loop["self"] = loop
+
+        event = rec.publish(EventType.TOOL_CALL, {"tool": loop})
+        await rec.close()
+
+        assert drained(rec) == [event]
+        assert opener.rows == []
+
+    async def test_literal_backslash_u_zero_text_in_a_tool_result_is_stored_intact(self):
+        rec, opener = recorder()
+        literal = "if c == '\\u0000':\x00"
+
+        await rec.record(step(0, result=literal))
+        await rec.close()
+
+        assert opener.rows[0]["payload"]["result"] == "if c == '\\u0000':"

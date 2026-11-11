@@ -335,8 +335,7 @@ async def turns_of(db: AsyncSession, repo: Repository) -> list[ChatMessage]:
 
 
 async def slot_count(redis: Any, user: User) -> int:
-    value = await redis.get(slot_key(user.id))
-    return int(value) if value is not None else 0
+    return int(await redis.zcard(slot_key(user.id)))
 
 
 async def wait_until(condition: Any, timeout: float = 10.0) -> None:
