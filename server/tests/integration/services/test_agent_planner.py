@@ -73,7 +73,6 @@ async def env(engine):
     """Seeds both repositories once, on a session that is rolled back at the end."""
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(settings, "OPENROUTER_API_KEY", "")
-        patch.setattr(settings, "COHERE_API_KEY", "")
         async with rolled_back_session(engine) as db:
             repos = await seed_tool_repos(db, await make_user(db))
             yield Env(factory=serialized(session_factory_for(db.bind)), repos=repos, db=db)

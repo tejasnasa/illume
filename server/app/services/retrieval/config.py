@@ -421,7 +421,7 @@ HYBRID_RERANK = PipelineConfig(
     name="hybrid_rerank",
     query=QueryConfig(condense=True),
     channels=_HYBRID_CHANNELS,
-    rerank=RerankConfig(kind="jev"),
+    rerank=RerankConfig(kind="cohere"),
     diversify=DiversifyConfig(total=20),
 )
 
@@ -429,7 +429,7 @@ STRUCTURAL = PipelineConfig(
     name="structural",
     query=QueryConfig(condense=True),
     channels=_STRUCTURAL_CHANNELS,
-    rerank=RerankConfig(kind="jev"),
+    rerank=RerankConfig(kind="cohere"),
     diversify=DiversifyConfig(total=20),
 )
 
@@ -437,7 +437,7 @@ DEEP_AGENT = PipelineConfig(
     name="deep_agent",
     query=QueryConfig(condense=True, history_messages=10),
     channels=_STRUCTURAL_CHANNELS,
-    rerank=RerankConfig(kind="jev"),
+    rerank=RerankConfig(kind="cohere"),
     diversify=DiversifyConfig(total=20),
     execution="agent",
     agent=AgentConfig(),
@@ -447,7 +447,7 @@ DEEP_AGENT_WORKERS = PipelineConfig(
     name="deep_agent_workers",
     query=QueryConfig(condense=True, history_messages=10),
     channels=_STRUCTURAL_CHANNELS,
-    rerank=RerankConfig(kind="jev"),
+    rerank=RerankConfig(kind="cohere"),
     diversify=DiversifyConfig(total=20),
     execution="planner",
     agent=AgentConfig(),

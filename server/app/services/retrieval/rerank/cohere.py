@@ -1,4 +1,4 @@
-"""Reranking with Cohere's rerank endpoint."""
+"""Reranking with Cohere's rerank model, served through OpenRouter."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from app.services.retrieval.rerank.base import (
     with_scores,
 )
 
-COHERE_RERANK_URL = "https://api.cohere.com/v2/rerank"
-COHERE_MODEL = "rerank-v3.5"
+COHERE_RERANK_URL = "https://openrouter.ai/api/v1/rerank"
+COHERE_MODEL = "cohere/rerank-5-fast"
 
 # Longer documents are cut, not skipped: the start of a chunk carries its path
 # and name, which is most of what the reranker needs.
@@ -26,21 +26,21 @@ REQUEST_TIMEOUT_SECONDS = 30.0
 
 
 class CohereReranker:
-    """Scores every candidate against the question with ``rerank-v3.5``.
+    """Scores every candidate against the question with ``cohere/rerank-5-fast``.
 
     The raw response of the request is kept on :attr:`calls`.
 
     Raises:
-        RerankerUnavailable: At construction, when ``COHERE_API_KEY`` is empty.
+        RerankerUnavailable: At construction, when ``OPENROUTER_API_KEY`` is empty.
     """
 
     kind = "cohere"
 
     def __init__(self, api_key: str | None = None) -> None:
-        key = api_key if api_key is not None else settings.COHERE_API_KEY
+        key = api_key if api_key is not None else settings.OPENROUTER_API_KEY
         if not key:
             raise RerankerUnavailable(
-                "reranker 'cohere' is not available: COHERE_API_KEY is not set"
+                "reranker 'cohere' is not available: OPENROUTER_API_KEY is not set"
             )
         self._api_key = key
         self.calls: list[RerankCall] = []
@@ -94,7 +94,7 @@ class CohereReranker:
             RerankCall(
                 provider="cohere",
                 model=COHERE_MODEL,
-                cost=None,
+                cost=self._cost(payload),
                 detail={"documents": len(candidates), "top_n": wanted},
                 response=payload,
             )
@@ -102,6 +102,15 @@ class CohereReranker:
 
         ordered, scores = self._parse(payload, candidates)
         return with_scores(ordered[:wanted], scores[:wanted])
+
+    @staticmethod
+    def _cost(payload: Any) -> float | None:
+        """The ``usage.cost`` OpenRouter reported, or ``None`` when absent."""
+        usage = payload.get("usage") if isinstance(payload, dict) else None
+        cost = usage.get("cost") if isinstance(usage, dict) else None
+        if isinstance(cost, bool) or not isinstance(cost, int | float):
+            return None
+        return float(cost)
 
     @staticmethod
     def _parse(payload: Any, candidates: list[Candidate]) -> tuple[list[Candidate], list[float]]:

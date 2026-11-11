@@ -113,7 +113,7 @@ class TestPresets:
         assert {t.channel for t in result.trace.channels} == {"dense", "lexical", "symbol"}
 
     @pytest.mark.parametrize("preset", [HYBRID_RERANK, STRUCTURAL], ids=lambda p: p.name)
-    async def test_presets_with_the_jev_reranker_degrade_to_the_fused_order(
+    async def test_presets_with_the_cohere_reranker_degrade_to_the_fused_order(
         self, db_session, preset
     ):
         seeded = await _seeded(db_session)
@@ -122,10 +122,10 @@ class TestPresets:
 
         assert result.candidates
         assert result.candidates[0].key == VERIFY_KEY
-        assert result.trace.reranker == "jev"
+        assert result.trace.reranker == "cohere"
         assert result.trace.reranker_degraded
         assert [d["stage"] for d in emit.degraded] == ["rerank"]
-        assert emit.degraded[0]["reranker"] == "jev"
+        assert emit.degraded[0]["reranker"] == "cohere"
         assert "not available" in emit.degraded[0]["reason"]
         # The fused order cut to top_n, then diversified as usual.
         expected = diversify(list(result.pool[: preset.rerank.top_n]), preset.diversify)
@@ -378,7 +378,7 @@ class TestTrace:
         seeded = await _seeded(db_session)
         result = await retrieve(STRUCTURAL, QUESTION, ctx=_context(db_session, seeded))
         encoded = json.dumps(asdict(result.trace))
-        assert json.loads(encoded)["reranker"] == "jev"
+        assert json.loads(encoded)["reranker"] == "cohere"
 
     async def test_a_query_rewrite_failure_is_in_the_trace(self, db_session, monkeypatch):
         seeded = await _seeded(db_session)

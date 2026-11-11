@@ -15,7 +15,6 @@ import pytest
 import respx
 
 from app.core.config import settings
-from app.services.decisions import DECISIONS_URL
 from app.services.retrieval import query as query_module
 from app.services.retrieval import single_shot
 from app.services.retrieval.citations import code_key
@@ -25,6 +24,7 @@ from app.services.retrieval.config import (
     HYBRID_RERANK,
     STRUCTURAL,
 )
+from app.services.retrieval.rerank.cohere import COHERE_RERANK_URL
 from app.services.retrieval.single_shot import (
     MAX_OUTPUT_TOKENS,
     NO_CONTEXT_ANSWER,
@@ -77,22 +77,23 @@ def generation(monkeypatch):
 
 
 @pytest.fixture
-def jev(monkeypatch):
-    """A Jev endpoint that rates passages mentioning ``verify_password`` highest."""
+def reranker(monkeypatch):
+    """A rerank endpoint that rates passages mentioning ``verify_password`` highest."""
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "or-test-key")
 
     def respond(request: httpx.Request) -> httpx.Response:
-        questions = json.loads(request.content)["questions"]
-        answers = {
-            name: {"score": 3.0 if "verify_password" in q["instructions"] else 0.5}
-            for name, q in questions.items()
-        }
+        documents = json.loads(request.content)["documents"]
+        results = [
+            {"index": i, "relevance_score": 0.9 if "verify_password" in text else 0.1}
+            for i, text in enumerate(documents)
+        ]
         return httpx.Response(
-            200, json={"answers": answers, "model": "typesafe/jev-1.13-20260917", "usage": {}}
+            200,
+            json={"model": "cohere/rerank-5-fast", "results": results, "usage": {"cost": 0.002}},
         )
 
     with respx.mock:
-        route = respx.post(DECISIONS_URL).mock(side_effect=respond)
+        route = respx.post(COHERE_RERANK_URL).mock(side_effect=respond)
         yield route
 
 
@@ -187,8 +188,8 @@ class TestCitingPresets:
         assert call["input"][-1] == {"role": "user", "content": QUESTION}
         assert call["max_output_tokens"] == 3000
 
-    async def test_hybrid_rerank_uses_jev_when_configured(
-        self, db_session, seeded, generation, jev
+    async def test_hybrid_rerank_uses_cohere_when_configured(
+        self, db_session, seeded, generation, reranker
     ):
         generation(GENERATED)
         result = await answer(
@@ -198,14 +199,14 @@ class TestCitingPresets:
             llm=make_llm(),
         )
 
-        assert jev.called
+        assert reranker.called
         assert not result.retrieval.trace.reranker_degraded
-        assert result.retrieval.candidates[0].rerank_score == 3.0
-        assert result.retrieval.trace.rerank_calls[0]["model"] == "typesafe/jev-1.13-20260917"
+        assert result.retrieval.candidates[0].rerank_score == 0.9
+        assert result.retrieval.trace.rerank_calls[0]["cost"] == 0.002
         assert [ref.symbol_name for ref in result.sources] == ["verify_password"]
 
     @pytest.mark.parametrize("preset", [HYBRID_RERANK, STRUCTURAL], ids=lambda p: p.name)
-    async def test_without_a_jev_key_the_answer_still_comes_back_degraded(
+    async def test_without_an_openrouter_key_the_answer_still_comes_back_degraded(
         self, db_session, seeded, generation, preset, monkeypatch
     ):
         monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
@@ -224,8 +225,8 @@ class TestCitingPresets:
         assert [d["stage"] for d in emit.degraded] == ["rerank"]
         assert [ref.symbol_name for ref in result.sources] == ["verify_password"]
 
-    async def test_structural_runs_with_jev_and_every_channel(
-        self, db_session, seeded, generation, jev
+    async def test_structural_runs_with_the_reranker_and_every_channel(
+        self, db_session, seeded, generation, reranker
     ):
         generation(GENERATED)
         result = await answer(
@@ -235,7 +236,7 @@ class TestCitingPresets:
             llm=make_llm(),
         )
 
-        assert jev.called
+        assert reranker.called
         assert result.generated is True
         assert result.cited_keys == [VERIFY_KEY]
         assert result.unresolved == ["F:app/ghost.py:1-2"]

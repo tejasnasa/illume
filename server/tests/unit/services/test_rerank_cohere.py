@@ -17,8 +17,8 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def cohere_key(monkeypatch):
-    monkeypatch.setattr(settings, "COHERE_API_KEY", "co-test-key")
+def openrouter_key(monkeypatch):
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "or-test-key")
 
 
 def pool(count: int = 4):
@@ -40,10 +40,10 @@ async def test_request_shape_and_auth_header():
     await get_reranker("cohere").rerank("how is auth done?", candidates, 2)
 
     request = route.calls.last.request
-    assert str(request.url) == "https://api.cohere.com/v2/rerank"
-    assert request.headers["authorization"] == "Bearer co-test-key"
+    assert str(request.url) == "https://openrouter.ai/api/v1/rerank"
+    assert request.headers["authorization"] == "Bearer or-test-key"
     body = json.loads(request.content)
-    assert body["model"] == "rerank-v3.5"
+    assert body["model"] == "cohere/rerank-5-fast"
     assert body["query"] == "how is auth done?"
     assert body["top_n"] == 2
     assert len(body["documents"]) == 4
@@ -87,6 +87,28 @@ async def test_the_raw_response_is_kept_on_the_reranker():
 
     assert [call.response for call in reranker.calls] == [payload]
     assert reranker.calls[0].provider == "cohere"
+    assert reranker.calls[0].model == "cohere/rerank-5-fast"
+    assert reranker.calls[0].cost is None
+
+
+@respx.mock
+async def test_the_reported_cost_is_recorded():
+    payload = {**results((1, 0.9)), "usage": {"search_units": 1, "cost": 0.0025}}
+    respx.post(COHERE_RERANK_URL).mock(return_value=httpx.Response(200, json=payload))
+    reranker = CohereReranker()
+    await reranker.rerank("q", pool(), 1)
+
+    assert reranker.calls[0].cost == 0.0025
+
+
+@respx.mock
+async def test_a_malformed_usage_block_leaves_the_cost_unset():
+    payload = {**results((1, 0.9)), "usage": {"cost": "free"}}
+    respx.post(COHERE_RERANK_URL).mock(return_value=httpx.Response(200, json=payload))
+    reranker = CohereReranker()
+    await reranker.rerank("q", pool(), 1)
+
+    assert reranker.calls[0].cost is None
 
 
 @respx.mock
@@ -103,8 +125,8 @@ async def test_bad_indices_are_ignored_but_no_usable_result_raises():
 
 
 async def test_a_missing_key_is_unavailable(monkeypatch):
-    monkeypatch.setattr(settings, "COHERE_API_KEY", "")
-    with pytest.raises(RerankerUnavailable, match="COHERE_API_KEY"):
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
+    with pytest.raises(RerankerUnavailable, match="OPENROUTER_API_KEY"):
         get_reranker("cohere")
 
 

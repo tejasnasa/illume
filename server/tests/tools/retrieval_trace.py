@@ -168,7 +168,6 @@ async def _main(question: str, preset: str, with_grep: bool) -> str:
             # No reranker or query-rewrite key is ever used here: with these empty the
             # model-backed stages degrade to the fused order, as they do in CI.
             settings.OPENROUTER_API_KEY = ""
-            settings.COHERE_API_KEY = ""
             result = await retrieve(config, text_, ctx=ctx)
         return render(result, config, known)
     finally:

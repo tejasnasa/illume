@@ -161,7 +161,6 @@ async def measured(engine):
     """
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(settings, "OPENROUTER_API_KEY", "")
-        patch.setattr(settings, "COHERE_API_KEY", "")
         async with rolled_back_session(engine) as db:
             seeded = await seed_repo(db, await make_user(db), RETRIEVAL_FIXTURE)
             results: dict[str, dict[str, RetrievalResult]] = {}

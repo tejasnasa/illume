@@ -74,7 +74,6 @@ def _llm() -> LLMConfig:
 async def _main(selected: list[int]) -> None:
     llm = _llm()
     settings.OPENROUTER_API_KEY = ""
-    settings.COHERE_API_KEY = ""
     engine = create_async_engine(_bootstrap.TEST_DB_URL, poolclass=NullPool)
     try:
         async with rolled_back_session(engine) as db:

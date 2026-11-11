@@ -116,20 +116,20 @@ async def test_a_raising_reranker_degrades_and_keeps_what_it_recorded(
 
 
 async def test_an_unavailable_reranker_degrades(db_session, seeded, monkeypatch):
-    monkeypatch.setattr(settings, "COHERE_API_KEY", "")
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
     emit = RecordingEmit()
     ctx = make_context(db_session, seeded.repo, {QUESTION: VERIFY_VECTOR})
     ctx.emit = emit
     result = await retrieve(config_for("cohere"), QUESTION, ctx=ctx)
 
     assert result.trace.reranker_degraded
-    assert "COHERE_API_KEY" in emit.degraded[0]["reason"]
+    assert "OPENROUTER_API_KEY" in emit.degraded[0]["reason"]
     assert result.trace.rerank_calls == ()
 
 
 @respx.mock
 async def test_cohere_end_to_end_orders_the_pool(db_session, seeded, monkeypatch):
-    monkeypatch.setattr(settings, "COHERE_API_KEY", "co-key")
+    monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "co-key")
 
     def respond(request: httpx.Request) -> httpx.Response:
         documents = json.loads(request.content)["documents"]

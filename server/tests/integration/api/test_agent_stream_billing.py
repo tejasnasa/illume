@@ -52,7 +52,6 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(autouse=True)
 def no_model_backed_stages(monkeypatch):
     monkeypatch.setattr(settings, "OPENROUTER_API_KEY", "")
-    monkeypatch.setattr(settings, "COHERE_API_KEY", "")
 
 
 @pytest.fixture

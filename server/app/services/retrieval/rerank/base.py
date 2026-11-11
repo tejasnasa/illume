@@ -105,9 +105,7 @@ def position_scores(count: int, pool: int) -> list[float]:
     return [1.0 - position / pool for position in range(count)]
 
 
-def get_reranker(
-    kind: str, *, llm: LLMConfig | None = None, session_id: str | None = None
-) -> Reranker:
+def get_reranker(kind: str, *, llm: LLMConfig | None = None) -> Reranker:
     """The reranker for ``kind``.
 
     Each additional kind registers here with its own branch, so the pipeline
@@ -118,8 +116,6 @@ def get_reranker(
         kind: A :attr:`RerankConfig.kind <app.services.retrieval.config.RerankConfig.kind>`.
         llm: The caller's generation credential, for kinds that call a model.
             ``llm`` kind falls back to the server's free-tier credential.
-        session_id: Groups the ``jev`` requests in OpenRouter's logs. Sent only
-            when given.
 
     Raises:
         RerankerUnavailable: When the kind has no implementation, or its key
@@ -141,5 +137,5 @@ def get_reranker(
     if kind == "jev":
         from app.services.retrieval.rerank.jev import JevReranker
 
-        return JevReranker(session_id=session_id)
+        return JevReranker()
     raise RerankerUnavailable(f"reranker {kind!r} is not available")

@@ -94,7 +94,7 @@ class TestRequest:
         await JevReranker().rerank("q", pool(2), 2)
         assert "session_id" not in json.loads(route.calls.last.request.content)
 
-        await get_reranker("jev", session_id="run-9").rerank("q", pool(2), 2)
+        await JevReranker(session_id="run-9").rerank("q", pool(2), 2)
         assert json.loads(route.calls.last.request.content)["session_id"] == "run-9"
 
     @respx.mock

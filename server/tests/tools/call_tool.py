@@ -101,7 +101,6 @@ async def _main(name: str, arguments: str, github_url: str | None) -> tuple[str,
             ctx = make_tool_context(session_factory_for(db.bind), repos.a.repo)
             # With these empty, the model-backed stages degrade to the plain order, as in CI.
             settings.OPENROUTER_API_KEY = ""
-            settings.COHERE_API_KEY = ""
             result = await REGISTRY.call(name, arguments, ctx)
         report = result.model_dump(mode="json")
         header = f"[{result.tool}: {result.status}, {result.elapsed_ms:.1f} ms"
