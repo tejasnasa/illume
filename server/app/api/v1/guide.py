@@ -11,6 +11,7 @@ from pathlib import Path
 from app.api.deps import get_repo_for_user
 from app.core.database import get_async_db
 from app.models import File, OnboardingGuide
+from app.services.onboarding_guide import find_guide, parse_reading_order
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -75,10 +76,7 @@ class GuideResponse(BaseModel):
 
 async def _get_guide(repo_id: uuid.UUID, db: AsyncSession) -> OnboardingGuide:
     """Load the stored guide or raise 404 if ingestion hasn't produced one."""
-    result = await db.execute(
-        select(OnboardingGuide).where(OnboardingGuide.repository_id == repo_id)
-    )
-    guide = result.scalar_one_or_none()
+    guide = await find_guide(db, repo_id)
     if not guide:
         raise HTTPException(
             status_code=404,
@@ -89,21 +87,15 @@ async def _get_guide(repo_id: uuid.UUID, db: AsyncSession) -> OnboardingGuide:
 
 def _parse_reading_order(raw: list | None) -> list[ReadingOrderItem]:
     """Parse stored reading-order JSON into sorted response items."""
-    if not raw:
-        return []
-    items = []
-    for entry in raw:
-        if not isinstance(entry, dict):
-            continue
-        items.append(
-            ReadingOrderItem(
-                position=entry.get("position", 0),
-                file_path=entry.get("path", ""),
-                annotation=entry.get("annotation", ""),
-                fan_in=entry.get("fan_in", 0),
-            )
+    return [
+        ReadingOrderItem(
+            position=entry.position,
+            file_path=entry.file_path,
+            annotation=entry.annotation,
+            fan_in=entry.fan_in,
         )
-    return sorted(items, key=lambda x: x.position)
+        for entry in parse_reading_order(raw)
+    ]
 
 
 def _parse_critical_files(raw: list | None) -> list[CriticalFile]:

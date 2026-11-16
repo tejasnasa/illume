@@ -1,5 +1,8 @@
 """The MCP server: its tools, its HTTP transport, and how it is mounted in the API.
 
+The server offers tools, two resource templates (a repository's overview and
+reading order) and four prompts.
+
 The server is built on the SDK's low-level ``Server`` rather than ``MCPServer``,
 because tools here carry hand-written input schemas and set ``structuredContent``
 and ``isError`` themselves; ``MCPServer`` derives a tool's schema from a Python
@@ -35,6 +38,8 @@ from app.core.redis import get_async_redis
 from app.mcp.account_tools import build_account_tools
 from app.mcp.auth import BearerAuthMiddleware
 from app.mcp.limits import RateLimiter
+from app.mcp.prompts import get_prompt, list_prompts
+from app.mcp.resources import build_resource_handlers
 from app.mcp.tool import McpTool, text_result
 from app.mcp.tools import build_repository_tools
 
@@ -163,12 +168,21 @@ def build_mcp(
         tool = tools.get(name)
         return None if tool is None else tool.definition.input_schema
 
+    list_resources, list_templates, read_resource = build_resource_handlers(
+        session_factory, limiter
+    )
+
     server: Server[Any] = Server(
         SERVER_NAME,
         instructions=INSTRUCTIONS,
         get_tool_input_schema=input_schema,
         on_list_tools=list_tools,
         on_call_tool=call_tool,
+        on_list_resources=list_resources,
+        on_list_resource_templates=list_templates,
+        on_read_resource=read_resource,
+        on_list_prompts=list_prompts,
+        on_get_prompt=get_prompt,
     )
     asgi_app = server.streamable_http_app(
         streamable_http_path="/",
