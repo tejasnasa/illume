@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.security import decode_access_token
+from app.mcp.server import MCP_PATH
 
 
 def _resolve_token(request: Request) -> str | None:
@@ -69,7 +70,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             "/openapi.json",
         ]
 
-        if any(request.url.path.startswith(path) for path in public_paths):
+        path = request.url.path
+        # The MCP endpoint does not use the session cookie: its callers are AI tools,
+        # which have none. It is matched exactly, not by prefix, so `/mcpanything`
+        # stays behind the cookie.
+        is_mcp = path == MCP_PATH or path.startswith(f"{MCP_PATH}/")
+
+        if is_mcp or any(path.startswith(public) for public in public_paths):
             # A public route still gets an opportunistic identity when the caller happens
             # to be signed in. The contact endpoint is reachable either way, but a
             # submission carrying a session can be attributed to an account -- and the

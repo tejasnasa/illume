@@ -1,7 +1,8 @@
 """
 FastAPI application entry point.
 
-Registers all API routers, middleware (CORS, Auth), and handles application lifespan events.
+Registers all API routers, middleware (CORS, Auth), the MCP endpoint, and handles
+application lifespan events.
 """
 
 from contextlib import asynccontextmanager
@@ -27,14 +28,20 @@ from app.api.v1 import (
     ws,
 )
 from app.core.config import settings
+from app.core.database import AsyncSessionLocal
 from app.core.health import probe_dependencies
+from app.mcp.server import build_mcp, install_mcp
 from app.middleware.auth import AuthMiddleware
+
+mcp_server, mcp_app = build_mcp(session_factory=AsyncSessionLocal)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting up...")
-    yield
+    # The MCP session manager runs for the app's lifetime; it can be entered only once.
+    async with mcp_server.session_manager.run():
+        yield
     print("Shutting down...")
 
 
@@ -62,6 +69,10 @@ app.include_router(activity.router)
 app.include_router(github_proxy.router)
 app.include_router(contact.router)
 app.include_router(push.router)
+
+# Added after the other middleware, so the bare-path rewrite runs before them and
+# before routing.
+install_mcp(app, mcp_app)
 
 
 @app.get("/healthz")

@@ -9,9 +9,10 @@ guide, ownership, stats), so prefix matching cannot tell them apart -- a missing
 import pytest
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
-from starlette.routing import WebSocketRoute
+from starlette.routing import Mount, WebSocketRoute
 
 from app.main import app
+from app.mcp.server import McpBarePathMiddleware
 from app.middleware.auth import AuthMiddleware
 
 pytestmark = pytest.mark.smoke
@@ -27,6 +28,7 @@ pytestmark = pytest.mark.smoke
 # 38 -> 41 with the chat stream POST and the agent-run list and replay GETs under
 # ``/api/v1/repository/{repo_id}/...``.
 # 41 -> 42 with the chat message changes GET under ``/api/v1/repository/{repo_id}/chat/...``.
+# The MCP endpoint at ``/mcp`` is a ``Mount``, not an ``APIRoute``, so it is not counted.
 EXPECTED_API_ROUTE_COUNT = 42
 
 EXPECTED_TAGS = {
@@ -64,6 +66,7 @@ REPRESENTATIVE_PATHS = {
     "/api/v1/repository/{repo_id}/agent-runs",
     "/api/v1/repository/{repo_id}/export/illume",
     "/api/v1/push/token",
+    "/mcp",
 }
 
 
@@ -111,11 +114,18 @@ def test_websocket_route_is_mounted():
     assert [r.path for r in ws_routes] == ["/api/v1/ws/ingest/{repo_id}"]
 
 
+def test_the_mcp_endpoint_is_a_mount():
+    [mount] = [r for r in app.routes if getattr(r, "path", None) == "/mcp"]
+
+    assert isinstance(mount, Mount)
+
+
 def test_auth_and_cors_middleware_are_installed():
     installed = {middleware.cls for middleware in app.user_middleware}
 
     assert AuthMiddleware in installed
     assert CORSMiddleware in installed
+    assert McpBarePathMiddleware in installed
 
 
 async def test_openapi_schema_is_served_and_parses(client):

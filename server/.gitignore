@@ -9,3 +9,6 @@ __pycache__/
 coverage.json
 .coverage
 htmlcov/
+
+# MCP dev harness client config
+.mcp-dev.json
