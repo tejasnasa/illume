@@ -30,6 +30,8 @@ from starlette.applications import Starlette
 
 from app.mcp.server import MCP_PATH, build_mcp, install_mcp
 from app.middleware.auth import AuthMiddleware
+from app.services.mcp_tokens import create_token
+from tests.factories import make_user
 from tests.fixtures.agent_tools import session_factory_for
 
 BASE_URL = "http://testserver"
@@ -93,8 +95,30 @@ async def mcp_app(db_session) -> AsyncIterator[McpApp]:
 
 
 @pytest.fixture
+async def mcp_user(db_session):
+    """The user whose token ``auth_headers`` carries."""
+    return await make_user(db_session)
+
+
+@pytest.fixture
+async def mcp_token(db_session, mcp_user) -> str:
+    """A valid plaintext token for ``mcp_user``, created in the test transaction."""
+    _, plaintext = await create_token(db_session, mcp_user.id, "test", 30)
+    return plaintext
+
+
+@pytest.fixture
+def auth_headers(mcp_token: str) -> dict[str, str]:
+    """The ``Authorization`` header a signed-in client sends."""
+    return {"authorization": f"Bearer {mcp_token}"}
+
+
+@pytest.fixture
 async def mcp_http(mcp_app: McpApp) -> AsyncIterator[httpx.AsyncClient]:
-    """A raw HTTP client for the MCP app, for checks below the protocol."""
+    """A raw HTTP client for the MCP app, for checks below the protocol.
+
+    It sends no token; add ``**auth_headers`` to a request to authenticate it.
+    """
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=mcp_app.app), base_url=BASE_URL
     ) as client:
@@ -105,8 +129,10 @@ async def mcp_http(mcp_app: McpApp) -> AsyncIterator[httpx.AsyncClient]:
 def mcp_connect(mcp_app: McpApp) -> Callable[..., AbstractAsyncContextManager[Client]]:
     """Connect an SDK client to the MCP app.
 
-    ``mode="legacy"`` runs the ``initialize`` handshake that today's clients use;
-    ``mode="auto"`` lets the SDK discover the newest protocol revision first.
+    Without headers the client is unauthenticated; pass ``**auth_headers`` (or any
+    other header) to sign in. ``mode="legacy"`` runs the ``initialize`` handshake
+    that today's clients use; ``mode="auto"`` lets the SDK discover the newest
+    protocol revision first.
     """
 
     @asynccontextmanager
@@ -116,13 +142,18 @@ def mcp_connect(mcp_app: McpApp) -> Callable[..., AbstractAsyncContextManager[Cl
         )
         client = Client(streamable_http_client(MCP_URL, http_client=http_client), mode=mode)
         async with http_client, in_own_task(client) as connected:
+            # Every request checks the token on a session that shares the test's
+            # connection. The handshake's trailing notification may still be in
+            # flight, and cancelling it at teardown would race the connection
+            # closing; a completed round trip guarantees it is done.
+            await connected.list_tools()
             yield connected
 
     return connect
 
 
 @pytest.fixture
-async def mcp_client(mcp_connect) -> AsyncIterator[Client]:
-    """An SDK client that has completed ``initialize`` against a fresh server."""
-    async with mcp_connect() as client:
+async def mcp_client(mcp_connect, auth_headers) -> AsyncIterator[Client]:
+    """A signed-in SDK client that has completed ``initialize`` against a fresh server."""
+    async with mcp_connect(**auth_headers) as client:
         yield client

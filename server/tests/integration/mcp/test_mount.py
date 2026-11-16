@@ -2,8 +2,10 @@
 
 Protocol checks drive an SDK client through the ``mcp_client`` fixture. The
 checks below the protocol (redirects, ``Host`` and ``Origin``) post raw JSON-RPC.
-The last group runs against the real API app, to prove opening ``/mcp`` to
-cookie-less callers opened nothing else.
+Every request here carries a valid token, so what is proved is the transport's own
+refusal, not the bearer check (``test_auth.py`` covers that). The last group runs
+against the real API app, to prove opening ``/mcp`` to cookie-less callers opened
+nothing else.
 """
 
 from __future__ import annotations
@@ -41,8 +43,10 @@ def sse_messages(body: str) -> list[dict]:
     ]
 
 
-async def initialize(mcp_http, path: str = "/mcp", **headers: str):
-    return await mcp_http.post(path, headers={**HEADERS, **headers}, json=INITIALIZE)
+async def initialize(mcp_http, auth_headers, path: str = "/mcp", **headers: str):
+    return await mcp_http.post(
+        path, headers={**HEADERS, **auth_headers, **headers}, json=INITIALIZE
+    )
 
 
 class TestProtocol:
@@ -51,40 +55,26 @@ class TestProtocol:
         assert mcp_client.server_info.name == SERVER_NAME
         assert mcp_client.server_capabilities.tools is not None
 
-    async def test_the_ping_tool_is_listed(self, mcp_client):
-        tools = (await mcp_client.list_tools()).tools
-
-        assert [tool.name for tool in tools] == ["ping"]
-        assert tools[0].input_schema["type"] == "object"
-        assert tools[0].annotations.read_only_hint is True
-
-    async def test_calling_ping_answers_pong(self, mcp_client):
-        result = await mcp_client.call_tool("ping", {})
-
-        assert result.is_error is not True
-        assert result.content[0].text == "pong"
-        assert result.structured_content == {"ok": True}
-
     async def test_an_unknown_tool_is_an_error_result(self, mcp_client):
         result = await mcp_client.call_tool("no_such_tool", {})
 
         assert result.is_error is True
         assert "Unknown tool" in result.content[0].text
 
-    async def test_a_client_on_the_newest_revision_is_served_too(self, mcp_connect):
-        async with mcp_connect(mode="auto") as client:
+    async def test_a_client_on_the_newest_revision_is_served_too(self, mcp_connect, auth_headers):
+        async with mcp_connect(mode="auto", **auth_headers) as client:
             version = client.protocol_version
             tools = (await client.list_tools()).tools
-            result = await client.call_tool("ping", {})
+            result = await client.call_tool("whoami", {})
 
         assert version in MODERN_PROTOCOL_VERSIONS
-        assert [tool.name for tool in tools] == ["ping"]
-        assert result.content[0].text == "pong"
+        assert "whoami" in [tool.name for tool in tools]
+        assert result.is_error is not True
 
 
 class TestBarePath:
-    async def test_post_without_a_trailing_slash_answers_in_place(self, mcp_http):
-        response = await initialize(mcp_http, "/mcp")
+    async def test_post_without_a_trailing_slash_answers_in_place(self, mcp_http, auth_headers):
+        response = await initialize(mcp_http, auth_headers, "/mcp")
 
         assert response.status_code == 200
         assert "location" not in response.headers
@@ -92,62 +82,62 @@ class TestBarePath:
         [message] = sse_messages(response.text)
         assert message["result"]["serverInfo"]["name"] == SERVER_NAME
 
-    async def test_the_slashed_path_is_served_too(self, mcp_http):
-        response = await initialize(mcp_http, "/mcp/")
+    async def test_the_slashed_path_is_served_too(self, mcp_http, auth_headers):
+        response = await initialize(mcp_http, auth_headers, "/mcp/")
 
         assert response.status_code == 200
 
-    async def test_the_query_string_survives_the_rewrite(self, mcp_http):
-        response = await initialize(mcp_http, "/mcp?probe=1")
+    async def test_the_query_string_survives_the_rewrite(self, mcp_http, auth_headers):
+        response = await initialize(mcp_http, auth_headers, "/mcp?probe=1")
 
         assert response.status_code == 200
 
-    async def test_a_path_below_the_endpoint_is_not_served(self, mcp_http):
-        response = await initialize(mcp_http, "/mcp/other")
+    async def test_a_path_below_the_endpoint_is_not_served(self, mcp_http, auth_headers):
+        response = await initialize(mcp_http, auth_headers, "/mcp/other")
 
         assert response.status_code == 404
 
 
 class TestTransportSecurity:
-    async def test_the_test_host_is_accepted(self, mcp_http):
-        response = await initialize(mcp_http, host="testserver")
+    async def test_the_test_host_is_accepted(self, mcp_http, auth_headers):
+        response = await initialize(mcp_http, auth_headers, host="testserver")
 
         assert response.status_code == 200
 
-    async def test_the_api_host_is_accepted(self, mcp_http):
+    async def test_the_api_host_is_accepted(self, mcp_http, auth_headers):
         # `GITHUB_REDIRECT_URL` points at the API, here on localhost:8000.
-        response = await initialize(mcp_http, host="localhost:8000")
+        response = await initialize(mcp_http, auth_headers, host="localhost:8000")
 
         assert response.status_code == 200
 
     @pytest.mark.parametrize("host", ["evil.example.com", "localhost.evil.example.com:80"])
-    async def test_a_foreign_host_is_refused(self, mcp_http, host):
-        response = await initialize(mcp_http, host=host)
+    async def test_a_foreign_host_is_refused(self, mcp_http, auth_headers, host):
+        response = await initialize(mcp_http, auth_headers, host=host)
 
         assert response.status_code == 421
 
-    async def test_a_request_without_an_origin_is_accepted(self, mcp_http):
-        response = await initialize(mcp_http)
+    async def test_a_request_without_an_origin_is_accepted(self, mcp_http, auth_headers):
+        response = await initialize(mcp_http, auth_headers)
 
         assert "origin" not in response.request.headers
         assert response.status_code == 200
 
-    async def test_the_frontend_origin_is_accepted(self, mcp_http):
-        response = await initialize(mcp_http, origin=settings.FRONTEND_URL)
+    async def test_the_frontend_origin_is_accepted(self, mcp_http, auth_headers):
+        response = await initialize(mcp_http, auth_headers, origin=settings.FRONTEND_URL)
 
         assert response.status_code == 200
 
     @pytest.mark.parametrize(
         "origin", ["https://evil.example.com", "http://localhost.evil.example.com"]
     )
-    async def test_a_foreign_browser_origin_is_refused(self, mcp_http, origin):
-        response = await initialize(mcp_http, origin=origin)
+    async def test_a_foreign_browser_origin_is_refused(self, mcp_http, auth_headers, origin):
+        response = await initialize(mcp_http, auth_headers, origin=origin)
 
         assert response.status_code == 403
 
-    async def test_a_post_that_is_not_json_is_refused(self, mcp_http):
+    async def test_a_post_that_is_not_json_is_refused(self, mcp_http, auth_headers):
         response = await mcp_http.post(
-            "/mcp", headers={**HEADERS, "content-type": "text/plain"}, content="hi"
+            "/mcp", headers={**HEADERS, **auth_headers, "content-type": "text/plain"}, content="hi"
         )
 
         assert response.status_code == 400
