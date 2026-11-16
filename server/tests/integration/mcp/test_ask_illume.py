@@ -263,7 +263,8 @@ class TestRecording:
 
         assert result.is_error is not True
         assert await turns_of(db_session, world.repo) == []
-        rows = (await db_session.execute(select(ChatMessage))).scalars().all()
+        mine = select(ChatMessage).where(ChatMessage.user_id == world.user.id)
+        rows = (await db_session.execute(mine)).scalars().all()
         assert list(rows) == []
         run = await only_run(db_session, world.repo)
         assert run.chat_message_id is None and run.status == "done"
@@ -367,7 +368,7 @@ class TestGates:
         assert result.is_error is True
         assert "API key" in result.content[0].text
         assert model.requests == []
-        assert await _runs(db_session) == []
+        assert await _runs(db_session, world.user) == []
 
     @pytest.mark.parametrize("mode", ["auto", "deep"])
     async def test_auto_and_deep_need_an_own_key(
@@ -380,7 +381,7 @@ class TestGates:
         assert result.is_error is True
         assert "own API key" in result.content[0].text
         assert model.requests == []
-        assert await _runs(db_session) == []
+        assert await _runs(db_session, free_world.user) == []
         assert await used(db_session, free_world.user) == 0
 
     async def test_an_exhausted_free_tier_is_an_error_and_no_run(
@@ -398,7 +399,7 @@ class TestGates:
         assert "free" in result.content[0].text
         assert "settings" in result.content[0].text
         assert model.requests == []
-        assert await _runs(db_session) == []
+        assert await _runs(db_session, world.user) == []
 
     async def test_a_claim_that_finds_the_allowance_spent_is_an_error_with_no_model_call(
         self, db_session, mcp_run_kit, mcp_user, server_key, mcp_connect, auth_headers, monkeypatch
@@ -432,7 +433,7 @@ class TestGates:
 
             assert refused.is_error is True
             assert "in progress" in refused.content[0].text
-            assert await _runs(db_session) == []
+            assert await _runs(db_session, world.user) == []
             assert await slot_count(redis_client, world.user) == 2
         finally:
             await redis_client.delete(slot_key(world.user.id))
@@ -457,15 +458,18 @@ class TestGates:
 
         assert result.is_error is True
         assert "No repository matches" in result.content[0].text
-        assert await _runs(db_session) == []
+        assert await _runs(db_session, world.user, stranger) == []
 
 
 async def _slot_free(redis_client, user) -> bool:
     return await slot_count(redis_client, user) == 0
 
 
-async def _runs(db_session) -> list[AgentRun]:
-    return list((await db_session.execute(select(AgentRun))).scalars().all())
+async def _runs(db_session, *users) -> list[AgentRun]:
+    """The runs owned by ``users``; rows other suites committed to the database are ignored."""
+    owners = [user.id for user in users]
+    query = select(AgentRun).where(AgentRun.user_id.in_(owners))
+    return list((await db_session.execute(query)).scalars().all())
 
 
 # --- billing ---------------------------------------------------------------------------------
@@ -770,7 +774,7 @@ class TestAskLimit:
         assert "retry in" in result.content[0].text
         assert "ask_illume runs per hour" in result.content[0].text
         assert model.requests == []
-        assert await _runs(db_session) == []
+        assert await _runs(db_session, world.user) == []
 
     async def test_each_call_counts_toward_the_hour_and_the_minute(
         self, db_session, mcp_run_kit, world, mcp_client, mcp_redis

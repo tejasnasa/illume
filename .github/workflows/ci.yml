@@ -163,6 +163,11 @@ jobs:
       - name: Run tests
         run: uv run pytest --cov=app --cov-report=json:coverage.json -n auto
 
+      # The launcher tests start the real API against the test stack and commit rows of
+      # their own, so they run after the main suite, never alongside it.
+      - name: Run launcher tests
+        run: uv run pytest ../mcp-local/tests
+
       # The floor file is committed once the suite is mature enough to defend a number.
       # Until then this step is a no-op rather than a red build.
       - name: Coverage ratchet

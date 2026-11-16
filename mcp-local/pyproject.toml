@@ -1,0 +1,25 @@
+[project]
+name = "illume-mcp"
+version = "0.1.0"
+description = "Local stdio launcher that connects MCP clients to a hosted Illume server"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=2.3.0,<3",
+]
+
+[project.scripts]
+illume-mcp = "illume_mcp.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/illume_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-p no:randomly"
