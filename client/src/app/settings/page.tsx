@@ -12,17 +12,19 @@ import GetMyData from "@/api/auth";
 /**
  * Server-rendered settings page that fetches the user once and hands the
  * row to the client AiSettings form. The MCP token list is fetched here too
- * and seeds the MCP card.
+ * and seeds the MCP card, which is left out when the server has MCP
+ * switched off.
  *
  * @returns Settings layout with navbar, the BYOK editor, the agent settings
  * and the MCP card.
  */
 export default async function Settings() {
+  const user = await GetMyData();
   // A failure to list tokens must not take the rest of the settings page down.
-  const [user, mcpTokens] = await Promise.all([
-    GetMyData(),
-    listMcpTokens().catch(() => null),
-  ]);
+  // Nothing is fetched when the server has switched MCP off.
+  const mcpTokens = user.mcp_enabled
+    ? await listMcpTokens().catch(() => null)
+    : null;
 
   return (
     <div>
@@ -38,10 +40,12 @@ export default async function Settings() {
         <section className="space-y-6 mx-auto max-w-3xl w-full">
           <AiSettings user={user} />
           <AgentSettings user={user} />
-          <McpSettings
-            initialTokens={mcpTokens ?? []}
-            loadFailed={mcpTokens === null}
-          />
+          {user.mcp_enabled && (
+            <McpSettings
+              initialTokens={mcpTokens ?? []}
+              loadFailed={mcpTokens === null}
+            />
+          )}
         </section>
       </main>
     </div>

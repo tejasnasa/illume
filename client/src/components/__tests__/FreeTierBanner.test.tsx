@@ -21,6 +21,7 @@ function makeUser(overrides: Partial<User> = {}): User {
     free_chat_messages_used: 0,
     free_ingestions_limit: 3,
     free_chat_messages_limit: 5,
+    mcp_enabled: true,
     ...overrides,
   };
 }

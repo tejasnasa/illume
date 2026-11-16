@@ -64,6 +64,67 @@ jobs:
         working-directory: client
         run: npm run test:e2e:prod
 
+      # Checks the MCP endpoint with the same smoke account the Playwright suite signs in as,
+      # so it needs no secret of its own and no token that has to be renewed. It logs in,
+      # mints a short-lived MCP token, runs `initialize` then `tools/list` and a
+      # `list_repositories` call that must name SMOKE_REPO_NAME, and revokes the token on any
+      # exit. Tokens left behind by a run that died before its revoke are swept first, so
+      # they can never fill the account's ten-token allowance.
+      #
+      # The server is stateless Streamable HTTP and answers each POST as an SSE stream
+      # (`text/event-stream`), so the JSON-RPC message is read from the `data:` line. It
+      # needs `Accept: application/json, text/event-stream` on every call and, after
+      # `initialize`, the negotiated `MCP-Protocol-Version`. There is no session id.
+      - name: Check the MCP endpoint
+        run: |
+          set -euo pipefail
+          api="${SMOKE_API_URL%/}"
+          tokens="${api}/api/v1/auth/me/mcp-tokens"
+          jar="$(mktemp)"
+          token_id=""
+
+          revoke() {
+            [ -n "$token_id" ] && curl -sS -o /dev/null -b "$jar" -X DELETE "${tokens}/${token_id}" || true
+            rm -f "$jar"
+          }
+          trap revoke EXIT
+
+          curl -sS --fail-with-body --max-time 30 -c "$jar" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg e "$SMOKE_EMAIL" --arg p "$SMOKE_PASSWORD" '{email: $e, password: $p}')" \
+            "${api}/api/v1/auth/login" >/dev/null
+
+          for stale in $(curl -sS --fail-with-body -b "$jar" "$tokens" | jq -r '.[] | select(.name == "prod-smoke") | .id'); do
+            curl -sS -o /dev/null -b "$jar" -X DELETE "${tokens}/${stale}"
+          done
+
+          created=$(curl -sS --fail-with-body --max-time 30 -b "$jar" -H "Content-Type: application/json" \
+            -d '{"name":"prod-smoke","expires_in_days":30}' "$tokens")
+          token_id=$(jq -er '.id' <<<"$created")
+          mcp_token=$(jq -er '.token' <<<"$created")
+          echo "::add-mask::${mcp_token}"
+
+          post() {
+            curl -sS --fail-with-body --max-time 30 \
+              -H "Authorization: Bearer ${mcp_token}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json, text/event-stream" \
+              "$@" "${api}/mcp" | tr -d '\r' | sed -n 's/^data: *//p' | jq -s '.[0]'
+          }
+
+          init=$(post -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"prod-smoke","version":"0"}}}')
+          version=$(jq -er '.result.protocolVersion' <<<"$init")
+          jq -e '.result.serverInfo.name == "illume"' <<<"$init" >/dev/null
+
+          listed=$(post -H "MCP-Protocol-Version: ${version}" -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')
+          count=$(jq -er '.result.tools | length' <<<"$listed")
+          echo "tools/list returned ${count} tools"
+          test "$count" -gt 0
+
+          repos=$(post -H "MCP-Protocol-Version: ${version}" -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_repositories","arguments":{}}}')
+          jq -e '.result.isError != true' <<<"$repos" >/dev/null
+          jq -e --arg name "$SMOKE_REPO_NAME" '[.result.content[].text] | join("\n") | contains($name)' <<<"$repos" >/dev/null
+          echo "list_repositories names ${SMOKE_REPO_NAME}"
+
       - name: Upload the Playwright report
         # On failure only: a green run's report is a large artifact nobody opens.
         #

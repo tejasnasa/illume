@@ -34,4 +34,6 @@ export default interface User {
   free_chat_messages_used: number;
   free_ingestions_limit: number;
   free_chat_messages_limit: number;
+  /** `false` when the server has switched the MCP endpoint off; the MCP card is hidden. */
+  mcp_enabled: boolean;
 }

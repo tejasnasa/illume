@@ -32,6 +32,7 @@ from mcp.server import Server, ServerRequestContext
 from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.applications import Starlette
+from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.config import settings
@@ -50,6 +51,14 @@ from app.services.agent.slots import RunSlots
 
 MCP_PATH = "/mcp"
 """Where the server is mounted. The public URL is exactly this, with no trailing slash."""
+
+MCP_ENABLED = True
+"""Feature switch. When false the endpoint answers 404, while the token routes keep
+working so tokens can still be listed and revoked. It is read on every request, not
+only at import."""
+
+MCP_MAX_BODY_BYTES = 1_048_576
+"""The largest request body the endpoint reads, in bytes. A larger one is refused with 413."""
 
 SERVER_NAME = "illume"
 
@@ -123,6 +132,97 @@ TRANSPORT_SECURITY = TransportSecuritySettings(
 )
 
 
+class _BodyTooLarge(Exception):
+    """Raised inside the wrapped app when the streamed body passes the limit."""
+
+
+class BodyLimitMiddleware:
+    """Refuse a request body larger than a byte limit with ``413`` before the app reads it.
+
+    A declared ``Content-Length`` over the limit is refused without reading
+    anything. A body that declares no length, or lies about it, is counted as the
+    app reads it and cut off at the limit, so no more than the limit is ever held.
+
+    Args:
+        app: The ASGI app to wrap.
+        max_bytes: The largest body accepted. Defaults to :data:`MCP_MAX_BODY_BYTES`,
+            read when the request arrives.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int | None = None) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Pass the request on, or answer 413 if its body is over the limit."""
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        limit = self.max_bytes if self.max_bytes is not None else MCP_MAX_BODY_BYTES
+        refusal = PlainTextResponse("request body too large", status_code=413)
+
+        for name, value in scope.get("headers", []):
+            if name == b"content-length":
+                try:
+                    declared = int(value)
+                except ValueError:
+                    break
+                if declared > limit:
+                    await refusal(scope, receive, send)
+                    return
+                break
+
+        received = 0
+        exceeded = False
+        started = False
+
+        async def limited_receive() -> Any:
+            nonlocal received, exceeded
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    exceeded = True
+                    raise _BodyTooLarge
+            return message
+
+        async def guarded_send(message: Any) -> None:
+            nonlocal started
+            # Whatever the app makes of the aborted read, the client gets the 413.
+            if exceeded:
+                return
+            if message["type"] == "http.response.start":
+                started = True
+            await send(message)
+
+        try:
+            await self.app(scope, limited_receive, guarded_send)
+        except Exception:
+            if not exceeded:
+                raise
+        if exceeded and not started:
+            await refusal(scope, receive, send)
+
+
+class McpEnabledMiddleware:
+    """Answer ``404`` for every request while :data:`MCP_ENABLED` is false.
+
+    Args:
+        app: The ASGI app to wrap.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        """Pass the request on when the switch is on, refuse it when it is off."""
+        if scope["type"] == "http" and not MCP_ENABLED:
+            await PlainTextResponse("Not Found", status_code=404)(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
 def build_mcp(
     *,
     session_factory: async_sessionmaker[AsyncSession],
@@ -153,8 +253,10 @@ def build_mcp(
     Returns:
         The low-level server and an ASGI app to mount at :data:`MCP_PATH`. The
         app answers at its own root, so the mount point is the public URL, and
-        it is always guarded: a request without a valid Illume token is refused
-        with 401 before the transport sees it.
+        it is always guarded: a request is refused with 404 while the feature is
+        switched off, with 413 when its body is over the limit, and with 401
+        unless it carries a valid Illume token, in every case before the
+        transport sees it.
     """
     limiter = RateLimiter(redis_factory)
     tools: dict[str, McpTool] = {
@@ -211,7 +313,9 @@ def build_mcp(
         json_response=False,
         transport_security=TRANSPORT_SECURITY,
     )
-    guarded = BearerAuthMiddleware(asgi_app, session_factory=session_factory)
+    guarded = McpEnabledMiddleware(
+        BodyLimitMiddleware(BearerAuthMiddleware(asgi_app, session_factory=session_factory))
+    )
     return server, guarded
 
 

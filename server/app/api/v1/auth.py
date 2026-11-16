@@ -31,6 +31,7 @@ from app.api.validation import FreeText
 from app.core.config import settings
 from app.core.database import get_async_db
 from app.core.security import create_access_token, hash_password, verify_password
+from app.mcp import server as mcp_server
 from app.models.user import User
 from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_config import LLMConfig
@@ -109,6 +110,9 @@ class UserResponse(BaseModel):
     free_chat_messages_used: int = 0
     free_ingestions_limit: int = FREE_INGESTIONS
     free_chat_messages_limit: int = FREE_CHAT_MESSAGES
+    # Whether the MCP endpoint is switched on; the settings page hides its card
+    # when it is not.
+    mcp_enabled: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -241,6 +245,7 @@ async def me(current_user: User = Depends(get_current_user)):
         free_chat_messages_used=current_user.free_chat_messages_used,
         free_ingestions_limit=FREE_INGESTIONS,
         free_chat_messages_limit=FREE_CHAT_MESSAGES,
+        mcp_enabled=mcp_server.MCP_ENABLED,
     )
 
 
