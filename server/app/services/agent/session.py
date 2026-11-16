@@ -13,7 +13,14 @@ open for the length of the stream.
   event carries it, and the run row is finalised.
 * *failed* -- the ``error`` event has been sent; no chat turn, no charge.
 * *cancelled* -- the client went away. The task is cancelled, the steps taken so
-  far are written, the run is marked cancelled, and no turn is saved or charged.
+  far are written, the run is marked cancelled, and no turn is saved. A free-tier
+  answer is charged only if the model had already started writing it.
+
+**The free-tier charge** is claimed *before* the answer is generated, atomically,
+so a client cannot get an answer for free by hanging up just before the end, and
+two concurrent requests cannot both spend the last message. The claim is given
+back when no answer was delivered: the run failed, it was cancelled before the
+first piece of the answer streamed, or it found nothing to answer from.
 
 In every case the concurrency slot is released in a ``finally``; its TTL is only
 the safety net for a process that dies.
@@ -52,7 +59,7 @@ from app.services.agent.slots import RunSlots
 from app.services.agent.steps import StepRecord
 from app.services.agent.tools.context import RepoSnapshot
 from app.services.decisions import Decider
-from app.services.entitlements import aclaim_free_chat_message
+from app.services.entitlements import aclaim_free_chat_message, arefund_free_chat_message
 from app.services.llm_config import LLMConfig
 from app.services.rag import ChatMessage
 from app.services.retrieval.channels.base import Embedder, RetrievalContext
@@ -192,6 +199,8 @@ class RunSession:
         self._released = False
         self._cleaned = False
         self._started = time.monotonic()
+        self._charged = False
+        self._answer_started = False
 
     # --- the response ------------------------------------------------------------
 
@@ -358,25 +367,41 @@ class RunSession:
 
     async def _single_shot(self) -> Outcome:
         request, kit = self.request, self._kit
-        async with self._sessions() as db:
-            ctx = RetrievalContext(
-                repository_id=request.repository.id,
-                db=db,
-                embed=kit.embed or embed_texts,
-                emit=self.recorder.emit,
-            )
-            result = await answer(
-                request.config,
-                request.question,
-                ctx=ctx,
-                history=request.history,
-                llm=request.llm,
-                emit=self.recorder.emit,
-                stream=True,
-                client_factory=kit.client_factory,
-            )
-        if request.on_free_tier and result.generated:
-            await self._charge()
+        if request.on_free_tier and not await self._claim():
+            return self._free_tier_refusal()
+
+        async def emit(event_type: str, data: dict[str, Any]) -> None:
+            if event_type == EventType.ANSWER_DELTA:
+                self._answer_started = True
+            await self.recorder.emit(event_type, data)
+
+        try:
+            async with self._sessions() as db:
+                ctx = RetrievalContext(
+                    repository_id=request.repository.id,
+                    db=db,
+                    embed=kit.embed or embed_texts,
+                    emit=self.recorder.emit,
+                )
+                result = await answer(
+                    request.config,
+                    request.question,
+                    ctx=ctx,
+                    history=request.history,
+                    llm=request.llm,
+                    emit=emit,
+                    stream=True,
+                    client_factory=kit.client_factory,
+                )
+        except asyncio.CancelledError:
+            if not self._answer_started:
+                await self._refund()
+            raise
+        except Exception:
+            await self._refund()
+            raise
+        if not result.generated:
+            await self._refund()
         return self._single_shot_outcome(result)
 
     def _single_shot_outcome(self, result: SingleShotAnswer) -> Outcome:
@@ -397,13 +422,49 @@ class RunSession:
             usage=UsageData(elapsed_seconds=round(time.monotonic() - self._started, 3)),
         )
 
-    async def _charge(self) -> None:
-        """Charges the free tier once, for the one answer, however many calls it took."""
+    async def _claim(self) -> bool:
+        """Claims one free-tier message for this run's answer, before it is generated.
+
+        One answer is one message, however many model calls it takes.
+
+        Returns:
+            ``False`` when the allowance is already spent. A claim that fails for
+            any other reason is logged and the run goes ahead uncharged, as a
+            failed charge always has.
+        """
         try:
             async with self._sessions() as db:
-                await aclaim_free_chat_message(db, self.request.user_id)
+                claimed = await aclaim_free_chat_message(db, self.request.user_id)
         except Exception:
             logger.warning("could not charge run %s", self.request.run_id, exc_info=True)
+            return True
+        self._charged = claimed
+        return claimed
+
+    async def _refund(self) -> None:
+        """Gives back this run's claimed message, once, when no answer was delivered.
+
+        Shielded, because it also runs while the task is being cancelled.
+        """
+        if not self._charged:
+            return
+        self._charged = False
+        try:
+            await asyncio.shield(self._refund_now())
+        except Exception:
+            logger.warning("could not refund run %s", self.request.run_id, exc_info=True)
+
+    async def _refund_now(self) -> None:
+        async with self._sessions() as db:
+            await arefund_free_chat_message(db, self.request.user_id)
+
+    def _free_tier_refusal(self) -> Outcome:
+        """Ends a run whose claim found the free allowance already spent."""
+        message = "You've used all of your free chat questions."
+        self.recorder.publish(
+            EventType.ERROR, {"message": message, "kind": "free_tier_exhausted", "status": 402}
+        )
+        return Outcome(status="failed", stop_reason="free_tier_exhausted", error=message)
 
     # --- finishing ---------------------------------------------------------------
 

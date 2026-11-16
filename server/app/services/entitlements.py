@@ -173,3 +173,27 @@ async def aclaim_free_chat_message(db: AsyncSession, user_id: uuid.UUID) -> bool
     )
     await db.commit()
     return int(result.rowcount or 0) == 1  # type: ignore[attr-defined]
+
+
+async def arefund_free_chat_message(db: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Give back one free chat message claimed by :func:`aclaim_free_chat_message`.
+
+    Used when a claimed answer is never delivered: the run failed, was cancelled
+    before the model wrote anything, or found nothing to answer from. Commits in
+    its own short transaction, like the claim, and never takes the counter below
+    zero.
+
+    Args:
+        db: An open async session.
+        user_id: The user to refund.
+
+    Returns:
+        ``True`` if a message was given back.
+    """
+    result = await db.execute(
+        update(User)
+        .where(User.id == user_id, User.free_chat_messages_used > 0)
+        .values(free_chat_messages_used=User.free_chat_messages_used - 1)
+    )
+    await db.commit()
+    return int(result.rowcount or 0) == 1  # type: ignore[attr-defined]

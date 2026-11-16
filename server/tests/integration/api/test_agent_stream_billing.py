@@ -1,16 +1,18 @@
 """Who may run what on the stream route, and what a run costs the free tier.
 
 Mirrors the chat route's quota rules: a free-tier user is charged one message for
-an answer that was generated, and nothing for a run that failed, was cancelled or
-found no context. A key of the user's own never touches the counter. Agent presets
-need that key (one run is tens of model calls on the operator's), and a model that
-cannot call tools is refused before anything is spent.
+an answer that was generated, and nothing for a run that failed, was cancelled
+before the answer started, or found no context. The message is claimed before
+generation and refunded in those cases. A key of the user's own never touches the
+counter. Agent presets need that key (one run is tens of model calls on the
+operator's), and a model that cannot call tools is refused before anything is spent.
 
 Priority tests: these are the money cases.
 """
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -30,11 +32,13 @@ from app.services.retrieval.config import (
     RerankConfig,
 )
 from tests.factories import fake_vector
-from tests.fixtures.agent_run import PlanDecider, ScriptedModel, finish, turn
+from tests.fixtures.agent_run import PlanDecider, ScriptedModel, finish, say, turn
 from tests.fixtures.agent_stream import (
     QUESTION,
     AnyModel,
     Committed,
+    Hold,
+    RawRequest,
     install,
     make_world,
     only_run,
@@ -42,6 +46,7 @@ from tests.fixtures.agent_stream import (
     stream,
     stream_url,
     turns_of,
+    wait_until,
 )
 from tests.fixtures.retrieval import fake_embedder
 from tests.helpers import authenticate
@@ -204,6 +209,114 @@ class TestFreeTier:
         assert "free chat questions" in response.json()["detail"]
         assert model.requests == []
         assert await runs_of(db_session, world.repo) == []
+
+    async def test_hanging_up_after_the_answer_started_is_still_charged(
+        self, app, client, db_session, free_world
+    ):
+        """The message is claimed before generation, so leaving at the end gets nothing free."""
+        # Longer than the recorder's delta buffer, so the first piece reaches the stream.
+        partial = "A partial answer about the code. " * 8
+        model = ScriptedModel([say(partial, stall_after_text=True)])
+        install(app, db_session, model)
+        raw = RawRequest(
+            app,
+            client,
+            stream_url(free_world.repo),
+            {"question": QUESTION, "preset": "hybrid"},
+        )
+
+        raw.start()
+        await wait_until(lambda: "answer_delta" in raw.text)
+        await raw.hang_up()
+
+        assert await used(db_session, free_world.user) == 1
+        assert (await only_run(db_session, free_world.repo)).status == "cancelled"
+        assert await turns_of(db_session, free_world.repo) == []
+
+    async def test_hanging_up_before_the_answer_started_is_refunded(
+        self, app, client, db_session, free_world, monkeypatch
+    ):
+        from app.services.agent import session as run_session
+
+        refunds: list[object] = []
+        refund = run_session.arefund_free_chat_message
+
+        async def counted_refund(db, user_id):
+            refunds.append(str(user_id))
+            return await refund(db, user_id)
+
+        monkeypatch.setattr(run_session, "arefund_free_chat_message", counted_refund)
+        hold = Hold()
+        model = AnyModel()
+        original = model.create
+
+        async def slow(**kwargs):
+            if kwargs.get("stream"):
+                await hold()
+            return await original(**kwargs)
+
+        model.create = slow  # type: ignore[method-assign]
+        install(app, db_session, model)
+        raw = RawRequest(
+            app,
+            client,
+            stream_url(free_world.repo),
+            {"question": QUESTION, "preset": "hybrid"},
+        )
+
+        raw.start()
+        await asyncio.wait_for(hold.reached.wait(), 15)
+        await raw.hang_up()
+
+        # Claimed before the model was called, then given back.
+        assert refunds == [str(free_world.user.id)]
+        assert await used(db_session, free_world.user) == 0
+        assert (await only_run(db_session, free_world.repo)).status == "cancelled"
+
+    async def test_a_claim_that_finds_the_allowance_spent_refuses_without_a_model_call(
+        self, app, client, db_session, server_key, monkeypatch
+    ):
+        """The atomic claim is the real gate: the route's early check can be raced past."""
+        world = await make_world(
+            client, db_session, byok=False, free_chat_messages_used=FREE_CHAT_MESSAGES
+        )
+        # Let the request past the route's early check, as a concurrent request would.
+        monkeypatch.setattr("app.api.v1.agent.FREE_CHAT_MESSAGES", FREE_CHAT_MESSAGES + 1)
+        model = AnyModel()
+        install(app, db_session, model)
+
+        _, events = await stream(client, world.repo, preset="hybrid")
+
+        assert events[-1]["type"] == "error"
+        assert events[-1]["data"]["kind"] == "free_tier_exhausted"
+        assert model.requests == []
+        assert await used(db_session, world.user) == FREE_CHAT_MESSAGES
+        run = await only_run(db_session, world.repo)
+        assert (run.status, run.stop_reason) == ("failed", "free_tier_exhausted")
+        assert await turns_of(db_session, world.repo) == []
+
+    async def test_a_failure_after_the_answer_started_is_refunded(
+        self, app, client, db_session, free_world
+    ):
+        failure = APIConnectionError(request=httpx.Request("POST", "https://x"))
+        model = AnyModel()
+
+        async def breaks_midway():
+            yield SimpleNamespace(type="response.output_text.delta", delta="Half an ans")
+            raise failure
+
+        async def create(**kwargs):
+            model.requests.append(kwargs)
+            return breaks_midway()
+
+        model.create = create  # type: ignore[method-assign]
+        install(app, db_session, model)
+
+        _, events = await stream(client, free_world.repo, preset="hybrid")
+
+        assert "answer_delta" in [event["type"] for event in events]
+        assert events[-1]["type"] == "error"
+        assert await used(db_session, free_world.user) == 0
 
     async def test_no_key_at_all_is_a_402(self, app, client, db_session, no_server_key):
         world = await make_world(client, db_session, byok=False)
@@ -403,3 +516,16 @@ class TestToolSupport:
         await db_session.refresh(world.user)
         assert world.user.ai_supports_tools is None
         assert world.user.ai_tools_checked_at is None
+
+
+class TestRefund:
+    async def test_a_refund_never_takes_the_counter_below_zero(self, db_session):
+        from app.services.entitlements import aclaim_free_chat_message, arefund_free_chat_message
+        from tests.factories import make_user
+
+        user = await make_user(db_session)
+
+        assert await aclaim_free_chat_message(db_session, user.id) is True
+        assert await arefund_free_chat_message(db_session, user.id) is True
+        assert await arefund_free_chat_message(db_session, user.id) is False
+        assert await used(db_session, user) == 0
