@@ -30,7 +30,7 @@ import app.services.agent.tools  # noqa: F401  (importing it registers every too
 from app.mcp.auth import current_user_id
 from app.mcp.context import build_tool_context
 from app.mcp.limits import RateLimiter
-from app.mcp.repos import McpRepoError, resolve_repo
+from app.mcp.repos import McpRepoError, repo_argument, resolve_repo
 from app.mcp.tool import McpTool, text_result
 from app.models.user import User
 from app.services.agent.tools.registry import REGISTRY, Tool
@@ -38,26 +38,6 @@ from app.services.llm_config import LLMConfig
 
 logger = logging.getLogger(__name__)
 
-
-def _ensure_call_log_is_emitted(log: logging.Logger) -> None:
-    """Give the per-call log line a handler of its own.
-
-    The API process configures no logging, so the root logger drops anything below
-    WARNING and the one line per tool call would never reach the container log.
-    The handler is added once; propagation stays on, so anything that does
-    configure the root logger (or a test capturing records) still receives it.
-
-    Args:
-        log: The logger the call line is written to.
-    """
-    if not log.handlers:
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s %(message)s"))
-        log.addHandler(handler)
-    log.setLevel(logging.INFO)
-
-
-_ensure_call_log_is_emitted(logger)
 
 MCP_EXCLUDED = frozenset({"finish"})
 """Registry tools that exist for Illume's own agent loop and mean nothing to an MCP client."""
@@ -186,11 +166,11 @@ def build_repository_tools(
                 )
                 return result
 
-            ref = arguments.get("repo")
-            if not isinstance(ref, str) or not ref.strip():
+            ref = repo_argument(arguments.get("repo"))
+            if ref is None:
                 return finish(
                     _error(
-                        "Invalid arguments: `repo` is required and must be a string: the "
+                        "Invalid arguments: `repo` is required: the "
                         "repository number, UUID or owner/name from list_repositories."
                     ),
                     "invalid_arguments",

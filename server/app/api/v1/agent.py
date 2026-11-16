@@ -30,24 +30,18 @@ from app.api.validation import MultiLineText
 from app.core.database import AsyncSessionLocal, get_async_db
 from app.models.agent_run import AgentRun
 from app.models.repository import Repository
-from app.models.user import User
-from app.services.agent.auto import AUTO, AutoRoute, resolve_auto
-from app.services.agent.overrides import OverrideError, Overrides, apply_overrides
+from app.services.agent.auto import AUTO
+from app.services.agent.overrides import Overrides
 from app.services.agent.persistence import (
-    create_run,
     last_activity,
     public_status,
 )
-from app.services.agent.prompts import PROMPT_VERSION
-from app.services.agent.session import RunKit, RunRequest, RunSession
+from app.services.agent.run_request import RunRefusal, prepare_run
+from app.services.agent.session import RunKit, RunSession
 from app.services.agent.slots import RunSlots
-from app.services.agent.tools.context import RepoSnapshot
-from app.services.decisions.openrouter import JEV_MODEL
-from app.services.entitlements import FREE_CHAT_MESSAGES, llm_config_for
+from app.services.entitlements import FREE_CHAT_MESSAGES
 from app.services.rag import ChatMessage
-from app.services.retrieval.config import PRESETS, PipelineConfig
-from app.services.retrieval.single_shot import is_classic_shaped
-from app.services.tool_support import ensure_tool_support
+from app.services.retrieval.config import PRESETS
 
 logger = logging.getLogger(__name__)
 
@@ -55,12 +49,6 @@ router = APIRouter(prefix="/api/v1/repository", tags=["agent"])
 
 SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 SSE_PING_SECONDS = 15
-
-CLASSIC_HISTORY_MESSAGES = 5
-"""Prior messages a Classic-shaped run replays, as the chat endpoint does."""
-
-MAX_HISTORY_MESSAGES = 20
-"""The most prior messages any preset can replay."""
 
 SessionOpener = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
@@ -193,25 +181,6 @@ async def _owned_repository(db: AsyncSession, repo_id: uuid.UUID, user_id: Any) 
     return repo
 
 
-def _model_label(owner: User, model: str) -> str:
-    """``provider:model``, with ``server`` for the operator's free-tier credential."""
-    provider = owner.ai_provider if owner.ai_api_key else None
-    return f"{provider or 'server'}:{model}"
-
-
-def _decider_label(config: PipelineConfig, model: str) -> str | None:
-    """``jev:<model id>`` or ``llm:<model>``; ``None`` when the run asks no decisions."""
-    asks = config.execution != "single_shot" or config.rerank.kind == "jev"
-    if not asks:
-        return None
-    return f"jev:{JEV_MODEL}" if config.decider == "jev" else f"llm:{model}"
-
-
-async def _known(value: bool | None) -> bool | None:
-    """A tool-support verdict that was already measured, as an awaitable."""
-    return value
-
-
 # --- routes --------------------------------------------------------------------------
 
 
@@ -259,154 +228,24 @@ async def stream_chat(
         HTTPException: 400, 402, 404, 422 or 429 as above.
     """
     user_id = getattr(request.state, "user_id", None)
-    repo = await _owned_repository(db, repo_id, user_id)
-    if repo.status != "ready":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Repository is not ready for querying (status: {repo.status})",
-        )
-
-    owner = (
-        (
-            await db.execute(
-                select(User).where(User.id == user_id).execution_options(populate_existing=True)
-            )
-        ).scalar_one_or_none()
-        if user_id
-        else None
-    )
-    # What the drawer may change depends on who pays for the extra calls.
-    own_key = owner is not None and owner.ai_api_key is not None
-    is_auto = payload.preset == AUTO
-    config: PipelineConfig | None = None
-    if not is_auto:
-        try:
-            config = apply_overrides(PRESETS[payload.preset], payload.overrides, own_key=own_key)
-        except OverrideError as error:
-            raise HTTPException(status_code=422, detail=str(error)) from error
-
-    llm_config = llm_config_for(owner)
-    if owner is None or llm_config is None:
-        raise HTTPException(
-            status_code=402,
-            detail=(
-                "Add your own API key to ask questions about this repository. "
-                "Configure one in your account settings."
-            ),
-        )
-
-    on_free_tier = owner.ai_api_key is None
-    supports_tools: bool | None = None
-    if is_auto:
-        if on_free_tier:
-            raise HTTPException(
-                status_code=402,
-                detail=(
-                    "Auto picks a preset per question and runs on your own API key. "
-                    "Add one in your account settings to use it."
-                ),
-            )
-        supports_tools = await ensure_tool_support(db, owner)
-    elif config is not None and config.execution != "single_shot":
-        if on_free_tier:
-            raise HTTPException(
-                status_code=402,
-                detail=(
-                    "Agent presets run on your own API key. "
-                    "Add one in your account settings to use them."
-                ),
-            )
-        supports_tools = await ensure_tool_support(db, owner)
-        if supports_tools is False:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "The model behind your API key does not support tool calling, "
-                    "which agent presets need. Choose a single-shot preset or change the model."
-                ),
-            )
-    if on_free_tier and owner.free_chat_messages_used >= FREE_CHAT_MESSAGES:
-        raise HTTPException(
-            status_code=402,
-            detail="You've used all of your free chat questions. ",
-        )
-
-    # Copy what the run needs out of the ORM rows, then end the request's
-    # transaction: the stream outlives this handler and must not hold a connection.
-    snapshot = RepoSnapshot.from_repository(repo)
-    context_window = (
-        payload.overrides.agent.context_window
-        if payload.overrides and payload.overrides.agent and payload.overrides.agent.context_window
-        else owner.ai_context_window
-    )
-    github_token = owner.github_access_token
-    model_label = _model_label(owner, llm_config.model)
-    await db.commit()
-
-    if not await slots.acquire(user_id):
-        raise HTTPException(
-            status_code=429,
-            detail="Too many answers are running at once. Wait for one to finish.",
-        )
-
-    run_id = uuid.uuid4()
-    auto: AutoRoute | None = None
     try:
-        if is_auto:
-            auto = await resolve_auto(
-                payload.question,
-                [ChatMessage(role=m.role, content=m.content) for m in payload.history],
-                decider=kit.decider,
-                supports_tools=lambda: _known(supports_tools),
-            )
-            try:
-                config = apply_overrides(
-                    PRESETS[auto.resolved_preset], payload.overrides, own_key=own_key
-                )
-            except OverrideError as error:
-                raise HTTPException(status_code=422, detail=str(error)) from error
-        assert config is not None
-        resolved_preset = auto.resolved_preset if auto is not None else payload.preset
-        bound = CLASSIC_HISTORY_MESSAGES if is_classic_shaped(config) else MAX_HISTORY_MESSAGES
-        history = [ChatMessage(role=m.role, content=m.content) for m in payload.history[-bound:]]
-        await create_run(
-            sessions,
-            run_id=run_id,
+        prepared = await prepare_run(
+            db,
             user_id=user_id,
-            repository_id=repo_id,
+            repo_id=repo_id,
             question=payload.question,
-            preset=resolved_preset,
-            config=config.model_dump(mode="json"),
-            config_hash=config.config_hash(),
-            prompt_version=PROMPT_VERSION if config.execution != "single_shot" else None,
-            model=model_label,
-            decider=_decider_label(config, llm_config.model),
-            ingested_commit_sha=snapshot.ingested_commit_sha,
+            history=[ChatMessage(role=m.role, content=m.content) for m in payload.history],
+            preset=payload.preset,
+            overrides=payload.overrides,
+            sessions=sessions,
+            kit=kit,
+            slots=slots,
+            free_limit=FREE_CHAT_MESSAGES,
         )
-    except BaseException:
-        await slots.release(user_id)
-        raise
+    except RunRefusal as refusal:
+        raise HTTPException(status_code=refusal.status, detail=refusal.detail) from refusal
 
-    run = RunSession(
-        RunRequest(
-            run_id=run_id,
-            user_id=user_id,
-            repository=snapshot,
-            question=payload.question,
-            history=history,
-            preset=resolved_preset,
-            config=config,
-            llm=llm_config,
-            model_label=model_label,
-            github_token=github_token,
-            context_window=context_window,
-            on_free_tier=on_free_tier,
-            auto=auto,
-        ),
-        sessions,
-        slots,
-        kit,
-    )
+    run = RunSession(prepared, sessions, slots, kit)
     run.start()
     return EventSourceResponse(
         run.frames(),

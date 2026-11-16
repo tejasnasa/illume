@@ -2,7 +2,7 @@
 
 Counters are fixed-window and live in Redis, keyed on the **user**: a user may
 hold several tokens, so a per-token limit would multiply the stated one by the
-number of tokens. Three limits apply:
+number of tokens. Four limits apply:
 
 - every tool call counts toward :data:`MCP_CALLS_PER_MINUTE`;
 - a repository tool whose ``cost`` is ``model`` or ``network`` (it spends the
@@ -11,7 +11,9 @@ number of tokens. Three limits apply:
 - a repository tool called by a user without an AI key of their own also counts
   toward :data:`MCP_FREE_CALLS_PER_DAY`. Raw tools do not touch the free chat
   allowance, so without this a keyless account would have unlimited
-  operator-paid calls.
+  operator-paid calls;
+- an ``ask_illume`` call also counts toward :data:`MCP_ASK_PER_HOUR`: each one is a
+  whole run, many model calls on the user's own key or one on the operator's.
 
 Going over a limit is an ordinary tool result the model can read, not an HTTP
 error. The limiter is best-effort: when Redis is unreachable the call is allowed
@@ -34,11 +36,13 @@ logger = logging.getLogger(__name__)
 MCP_CALLS_PER_MINUTE = 60
 MCP_MODEL_CALLS_PER_MINUTE = 20
 MCP_FREE_CALLS_PER_DAY = 300
+MCP_ASK_PER_HOUR = 20
 
 MODEL_COST_CLASSES = frozenset({"model", "network"})
 """Registry tool costs that count toward :data:`MCP_MODEL_CALLS_PER_MINUTE`."""
 
 _MINUTE_SECONDS = 60
+_HOUR_SECONDS = 3_600
 _DAY_SECONDS = 86_400
 _REDIS_TIMEOUT_SECONDS = 2.0
 _EXPIRY_SLACK_SECONDS = 5
@@ -70,7 +74,7 @@ def window_key(scope: str, user_id: uuid.UUID, size: int, now: float) -> str:
     """The Redis key of the counter for ``scope`` in the window containing ``now``.
 
     Args:
-        scope: ``calls``, ``model`` or ``daily``.
+        scope: ``calls``, ``model``, ``daily`` or ``ask``.
         user_id: The token owner.
         size: The window length in seconds.
         now: Seconds since the epoch.
@@ -79,7 +83,7 @@ def window_key(scope: str, user_id: uuid.UUID, size: int, now: float) -> str:
 
 
 class RateLimiter:
-    """Counts a user's MCP calls against the three limits.
+    """Counts a user's MCP calls against the limits.
 
     Args:
         redis_factory: Returns an async Redis client. The client is closed after
@@ -128,6 +132,19 @@ class RateLimiter:
         if keyless:
             hits.append(("daily", _DAY_SECONDS, MCP_FREE_CALLS_PER_DAY, "repository calls per day"))
         return await self._check(user_id, hits) if hits else None
+
+    async def check_ask(self, user_id: uuid.UUID) -> Limited | None:
+        """Count one ``ask_illume`` run against the per-hour limit.
+
+        Args:
+            user_id: The token owner.
+
+        Returns:
+            The limit that was reached, or ``None`` when the run may go ahead.
+        """
+        return await self._check(
+            user_id, [("ask", _HOUR_SECONDS, MCP_ASK_PER_HOUR, "ask_illume runs per hour")]
+        )
 
     async def _check(
         self, user_id: uuid.UUID, hits: list[tuple[str, int, int, str]]

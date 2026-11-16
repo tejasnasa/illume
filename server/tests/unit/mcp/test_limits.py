@@ -116,3 +116,24 @@ async def test_an_unreachable_redis_allows_the_call_and_warns(caplog):
         is None
     )
     assert "allowing the call" in caplog.text
+
+
+async def test_the_hourly_ask_limit_refuses_the_next_run_with_the_seconds_left(limiter):
+    user = uuid.uuid4()
+    for _ in range(limits.MCP_ASK_PER_HOUR):
+        assert await limiter.check_ask(user) is None
+
+    limited = await limiter.check_ask(user)
+
+    window_end = (int(NOW // 3600) + 1) * 3600
+    assert limited is not None
+    assert limited.retry_after == int(window_end - NOW)
+    assert "ask_illume runs per hour" in limited.message
+
+
+async def test_the_ask_limit_is_per_user(limiter):
+    first, second = uuid.uuid4(), uuid.uuid4()
+    for _ in range(limits.MCP_ASK_PER_HOUR + 1):
+        await limiter.check_ask(first)
+
+    assert await limiter.check_ask(second) is None

@@ -113,6 +113,9 @@ class RunRequest:
             for the configuration's.
         on_free_tier: Whether a generated answer is charged to the free tier.
         auto: How an ``auto`` request was resolved, or ``None`` for any other preset.
+        save_history: Whether a finished answer is saved as a turn of the
+            repository's chat. A run asked from outside the chat page leaves it
+            out; the run row is finalised either way.
     """
 
     run_id: uuid.UUID
@@ -128,6 +131,7 @@ class RunRequest:
     context_window: int | None
     on_free_tier: bool
     auto: AutoRoute | None = None
+    save_history: bool = True
 
 
 @dataclass
@@ -472,19 +476,22 @@ class RunSession:
         request, recorder = self.request, self.recorder
         message_id: uuid.UUID | None = None
         if outcome.status == "done":
-            try:
-                message_id = await save_turn(
-                    self._sessions,
-                    run_id=request.run_id,
-                    user_id=request.user_id,
-                    repository_id=request.repository.id,
-                    question=request.question,
-                    answer=outcome.answer,
-                    sources=outcome.citations,
-                    answered_commit_sha=request.repository.ingested_commit_sha,
-                )
-            except Exception:
-                logger.warning("could not save the turn of run %s", request.run_id, exc_info=True)
+            if request.save_history:
+                try:
+                    message_id = await save_turn(
+                        self._sessions,
+                        run_id=request.run_id,
+                        user_id=request.user_id,
+                        repository_id=request.repository.id,
+                        question=request.question,
+                        answer=outcome.answer,
+                        sources=outcome.citations,
+                        answered_commit_sha=request.repository.ingested_commit_sha,
+                    )
+                except Exception:
+                    logger.warning(
+                        "could not save the turn of run %s", request.run_id, exc_info=True
+                    )
             recorder.publish(
                 EventType.DONE,
                 DoneData(

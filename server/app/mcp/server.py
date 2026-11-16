@@ -1,6 +1,7 @@
 """The MCP server: its tools, its HTTP transport, and how it is mounted in the API.
 
-The server offers tools, two resource templates (a repository's overview and
+The server offers tools (among them ``ask_illume``, which runs Illume's own
+answering pipeline), two resource templates (a repository's overview and
 reading order) and four prompts.
 
 The server is built on the SDK's low-level ``Server`` rather than ``MCPServer``,
@@ -36,12 +37,16 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from app.core.config import settings
 from app.core.redis import get_async_redis
 from app.mcp.account_tools import build_account_tools
+from app.mcp.ask import build_ask_tool
 from app.mcp.auth import BearerAuthMiddleware
 from app.mcp.limits import RateLimiter
 from app.mcp.prompts import get_prompt, list_prompts
 from app.mcp.resources import build_resource_handlers
 from app.mcp.tool import McpTool, text_result
 from app.mcp.tools import build_repository_tools
+from app.services.agent.persistence import SessionOpener
+from app.services.agent.session import RunKit
+from app.services.agent.slots import RunSlots
 
 MCP_PATH = "/mcp"
 """Where the server is mounted. The public URL is exactly this, with no trailing slash."""
@@ -122,6 +127,9 @@ def build_mcp(
     *,
     session_factory: async_sessionmaker[AsyncSession],
     redis_factory: Callable[[], Any] = get_async_redis,
+    run_sessions: SessionOpener | None = None,
+    kit_factory: Callable[[], RunKit] | None = None,
+    slots_factory: Callable[[], RunSlots] | None = None,
 ) -> tuple[Server[Any], ASGIApp]:
     """Build the MCP server and the ASGI app that serves it.
 
@@ -135,6 +143,12 @@ def build_mcp(
             the tools and for checking each request's token.
         redis_factory: Returns a fresh async Redis client for the rate limiter
             on every call. A test passes one backed by a fake server.
+        run_sessions: Opens the sessions an ``ask_illume`` run writes with. Defaults
+            to ``session_factory``; a test passes one whose sessions never overlap.
+        kit_factory: Returns the collaborators an ``ask_illume`` run uses (model
+            client, embedder, decider). Defaults to the production ones; a test
+            passes scripted ones.
+        slots_factory: Returns the per-user run cap. Defaults to the production one.
 
     Returns:
         The low-level server and an ASGI app to mount at :data:`MCP_PATH`. The
@@ -148,6 +162,13 @@ def build_mcp(
         for tool in [
             *build_account_tools(session_factory, limiter),
             *build_repository_tools(session_factory, limiter),
+            build_ask_tool(
+                session_factory,
+                limiter,
+                run_sessions=run_sessions,
+                kit_factory=kit_factory,
+                slots_factory=slots_factory,
+            ),
         ]
     }
 

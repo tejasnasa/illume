@@ -27,6 +27,26 @@ class McpRepoError(Exception):
         self.message = message
 
 
+def repo_argument(value: object) -> str | None:
+    """The ``repo`` argument of a tool call as a reference string, or ``None`` if unusable.
+
+    The schema asks for a string, but a client that sees a repository number often
+    sends it as a JSON number; that is accepted as the same reference. A boolean is
+    not a number here.
+
+    Args:
+        value: The raw ``repo`` argument.
+
+    Returns:
+        The stripped reference, or ``None`` when it is missing, empty or of another type.
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def _not_found(ref: str) -> McpRepoError:
     # One message for "no such repository" and "someone else's repository", so a
     # reference cannot be used to probe what other users have ingested.

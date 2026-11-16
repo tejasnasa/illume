@@ -32,8 +32,10 @@ from starlette.applications import Starlette
 
 from app.mcp.server import MCP_PATH, build_mcp, install_mcp
 from app.middleware.auth import AuthMiddleware
+from app.services.agent.session import RunKit
 from app.services.mcp_tokens import create_token
 from tests.factories import make_user
+from tests.fixtures.agent_run import serialized
 from tests.fixtures.agent_tools import session_factory_for
 
 BASE_URL = "http://testserver"
@@ -108,6 +110,18 @@ class McpRedis:
         return fakeredis.aioredis.FakeRedis(server=self.server, decode_responses=True)
 
 
+class RunKitBox:
+    """The collaborators ``ask_illume`` runs use, replaceable while the server is up.
+
+    Attributes:
+        kit: Handed to every run started after it is set. The default is the
+            production kit; a test that asks a question sets a scripted one first.
+    """
+
+    def __init__(self) -> None:
+        self.kit = RunKit()
+
+
 @pytest.fixture
 def mcp_redis() -> McpRedis:
     """The fake Redis behind the server's rate limiter."""
@@ -115,10 +129,21 @@ def mcp_redis() -> McpRedis:
 
 
 @pytest.fixture
-async def mcp_app(db_session, mcp_redis) -> AsyncIterator[McpApp]:
+def mcp_run_kit() -> RunKitBox:
+    """The model, embedder and decider ``ask_illume`` runs use; set ``.kit`` in a test."""
+    return RunKitBox()
+
+
+@pytest.fixture
+async def mcp_app(db_session, mcp_redis, mcp_run_kit) -> AsyncIterator[McpApp]:
     """A fresh MCP server bound to the test transaction, with its session manager running."""
+    factory = session_factory_for(db_session.bind)
     server, asgi_app = build_mcp(
-        session_factory=session_factory_for(db_session.bind), redis_factory=mcp_redis.factory
+        session_factory=factory,
+        redis_factory=mcp_redis.factory,
+        # Runs write from concurrent tasks; on one shared connection they must not overlap.
+        run_sessions=serialized(factory),
+        kit_factory=lambda: mcp_run_kit.kit,
     )
     app = Starlette(lifespan=lambda _app: server.session_manager.run())
     app.add_middleware(AuthMiddleware)

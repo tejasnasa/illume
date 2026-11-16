@@ -36,7 +36,7 @@ from tests.fixtures.retrieval import fake_embedder
 pytestmark = pytest.mark.integration
 
 EXPOSED = [tool.name for tool in exposed_tools()]
-ACCOUNT_TOOLS = {"whoami", "list_repositories"}
+NON_REGISTRY_TOOLS = {"whoami", "list_repositories", "ask_illume"}
 
 EXAMPLES: dict[str, dict[str, Any]] = {
     "search_code": {"query": "Where is `verify_password` defined?", "k": 5},
@@ -141,7 +141,7 @@ def everything(result) -> str:
 async def test_every_exposed_registry_tool_is_listed_and_finish_is_not(mcp_client):
     listed = {tool.name: tool for tool in (await mcp_client.list_tools()).tools}
 
-    assert set(listed) == ACCOUNT_TOOLS | set(EXPOSED)
+    assert set(listed) == NON_REGISTRY_TOOLS | set(EXPOSED)
     assert set(EXPOSED) == set(REGISTRY.names()) - {"finish"}
     assert "finish" not in listed
 
@@ -371,14 +371,21 @@ async def test_a_wrong_type_is_an_error(ref, mcp_client):
     assert text_of(result).startswith("[invalid_arguments] ")
 
 
-@pytest.mark.parametrize("repo", [None, 7, "", "   "])
-async def test_a_missing_or_non_string_repo_is_an_error(repo, mcp_client):
+@pytest.mark.parametrize("repo", [None, True, 1.5, "", "   ", ["1"]])
+async def test_a_missing_or_unusable_repo_is_an_error(repo, mcp_client):
     arguments = {"path": SECURITY} if repo is None else {"path": SECURITY, "repo": repo}
 
     result = await call(mcp_client, "list_symbols", **arguments)
 
     assert result.is_error is True
     assert "`repo` is required" in text_of(result)
+
+
+async def test_a_repository_number_sent_as_a_json_number_is_accepted(repos, mcp_client):
+    result = await call(mcp_client, "get_overview", repo=repos.a.repo.repo_number)
+
+    assert result.is_error is not True
+    assert "B_MARKER" not in text_of(result)
 
 
 async def test_an_unknown_repository_is_an_error(repos, mcp_client):
