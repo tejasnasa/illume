@@ -20,6 +20,8 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any
 
+import fakeredis
+import fakeredis.aioredis
 import httpx
 import httpx2
 import pytest
@@ -83,10 +85,41 @@ class McpApp:
         self.app = app
 
 
+class McpRedis:
+    """The rate limiter's Redis for one test: a fake server that can be made to fail.
+
+    Attributes:
+        server: The fake server every client the factory hands out shares.
+        down: When true, the factory raises, as an unreachable Redis would.
+    """
+
+    def __init__(self) -> None:
+        self.server = fakeredis.FakeServer()
+        self.down = False
+
+    def factory(self) -> fakeredis.aioredis.FakeRedis:
+        """A new client on the shared server, or a failure when ``down``."""
+        if self.down:
+            raise ConnectionError("redis is down")
+        return fakeredis.aioredis.FakeRedis(server=self.server, decode_responses=True)
+
+    def client(self) -> fakeredis.aioredis.FakeRedis:
+        """A client for the test's own reads and writes, ignoring ``down``."""
+        return fakeredis.aioredis.FakeRedis(server=self.server, decode_responses=True)
+
+
 @pytest.fixture
-async def mcp_app(db_session) -> AsyncIterator[McpApp]:
+def mcp_redis() -> McpRedis:
+    """The fake Redis behind the server's rate limiter."""
+    return McpRedis()
+
+
+@pytest.fixture
+async def mcp_app(db_session, mcp_redis) -> AsyncIterator[McpApp]:
     """A fresh MCP server bound to the test transaction, with its session manager running."""
-    server, asgi_app = build_mcp(session_factory=session_factory_for(db_session.bind))
+    server, asgi_app = build_mcp(
+        session_factory=session_factory_for(db_session.bind), redis_factory=mcp_redis.factory
+    )
     app = Starlette(lifespan=lambda _app: server.session_manager.run())
     app.add_middleware(AuthMiddleware)
     install_mcp(app, asgi_app)

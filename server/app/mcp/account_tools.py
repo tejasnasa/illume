@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.mcp.auth import current_user_id
+from app.mcp.limits import RateLimiter
 from app.mcp.tool import McpTool, text_result
 from app.models.repository import Repository
 from app.models.user import User
@@ -47,11 +48,14 @@ def _repo_line(entry: dict[str, Any]) -> str:
     )
 
 
-def build_account_tools(session_factory: async_sessionmaker[AsyncSession]) -> list[McpTool]:
+def build_account_tools(
+    session_factory: async_sessionmaker[AsyncSession], limiter: RateLimiter | None = None
+) -> list[McpTool]:
     """Build the tools that describe the caller and their repositories.
 
     Args:
         session_factory: Source of the database sessions the handlers use.
+        limiter: When given, each call counts toward the user's per-minute limit.
 
     Returns:
         The ``whoami`` and ``list_repositories`` tools.
@@ -61,6 +65,8 @@ def build_account_tools(session_factory: async_sessionmaker[AsyncSession]) -> li
         ctx: ServerRequestContext[Any], arguments: dict[str, Any]
     ) -> types.CallToolResult:
         user_id = current_user_id(ctx)
+        if limiter is not None and (limited := await limiter.check_call(user_id)):
+            return text_result(limited.message, is_error=True)
         async with session_factory() as db:
             email = await db.scalar(select(User.email).where(User.id == user_id))
             count = await db.scalar(
@@ -75,6 +81,9 @@ def build_account_tools(session_factory: async_sessionmaker[AsyncSession]) -> li
     async def list_repositories(
         ctx: ServerRequestContext[Any], arguments: dict[str, Any]
     ) -> types.CallToolResult:
+        user_id = current_user_id(ctx)
+        if limiter is not None and (limited := await limiter.check_call(user_id)):
+            return text_result(limited.message, is_error=True)
         status = arguments.get("status", "ready")
         extra = sorted(set(arguments) - {"status"})
         if status not in STATUS_CHOICES or extra:

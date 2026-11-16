@@ -19,6 +19,7 @@ engine, so a test can bind the whole server to its own transaction.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -30,9 +31,12 @@ from starlette.applications import Starlette
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.config import settings
+from app.core.redis import get_async_redis
 from app.mcp.account_tools import build_account_tools
 from app.mcp.auth import BearerAuthMiddleware
+from app.mcp.limits import RateLimiter
 from app.mcp.tool import McpTool, text_result
+from app.mcp.tools import build_repository_tools
 
 MCP_PATH = "/mcp"
 """Where the server is mounted. The public URL is exactly this, with no trailing slash."""
@@ -109,7 +113,11 @@ TRANSPORT_SECURITY = TransportSecuritySettings(
 )
 
 
-def build_mcp(*, session_factory: async_sessionmaker[AsyncSession]) -> tuple[Server[Any], ASGIApp]:
+def build_mcp(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    redis_factory: Callable[[], Any] = get_async_redis,
+) -> tuple[Server[Any], ASGIApp]:
     """Build the MCP server and the ASGI app that serves it.
 
     Each call returns a new server with its own session manager. The manager's
@@ -120,6 +128,8 @@ def build_mcp(*, session_factory: async_sessionmaker[AsyncSession]) -> tuple[Ser
     Args:
         session_factory: The only source of database sessions for the server, for
             the tools and for checking each request's token.
+        redis_factory: Returns a fresh async Redis client for the rate limiter
+            on every call. A test passes one backed by a fake server.
 
     Returns:
         The low-level server and an ASGI app to mount at :data:`MCP_PATH`. The
@@ -127,8 +137,13 @@ def build_mcp(*, session_factory: async_sessionmaker[AsyncSession]) -> tuple[Ser
         it is always guarded: a request without a valid Illume token is refused
         with 401 before the transport sees it.
     """
+    limiter = RateLimiter(redis_factory)
     tools: dict[str, McpTool] = {
-        tool.definition.name: tool for tool in build_account_tools(session_factory)
+        tool.definition.name: tool
+        for tool in [
+            *build_account_tools(session_factory, limiter),
+            *build_repository_tools(session_factory, limiter),
+        ]
     }
 
     async def list_tools(
