@@ -15,6 +15,7 @@ from app.models.embedding import Embedding
 from app.models.file import File
 from app.models.file_cochange import FileCochange
 from app.models.glossary_entry import GlossaryEntry
+from app.models.mcp_token import McpToken
 from app.models.onboarding_guide import OnboardingGuide
 from app.models.pull_request import PullRequest
 from app.models.push_token import PushToken
@@ -35,6 +36,7 @@ __all__ = [
     "Commit",
     "CodeOwner",
     "GlossaryEntry",
+    "McpToken",
     "OnboardingGuide",
     "PullRequest",
     "PushToken",

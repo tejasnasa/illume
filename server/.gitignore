@@ -12,3 +12,5 @@ htmlcov/
 
 # MCP dev harness client config
 .mcp-dev.json
+.mcp-dev.cookie
+.mcp-dev.stop

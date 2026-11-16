@@ -16,6 +16,7 @@ from app.models import (
     file,
     file_cochange,
     glossary_entry,
+    mcp_token,
     onboarding_guide,
     pull_request,
     push_token,

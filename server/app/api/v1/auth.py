@@ -3,12 +3,14 @@
 Handles user registration, login/logout via httponly session cookies,
 current-user lookup, the GitHub OAuth code-exchange flow that links
 a GitHub account and stores its access token, and the per-user AI
-credential store (BYOK provider/key/model) with a save-time probe.
+credential store (BYOK provider/key/model) with a save-time probe, and the
+personal access tokens used by MCP clients.
 """
 
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -33,6 +35,13 @@ from app.models.user import User
 from app.services.entitlements import FREE_CHAT_MESSAGES, FREE_INGESTIONS
 from app.services.llm_config import LLMConfig
 from app.services.llm_providers import PROVIDERS, get_provider, suggest_provider
+from app.services.mcp_tokens import (
+    TokenLimitError,
+    TokenNotFoundError,
+    create_token,
+    list_tokens,
+    revoke_token,
+)
 from app.services.retrieval.config import (
     DEFAULT_CONTEXT_WINDOW,
     MAX_CONTEXT_WINDOW,
@@ -843,3 +852,119 @@ async def put_agent_settings(
     await db.commit()
     await db.refresh(current_user)
     return AgentSettingsResponse(context_window=current_user.ai_context_window)
+
+
+class McpTokenResponse(BaseModel):
+    """One MCP token as listed: metadata only, never the hash or the plaintext."""
+
+    id: uuid.UUID
+    name: str
+    prefix: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
+
+
+class McpTokenCreateRequest(BaseModel):
+    """Payload for minting an MCP token.
+
+    ``expires_in_days`` is 30 or 90; an explicit ``null`` mints a token that
+    never expires, and leaving it out means 90.
+    """
+
+    name: FreeText = Field(min_length=1, max_length=60)
+    expires_in_days: Literal[30, 90] | None = 90
+
+
+class McpTokenCreatedResponse(McpTokenResponse):
+    """The create response: the metadata plus the plaintext, shown exactly once."""
+
+    token: str
+
+
+def _mcp_token_response(token) -> McpTokenResponse:
+    """Map a stored token to its public listing shape."""
+    return McpTokenResponse(
+        id=token.id,
+        name=token.name,
+        prefix=token.token_prefix,
+        created_at=token.created_at,
+        last_used_at=token.last_used_at,
+        expires_at=token.expires_at,
+    )
+
+
+@router.get("/me/mcp-tokens", response_model=list[McpTokenResponse])
+async def get_mcp_tokens(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List the current user's active MCP tokens, newest first.
+
+    Revoked and expired tokens are omitted. The hash and plaintext are never
+    returned.
+
+    Args:
+        db: Async database session.
+        current_user: User resolved by the auth dependency.
+
+    Returns:
+        The token metadata.
+    """
+    tokens = await list_tokens(db, current_user.id)
+    return [_mcp_token_response(token) for token in tokens]
+
+
+@router.post("/me/mcp-tokens", response_model=McpTokenCreatedResponse, status_code=201)
+async def post_mcp_token(
+    body: McpTokenCreateRequest,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Mint an MCP token for the current user.
+
+    The plaintext is in this response and nowhere else: it is not stored and
+    cannot be shown again.
+
+    Args:
+        body: The label and lifetime.
+        db: Async database session.
+        current_user: User resolved by the auth dependency.
+
+    Returns:
+        The token metadata and its plaintext.
+
+    Raises:
+        HTTPException: 409 when the user already holds the maximum number of
+            active tokens.
+    """
+    try:
+        token, plaintext = await create_token(db, current_user.id, body.name, body.expires_in_days)
+    except TokenLimitError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return McpTokenCreatedResponse(**_mcp_token_response(token).model_dump(), token=plaintext)
+
+
+@router.delete("/me/mcp-tokens/{token_id}", status_code=204)
+async def delete_mcp_token(
+    token_id: uuid.UUID,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Revoke one of the current user's MCP tokens.
+
+    Revoking an already revoked token succeeds.
+
+    Args:
+        token_id: The token to revoke.
+        db: Async database session.
+        current_user: User resolved by the auth dependency.
+
+    Raises:
+        HTTPException: 404 when the token does not exist or is not the caller's.
+    """
+    try:
+        await revoke_token(db, current_user.id, token_id)
+    except TokenNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Token not found") from exc
+    return Response(status_code=204)

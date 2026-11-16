@@ -15,9 +15,15 @@ Every OpenAI-compatible URL points at ``scripts/openai_stub_server.py``, started
 :8098 (the E2E suite owns :8099), so nothing reaches a billed API.
 
 It migrates the test database and **commits** a user with the two-repository tool fixture,
-then writes ``.mcp-dev.json`` (gitignored) for ``claude -p --mcp-config``. The user is
-deleted on exit, cascading the repositories; ``--cleanup`` does the same after a run that
-was killed before it could.
+then writes two gitignored files: ``.mcp-dev.json`` for ``claude -p --mcp-config``, carrying
+a personal access token for the user as a bearer header, and ``.mcp-dev.cookie``, a session
+JWT for the same user, for ``curl -b "access_token=$(cat .mcp-dev.cookie)"``. Neither value
+is printed. The user is deleted on exit, cascading the repositories and the token, and the
+files are removed; ``--cleanup`` does the same after a run that was killed before it could.
+
+To stop a run gracefully, create the file ``.mcp-dev.stop`` in ``server/``: while serving,
+the harness deletes it and shuts down normally, so cleanup runs. That is the way to stop it
+on Windows, where a hard kill skips ``finally``.
 
 Two limits, so a live check does not chase them: there is no GitHub stub, so ``read_file``
 would call the real api.github.com; and the stub returns one fixed vector for every
@@ -48,6 +54,8 @@ STUB_PORT = 8098
 TEST_DB_PORT = 5433
 EMAIL = "mcp-dev@example.com"
 MCP_CONFIG = SERVER_ROOT / ".mcp-dev.json"
+SESSION_COOKIE = SERVER_ROOT / ".mcp-dev.cookie"
+STOP_FILE = SERVER_ROOT / ".mcp-dev.stop"
 READY_TIMEOUT_SECONDS = 60
 
 # The fields `serverEnv` leaves out because their defaults are safe in the E2E stack.
@@ -136,13 +144,16 @@ async def delete_user() -> None:
     print(f"deleted {EMAIL} and their repositories")
 
 
-async def seed() -> dict[str, int]:
-    """Commit the harness user and the two tool repositories.
+async def seed() -> tuple[dict[str, int], str, str]:
+    """Commit the harness user, their MCP token and the two tool repositories.
 
     Returns:
-        Each repository's name mapped to its ``repo_number``.
+        Each repository's name mapped to its ``repo_number``, the plaintext MCP
+        token, and a session JWT for the user.
     """
     from app.core.database import AsyncSessionLocal
+    from app.core.security import create_access_token
+    from app.services.mcp_tokens import create_token
     from tests.factories import make_user
     from tests.fixtures.agent_tools import seed_tool_repos
 
@@ -150,10 +161,13 @@ async def seed() -> dict[str, int]:
         user = await make_user(db, email=EMAIL, name="MCP Dev")
         repos = await seed_tool_repos(db, user)
         await db.commit()
-        return {seeded.repo.name: seeded.repo.repo_number for seeded in (repos.a, repos.b)}
+        _, token = await create_token(db, user.id, "mcp-dev", expires_in_days=30)
+        session = create_access_token(str(user.id))
+        numbers = {seeded.repo.name: seeded.repo.repo_number for seeded in (repos.a, repos.b)}
+        return numbers, token, session
 
 
-async def reset_and_seed() -> dict[str, int]:
+async def reset_and_seed() -> tuple[dict[str, int], str, str]:
     """Replace any leftover harness user with a fresh seed, on one event loop."""
     from app.core.database import async_engine
 
@@ -165,20 +179,36 @@ async def reset_and_seed() -> dict[str, int]:
 
 
 async def cleanup() -> None:
-    """Delete the harness user and release the engine."""
+    """Delete the harness user and the credential files, and release the engine."""
     from app.core.database import async_engine
 
+    for path in (MCP_CONFIG, SESSION_COOKIE, STOP_FILE):
+        path.unlink(missing_ok=True)
     try:
         await delete_user()
     finally:
         await async_engine.dispose()
 
 
-def write_mcp_config() -> None:
-    """Write the client config pointing a headless Claude Code run at the harness."""
-    config = {"mcpServers": {"illume": {"type": "http", "url": f"http://localhost:{API_PORT}/mcp"}}}
+def write_credentials(token: str, session: str) -> None:
+    """Write the client config and the session cookie for the harness user.
+
+    Args:
+        token: The plaintext MCP token, sent as a bearer header.
+        session: A session JWT, for hitting the cookie-authenticated API by hand.
+    """
+    config = {
+        "mcpServers": {
+            "illume": {
+                "type": "http",
+                "url": f"http://localhost:{API_PORT}/mcp",
+                "headers": {"Authorization": f"Bearer {token}"},
+            }
+        }
+    }
     MCP_CONFIG.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-    print(f"wrote {MCP_CONFIG}")
+    SESSION_COOKIE.write_text(session, encoding="utf-8")
+    print(f"wrote {MCP_CONFIG} and {SESSION_COOKIE}")
 
 
 def start(args: list[str], env: dict[str, str]) -> subprocess.Popen:
@@ -211,6 +241,10 @@ def serve(env: dict[str, str]) -> None:
         wait_until_ready(f"http://127.0.0.1:{API_PORT}/healthz")
         print(f"API on http://localhost:{API_PORT}, MCP at http://localhost:{API_PORT}/mcp")
         while api.poll() is None and stub.poll() is None:
+            if STOP_FILE.exists():
+                STOP_FILE.unlink(missing_ok=True)
+                print("stop file found, shutting down")
+                break
             time.sleep(0.5)
     except KeyboardInterrupt:
         pass
@@ -242,9 +276,11 @@ def main() -> None:
         return
 
     migrate()
-    repos = asyncio.run(reset_and_seed())
+    # A stale stop file would end the run the moment it started.
+    STOP_FILE.unlink(missing_ok=True)
+    repos, token, session = asyncio.run(reset_and_seed())
     print(f"seeded {EMAIL}: {repos}")
-    write_mcp_config()
+    write_credentials(token, session)
 
     # A terminate from the outside should still clean up, not leave committed rows behind.
     signal.signal(signal.SIGTERM, _interrupt)

@@ -28,13 +28,12 @@ def chat_columns(engine) -> dict[str, dict]:
     return {column["name"]: column for column in inspect(engine).get_columns("chat_messages")}
 
 
-def test_the_revision_is_the_head_and_follows_the_drop_of_verification(alembic_config):
+def test_the_revision_follows_the_drop_of_verification(alembic_config):
     from alembic.script import ScriptDirectory
 
     script = ScriptDirectory.from_config(alembic_config)
 
     assert script.get_revision(REVISION).down_revision == PARENT
-    assert script.get_current_head() == REVISION
 
 
 def test_upgrade_adds_the_columns_and_downgrade_drops_them(alembic_config, scratch_database):  # noqa: F811

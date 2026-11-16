@@ -28,8 +28,9 @@ pytestmark = pytest.mark.smoke
 # 38 -> 41 with the chat stream POST and the agent-run list and replay GETs under
 # ``/api/v1/repository/{repo_id}/...``.
 # 41 -> 42 with the chat message changes GET under ``/api/v1/repository/{repo_id}/chat/...``.
+# 42 -> 45 with the MCP token GET/POST/DELETE under ``/api/v1/auth/me/mcp-tokens``.
 # The MCP endpoint at ``/mcp`` is a ``Mount``, not an ``APIRoute``, so it is not counted.
-EXPECTED_API_ROUTE_COUNT = 42
+EXPECTED_API_ROUTE_COUNT = 45
 
 EXPECTED_TAGS = {
     "agent",
@@ -52,6 +53,8 @@ REPRESENTATIVE_PATHS = {
     "/healthz",
     "/api/v1/auth/login",
     "/api/v1/auth/me",
+    "/api/v1/auth/me/mcp-tokens",
+    "/api/v1/auth/me/mcp-tokens/{token_id}",
     "/api/v1/contact",
     "/api/v1/github/repos",
     "/api/v1/repository",
