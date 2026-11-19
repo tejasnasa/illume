@@ -122,7 +122,14 @@ describe("McpSettings", () => {
     await createToken(user);
     await screen.findByLabelText("New token");
 
-    for (const tab of ["Claude Code", "Cursor", "VS Code", "Local launcher"]) {
+    for (const tab of [
+      "Claude Code",
+      "Cursor",
+      "VS Code",
+      "Codex",
+      "OpenCode",
+      "Local launcher",
+    ]) {
       await user.click(screen.getByRole("tab", { name: tab }));
       expect(snippet()).toContain(PLAINTEXT);
       expect(snippet()).not.toContain("<your token>");
@@ -143,6 +150,37 @@ describe("McpSettings", () => {
     expect(snippet()).toMatch(
       /^claude mcp add --transport http illume .*\/mcp --header "Authorization: Bearer <your token>"$/,
     );
+  });
+
+  it("keeps the token in an environment variable for Codex and OpenCode", async () => {
+    createMock.mockResolvedValueOnce({ ...makeToken(), token: PLAINTEXT });
+    const user = userEvent.setup();
+    render(<McpSettings initialTokens={[]} />);
+    const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+    await user.click(screen.getByRole("tab", { name: "Codex" }));
+    expect(snippet()).toContain("[mcp_servers.illume]");
+    expect(snippet()).toContain(`url = "${backend}/mcp"`);
+    expect(snippet()).toContain('bearer_token_env_var = "ILLUME_MCP_TOKEN"');
+
+    await user.click(screen.getByRole("tab", { name: "OpenCode" }));
+    const body = snippet().split("\n").slice(1).join("\n");
+    const config = JSON.parse(body);
+    expect(config.mcp.servers.illume).toEqual({
+      type: "remote",
+      url: `${backend}/mcp`,
+      oauth: false,
+      headers: { Authorization: "Bearer {env:ILLUME_MCP_TOKEN}" },
+    });
+
+    await createToken(user);
+    await screen.findByLabelText("New token");
+    for (const tab of ["Codex", "OpenCode"]) {
+      await user.click(screen.getByRole("tab", { name: tab }));
+      // The token appears once, in the line that exports it, never in the config.
+      expect(snippet().split(PLAINTEXT)).toHaveLength(2);
+      expect(snippet().split("\n")[0]).toContain(PLAINTEXT);
+    }
   });
 
   it("revokes only after a confirm and removes the row", async () => {
@@ -224,8 +262,12 @@ describe("McpSettings", () => {
 
     await user.click(screen.getByRole("tab", { name: "VS Code" }));
     expect(screen.getByText(/\.vscode\/mcp\.json/)).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "Codex" }));
+    expect(screen.getByText(/~\/\.codex\/config\.toml/)).toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: "OpenCode" }));
+    expect(screen.getByText(/opencode\.jsonc/)).toBeInTheDocument();
     expect(
       within(screen.getByRole("tablist")).getAllByRole("tab"),
-    ).toHaveLength(4);
+    ).toHaveLength(6);
   });
 });

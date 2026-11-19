@@ -31,12 +31,15 @@ const EXPIRY_OPTIONS = [
   { value: "never", label: "Never" },
 ] as const;
 
-type SnippetTab = "claude-code" | "cursor" | "vscode" | "launcher";
+type SnippetTab =
+  "claude-code" | "cursor" | "vscode" | "codex" | "opencode" | "launcher";
 
 const TABS: { id: SnippetTab; label: string }[] = [
   { id: "claude-code", label: "Claude Code" },
   { id: "cursor", label: "Cursor" },
   { id: "vscode", label: "VS Code" },
+  { id: "codex", label: "Codex" },
+  { id: "opencode", label: "OpenCode" },
   { id: "launcher", label: "Local launcher" },
 ];
 
@@ -45,6 +48,10 @@ const TAB_HINTS: Record<SnippetTab, string> = {
   "claude-code": "Run this in a terminal.",
   cursor: "Add this to ~/.cursor/mcp.json, or .cursor/mcp.json in a project.",
   vscode: "Add this to .vscode/mcp.json in your workspace.",
+  codex:
+    "Add this to ~/.codex/config.toml, and export the token in the environment Codex runs in. The config names the variable, not the token.",
+  opencode:
+    "Add this to opencode.jsonc in your project, or ~/.config/opencode/opencode.jsonc for every project, and export the token in the environment OpenCode runs in.",
   launcher:
     "For clients that cannot send custom headers, such as Claude Desktop: add this to the mcpServers section of its config file. The token stays in the environment, not on a command line.",
 };
@@ -102,6 +109,34 @@ function buildSnippet(tab: SnippetTab, url: string, token: string) {
         null,
         2,
       );
+    case "codex":
+      return [
+        `# export ILLUME_MCP_TOKEN="${token}"`,
+        "[mcp_servers.illume]",
+        `url = "${url}"`,
+        'bearer_token_env_var = "ILLUME_MCP_TOKEN"',
+      ].join("\n");
+    case "opencode":
+      return [
+        `// export ILLUME_MCP_TOKEN="${token}"`,
+        JSON.stringify(
+          {
+            $schema: "https://opencode.ai/config.json",
+            mcp: {
+              servers: {
+                illume: {
+                  type: "remote",
+                  url,
+                  oauth: false,
+                  headers: { Authorization: "Bearer {env:ILLUME_MCP_TOKEN}" },
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      ].join("\n");
     case "launcher":
       return JSON.stringify(
         {
