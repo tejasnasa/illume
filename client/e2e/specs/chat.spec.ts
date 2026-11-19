@@ -97,13 +97,13 @@ test.describe("history", () => {
   test("opens on an empty new chat and lists the seeded conversation", async ({ page }) => {
     await expect(page.getByText(/What would you like to know/)).toBeVisible();
     const nav = page.getByRole("navigation", { name: "Conversations" });
-    await expect(nav.getByRole("button", { name: /What does func_0 do\?/ })).toBeVisible();
+    await expect(nav.getByRole("button", { name: /^What does func_0 do\?/ })).toBeVisible();
     await expect(nav.getByRole("button", { name: "New chat" })).toBeVisible();
   });
 
   test("loads the persisted turn and its answer from the conversation", async ({ page }) => {
     const nav = page.getByRole("navigation", { name: "Conversations" });
-    await nav.getByRole("button", { name: /What does func_0 do\?/ }).first().click();
+    await nav.getByRole("button", { name: /^What does func_0 do\?/ }).first().click();
 
     await expect(page).toHaveURL(/[?&]c=/);
     await expect(page.getByText("What does func_0 do?").last()).toBeVisible();

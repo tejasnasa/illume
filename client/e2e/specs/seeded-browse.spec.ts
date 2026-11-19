@@ -94,8 +94,10 @@ test.describe("the repository overview", () => {
     // actually rendered.
     await page.goto(home);
 
-    await expect(page.getByText("AI Architecture Overview")).toBeVisible();
+    // The summary text exists only on the rendered page, so waiting for it first lets
+    // the route's loading skeleton, which shares the section title, leave the DOM.
     await expect(page.getByText(/A small fixture repository used by the end-to-end/)).toBeVisible();
+    await expect(page.getByText("AI Architecture Overview").first()).toBeVisible();
   });
 
   test("links to the chat page instead of embedding the chat", async ({ page }) => {
