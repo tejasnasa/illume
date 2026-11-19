@@ -17,6 +17,7 @@ from app.api.v1 import (
     auth,
     chat,
     contact,
+    conversations,
     github_proxy,
     glossary,
     graph,
@@ -58,6 +59,7 @@ app.add_middleware(
 app.include_router(ws.router)
 app.include_router(repository.router)
 app.include_router(chat.router)
+app.include_router(conversations.router)
 app.include_router(agent.router)
 app.include_router(graph.router)
 app.include_router(auth.router)

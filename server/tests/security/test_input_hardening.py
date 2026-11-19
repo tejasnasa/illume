@@ -269,27 +269,30 @@ class TestPayloadLimits:
 
         assert response.status_code == 200
 
-    async def test_a_very_long_chat_question_is_accepted(self, client, target, monkeypatch):
-        from app.services.rag import RAGResponse
-
-        async def fake(query, repository_id, db, history=None, *, llm=None):
-            return RAGResponse(answer="ok", sources=[])
-
-        import app.api.v1.chat as chat_module
-
-        monkeypatch.setattr(chat_module, "answer_question", fake)
+    async def test_a_very_long_chat_question_is_refused(self, client, target):
         _, repo = target
 
         response = await client.post(
             f"/api/v1/repository/{repo.id}/chat", json={"question": "x" * 100_000}
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 422
 
-    async def test_an_oversized_history_list_is_truncated_not_rejected(
+    async def test_an_oversized_history_list_is_refused(self, client, target):
+        _, repo = target
+        history = [{"role": "user", "content": "x" * 1000} for _ in range(500)]
+
+        response = await client.post(
+            f"/api/v1/repository/{repo.id}/chat", json={"question": "q", "history": history}
+        )
+
+        assert response.status_code == 422
+
+    async def test_a_history_at_the_limit_is_truncated_to_the_last_five(
         self, client, target, monkeypatch
     ):
-        """The route slices to the last five, so a huge client-side history is harmless."""
+        """The route slices to the last five, so a long client-side history is harmless."""
+        from app.api.validation import MAX_HISTORY_ITEMS
         from app.services.rag import RAGResponse
 
         forwarded: list = []
@@ -302,7 +305,7 @@ class TestPayloadLimits:
 
         monkeypatch.setattr(chat_module, "answer_question", fake)
         _, repo = target
-        history = [{"role": "user", "content": "x" * 1000} for _ in range(500)]
+        history = [{"role": "user", "content": "x" * 1000} for _ in range(MAX_HISTORY_ITEMS)]
 
         response = await client.post(
             f"/api/v1/repository/{repo.id}/chat", json={"question": "q", "history": history}

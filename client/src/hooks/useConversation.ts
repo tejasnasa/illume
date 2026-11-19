@@ -1,10 +1,11 @@
 /**
- * The chat thread for one repository: stored history plus the live run.
+ * One conversation's thread: its stored turns plus the live run.
  * @module UseConversation
  */
 "use client";
 
 import { stripMarks } from "@/lib/agent/answer";
+import { boundHistory } from "@/lib/agent/limits";
 import type { Overrides, PresetChoice } from "@/lib/agent/presets";
 import {
   initialRunState,
@@ -48,21 +49,49 @@ interface HistoryRow {
 
 const BACKEND = () => process.env.NEXT_PUBLIC_BACKEND_URL;
 
+/** What the page wants to hear about as the thread changes. */
+export interface ConversationCallbacks {
+  /** A turn was saved; `created` is true when it started the conversation. */
+  onTurnSaved?: (conversationId: string, created: boolean) => void;
+  /** The selected conversation does not exist, or is not the caller's. */
+  onMissing?: () => void;
+}
+
 /**
- * Loads the stored thread and drives new runs on top of it.
+ * Loads one conversation's stored turns and drives new runs on top of them.
+ *
+ * With no conversation selected the thread is empty, and the first question
+ * starts a conversation on the server: when its answer is saved the new id is
+ * adopted without reloading, so the streamed answer stays on screen.
  *
  * One run is in focus at a time, the newest. Every other turn keeps the state
  * it settled in.
  *
  * @param repoId - Repository id.
- * @returns Turns, loading flag, and the actions the page offers.
+ * @param initialConversationId - The conversation to open, or null for a new chat.
+ * @param callbacks - Notifications for the page.
+ * @returns Turns, loading flag, the active conversation and the actions the page offers.
  */
-export function useConversation(repoId: string) {
+export function useConversation(
+  repoId: string,
+  initialConversationId: string | null = null,
+  callbacks: ConversationCallbacks = {},
+) {
   const stream = useAgentStream();
   const { start, reset } = stream;
   const [stored, setStored] = useState<StoredTurn[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(
+    initialConversationId,
+  );
+  const [loaded, setLoaded] = useState(initialConversationId === null);
+  const activeIdRef = useRef(activeId);
+  // An id the hook adopted from a finished run: its turns are already on screen.
+  const adoptedRef = useRef<string | null>(null);
+  const notifiedRunRef = useRef<string | null>(null);
+  const callbacksRef = useRef(callbacks);
+  callbacksRef.current = callbacks;
+  activeIdRef.current = activeId;
   const storedRef = useRef(stored);
   const focusRef = useRef(focusId);
   const streamStateRef = useRef(stream.state);
@@ -73,17 +102,34 @@ export function useConversation(repoId: string) {
   liveRef.current = stream.isLive;
 
   useEffect(() => {
+    if (activeId === null) {
+      setLoaded(true);
+      return;
+    }
+    if (adoptedRef.current === activeId) {
+      adoptedRef.current = null;
+      setLoaded(true);
+      return;
+    }
     let cancelled = false;
+    setLoaded(false);
     const load = async () => {
       try {
         const base = `${BACKEND()}/api/v1/repository/${repoId}`;
         const [history, runs] = await Promise.all([
-          fetch(`${base}/chat/history`, { credentials: "include" }),
+          fetch(`${base}/conversations/${activeId}/messages`, {
+            credentials: "include",
+          }),
           fetch(`${base}/agent-runs?limit=100`, {
             credentials: "include",
           }).catch(() => null),
         ]);
-        if (!history.ok || cancelled) return;
+        if (cancelled) return;
+        if (history.status === 404) {
+          callbacksRef.current.onMissing?.();
+          return;
+        }
+        if (!history.ok) return;
         const rows = (await history.json()) as HistoryRow[];
         // What each answer's run spent, so stored turns show it as live ones do.
         const usageByMessage = new Map<string, Usage>();
@@ -109,12 +155,9 @@ export function useConversation(repoId: string) {
             usageByMessage.get(row.id) ?? null,
           ),
           chatMessageId: row.id,
-          stale: row.stale_at
-            ? { paths: row.stale_paths ?? [] }
-            : null,
+          stale: row.stale_at ? { paths: row.stale_paths ?? [] } : null,
         }));
-        // A question asked before the history landed stays after it.
-        setStored((current) => [...mapped, ...current]);
+        setStored(mapped);
       } catch (error) {
         console.error("Failed to fetch chat history", error);
       } finally {
@@ -125,7 +168,25 @@ export function useConversation(repoId: string) {
     return () => {
       cancelled = true;
     };
-  }, [repoId]);
+  }, [repoId, activeId]);
+
+  // A saved answer names its conversation: adopt it when the thread had none,
+  // and tell the page so it can refresh the list and the address.
+  useEffect(() => {
+    const state = stream.state;
+    if (state.status !== "done" || !state.runId) return;
+    if (notifiedRunRef.current === state.runId) return;
+    notifiedRunRef.current = state.runId;
+    const id = state.conversationId;
+    if (!id) return;
+    const created = activeIdRef.current === null;
+    if (created) {
+      adoptedRef.current = id;
+      activeIdRef.current = id;
+      setActiveId(id);
+    }
+    callbacksRef.current.onTurnSaved?.(id, created);
+  }, [stream.state]);
 
   /** Copies the stream's state onto the turn it was driving. */
   const freeze = useCallback((turns: StoredTurn[]): StoredTurn[] => {
@@ -177,7 +238,14 @@ export function useConversation(repoId: string) {
       ]);
       setFocusId(id);
       focusRef.current = id;
-      void start({ repoId, question, preset, overrides, history });
+      void start({
+        repoId,
+        question,
+        preset,
+        overrides,
+        history: boundHistory(history),
+        conversationId: activeIdRef.current,
+      });
     },
     [repoId, freeze, start],
   );
@@ -209,21 +277,25 @@ export function useConversation(repoId: string) {
     [repoId, reset],
   );
 
-  /** Wipes the thread locally and on the server. */
-  const clear = useCallback(async () => {
-    reset();
-    setFocusId(null);
-    focusRef.current = null;
-    setStored([]);
-    try {
-      await fetch(`${BACKEND()}/api/v1/repository/${repoId}/chat`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-    } catch (error) {
-      console.error("Failed to clear chat history", error);
-    }
-  }, [repoId, reset]);
+  /**
+   * Opens a conversation, or an empty new chat when `id` is null.
+   *
+   * A live run is cancelled: its answer would otherwise land in a thread it
+   * does not belong to.
+   */
+  const select = useCallback(
+    (id: string | null) => {
+      if (id === activeIdRef.current) return;
+      reset();
+      setFocusId(null);
+      focusRef.current = null;
+      setStored([]);
+      adoptedRef.current = null;
+      activeIdRef.current = id;
+      setActiveId(id);
+    },
+    [reset],
+  );
 
   return {
     turns,
@@ -231,9 +303,10 @@ export function useConversation(repoId: string) {
     busy: stream.isLive,
     focusState: focusId ? stream.state : initialRunState,
     focusId,
+    activeId,
+    select,
     send,
     stop: stream.stop,
     remove,
-    clear,
   };
 }

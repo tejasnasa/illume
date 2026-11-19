@@ -36,14 +36,12 @@ def indexes(engine) -> dict[str, dict]:
     return {index["name"]: index for index in inspect(engine).get_indexes("mcp_tokens")}
 
 
-def test_the_revision_follows_the_staleness_columns_and_is_the_head(alembic_config):
+def test_the_revision_follows_the_staleness_columns(alembic_config):
     from alembic.script import ScriptDirectory
 
     script = ScriptDirectory.from_config(alembic_config)
 
     assert script.get_revision(REVISION).down_revision == PARENT
-    assert script.get_current_head() == REVISION
-    assert len(script.get_heads()) == 1
 
 
 def test_upgrade_creates_the_table_and_downgrade_drops_it(alembic_config, scratch_database):  # noqa: F811

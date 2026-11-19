@@ -30,16 +30,26 @@ export interface StreamRequest {
  * delegated to `onStream`, which returns the response (or throws).
  */
 export function installFetch(options: {
+  /** The turns of whichever conversation is opened. */
   history?: unknown[];
+  /** The sidebar's list. */
+  conversations?: unknown[];
   runs?: unknown[];
   onStream?: (request: StreamRequest) => Response | Promise<Response>;
-  /** Answers any other URL; return `undefined` to leave it unmocked. */
+  /** Answers any URL ahead of the built-in routes; return `undefined` to fall through. */
   onOther?: (url: string, init?: RequestInit) => Response | undefined;
 }) {
   const requests: StreamRequest[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
-    if (url.endsWith("/chat/history")) return Response.json(options.history ?? []);
+    const override = options.onOther?.(url, init);
+    if (override) return override;
+    if (/\/conversations\/[^/]+\/messages$/.test(url)) {
+      return Response.json(options.history ?? []);
+    }
+    if (url.endsWith("/conversations") && (init?.method ?? "GET") === "GET") {
+      return Response.json(options.conversations ?? []);
+    }
     if (url.includes("/agent-runs?")) return Response.json(options.runs ?? []);
     if (url.endsWith("/chat/stream") && options.onStream) {
       const request = {

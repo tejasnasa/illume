@@ -34,6 +34,7 @@ from app.services.agent.session import RunKit, RunRequest
 from app.services.agent.slots import RunSlots
 from app.services.agent.tools.context import RepoSnapshot
 from app.services.decisions.openrouter import JEV_MODEL
+from app.services.conversations import owned_conversation
 from app.services.entitlements import llm_config_for
 from app.services.rag import ChatMessage
 from app.services.retrieval.config import PRESETS, PipelineConfig
@@ -113,6 +114,7 @@ async def prepare_run(
     free_limit: int,
     config_extra: dict[str, Any] | None = None,
     save_history: bool = True,
+    conversation_id: uuid.UUID | None = None,
 ) -> RunRequest:
     """Runs every check a question must pass and records the run as ``running``.
 
@@ -144,6 +146,11 @@ async def prepare_run(
         config_extra: Keys added to the run row's ``config`` record, such as where
             the question came from. They are not part of the configuration hash.
         save_history: Whether the run's answer is saved as a chat turn.
+        conversation_id: The conversation the turn joins; a conversation that is
+            not the caller's is a 404 refusal, checked right after the repository.
+            When ``None`` and the turn is saved, a new conversation id is chosen;
+            its row is written only when the turn is saved, so a run that ends
+            without an answer leaves no conversation behind.
 
     Returns:
         The resolved run, already inserted as a ``running`` row.
@@ -154,6 +161,15 @@ async def prepare_run(
     repo = await owned_repository(db, repo_id, user_id)
     if repo.status != "ready":
         raise RunRefusal(400, f"Repository is not ready for querying (status: {repo.status})")
+    new_conversation = False
+    if save_history:
+        if conversation_id is None:
+            conversation_id = uuid.uuid4()
+            new_conversation = True
+        elif await owned_conversation(db, user_id, repo_id, conversation_id) is None:
+            raise RunRefusal(404, "Conversation not found")
+    else:
+        conversation_id = None
 
     owner = (
         (
@@ -276,4 +292,6 @@ async def prepare_run(
         on_free_tier=on_free_tier,
         auto=auto,
         save_history=save_history,
+        conversation_id=conversation_id,
+        new_conversation=new_conversation,
     )

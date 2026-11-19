@@ -313,7 +313,7 @@
           "type": "object"
         }
       },
-      "description": "``done``: the run ended with an answer.\n\nAttributes:\n    run_id: The run.\n    status: ``done``.\n    answer: The final answer.\n    citations: The evidence the answer cites.\n    unresolved: Cited keys, as written, that match nothing the run saw.\n    stop_reason: Why the run stopped.\n    usage: What the run spent.\n    chat_message_id: The saved chat turn, when it was saved.\n    steps_dropped: Records past the per-run cap that were not stored.\n    limits_reached: The limits the run hit, in order.",
+      "description": "``done``: the run ended with an answer.\n\nAttributes:\n    run_id: The run.\n    status: ``done``.\n    answer: The final answer.\n    citations: The evidence the answer cites.\n    unresolved: Cited keys, as written, that match nothing the run saw.\n    stop_reason: Why the run stopped.\n    usage: What the run spent.\n    chat_message_id: The saved chat turn, when it was saved.\n    conversation_id: The conversation the saved turn belongs to.\n    steps_dropped: Records past the per-run cap that were not stored.\n    limits_reached: The limits the run hit, in order.",
       "properties": {
         "answer": {
           "title": "Answer",
@@ -337,6 +337,18 @@
           },
           "title": "Citations",
           "type": "array"
+        },
+        "conversation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Id"
         },
         "limits_reached": {
           "items": {
@@ -719,11 +731,23 @@
       "type": "object"
     },
     "run_started": {
-      "description": "``run_started``: what is about to answer.\n\nAttributes:\n    preset: The preset the request named.\n    config_hash: Hash of the effective configuration, overrides included.\n    model: The generation model.\n    execution: ``single_shot``, ``agent`` or ``planner``.",
+      "description": "``run_started``: what is about to answer.\n\nAttributes:\n    preset: The preset the request named.\n    config_hash: Hash of the effective configuration, overrides included.\n    model: The generation model.\n    execution: ``single_shot``, ``agent`` or ``planner``.\n    conversation_id: The conversation the turn will join, when the answer is\n        saved as a chat turn.",
       "properties": {
         "config_hash": {
           "title": "Config Hash",
           "type": "string"
+        },
+        "conversation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conversation Id"
         },
         "execution": {
           "title": "Execution",

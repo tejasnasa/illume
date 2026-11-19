@@ -379,7 +379,7 @@ describe("ChatPage history", () => {
         },
       ],
     });
-    renderPage();
+    renderPage({ initialConversationId: "c1" });
     expect(await screen.findByText("What is func_0?")).toBeInTheDocument();
     expect(screen.getByText("It is the first function.")).toBeInTheDocument();
     const stats = await screen.findByTestId("run-stats");
@@ -392,24 +392,9 @@ describe("ChatPage history", () => {
 
   it("shows no figures for a stored answer with no recorded run", async () => {
     installFetch({ history: HISTORY });
-    renderPage();
+    renderPage({ initialConversationId: "c1" });
     await screen.findByText("What is func_0?");
     expect(screen.queryByTestId("run-stats")).not.toBeInTheDocument();
-  });
-
-  it("clears history from the options menu", async () => {
-    const { fetchMock } = installFetch({ history: HISTORY });
-    renderPage();
-    await screen.findByText("What is func_0?");
-    fireEvent.click(screen.getByRole("button", { name: "Chat options" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Clear chat history/ }));
-    await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringMatching(/\/repository\/repo-1\/chat$/),
-        expect.objectContaining({ method: "DELETE" }),
-      ),
-    );
-    expect(await screen.findByText(/What would you like to know/)).toBeInTheDocument();
   });
 });
 
@@ -459,7 +444,7 @@ describe("ChatPage stale answers", () => {
 
   it("flags only the answers whose cited files changed", async () => {
     installFetch({ history: STALE_HISTORY });
-    renderPage();
+    renderPage({ initialConversationId: "c1" });
     await screen.findByText("MIT.");
     expect(screen.getAllByTestId("stale-notice")).toHaveLength(1);
     const turns = screen.getAllByTestId("turn");
@@ -474,7 +459,7 @@ describe("ChatPage stale answers", () => {
       onStream: () => stream.response,
     });
     const user = userEvent.setup();
-    renderPage();
+    renderPage({ initialConversationId: "c1" });
     await screen.findByText("MIT.");
     await user.click(screen.getByRole("button", { name: /Deep agent/ }));
     await user.click(screen.getByRole("menuitemradio", { name: /Hybrid/ }));
@@ -505,5 +490,275 @@ describe("ChatPage free tier", () => {
     renderPage({ caps: { hasOwnKey: false, supportsTools: null }, freeChatRemaining: 0 });
     expect(await screen.findByRole("textbox", { name: /Ask about the codebase/ })).toBeDisabled();
     expect(screen.getByRole("link", { name: /Add your own API key/ })).toHaveAttribute("href", "/settings");
+  });
+});
+
+describe("ChatPage conversations", () => {
+  const LIST = [
+    {
+      id: "c1",
+      title: "How does auth work",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-02T00:00:00Z",
+      message_count: 1,
+    },
+    {
+      id: "c2",
+      title: "Where is the router",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z",
+      message_count: 0,
+    },
+  ];
+  const TURNS = [
+    { id: "msg-1", question: "What is func_0?", answer: "The first function.", sources: [] },
+  ];
+
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/repo/1/chat");
+  });
+
+  it("lists the conversations and marks the open one", async () => {
+    installFetch({ conversations: LIST, history: TURNS });
+    renderPage({ initialConversationId: "c1" });
+
+    const nav = await screen.findByRole("navigation", { name: "Conversations" });
+    expect(await within(nav).findByText("How does auth work")).toBeInTheDocument();
+    expect(within(nav).getByText("Where is the router")).toBeInTheDocument();
+    expect(within(nav).getByRole("button", { name: /^How does auth work/ })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    expect(await screen.findByText("What is func_0?")).toBeInTheDocument();
+  });
+
+  it("opens a conversation from the list, puts it in the address and loads only its turns", async () => {
+    const { fetchMock } = installFetch({ conversations: LIST, history: TURNS });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^Where is the router/ }));
+
+    expect(window.location.search).toBe("?c=c2");
+    expect(await screen.findByText("What is func_0?")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/repository\/repo-1\/conversations\/c2\/messages$/),
+      expect.anything(),
+    );
+  });
+
+  it("starts an empty new chat and drops the conversation from the address", async () => {
+    installFetch({ conversations: LIST, history: TURNS });
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/repo/1/chat?c=c1");
+    renderPage({ initialConversationId: "c1" });
+    await screen.findByText("What is func_0?");
+
+    await user.click(screen.getByRole("button", { name: "New chat" }));
+
+    expect(window.location.search).toBe("");
+    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+    expect(screen.queryByText("What is func_0?")).not.toBeInTheDocument();
+  });
+
+  it("follows back and forward", async () => {
+    installFetch({ conversations: LIST, history: TURNS });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: /^How does auth work/ }));
+    await screen.findByText("What is func_0?");
+
+    await act(async () => {
+      window.history.replaceState(null, "", "/repo/1/chat");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+  });
+
+  it("sends only the open conversation turns and its id", async () => {
+    const stream = streamResponse();
+    const { requests } = installFetch({
+      conversations: LIST,
+      history: TURNS,
+      onStream: () => stream.response,
+    });
+    renderPage({ initialConversationId: "c1" });
+    await screen.findByText("What is func_0?");
+
+    await ask("And func_1?");
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0].body.conversation_id).toBe("c1");
+    expect(requests[0].body.history).toEqual([
+      { role: "user", content: "What is func_0?" },
+      { role: "assistant", content: "The first function." },
+    ]);
+    stream.close();
+  });
+
+  it("starts a conversation on the first question and keeps the streamed answer", async () => {
+    const stream = streamResponse();
+    const { requests, fetchMock } = installFetch({
+      conversations: [],
+      onStream: () => stream.response,
+    });
+    renderPage();
+    await ask("Where is login?");
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0].body).not.toHaveProperty("conversation_id");
+    const listCalls = () =>
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/conversations")).length;
+    const before = listCalls();
+
+    await act(async () => {
+      stream.push(
+        sseBody([
+          ev("done", {
+            run_id: "run-1",
+            answer: "Login is in auth.",
+            citations: [],
+            conversation_id: "new-conv",
+            chat_message_id: "msg-9",
+          }),
+        ]),
+      );
+      stream.close();
+    });
+
+    await waitFor(() => expect(window.location.search).toBe("?c=new-conv"));
+    expect(await screen.findByTestId("answer")).toHaveTextContent("Login is in auth.");
+    expect(screen.getAllByTestId("turn")).toHaveLength(1);
+    await waitFor(() => expect(listCalls()).toBeGreaterThan(before));
+    // The messages of the new conversation are not fetched over the live answer.
+    expect(
+      fetchMock.mock.calls.some(([url]) => /conversations\/new-conv\/messages/.test(String(url))),
+    ).toBe(false);
+  });
+
+  it("does not adopt a conversation when the run fails", async () => {
+    const stream = streamResponse();
+    installFetch({ onStream: () => stream.response });
+    renderPage();
+    await ask("Where is login?");
+    await act(async () => {
+      stream.push(sseBody([ev("error", { message: "boom", kind: "unreachable", status: 502 })]));
+      stream.close();
+    });
+
+    await screen.findByText(/boom/);
+    expect(window.location.search).toBe("");
+  });
+
+  it("returns to a new chat when the open conversation no longer exists", async () => {
+    installFetch({
+      onOther: (url) =>
+        /conversations\/gone\/messages$/.test(url)
+          ? new Response("{}", { status: 404 })
+          : undefined,
+    });
+    window.history.replaceState(null, "", "/repo/1/chat?c=gone");
+    renderPage({ initialConversationId: "gone" });
+
+    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+    expect(window.location.search).toBe("");
+  });
+
+  it("renames and deletes from the list, leaving a deleted open conversation", async () => {
+    const { fetchMock } = installFetch({
+      conversations: LIST,
+      history: TURNS,
+      onOther: (url, init) =>
+        /\/conversations\/c1$/.test(url) && init?.method
+          ? new Response(init.method === "DELETE" ? null : "{}", {
+              status: init.method === "DELETE" ? 204 : 200,
+            })
+          : undefined,
+    });
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/repo/1/chat?c=c1");
+    renderPage({ initialConversationId: "c1" });
+    await screen.findByText("What is func_0?");
+
+    await user.click(screen.getByRole("button", { name: "Options for How does auth work" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "Conversation title" });
+    await user.clear(field);
+    await user.type(field, "Auth flow{Enter}");
+    expect(await screen.findByText("Auth flow")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/conversations\/c1$/),
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ title: "Auth flow" }) }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Options for Auth flow" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/conversations\/c1$/),
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+    expect(window.location.search).toBe("");
+    expect(screen.queryByText("Auth flow")).not.toBeInTheDocument();
+    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+  });
+
+  it("keeps the list in a drawer on narrow screens", async () => {
+    setViewport(false);
+    installFetch({ conversations: LIST });
+    const user = userEvent.setup();
+    renderPage();
+
+    // The wide panel is always rendered and hidden by a breakpoint, which jsdom
+    // does not apply, so the drawer is identified by its own test id.
+    expect(screen.queryByTestId("conversation-drawer")).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Open conversations" }));
+    const drawer = await screen.findByTestId("conversation-drawer");
+
+    await user.click(within(drawer).getByRole("button", { name: /^Where is the router/ }));
+
+    expect(window.location.search).toBe("?c=c2");
+    expect(screen.queryByTestId("conversation-drawer")).not.toBeInTheDocument();
+  });
+
+  it("limits the question and shows how close it is", async () => {
+    installFetch({});
+    renderPage();
+    const box = (await screen.findByRole("textbox", {
+      name: /Ask about the codebase/,
+    })) as HTMLTextAreaElement;
+
+    expect(box.maxLength).toBe(4000);
+    expect(screen.queryByTestId("char-count")).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: "x".repeat(3600) } });
+    expect(screen.getByTestId("char-count")).toHaveTextContent("3600 / 4000");
+  });
+
+  it("never sends more than 40 history items, dropping the oldest", async () => {
+    const stream = streamResponse();
+    const turns = Array.from({ length: 25 }, (_, i) => ({
+      id: `m${i}`,
+      question: `question ${i}`,
+      answer: `answer ${i}`,
+      sources: [],
+    }));
+    const { requests } = installFetch({
+      conversations: LIST,
+      history: turns,
+      onStream: () => stream.response,
+    });
+    renderPage({ initialConversationId: "c1" });
+    await screen.findByText("question 24");
+
+    await ask("one more");
+
+    await waitFor(() => expect(requests).toHaveLength(1));
+    const history = requests[0].body.history as { content: string }[];
+    expect(history).toHaveLength(40);
+    expect(history[0].content).toBe("question 5");
+    expect(history[39].content).toBe("answer 24");
+    stream.close();
   });
 });

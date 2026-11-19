@@ -170,6 +170,8 @@ export interface RunState {
   stopReason: string | null;
   limitsReached: string[];
   chatMessageId: string | null;
+  /** The conversation the saved turn joined, once the run is done. */
+  conversationId: string | null;
   error: RunError | null;
   startedAt: number | null;
   endedAt: number | null;
@@ -213,6 +215,7 @@ export const initialRunState: RunState = {
   stopReason: null,
   limitsReached: [],
   chatMessageId: null,
+  conversationId: null,
   error: null,
   startedAt: null,
   endedAt: null,
@@ -615,6 +618,7 @@ function applyEvent(
         stopReason: done.stop_reason ?? null,
         limitsReached: done.limits_reached ?? [],
         chatMessageId: done.chat_message_id ?? null,
+        conversationId: done.conversation_id ?? null,
         endedAt: at ?? state.endedAt,
         highlight: {
           ...state.highlight,

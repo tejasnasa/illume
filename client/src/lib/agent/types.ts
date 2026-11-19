@@ -194,6 +194,7 @@ export interface DoneData {
   stop_reason?: string;
   usage?: Usage;
   chat_message_id?: string | null;
+  conversation_id?: string | null;
   steps_dropped?: number;
   limits_reached?: string[];
 }

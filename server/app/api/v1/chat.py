@@ -9,17 +9,27 @@ import uuid
 from datetime import datetime
 from typing import Literal, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AuthenticationError
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select
 
-from app.api.validation import MultiLineText
+from app.api.validation import (
+    MAX_HISTORY_ITEMS,
+    HistoryContentText,
+    QuestionText,
+)
 from app.core.database import AsyncSession, get_async_db
 from app.models.chat_message import ChatMessage as ChatMessageModel
 from app.models.commit import Commit
+from app.models.conversation import Conversation
 from app.models.repository import Repository
 from app.models.user import User
+from app.services.conversations import (
+    ensure_conversation,
+    owned_conversation,
+    touch_conversation,
+)
 from app.services.entitlements import (
     FREE_CHAT_MESSAGES,
     aclaim_free_chat_message,
@@ -42,7 +52,7 @@ class ChatMessageRequest(BaseModel):
     """
 
     role: Literal["user", "assistant"]
-    content: MultiLineText
+    content: HistoryContentText
 
 
 class ChatRequest(BaseModel):
@@ -53,8 +63,9 @@ class ChatRequest(BaseModel):
     client has to construct.
     """
 
-    question: MultiLineText
-    history: list[ChatMessageRequest] = []
+    question: QuestionText
+    conversation_id: uuid.UUID | None = None
+    history: list[ChatMessageRequest] = Field(default=[], max_length=MAX_HISTORY_ITEMS)
 
 
 class SourceReferenceResponse(BaseModel):
@@ -76,6 +87,7 @@ class ChatResponse(BaseModel):
     """Newly created chat turn with generated answer and sources."""
 
     id: uuid.UUID
+    conversation_id: uuid.UUID
     answer: str
     sources: list[SourceReferenceResponse]
 
@@ -84,6 +96,7 @@ class ChatMessageHistoryResponse(BaseModel):
     """Persisted chat turn returned by the history endpoint."""
 
     id: uuid.UUID
+    conversation_id: uuid.UUID
     repository_id: uuid.UUID
     user_id: uuid.UUID
     question: str
@@ -112,15 +125,18 @@ async def chat(
 
     Args:
         repo_id: ID of the repository to query.
-        payload: Question plus optional conversation history.
+        payload: Question, optional conversation history and optional conversation.
         request: Request carrying the authenticated user ID in state.
         db: Async database session.
 
     Returns:
-        The new chat record's ID, answer text, and source citations.
+        The new chat record's ID, its conversation's ID, answer text, and source
+        citations. A question asked without ``conversation_id`` starts a new
+        conversation, created only once the answer exists.
 
     Raises:
-        HTTPException: 404 if the repo is not found, 400 if not ready.
+        HTTPException: 404 if the repo or the named conversation is not the caller's,
+            400 if not ready.
     """
     user_id = getattr(request.state, "user_id", None)
     repo = (
@@ -136,6 +152,11 @@ async def chat(
             status_code=400,
             detail=f"Repository is not ready for querying (status: {repo.status})",
         )
+
+    if payload.conversation_id is not None and (
+        await owned_conversation(db, user_id, repo_id, payload.conversation_id) is None
+    ):
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     # The snapshot the question is answered against, read before anything can
     # expire the row.
@@ -251,7 +272,19 @@ async def chat(
         for s in result.sources
     ]
 
+    # A new conversation exists only from here on, so a refused or failed request
+    # leaves nothing behind.
+    conversation_id = payload.conversation_id or uuid.uuid4()
+    if payload.conversation_id is None:
+        await ensure_conversation(
+            db,
+            conversation_id=conversation_id,
+            user_id=cast(uuid.UUID, user_id),
+            repository_id=repo_id,
+            question=payload.question,
+        )
     chat_record = ChatMessageModel(
+        conversation_id=conversation_id,
         repository_id=repo_id,
         user_id=user_id,
         question=payload.question,
@@ -261,11 +294,14 @@ async def chat(
         cited_paths=cited_file_paths(s.file_path for s in result.sources),
     )
     db.add(chat_record)
+    await db.flush()
+    await touch_conversation(db, conversation_id)
     await db.commit()
     await db.refresh(chat_record)
 
     return ChatResponse(
         id=chat_record.id,
+        conversation_id=conversation_id,
         answer=result.answer,
         sources=[
             SourceReferenceResponse(
@@ -289,6 +325,7 @@ async def chat(
 async def get_chat_history(
     repo_id: uuid.UUID,
     request: Request,
+    conversation_id: uuid.UUID | None = Query(default=None),
     db: AsyncSession = Depends(get_async_db),
 ):
     """List a user's chat history for a repository in chronological order.
@@ -296,13 +333,15 @@ async def get_chat_history(
     Args:
         repo_id: ID of the repository whose history to list.
         request: Request carrying the authenticated user ID in state.
+        conversation_id: Limit the list to one conversation; every turn when omitted.
         db: Async database session.
 
     Returns:
         Chronologically ordered chat turns.
 
     Raises:
-        HTTPException: 401 if unauthenticated, 404 if the repo is not found.
+        HTTPException: 401 if unauthenticated, 404 if the repo or the named
+            conversation is not the caller's.
     """
     user_id = getattr(request.state, "user_id", None)
     if not user_id:
@@ -316,20 +355,16 @@ async def get_chat_history(
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
 
-    messages = (
-        (
-            await db.execute(
-                select(ChatMessageModel)
-                .filter(
-                    ChatMessageModel.repository_id == repo_id,
-                    ChatMessageModel.user_id == user_id,
-                )
-                .order_by(ChatMessageModel.created_at.asc())
-            )
-        )
-        .scalars()
-        .all()
+    query = select(ChatMessageModel).filter(
+        ChatMessageModel.repository_id == repo_id,
+        ChatMessageModel.user_id == user_id,
     )
+    if conversation_id is not None:
+        if await owned_conversation(db, user_id, repo_id, conversation_id) is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        query = query.filter(ChatMessageModel.conversation_id == conversation_id)
+
+    messages = (await db.execute(query.order_by(ChatMessageModel.created_at.asc()))).scalars().all()
 
     return messages
 
@@ -504,7 +539,7 @@ async def clear_chat_history(
     request: Request,
     db: AsyncSession = Depends(get_async_db),
 ):
-    """Delete all of the user's chat history for a repository.
+    """Delete all of the user's conversations, and with them every turn, for a repository.
 
     Args:
         repo_id: ID of the repository whose history to clear.
@@ -521,10 +556,11 @@ async def clear_chat_history(
     if not user_id:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
+    # The turns go with their conversations through the foreign key.
     await db.execute(
-        delete(ChatMessageModel).where(
-            ChatMessageModel.repository_id == repo_id,
-            ChatMessageModel.user_id == user_id,
+        delete(Conversation).where(
+            Conversation.repository_id == repo_id,
+            Conversation.user_id == user_id,
         )
     )
     await db.commit()

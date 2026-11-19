@@ -94,14 +94,27 @@ test.describe("history", () => {
     await page.goto(chat);
   });
 
-  test("loads the persisted turn and its answer", async ({ page }) => {
+  test("opens on an empty new chat and lists the seeded conversation", async ({ page }) => {
+    await expect(page.getByText(/What would you like to know/)).toBeVisible();
+    const nav = page.getByRole("navigation", { name: "Conversations" });
+    await expect(nav.getByRole("button", { name: /What does func_0 do\?/ })).toBeVisible();
+    await expect(nav.getByRole("button", { name: "New chat" })).toBeVisible();
+  });
+
+  test("loads the persisted turn and its answer from the conversation", async ({ page }) => {
+    const nav = page.getByRole("navigation", { name: "Conversations" });
+    await nav.getByRole("button", { name: /What does func_0 do\?/ }).first().click();
+
+    await expect(page).toHaveURL(/[?&]c=/);
     await expect(page.getByText("What does func_0 do?").last()).toBeVisible();
     await expect(page.getByText(/the first function in the fixture/).last()).toBeVisible();
   });
 
-  test("offers a clear action once a turn exists", async ({ page }) => {
-    await page.getByRole("button", { name: "Chat options" }).click();
-    await expect(page.getByRole("menuitem", { name: /Clear chat history/ })).toBeVisible();
+  test("offers rename and delete for a conversation", async ({ page }) => {
+    const nav = page.getByRole("navigation", { name: "Conversations" });
+    await nav.getByRole("button", { name: /^Options for / }).first().click();
+    await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();
   });
 });
 

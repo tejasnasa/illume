@@ -45,3 +45,48 @@ export function SuggestionsSkeleton() {
     </div>
   );
 }
+
+/** Stands in for the conversation list's rows while it loads. */
+export function ConversationRowsSkeleton() {
+  return (
+    <li
+      className="space-y-1 px-2"
+      aria-hidden="true"
+      data-testid="conversation-rows-skeleton"
+    >
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div key={i} className="space-y-1.5 px-3 py-2">
+          <Skeleton className="h-3.5 w-4/5" />
+          <Skeleton className="h-2.5 w-1/3" />
+        </div>
+      ))}
+    </li>
+  );
+}
+
+/**
+ * Stands in for the conversation panel on wide screens, and for the button
+ * that opens it on narrow ones, in the places the chat page puts them.
+ */
+export function ConversationSidebarSkeleton() {
+  return (
+    <>
+      <div
+        className="absolute inset-y-0 left-0 z-30 hidden w-64 p-3 md:block"
+        aria-hidden="true"
+      >
+        <div className="flex h-full w-full flex-col rounded-2xl border border-(--border) bg-(--card)/60 shadow-[0_8px_32px_0_rgb(0_0_0/0.3)] backdrop-blur-xl">
+          <div className="p-3">
+            <Skeleton className="h-9.5 w-full rounded-lg" />
+          </div>
+          <ul className="flex-1 overflow-hidden pb-3">
+            <ConversationRowsSkeleton />
+          </ul>
+        </div>
+      </div>
+      <div className="absolute left-3 top-3 z-20 md:hidden" aria-hidden="true">
+        <Skeleton className="h-7.5 w-20 rounded-full" />
+      </div>
+    </>
+  );
+}

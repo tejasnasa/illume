@@ -11,6 +11,7 @@ from app.models import (
     ast_symbol,
     code_owner,
     commit,
+    conversation,
     dependency,
     embedding,
     file,

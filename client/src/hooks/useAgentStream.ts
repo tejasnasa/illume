@@ -28,6 +28,8 @@ export interface StartArgs {
   preset: PresetChoice;
   overrides?: Overrides;
   history: HistoryMessage[];
+  /** The conversation the answer joins; omitted, the server starts one. */
+  conversationId?: string | null;
 }
 
 const BACKEND = () => process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -48,7 +50,14 @@ export function useAgentStream() {
 
   /** Streams a new run. Resolves when the connection closes. */
   const start = useCallback(
-    async ({ repoId, question, preset, overrides, history }: StartArgs) => {
+    async ({
+      repoId,
+      question,
+      preset,
+      overrides,
+      history,
+      conversationId,
+    }: StartArgs) => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -68,6 +77,7 @@ export function useAgentStream() {
             body: JSON.stringify({
               question,
               history,
+              ...(conversationId ? { conversation_id: conversationId } : {}),
               preset,
               ...(overrides ? { overrides } : {}),
             }),

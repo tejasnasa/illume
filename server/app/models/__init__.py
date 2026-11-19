@@ -10,6 +10,7 @@ from app.models.ast_symbol import AstSymbol
 from app.models.chat_message import ChatMessage
 from app.models.code_owner import CodeOwner
 from app.models.commit import Commit
+from app.models.conversation import Conversation
 from app.models.dependency import Dependency
 from app.models.embedding import Embedding
 from app.models.file import File
@@ -35,6 +36,7 @@ __all__ = [
     "User",
     "Commit",
     "CodeOwner",
+    "Conversation",
     "GlossaryEntry",
     "McpToken",
     "OnboardingGuide",

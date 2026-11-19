@@ -13,6 +13,7 @@ import uuid
 import pytest
 
 from app.models.chat_message import ChatMessage
+from app.models.conversation import Conversation
 from app.models.repository import Repository
 from app.tasks import sync as sync_module
 from app.tasks.sync import _changed_paths, _mark_stale_answers, sync_repository
@@ -36,7 +37,11 @@ LATER = "c" * 40
 
 
 def add_message(session, repo, *, cited, answered="a" * 40, **fields) -> uuid.UUID:
+    conversation = Conversation(user_id=repo.user_id, repository_id=repo.id, title="q")
+    session.add(conversation)
+    session.flush()
     message = ChatMessage(
+        conversation_id=conversation.id,
         repository_id=repo.id,
         user_id=repo.user_id,
         question="q",

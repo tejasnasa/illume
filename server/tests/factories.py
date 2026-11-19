@@ -12,12 +12,14 @@ import itertools
 import uuid
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
 from app.models.ast_symbol import AstSymbol
 from app.models.chat_message import ChatMessage
 from app.models.code_owner import CodeOwner
+from app.models.conversation import Conversation
 from app.models.dependency import Dependency
 from app.models.embedding import Embedding
 from app.models.file import File
@@ -290,6 +292,44 @@ async def make_guide(
     return guide
 
 
+async def make_conversation(
+    db: AsyncSession,
+    repo: Repository,
+    user: User,
+    *,
+    title: str = "A conversation",
+    new: bool = False,
+) -> uuid.UUID:
+    """
+    The user's most recent conversation on the repository, or a new one.
+
+    Args:
+        db: The test session.
+        repo: The repository.
+        user: The owner.
+        title: Title for a conversation that has to be created.
+        new: Always create a conversation rather than reusing one.
+
+    Returns:
+        The conversation's id.
+    """
+    if not new:
+        existing = (
+            await db.execute(
+                select(Conversation.id)
+                .where(Conversation.repository_id == repo.id, Conversation.user_id == user.id)
+                .order_by(Conversation.updated_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return existing
+    conversation = Conversation(user_id=user.id, repository_id=repo.id, title=title)
+    db.add(conversation)
+    await db.flush()
+    return conversation.id
+
+
 async def make_chat_message(
     db: AsyncSession,
     repo: Repository,
@@ -304,11 +344,14 @@ async def make_chat_message(
     Insert one persisted chat turn.
 
     Any other column of the message, such as ``cited_paths`` or ``stale_paths``,
-    can be given by keyword.
+    can be given by keyword. Without a ``conversation_id`` the turn joins the user's
+    most recent conversation on the repository, which is created when there is none.
 
     `created_at` is server-generated, and the history endpoint orders on it, so tests
     that care about ordering insert in sequence and rely on `now()` advancing.
     """
+    if "conversation_id" not in fields:
+        fields["conversation_id"] = await make_conversation(db, repo, user, title=question)
     message = ChatMessage(
         repository_id=repo.id,
         user_id=user.id,

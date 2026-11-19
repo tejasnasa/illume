@@ -157,12 +157,15 @@ class RunStartedData(BaseModel):
         config_hash: Hash of the effective configuration, overrides included.
         model: The generation model.
         execution: ``single_shot``, ``agent`` or ``planner``.
+        conversation_id: The conversation the turn will join, when the answer is
+            saved as a chat turn.
     """
 
     preset: str
     config_hash: str
     model: str
     execution: str
+    conversation_id: str | None = None
 
 
 class RouteData(BaseModel):
@@ -428,6 +431,7 @@ class DoneData(BaseModel):
         stop_reason: Why the run stopped.
         usage: What the run spent.
         chat_message_id: The saved chat turn, when it was saved.
+        conversation_id: The conversation the saved turn belongs to.
         steps_dropped: Records past the per-run cap that were not stored.
         limits_reached: The limits the run hit, in order.
     """
@@ -440,6 +444,7 @@ class DoneData(BaseModel):
     stop_reason: str
     usage: UsageData = Field(default_factory=UsageData)
     chat_message_id: str | None = None
+    conversation_id: str | None = None
     steps_dropped: int = 0
     limits_reached: list[str] = Field(default_factory=list)
 

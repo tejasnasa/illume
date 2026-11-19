@@ -98,6 +98,15 @@ REPO_ROUTES: list[RepoRoute] = [
     # actually matters.
     RepoRoute("DELETE", "/api/v1/repository/{ref}/chat", success=204, cross_user=204, unknown=204),
     RepoRoute("DELETE", "/api/v1/repository/{ref}/chat/{message_id}", success=204),
+    RepoRoute("GET", "/api/v1/repository/{ref}/conversations"),
+    RepoRoute("POST", "/api/v1/repository/{ref}/conversations", success=201, body={}),
+    RepoRoute(
+        "PATCH",
+        "/api/v1/repository/{ref}/conversations/{conversation_id}",
+        body={"title": "Renamed"},
+    ),
+    RepoRoute("GET", "/api/v1/repository/{ref}/conversations/{conversation_id}/messages"),
+    RepoRoute("DELETE", "/api/v1/repository/{ref}/conversations/{conversation_id}", success=204),
 ]
 
 IDS = [f"{r.method} {r.template}{' [number]' if r.key == 'number' else ''}" for r in REPO_ROUTES]
@@ -210,6 +219,8 @@ def path_for(route: RepoRoute, repo, message=None) -> str:
     path = route.template.replace("{ref}", ref)
     if "{message_id}" in path:
         path = path.replace("{message_id}", str(message.id))
+    if "{conversation_id}" in path:
+        path = path.replace("{conversation_id}", str(message.conversation_id))
     if "{run_id}" in path:
         path = path.replace("{run_id}", str(message.agent_run_id))
     return path

@@ -116,6 +116,10 @@ class RunRequest:
         save_history: Whether a finished answer is saved as a turn of the
             repository's chat. A run asked from outside the chat page leaves it
             out; the run row is finalised either way.
+        conversation_id: The conversation a saved turn joins; ``None`` when the
+            turn is not saved.
+        new_conversation: Whether that conversation is created when the turn is
+            saved, rather than already existing.
     """
 
     run_id: uuid.UUID
@@ -132,6 +136,8 @@ class RunRequest:
     on_free_tier: bool
     auto: AutoRoute | None = None
     save_history: bool = True
+    conversation_id: uuid.UUID | None = None
+    new_conversation: bool = False
 
 
 @dataclass
@@ -298,6 +304,11 @@ class RunSession:
                 "config_hash": request.config.config_hash(),
                 "model": request.model_label,
                 "execution": request.config.execution,
+                **(
+                    {"conversation_id": str(request.conversation_id)}
+                    if request.conversation_id
+                    else {}
+                ),
             },
         )
         if request.auto is not None:
@@ -483,6 +494,8 @@ class RunSession:
                         run_id=request.run_id,
                         user_id=request.user_id,
                         repository_id=request.repository.id,
+                        conversation_id=request.conversation_id,
+                        new_conversation=request.new_conversation,
                         question=request.question,
                         answer=outcome.answer,
                         sources=outcome.citations,
@@ -502,6 +515,11 @@ class RunSession:
                     stop_reason=outcome.stop_reason,
                     usage=outcome.usage,
                     chat_message_id=str(message_id) if message_id else None,
+                    conversation_id=(
+                        str(request.conversation_id)
+                        if message_id and request.conversation_id
+                        else None
+                    ),
                     steps_dropped=recorder.dropped,
                     limits_reached=outcome.limits_reached,
                 ).model_dump(mode="json"),

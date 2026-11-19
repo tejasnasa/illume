@@ -19,14 +19,14 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette import EventSourceResponse
 from starlette.background import BackgroundTask
 
 from app.api.v1.chat import ChatMessageRequest
-from app.api.validation import MultiLineText
+from app.api.validation import MAX_HISTORY_ITEMS, QuestionText
 from app.core.database import AsyncSessionLocal, get_async_db
 from app.models.agent_run import AgentRun
 from app.models.repository import Repository
@@ -80,6 +80,8 @@ class StreamRequest(BaseModel):
     Attributes:
         question: The question; multi-line, like the chat composer's.
         history: Earlier turns, oldest first.
+        conversation_id: The conversation the answer joins. Omitted, the answer
+            starts a new one, which exists once the answer is saved.
         preset: A preset name, or ``auto`` to have one decision pick the preset
             from the question. ``auto`` needs the caller's own key.
         overrides: Settings changed for this run only; they apply to the preset
@@ -89,8 +91,9 @@ class StreamRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    question: MultiLineText
-    history: list[ChatMessageRequest] = []
+    question: QuestionText
+    conversation_id: uuid.UUID | None = None
+    history: list[ChatMessageRequest] = Field(default=[], max_length=MAX_HISTORY_ITEMS)
     preset: str = "classic"
     overrides: Overrides | None = None
 
@@ -196,7 +199,8 @@ async def stream_chat(
 ):
     """Answer a question with a preset and stream the run as server-sent events.
 
-    Checks, in order: the repository is the caller's (404) and ready (400); the
+    Checks, in order: the repository is the caller's (404) and ready (400); a named
+    conversation is the caller's (404); the
     overrides fit the preset (422); a credential exists (402); agent presets have a
     key of the caller's own (402) whose model can call tools (400); the free-tier
     allowance is not spent (402); the caller has a free run slot (429). Nothing
@@ -237,6 +241,7 @@ async def stream_chat(
             history=[ChatMessage(role=m.role, content=m.content) for m in payload.history],
             preset=payload.preset,
             overrides=payload.overrides,
+            conversation_id=payload.conversation_id,
             sessions=sessions,
             kit=kit,
             slots=slots,

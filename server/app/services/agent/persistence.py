@@ -47,6 +47,7 @@ from app.services.agent.events import (
 )
 from app.services.agent.state import Evidence
 from app.services.agent.steps import StepRecord
+from app.services.conversations import ensure_conversation, touch_conversation
 from app.services.retrieval.citations import parse_key
 from app.services.staleness import cited_file_paths
 
@@ -439,6 +440,8 @@ async def save_turn(
     run_id: uuid.UUID,
     user_id: uuid.UUID,
     repository_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    new_conversation: bool = False,
     question: str,
     answer: str,
     sources: Sequence[CitationData],
@@ -449,8 +452,10 @@ async def save_turn(
     The turn records the commit it was answered against and the distinct files
     its sources cite, which is what a later sync compares changes with.
 
-    The turn and the link are committed together, so history never holds a turn
-    whose run does not point back at it.
+    The turn joins ``conversation_id``, which is created first (titled from the
+    question) when ``new_conversation`` is set, and is moved to the top of the
+    list. The turn, the conversation and the link are committed together, so
+    history never holds a turn whose run does not point back at it.
 
     Returns:
         The new chat message's id.
@@ -471,8 +476,17 @@ async def save_turn(
         for source in sources
     ]
     async with sessions() as db:
+        if new_conversation:
+            await ensure_conversation(
+                db,
+                conversation_id=conversation_id,
+                user_id=user_id,
+                repository_id=repository_id,
+                question=question,
+            )
         message = ChatMessage(
             id=uuid.uuid4(),
+            conversation_id=conversation_id,
             repository_id=repository_id,
             user_id=user_id,
             question=question,
@@ -484,6 +498,7 @@ async def save_turn(
         )
         db.add(message)
         await db.flush()
+        await touch_conversation(db, conversation_id)
         await db.execute(
             update(AgentRun).where(AgentRun.id == run_id).values(chat_message_id=message.id)
         )
