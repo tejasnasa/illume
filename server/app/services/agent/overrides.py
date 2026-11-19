@@ -8,8 +8,9 @@ What a request may change depends on who pays for the extra calls:
 
 * On the free tier the operator pays, so a request may only make a run cheaper:
   a budget may not exceed the preset's own, the seed may be switched off but
-  not on, the channels may only be narrowed, and the reranker and query
-  rewriting may only be turned off.
+  not on, the channels may only be narrowed, the replayed history and the
+  number of surviving results may not exceed the preset's own, and the
+  reranker and query rewriting may only be turned off.
 * With the caller's own key, the drawer's switches are open: the seed may be
   switched on, channels added, and the reranker and query rewriting chosen.
   Budgets may be raised only as far as the most generous preset allows, never
@@ -172,6 +173,22 @@ def _check_ceilings(
             raise OverrideError(f"{section}.{name} cannot exceed {ceiling}, {whose}")
 
 
+def _check_free_tier_cap(name: str, given: int | None, own: int, preset: str) -> None:
+    """Refuses a free-tier request that raises how much is sent to the model.
+
+    Args:
+        name: The dotted field name, for the message.
+        given: The requested value, or ``None`` when the request left it alone.
+        own: The chosen preset's value, which is the free-tier ceiling.
+        preset: The preset's name, for the message.
+
+    Raises:
+        OverrideError: When ``given`` exceeds ``own``.
+    """
+    if given is not None and given > own:
+        raise OverrideError(f"{name} cannot exceed {own}, preset {preset!r} on the free tier")
+
+
 def _channels(base: PipelineConfig, kinds: list[str], *, own_key: bool) -> list[dict[str, Any]]:
     """The requested channels, keeping the preset's own settings where it has them."""
     own = {channel.kind: channel for channel in base.channels}
@@ -245,6 +262,13 @@ def apply_overrides(
 
     if overrides.query is not None:
         given = _set_fields(data["query"], overrides.query)
+        if not own_key:
+            _check_free_tier_cap(
+                "query.history_messages",
+                given.get("history_messages"),
+                base.query.history_messages,
+                base.name,
+            )
         transform = given.get("transform")
         if transform not in (None, "identity", base.query.transform) and not own_key:
             raise OverrideError(f"query.transform {transform!r} is not available on the free tier")
@@ -261,7 +285,11 @@ def apply_overrides(
             data["fusion"] = "rrf"
 
     if overrides.diversify is not None:
-        _set_fields(data["diversify"], overrides.diversify)
+        given = _set_fields(data["diversify"], overrides.diversify)
+        if not own_key:
+            _check_free_tier_cap(
+                "diversify.total", given.get("total"), base.diversify.total, base.name
+            )
 
     try:
         return PipelineConfig.model_validate(data)

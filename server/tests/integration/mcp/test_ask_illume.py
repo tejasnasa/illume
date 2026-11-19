@@ -174,6 +174,31 @@ class TestDefinition:
 # --- quick, auto and deep ----------------------------------------------------------------
 
 
+class TestQuestionLimit:
+    async def test_a_question_at_the_limit_is_answered(
+        self, db_session, mcp_run_kit, world, mcp_client
+    ):
+        use(mcp_run_kit, world, AnyModel("An answer."))
+
+        result = await ask_tool(mcp_client, world, question="x" * MAX_QUESTION_CHARS)
+
+        assert result.is_error is not True
+
+    async def test_a_question_over_the_limit_is_an_error_and_no_run(
+        self, db_session, mcp_run_kit, world, mcp_client
+    ):
+        use(mcp_run_kit, world, AnyModel("An answer."))
+
+        try:
+            result = await ask_tool(mcp_client, world, question="x" * (MAX_QUESTION_CHARS + 1))
+        except Exception:
+            # The SDK may reject a schema violation before the handler runs.
+            result = None
+
+        assert result is None or result.is_error is True
+        assert await _runs(db_session, world.user) == []
+
+
 class TestModes:
     async def test_quick_on_the_free_tier_answers_with_classic_and_records_the_run(
         self, db_session, mcp_run_kit, free_world, mcp_client

@@ -5,9 +5,13 @@
 "use client";
 
 import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
+import { MAX_QUESTION_CHARS } from "@/lib/agent/limits";
 import { useLayoutEffect, useRef } from "react";
 
 const MAX_HEIGHT_PX = 200;
+
+/** Length from which the remaining room is shown. */
+const COUNTER_FROM = Math.floor(MAX_QUESTION_CHARS * 0.85);
 
 /**
  * Renders the composer card.
@@ -61,12 +65,17 @@ export default function ChatInput({
         ref={ref}
         value={value}
         rows={1}
+        maxLength={MAX_QUESTION_CHARS}
         disabled={disabled}
         placeholder={placeholder}
         aria-label="Ask about the codebase"
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+          if (
+            event.key === "Enter" &&
+            !event.shiftKey &&
+            !event.nativeEvent.isComposing
+          ) {
             event.preventDefault();
             if (canSend) onSend();
           }
@@ -75,6 +84,16 @@ export default function ChatInput({
       />
       <div className="flex items-center justify-between px-1 pt-1">
         {picker}
+        {value.length >= COUNTER_FROM && (
+          <span
+            data-testid="char-count"
+            aria-live="polite"
+            className={`ml-auto mr-2 text-[11px] ${value.length >= MAX_QUESTION_CHARS ? "text-(--destructive)" : "text-(--muted-foreground)"}`}
+          >
+            {value.length} / {MAX_QUESTION_CHARS}
+            {value.length >= MAX_QUESTION_CHARS ? " (limit reached)" : ""}
+          </span>
+        )}
         {busy ? (
           <button
             type="button"

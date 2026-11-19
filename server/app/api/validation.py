@@ -20,7 +20,7 @@ than reintroducing the shape.
 from typing import Annotated
 
 from fastapi import Query
-from pydantic import AfterValidator
+from pydantic import AfterValidator, Field
 
 # The largest `page_size` any paginated route accepts, used to derive the bound below.
 MAX_PAGE_SIZE = 200
@@ -90,12 +90,8 @@ def _no_control_characters_multiline(value: str | None) -> str | None:
     """
     if value is None:
         return None
-    if any(
-        (ord(ch) < 32 and ch not in "\t\n\r") or ord(ch) == 127 for ch in value
-    ):
-        raise ValueError(
-            "must not contain control characters other than newlines and tabs"
-        )
+    if any((ord(ch) < 32 and ch not in "\t\n\r") or ord(ch) == 127 for ch in value):
+        raise ValueError("must not contain control characters other than newlines and tabs")
     return value
 
 
@@ -133,3 +129,18 @@ OptionalFreeText = Annotated[str | None, NoControlCharacters]
 
 PageNumber = Annotated[int, Query(ge=1, le=MAX_PAGE)]
 """A 1-indexed page number, bounded so its offset cannot overflow ``BIGINT``."""
+
+MAX_QUESTION_CHARS = 4000
+"""The longest question any way of asking accepts."""
+
+MAX_HISTORY_ITEMS = 40
+"""The most prior turns a request may carry."""
+
+MAX_HISTORY_CONTENT_CHARS = 20000
+"""The longest single prior turn a request may carry."""
+
+QuestionText = Annotated[MultiLineText, Field(max_length=MAX_QUESTION_CHARS)]
+"""A multi-line question bounded to :data:`MAX_QUESTION_CHARS` characters."""
+
+HistoryContentText = Annotated[MultiLineText, Field(max_length=MAX_HISTORY_CONTENT_CHARS)]
+"""One prior turn's text, bounded to :data:`MAX_HISTORY_CONTENT_CHARS` characters."""

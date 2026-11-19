@@ -195,6 +195,50 @@ class TestFreeTier:
         assert applied.rerank.kind == "none"
 
 
+class TestFreeTierSizeCaps:
+    @pytest.mark.parametrize(
+        ("fields", "field", "preset_value"),
+        [
+            (
+                lambda n: {"query": {"history_messages": n}},
+                "history_messages",
+                HYBRID.query.history_messages,
+            ),
+            (lambda n: {"diversify": {"total": n}}, "total", HYBRID.diversify.total),
+        ],
+        ids=["history", "diversify-total"],
+    )
+    def test_a_value_above_the_presets_is_refused(self, fields, field, preset_value):
+        with pytest.raises(OverrideError, match=rf"{field} cannot exceed {preset_value}"):
+            apply_overrides(HYBRID, overrides(**fields(preset_value + 1)))
+
+    @pytest.mark.parametrize("delta", [0, -1])
+    def test_a_value_at_or_below_the_presets_is_applied(self, delta):
+        applied = apply_overrides(
+            HYBRID,
+            overrides(
+                query={"history_messages": HYBRID.query.history_messages + delta},
+                diversify={"total": HYBRID.diversify.total + delta},
+            ),
+        )
+
+        assert applied.query.history_messages == HYBRID.query.history_messages + delta
+        assert applied.diversify.total == HYBRID.diversify.total + delta
+
+    def test_an_own_key_may_raise_them(self):
+        applied = apply_overrides(
+            HYBRID,
+            overrides(
+                query={"history_messages": HYBRID.query.history_messages + 1},
+                diversify={"total": HYBRID.diversify.total + 1},
+            ),
+            own_key=True,
+        )
+
+        assert applied.query.history_messages == HYBRID.query.history_messages + 1
+        assert applied.diversify.total == HYBRID.diversify.total + 1
+
+
 class TestOwnKey:
     def test_the_seed_can_be_switched_on(self):
         no_seed = DEEP_AGENT.model_copy(

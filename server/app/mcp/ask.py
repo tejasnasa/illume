@@ -35,7 +35,7 @@ from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.api.validation import MultiLineText
+from app.api.validation import MAX_QUESTION_CHARS, MultiLineText
 from app.mcp.auth import current_user_id
 from app.mcp.limits import RateLimiter
 from app.mcp.repos import McpRepoError, repo_argument, resolve_repo
@@ -57,8 +57,6 @@ SOURCE = "mcp"
 """What the run's record says asked the question."""
 
 MODES = ("quick", "auto", "deep")
-MAX_QUESTION_CHARS = 4000
-"""The longest question accepted. The chat route sets no limit of its own."""
 
 SINGLE_SHOT_TIMEOUT_SECONDS = 120.0
 """How long a single-shot answer may take before the call gives up."""
