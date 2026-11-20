@@ -182,7 +182,7 @@ class TestIngestAtBase:
 
     def test_an_existing_clone_is_used_and_left_in_place(self, db, history, cache_dir, monkeypatch):
         from evals.corpus.ingest import ingest_at_base
-        from tests.evals.conftest import corpus_repo_for
+        from tests.evals.conftest import corpus_repo_for, eval_email
         from tests.fixtures import openai_stub
 
         openai_stub.install(monkeypatch)
@@ -192,7 +192,7 @@ class TestIngestAtBase:
         result = ingest_at_base(
             db,
             corpus_repo=corpus_repo_for(history),
-            user_email=f"eval-test-{uuid.uuid4().hex[:8]}@example.com",
+            user_email=eval_email(db),
             cache_dir=cache_dir,
             llm_config=None,
             clone_override=clone,

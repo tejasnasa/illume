@@ -42,6 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     gold = commands.add_parser("gold", help="build and verify the gold set")
     gold.add_argument("action", choices=["build", "phrase", "verify", "split"])
+    gold.add_argument("--repo", help="corpus entry to build gold items for")
+    gold.add_argument("--corpus", type=Path, help="corpus file (default: the shipped one)")
+    gold.add_argument("--seed", type=int, default=0, help="sampling seed (default 0)")
 
     run = commands.add_parser("run", help="generate answers or judge them")
     run.add_argument("action", choices=["generate", "judge"])
@@ -183,6 +186,34 @@ def cmd_mine(args: argparse.Namespace) -> int:
     )
 
 
+def cmd_gold(args: argparse.Namespace) -> int:
+    """Run a ``gold`` subcommand against the eval database.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The process exit status.
+    """
+    from evals.cli import gold_commands
+    from evals.corpus.corpus import CORPUS_PATH
+
+    if args.action != "build":
+        return cmd_not_built(f"gold {args.action}")
+    if not args.repo:
+        print("gold build needs --repo NAME", file=sys.stderr)
+        return 2
+    assert_eval_url(eval_settings.DATABASE_URL, kind="database")
+    return gold_commands.cmd_gold_build(
+        async_url=eval_settings.DATABASE_URL,
+        out_dir=eval_settings.OUT_DIR,
+        clones_dir=eval_settings.CLONES_DIR,
+        repo_name=args.repo,
+        corpus_path=args.corpus or CORPUS_PATH,
+        seed=args.seed,
+    )
+
+
 def _generator_key() -> str:
     """Return the generator API key, or an empty string when it is not configured."""
     try:
@@ -224,6 +255,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_corpus(args)
     if args.command == "mine":
         return cmd_mine(args)
+    if args.command == "gold":
+        return cmd_gold(args)
     action = getattr(args, "action", None)
     return cmd_not_built(f"{args.command} {action}" if action else args.command)
 

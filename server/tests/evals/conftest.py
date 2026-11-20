@@ -96,19 +96,33 @@ def session_factory():
 
 @pytest.fixture
 def db(session_factory) -> Iterator[Session]:
-    """A committed-writes session; every user this test created is removed afterwards."""
+    """A committed-writes session; every user this test created is removed afterwards.
+
+    Users are matched by a prefix unique to this test (``session.info["email_prefix"]``,
+    used by :func:`eval_email`), never by a shared pattern: under xdist another worker's
+    ingestion may be running against its own eval user at the same moment.
+    """
     session = session_factory()
+    prefix = f"eval-test-{uuid.uuid4().hex[:12]}-"
+    session.info["email_prefix"] = prefix
     yield session
     session.rollback()
+    pattern = {"pattern": f"{prefix}%"}
     session.execute(
         text(
             "DELETE FROM repositories WHERE user_id IN "
-            "(SELECT id FROM users WHERE email LIKE 'eval-test-%')"
-        )
+            "(SELECT id FROM users WHERE email LIKE :pattern)"
+        ),
+        pattern,
     )
-    session.execute(text("DELETE FROM users WHERE email LIKE 'eval-test-%'"))
+    session.execute(text("DELETE FROM users WHERE email LIKE :pattern"), pattern)
     session.commit()
     session.close()
+
+
+def eval_email(db: Session) -> str:
+    """A fresh eval-user email that the ``db`` fixture's teardown removes."""
+    return f"{db.info['email_prefix']}{uuid.uuid4().hex[:8]}@example.com"
 
 
 @pytest.fixture
@@ -120,7 +134,7 @@ def ingest(db, history, cache_dir, monkeypatch) -> Callable[..., IngestResult]:
         return ingest_at_base(
             db,
             corpus_repo=corpus_repo_for(history, base, **kw),
-            user_email=f"eval-test-{uuid.uuid4().hex[:8]}@example.com",
+            user_email=eval_email(db),
             cache_dir=cache_dir,
             llm_config=None,
         )

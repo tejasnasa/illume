@@ -1,0 +1,21 @@
+# Format example for a hand-written set. Not loaded for any real repository: a real set
+# lives in hand/<corpus entry name>.yaml.
+items:
+  - kind: architecture
+    question: Where does the application decide which user a request belongs to?
+    required_files:
+      - app/middleware/auth.py
+    acceptable_files:
+      - app/api/deps.py
+    notes: Authentication happens in a middleware before any route runs.
+  - kind: flow
+    question: What happens between a user submitting a login form and the session cookie being set?
+    required_files:
+      - app/api/auth.py
+      - app/core/security.py
+    acceptable_files:
+      - app/models/user.py
+    tags: [multi-file]
+  - kind: unanswerable
+    question: Which payment provider does the project use for subscriptions?
+    notes: The repository has no payment code; a good answer says so.
