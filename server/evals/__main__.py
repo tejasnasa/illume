@@ -54,11 +54,60 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = commands.add_parser("run", help="generate answers or judge them")
     run.add_argument("action", choices=["generate", "judge"])
+    run.add_argument(
+        "--slice", choices=["pilot", "tuning", "test"], help="generate: the slice to run"
+    )
+    run.add_argument("--arms", default="starter", help="generate: 'starter' or a,b,c")
+    run.add_argument("--run", dest="run_name", help="the run's name; an existing run resumes")
+    run.add_argument(
+        "--subset",
+        action="append",
+        default=[],
+        metavar="ARM=N",
+        help="generate: restrict an arm to N items (repeatable)",
+    )
+    run.add_argument("--repeats", type=int, default=1, help="generate: runs per agent item")
+    run.add_argument(
+        "--repeats-subset", type=int, default=0, help="generate: items the repeats cover"
+    )
+    run.add_argument(
+        "--off-peak-only", action="store_true", help="generate: wait for the off-peak window"
+    )
+    run.add_argument("--seed", type=int, default=0, help="generate: shuffle and subset seed")
+    run.add_argument("--concurrency", type=int, default=4, help="generate: pairs at once")
+    _add_budget_arguments(run)
 
     commands.add_parser("report", help="render a report from run outputs")
     commands.add_parser("selftest", help="run the metric self-tests")
-    commands.add_parser("budget", help="show spend against the budget")
+    budget = commands.add_parser("budget", help="show spend against the budget")
+    budget.add_argument("--run", dest="run_name", help="the run to read (default: every run)")
+    budget.add_argument(
+        "--project", action="store_true", help="project a planned run from measured cost"
+    )
+    budget.add_argument("--items", type=int, help="project: items in the planned run")
+    budget.add_argument("--arms", default="starter", help="project: 'starter' or a,b,c")
+    budget.add_argument("--repeats", type=int, default=1, help="project: runs per agent item")
+    budget.add_argument(
+        "--repeats-subset", type=int, default=0, help="project: items the repeats cover"
+    )
+    _add_budget_arguments(budget)
     return parser
+
+
+def _add_budget_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the spending cap and stop threshold, defaulting to the starter run's."""
+    parser.add_argument(
+        "--budget",
+        type=float,
+        default=eval_settings.STARTER_BUDGET_USD,
+        help="the spending cap in US dollars",
+    )
+    parser.add_argument(
+        "--stop",
+        type=float,
+        default=eval_settings.STARTER_STOP_USD,
+        help="the spend at which the run stops cleanly",
+    )
 
 
 def _alembic_config():
@@ -257,6 +306,66 @@ def _generator_key() -> str:
         return ""
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """Run ``run generate``; ``run judge`` is not built yet.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The process exit status.
+    """
+    if args.action != "generate":
+        return cmd_not_built(f"run {args.action}")
+    if not args.slice or not args.run_name:
+        print("run generate needs --slice and --run", file=sys.stderr)
+        return 2
+    from evals.cli import run_commands
+
+    assert_eval_url(eval_settings.DATABASE_URL, kind="database")
+    return run_commands.cmd_run_generate(
+        out_dir=eval_settings.OUT_DIR,
+        slice_name=args.slice,
+        arms_spec=args.arms,
+        run_name=args.run_name,
+        budget_usd=args.budget,
+        stop_usd=args.stop,
+        clones_dir=eval_settings.CLONES_DIR,
+        async_url=eval_settings.DATABASE_URL,
+        require_key=eval_settings.require_key,
+        subsets=args.subset,
+        repeats=args.repeats,
+        repeats_subset=args.repeats_subset,
+        off_peak_only=args.off_peak_only,
+        seed=args.seed,
+        concurrency=args.concurrency,
+    )
+
+
+def cmd_budget(args: argparse.Namespace) -> int:
+    """Run ``budget``: spend against the cap, or a projection from measured cost.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The process exit status.
+    """
+    from evals.cli import run_commands
+
+    return run_commands.cmd_budget(
+        out_dir=eval_settings.OUT_DIR,
+        budget_usd=args.budget,
+        stop_usd=args.stop,
+        run_name=args.run_name,
+        project_run=args.project,
+        items=args.items,
+        arms_spec=args.arms,
+        repeats=args.repeats,
+        repeats_subset=args.repeats_subset,
+    )
+
+
 def cmd_not_built(label: str) -> int:
     """Report a command whose implementation has not landed yet.
 
@@ -292,6 +401,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_mine(args)
     if args.command == "gold":
         return cmd_gold(args)
+    if args.command == "run":
+        return cmd_run(args)
+    if args.command == "budget":
+        return cmd_budget(args)
     action = getattr(args, "action", None)
     return cmd_not_built(f"{args.command} {action}" if action else args.command)
 

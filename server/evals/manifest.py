@@ -77,6 +77,7 @@ def build_manifest(
     git: Mapping[str, Any] | None = None,
     uv_lock_sha256: str | None = None,
     created_at: datetime | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble the manifest dictionary.
 
@@ -93,6 +94,7 @@ def build_manifest(
         git: ``{"sha", "dirty"}``; read from the working tree when omitted.
         uv_lock_sha256: Digest of ``uv.lock``; computed when omitted.
         created_at: Timestamp; the current UTC time when omitted.
+        extra: Further JSON-serialisable settings of the run, recorded under ``run``.
 
     Returns:
         A JSON-serialisable dictionary.
@@ -101,7 +103,7 @@ def build_manifest(
     if uv_lock_sha256 is None:
         uv_lock_sha256 = file_sha256(SERVER_ROOT / "uv.lock")
     stamp = created_at or datetime.now(UTC)
-    return {
+    manifest: dict[str, Any] = {
         "git_sha": state.get("sha"),
         "dirty": state.get("dirty"),
         "uv_lock_sha256": uv_lock_sha256,
@@ -116,6 +118,9 @@ def build_manifest(
         "eval_instruction": eval_instruction,
         "created_at": stamp.astimezone(UTC).isoformat(),
     }
+    if extra:
+        manifest["run"] = dict(extra)
+    return manifest
 
 
 def write_manifest(out_dir: Path, **kwargs: Any) -> Path:

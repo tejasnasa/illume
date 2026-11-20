@@ -1,0 +1,45 @@
+# Pinned price table for the evaluation's cost accounting.
+#
+# Every rate below is deliberately null: they are not known to the harness and must be filled in
+# from each provider's own pricing page before any paid run. A generate or judge run refuses to
+# start until every rate for the models it will call is a number and `verified` is true.
+#
+# Fill in:
+#   - version: any label you will recognise; bump it when a rate changes. It is written to every
+#     run manifest.
+#   - as_of: the date you read the pricing pages (YYYY-MM-DD).
+#   - verified: true once the rates have been checked against the pages.
+#   - every model: input cache-miss and cache-hit price and output price, in US dollars per
+#     1M tokens. DeepSeek is priced separately for peak and off-peak hours; the others have one
+#     set of `rates`.
+#   - off_peak: the daily off-peak window as UTC "HH:MM" times. It may wrap past midnight
+#     (for example start "16:30", end "00:30").
+#   - embeddings: US dollars per 1M input tokens.
+#
+# Cohere and Jev report their own cost on every call, so they need no rate here.
+version: "1"
+as_of: null
+verified: false
+
+off_peak:
+  start_utc: null
+  end_utc: null
+
+models:
+  deepseek-v4-1-flash-1017:
+    peak:
+      input_cache_miss: null
+      input_cache_hit: null
+      output: null
+    off_peak:
+      input_cache_miss: null
+      input_cache_hit: null
+      output: null
+  gpt-6-luna:
+    rates:
+      input_cache_miss: null
+      input_cache_hit: null
+      output: null
+
+embeddings:
+  text-embedding-3-small: null
