@@ -23,7 +23,6 @@ is why the guard exists and is callable on its own.
 
 import logging
 import secrets
-import subprocess
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,11 +38,10 @@ from app.services.pipeline import run_full_analysis
 from app.services.pr_fetcher import _bulk_insert_pull_requests
 from evals.corpus.corpus import CorpusRepo
 from evals.corpus.report import corpus_counts
+from evals.mining.clones import git, is_ancestor
 from evals.mining.github_cache import CachedPR, load_prs
 
 logger = logging.getLogger(__name__)
-
-GIT_TIMEOUT_SECONDS = 120
 
 
 class LeakError(AssertionError):
@@ -70,36 +68,6 @@ class IngestResult:
     inserted_pr_numbers: tuple[int, ...]
     considered_prs: int
     counts: dict = field(default_factory=dict)
-
-
-def _git(clone_path: Path, *args: str) -> subprocess.CompletedProcess:
-    """Run git in a clone and return the finished process without raising."""
-    return subprocess.run(
-        ["git", "-C", str(clone_path), *args],
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT_SECONDS,
-    )
-
-
-def is_ancestor(clone_path: Path, sha: str, base_commit: str) -> bool:
-    """Whether ``sha`` is an ancestor of, or equal to, ``base_commit``.
-
-    Uses ``git merge-base --is-ancestor``, which is immune to the timestamp skew that
-    rebases and clock drift introduce. A SHA the clone does not contain counts as not an
-    ancestor.
-
-    Args:
-        clone_path: A clone that contains ``base_commit``.
-        sha: The commit to test.
-        base_commit: The pinned commit.
-
-    Returns:
-        ``True`` only when git exits 0.
-    """
-    if not sha:
-        return False
-    return _git(clone_path, "merge-base", "--is-ancestor", sha, base_commit).returncode == 0
 
 
 def select_history_prs(
@@ -179,7 +147,7 @@ def assert_no_leak(
         raise LeakError(f"pull request rows not inserted by the harness: {stray[:10]}")
     allowed_ids = {row_id for row_id, _ in pr_rows}
 
-    listing = _git(clone_path, "rev-list", base_commit)
+    listing = git(clone_path, "rev-list", base_commit)
     if listing.returncode != 0:
         raise LeakError(f"cannot list history at {base_commit}: {listing.stderr.strip()}")
     reachable = set(listing.stdout.split())
@@ -268,7 +236,7 @@ def ingest_at_base(
             )
         else:
             clone_path = Path(clone_override)
-            checkout = _git(clone_path, "checkout", "--detach", base)
+            checkout = git(clone_path, "checkout", "--detach", base)
             if checkout.returncode != 0:
                 raise RuntimeError(f"cannot check out {base}: {checkout.stderr.strip()}")
 

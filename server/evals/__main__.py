@@ -35,7 +35,10 @@ def build_parser() -> argparse.ArgumentParser:
     corpus.add_argument("--corpus", type=Path, help="corpus file (default: the shipped one)")
     corpus.add_argument("--name", help="snapshot name")
 
-    commands.add_parser("mine", help="mine questions from pull requests")
+    mine = commands.add_parser("mine", help="clone a corpus repository and cache its pull requests")
+    mine.add_argument("--repo", help="corpus entry to mine")
+    mine.add_argument("--corpus", type=Path, help="corpus file (default: the shipped one)")
+    mine.add_argument("--refresh", action="store_true", help="fetch again even if cached")
 
     gold = commands.add_parser("gold", help="build and verify the gold set")
     gold.add_argument("action", choices=["build", "phrase", "verify", "split"])
@@ -150,6 +153,36 @@ def cmd_corpus(args: argparse.Namespace) -> int:
     return run(sync_url=url, out_dir=eval_settings.OUT_DIR, name=args.name)
 
 
+def cmd_mine(args: argparse.Namespace) -> int:
+    """Run ``mine`` for one corpus repository.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The process exit status.
+    """
+    from evals.cli import mine_commands
+    from evals.corpus.corpus import CORPUS_PATH
+
+    if not args.repo:
+        print("mine needs --repo NAME", file=sys.stderr)
+        return 2
+    try:
+        token = eval_settings.require_github_token()
+    except eval_settings.EvalIsolationError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return mine_commands.cmd_mine(
+        out_dir=eval_settings.OUT_DIR,
+        clones_dir=eval_settings.CLONES_DIR,
+        token=token,
+        repo_name=args.repo,
+        corpus_path=args.corpus or CORPUS_PATH,
+        refresh=args.refresh,
+    )
+
+
 def _generator_key() -> str:
     """Return the generator API key, or an empty string when it is not configured."""
     try:
@@ -189,6 +222,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_selftest()
     if args.command == "corpus":
         return cmd_corpus(args)
+    if args.command == "mine":
+        return cmd_mine(args)
     action = getattr(args, "action", None)
     return cmd_not_built(f"{args.command} {action}" if action else args.command)
 
