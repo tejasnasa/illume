@@ -182,6 +182,7 @@ def cmd_selftest() -> int:
         0 when every case passes (or there are none), 1 otherwise.
     """
     import evals.metrics.selftest  # noqa: F401  # registers the metric cases
+    import evals.stats_selftest  # noqa: F401  # registers the statistics cases
 
     passed, failed = selftest_registry.run_all()
     total = len(passed) + len(failed)
