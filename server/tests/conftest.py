@@ -47,6 +47,11 @@ os.environ.update(
         "RESEND_API_KEY": "re_test_key_not_a_real_credential",
         "CONTACT_TO_EMAIL": "operator@example.com",
         "CONTACT_FROM_EMAIL": "contact@illume.tejasnasa.me",
+        # DeepEval loads a developer's `.env` into the process on import, which would
+        # carry real keys and switches into the suite.
+        "DEEPEVAL_DISABLE_DOTENV": "1",
+        # Tracing would wrap the suite's fake model clients and send runs to LangSmith.
+        "LANGSMITH_TRACING": "false",
     }
 )
 

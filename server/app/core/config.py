@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     OAUTH_REDIRECT_ALLOWLIST: list[str] = []
     MOBILE_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 90  # 90 days
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()  # type: ignore
