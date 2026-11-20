@@ -269,6 +269,8 @@ def cmd_run_generate(
     prereg_dir: Path = PREREG_DIR,
     repo_root: Path = REPO_ROOT,
     min_intervals: Mapping[str, float] | None = None,
+    capture: Callable[[Path, Sequence[GoldItem]], None] | None = None,
+    sync_url: str | None = None,
 ) -> int:
     """Generate answers for a slice, every arm on every question.
 
@@ -295,6 +297,9 @@ def cmd_run_generate(
         prereg_dir: Where the pre-registrations live.
         repo_root: The git repository's root, for the frozen check.
         min_intervals: Seconds between calls per provider.
+        capture: Writes the report's context files into the run directory after the pass; when
+            omitted and ``sync_url`` is given, the files are captured from that database.
+        sync_url: The eval database's sync URL, for the default capture.
 
     Returns:
         The process exit status: 0 on success, 1 when something stopped it from starting or any
@@ -394,7 +399,40 @@ def cmd_run_generate(
     if result.errors:
         print("some pairs ended as errors; running the command again retries them")
     print(f"records: {run_dir / GENERATIONS}")
+    _capture_context(capture, sync_url, run_dir, items, out_dir, corpus_path)
     return 1 if result.errors else 0
+
+
+def _capture_context(
+    capture: Callable[[Path, Sequence[GoldItem]], None] | None,
+    sync_url: str | None,
+    run_dir: Path,
+    items: Sequence[GoldItem],
+    out_dir: Path,
+    corpus_path: Path,
+) -> None:
+    """Write the report's context files into the run directory; a failure is only reported."""
+    if capture is None and sync_url is None:
+        return
+    try:
+        if capture is not None:
+            capture(run_dir, items)
+            return
+        from evals.report.capture import capture_from_url
+
+        assert sync_url is not None
+        missing = capture_from_url(
+            sync_url,
+            run_dir=run_dir,
+            items=items,
+            out_dir=out_dir,
+            user_email=EVAL_USER_EMAIL,
+            corpus_path=corpus_path,
+        )
+        if missing:
+            print(f"no ingested repository to capture for: {', '.join(missing)}", file=sys.stderr)
+    except Exception as failure:
+        print(f"could not capture the report's context: {failure}", file=sys.stderr)
 
 
 def _read_split_lock(out_dir: Path) -> dict[str, Any]:

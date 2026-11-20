@@ -92,7 +92,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--annotator", help="judge-label, judge-agreement: whose labels")
 
-    commands.add_parser("report", help="render a report from run outputs")
+    report = commands.add_parser("report", help="build a report from a run directory")
+    report.add_argument("--run", dest="run_name", required=True, help="the run to report on")
+    report.add_argument("--mode", choices=["full", "pilot"], required=True)
+    report.add_argument("--out", type=Path, help="output directory (default: by mode)")
+    report.add_argument("--judge-slug", help="read this judge's judgments instead of the default")
     commands.add_parser("selftest", help="run the metric self-tests")
     budget = commands.add_parser("budget", help="show spend against the budget")
     budget.add_argument("--run", dest="run_name", help="the run to read (default: every run)")
@@ -357,7 +361,40 @@ def cmd_run(args: argparse.Namespace) -> int:
         off_peak_only=args.off_peak_only,
         seed=args.seed,
         concurrency=args.concurrency,
+        sync_url=eval_settings.SYNC_DATABASE_URL,
     )
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    """Run ``report``: build ``report.md``, ``report.json`` and figures from a run directory.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The process exit status.
+    """
+    from evals.cli.run_commands import run_dir_for
+    from evals.report import ReportError, build_report
+    from evals.report.load import RunNotFound
+
+    run_dir = run_dir_for(eval_settings.OUT_DIR, args.run_name)
+    default = "pilot_v1" if args.mode == "pilot" else f"report_{args.run_name}"
+    out = args.out or eval_settings.OUT_DIR / default
+    try:
+        report = build_report(
+            run_dir,
+            mode=args.mode,
+            out_dir=out,
+            out_root=eval_settings.OUT_DIR,
+            judge_slug=args.judge_slug,
+        )
+    except (ReportError, RunNotFound, FileNotFoundError) as failure:
+        print(str(failure), file=sys.stderr)
+        return 1
+    print(f"report written to {report.out_dir}")
+    print("sections: " + ", ".join(report.data["sections"]))
+    return 0
 
 
 def cmd_judge(args: argparse.Namespace) -> int:
@@ -480,6 +517,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_run(args)
     if args.command == "budget":
         return cmd_budget(args)
+    if args.command == "report":
+        return cmd_report(args)
     action = getattr(args, "action", None)
     return cmd_not_built(f"{args.command} {action}" if action else args.command)
 

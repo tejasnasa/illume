@@ -16,6 +16,8 @@ import respx
 
 from app.services.retrieval.citations import code_key
 from evals.arms import get_arm, question_with_instruction
+from evals.gold.schema import write_jsonl
+from evals.report import build_report
 from evals.run.adapters import run_single_shot
 from evals.run.budget import Budget
 from evals.run.endpoint import JudgeEndpoint
@@ -170,4 +172,21 @@ async def test_judging_the_generated_records_with_a_scripted_judge(db_session, s
     assert {j.generation_key for j in stored} == {p.generation.record_key for p in pairs}
     assert all(j.status == "ok" and (j.correct, j.faithful) == (3, 2) for j in stored)
     assert all("def verify_password" in text for text in judge_model.input_texts(0)[-1:])
+    assert generations.read_bytes() == before
+
+    write_jsonl(run_dir / "gold.jsonl", items)
+    started = time.perf_counter()
+    report = build_report(
+        run_dir,
+        mode="pilot",
+        out_dir=tmp_path / "report",
+        n_boot=200,
+        n_perm=200,
+        n_boot_mean=100,
+    )
+    assert time.perf_counter() - started < 120
+    assert (tmp_path / "report" / "report.md").read_text(encoding="utf-8").startswith("# Pilot")
+    written = json.loads((tmp_path / "report" / "report.json").read_text(encoding="utf-8"))
+    assert written["mode"] == "pilot" and written["scope"]["arms"] == ARMS
+    assert {"judge_results", "limitations"} <= set(report.data["sections"])
     assert generations.read_bytes() == before
