@@ -14,3 +14,7 @@ htmlcov/
 .mcp-dev.json
 .mcp-dev.cookie
 .mcp-dev.stop
+
+# Eval harness outputs and local keys
+evals/out/
+evals/.env.eval

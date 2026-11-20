@@ -190,6 +190,82 @@ jobs:
           path: server/coverage.json
           if-no-files-found: ignore
 
+  evals:
+    name: Eval harness (key-free)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    # Same environment and services as the backend tests: the eval tests run against the
+    # test stack. The eval CLI itself overwrites this environment with its own.
+    env:
+      DATABASE_URL: postgresql+asyncpg://illume:test@localhost:5433/illume_test
+      SYNC_DATABASE_URL: postgresql://illume:test@localhost:5433/illume_test
+      REDIS_URL: redis://localhost:6380/0
+      SECRET_KEY: test-secret-key-not-for-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
+      FRONTEND_URL: http://localhost:3000
+      ENVIRONMENT: development
+      GITHUB_CLIENT_ID: test-github-client-id
+      GITHUB_CLIENT_SECRET: test-github-client-secret
+      GITHUB_REDIRECT_URL: http://localhost:8000/api/v1/auth/github/callback
+      DOMAIN: localhost
+      OPENAI_API_KEY: test-openai-key
+      AI_MODEL: gpt-4o-mini
+      RESEND_API_KEY: re_test_key_not_a_real_credential
+      CONTACT_TO_EMAIL: operator@example.com
+      CONTACT_FROM_EMAIL: contact@tejasnasa.me
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: illume
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: illume_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U illume -d illume_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: server/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Lint
+        run: uv run ruff check evals/
+
+      - name: Format check
+        run: uv run ruff format --check evals/
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      # Needs no database: the metric self-tests are pure.
+      - name: Self-test
+        run: uv run python -m evals selftest
+
+      - name: Run tests
+        run: uv run pytest tests/evals -n 2
+
   frontend-tests:
     name: Frontend tests
     runs-on: ubuntu-latest

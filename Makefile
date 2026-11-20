@@ -36,7 +36,8 @@ endif
         test-e2e test-e2e-prod test-e2e-report \
         cov cov-be cov-fe \
         lint lint-be lint-be-app lint-fe fmt fmt-be fmt-be-app fmt-fe \
-        build-fe docker-build probe-ai clean
+        build-fe docker-build probe-ai clean \
+        eval-infra eval-infra-down eval-migrate eval-selftest eval-ci
 
 help:
 	@echo "Bootstrap"
@@ -89,6 +90,13 @@ help:
 	@echo "  make build-fe         production build of the client"
 	@echo "  make docker-build     build the server image locally"
 	@echo ""
+	@echo "Evaluation"
+	@echo "  make eval-infra       start the eval stack (5434 / 6381, persistent volumes)"
+	@echo "  make eval-infra-down  stop the eval stack, keeping its data"
+	@echo "  make eval-migrate     apply migrations to the eval database"
+	@echo "  make eval-selftest    run the metric self-tests (no database needed)"
+	@echo "  make eval-ci          key-free eval harness tests (needs test-infra)"
+	@echo ""
 	@echo "Other"
 	@echo "  make probe-ai         probe a real LLM provider with the app's request shapes"
 	@echo "  make clean            remove build and test artefacts"
@@ -138,6 +146,23 @@ test-infra:
 
 test-infra-down:
 	$(COMPOSE) down
+
+# ----------------------------------------------------------------- evaluation
+
+eval-infra:
+	docker compose -f docker-compose.eval.yml up -d --wait
+
+eval-infra-down:
+	docker compose -f docker-compose.eval.yml down
+
+eval-migrate:
+	cd server && uv run python -m evals db migrate
+
+eval-selftest:
+	cd server && uv run python -m evals selftest
+
+eval-ci:
+	cd server && AI_API_KEY= OPENROUTER_API_KEY= uv run pytest tests/evals
 
 # -------------------------------------------------------------------- database
 

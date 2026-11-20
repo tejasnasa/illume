@@ -1,0 +1,44 @@
+# Evaluation infrastructure for the Illume eval harness.
+#
+# Kept apart from the test stack (docker-compose.test.yml) because the test suite wipes
+# that database. Unlike the test stack this one uses named volumes: the ingested corpora,
+# their embeddings and glossaries are expensive to rebuild, so they persist across
+# restarts. `docker compose -f docker-compose.eval.yml down -v` deletes them.
+#
+#   docker compose -f docker-compose.eval.yml up -d --wait
+#
+# Host ports: Postgres 5434, Redis 6381.
+services:
+  postgres-eval:
+    image: pgvector/pgvector:pg16
+    container_name: illume-postgres-eval
+    environment:
+      POSTGRES_USER: illume
+      POSTGRES_PASSWORD: eval
+      POSTGRES_DB: illume_eval
+    ports:
+      - "5434:5432"
+    volumes:
+      - illume-eval-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U illume -d illume_eval"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis-eval:
+    image: redis:7
+    container_name: illume-redis-eval
+    ports:
+      - "6381:6379"
+    volumes:
+      - illume-eval-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  illume-eval-pgdata:
+  illume-eval-redis:
