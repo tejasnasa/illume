@@ -16,6 +16,7 @@ from evals.report import ReportError, build_report
 from evals.report.comparisons import (
     FULL_COMPARISONS,
     PILOT_COMPARISONS,
+    SIMPLE_COMPARISONS,
     ItemRef,
     StatConfig,
     run_comparisons,
@@ -298,13 +299,9 @@ def _table_rows(path: str) -> list[list[str]]:
     return table
 
 
-def test_the_comparison_tables_match_the_preregistrations():
-    pilot = _table_rows("pilot.md")
-    assert [c[0] for c in pilot] == [s.id for s in PILOT_COMPARISONS]
-    for cells, spec in zip(pilot, PILOT_COMPARISONS, strict=True):
-        assert re.findall(r"`([^`]+)`", cells[1]) == [spec.arm_a, spec.arm_b]
-        assert ("dollars" in cells[2]) == (spec.metric == "cost")
-        assert ("recall" in cells[2]) == (spec.metric == "recall")
+def test_the_comparison_lists_match_the_preregistrations():
+    text = (PREREG / "pilot.md").read_text(encoding="utf-8")
+    assert re.findall(r"`([^`]+)` vs `([^`]+)`", text) == list(SIMPLE_COMPARISONS)
     full_rows = _table_rows("v1.md")
     assert [c[0] for c in full_rows] == ["H1a", "H1b", "H2", "H3", "H4", "H5", "H6", "H7"]
     for cells in full_rows:
@@ -354,8 +351,9 @@ def test_the_report_command_takes_a_run_a_mode_and_an_output_directory():
     assert help_text.returncode == 0
     for flag in ("--run", "--mode", "--out", "--judge-slug"):
         assert flag in help_text.stdout
+    assert "simple" in help_text.stdout
     missing = subprocess.run(
-        [sys.executable, "-m", "evals", "report", "--run", "r1"],
+        [sys.executable, "-m", "evals", "report"],
         cwd=server_root,
         capture_output=True,
         text=True,

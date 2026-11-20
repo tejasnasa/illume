@@ -2,6 +2,7 @@
 
 import math
 import random
+import re
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ import pytest
 import evals.stats_selftest  # noqa: F401
 from evals import selftest_registry
 from evals.gold.split import PREREG_FILES
+from evals.report.comparisons import SIMPLE_COMPARISONS
 from evals.stats import (
     PairedObs,
     direction_counts,
@@ -153,25 +155,20 @@ def test_the_new_statistics_cases_are_registered_and_pass():
 def test_each_prereg_draft_exists_under_the_name_the_guard_expects(slice_name):
     path = PREREG_DIR / PREREG_FILES[slice_name]
     text = path.read_text(encoding="utf-8")
-    assert "Status: DRAFT — commit this file unchanged before the first paid run" in text
+    assert re.search(
+        r"Status: DRAFT(?:\.| —) ?[Cc]ommit this file unchanged before the first paid run", text
+    )
     assert "the commit is the timestamp." in text
     assert "TBD" not in text and "TODO" not in text
 
 
-def test_the_pilot_draft_names_every_comparison():
+def test_the_pilot_draft_names_every_comparison_in_order():
     text = (PREREG_DIR / "pilot.md").read_text(encoding="utf-8")
-    for pair in (
-        "`agent` vs `structural_rerank`",
-        "`structural` vs `classic`",
-        "`structural` vs `structural_-cochange`",
-        "`auto` vs `agent`",
-        "`hybrid_rerank` vs `hybrid`",
-        "`structural_rerank` vs `structural`",
-        "`hybrid_hyde` vs `hybrid`",
-        "`hybrid_multiquery` vs `hybrid`",
-    ):
-        assert pair in text, pair
-    assert "Luna" in text and "Holm" in text and "Wilson" in text
+    stated = re.findall(r"`([^`]+)` vs `([^`]+)`", text)
+    assert stated == list(SIMPLE_COMPARISONS)
+    for metric in ("File recall", "Correctness", "Faithfulness", "Answer relevancy"):
+        assert metric in text, metric
+    assert "not resolved at this sample size" in text
 
 
 def test_the_full_draft_names_every_hypothesis():

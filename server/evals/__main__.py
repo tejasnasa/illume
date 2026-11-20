@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     mine.add_argument("--refresh", action="store_true", help="fetch again even if cached")
 
     gold = commands.add_parser("gold", help="build and verify the gold set")
-    gold.add_argument("action", choices=["build", "phrase", "verify", "split"])
+    gold.add_argument("action", choices=["build", "phrase", "check", "verify", "split"])
     gold.add_argument("--repo", help="corpus entry to build gold items for")
     gold.add_argument("--corpus", type=Path, help="corpus file (default: the shipped one)")
     gold.add_argument("--seed", type=int, default=0, help="sampling seed (default 0)")
@@ -50,12 +50,52 @@ def build_parser() -> argparse.ArgumentParser:
         "--report", action="store_true", help="verify: print the error report, write verified items"
     )
     gold.add_argument("--all", action="store_true", help="split: use every repository")
-    gold.add_argument("--pilot", action="store_true", help="split: one pilot slice, no test split")
+    gold.add_argument(
+        "--pilot",
+        action="store_true",
+        help="split: one pilot slice with no test split (the default; kept for older scripts)",
+    )
+    gold.add_argument(
+        "--tuning-test-split",
+        action="store_true",
+        help="split: make the tuning/test split, which generation then guards with a "
+        "pre-registration, instead of the single pilot slice",
+    )
+    gold.add_argument(
+        "--include-anchor",
+        action="store_true",
+        help="build: also build the change questions that name a starting file",
+    )
+    gold.add_argument(
+        "--include-rationale", action="store_true", help='build: also build the "why" questions'
+    )
+    gold.add_argument(
+        "--include-structural",
+        action="store_true",
+        help="build: also build the import-graph questions",
+    )
+    gold.add_argument(
+        "--include-unanswerable",
+        action="store_true",
+        help="build: keep the hand items marked unanswerable",
+    )
+    gold.add_argument(
+        "--checker-model", help="check: the checking model (default: the judge model)"
+    )
+    gold.add_argument("--checker-base-url", help="check: the checker's OpenAI-compatible base URL")
+    gold.add_argument(
+        "--checker-api-style", choices=["responses", "chat"], help="check: the transport"
+    )
+    gold.add_argument("--concurrency", type=int, default=4, help="check: items at once")
+    _add_budget_arguments(gold)
 
     run = commands.add_parser("run", help="generate answers or judge them")
     run.add_argument("action", choices=["generate", "judge", "judge-label", "judge-agreement"])
     run.add_argument(
-        "--slice", choices=["pilot", "tuning", "test"], help="generate: the slice to run"
+        "--slice",
+        choices=["pilot", "tuning", "test"],
+        default="pilot",
+        help="generate: the slice to run (default pilot)",
     )
     run.add_argument("--arms", default="starter", help="generate: 'starter' or a,b,c")
     run.add_argument("--run", dest="run_name", help="the run's name; an existing run resumes")
@@ -86,15 +126,23 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--sample-only", action="store_true", help="judge: draw the labelling sample, no calls"
     )
-    run.add_argument("--sample-size", type=int, default=40, help="judge: answers to label")
+    run.add_argument("--sample-size", type=int, default=30, help="judge: answers to label")
     run.add_argument(
-        "--per-family-min", type=int, default=10, help="judge: fewest labelled per family"
+        "--include-unanswerable",
+        action="store_true",
+        help="judge: also grade the items marked unanswerable",
     )
     run.add_argument("--annotator", help="judge-label, judge-agreement: whose labels")
 
     report = commands.add_parser("report", help="build a report from a run directory")
     report.add_argument("--run", dest="run_name", required=True, help="the run to report on")
-    report.add_argument("--mode", choices=["full", "pilot"], required=True)
+    report.add_argument(
+        "--mode",
+        choices=["simple", "full", "pilot"],
+        default="simple",
+        help="simple: the default tables and comparisons; full: the pre-registered analysis; "
+        "pilot: the older pilot report",
+    )
     report.add_argument("--out", type=Path, help="output directory (default: by mode)")
     report.add_argument("--judge-slug", help="read this judge's judgments instead of the default")
     commands.add_parser("selftest", help="run the metric self-tests")
@@ -281,12 +329,14 @@ def cmd_gold(args: argparse.Namespace) -> int:
             out_dir=eval_settings.OUT_DIR,
             repo_name=args.repo,
             all_repos=args.all,
-            pilot=args.pilot,
+            pilot=not args.tuning_test_split,
             seed=args.seed,
         )
     if not args.repo:
         print(f"gold {args.action} needs --repo NAME", file=sys.stderr)
         return 2
+    if args.action == "check":
+        return cmd_gold_check(args, corpus_path)
     if args.action == "phrase":
         try:
             key = eval_settings.require_key("OPENAI_API_KEY")
@@ -317,6 +367,47 @@ def cmd_gold(args: argparse.Namespace) -> int:
         repo_name=args.repo,
         corpus_path=corpus_path,
         seed=args.seed,
+        include_anchor=args.include_anchor,
+        include_rationale=args.include_rationale,
+        include_structural=args.include_structural,
+        include_unanswerable=args.include_unanswerable,
+    )
+
+
+def cmd_gold_check(args: argparse.Namespace, corpus_path: Path) -> int:
+    """Run ``gold check``: an independent model checks the hand reference answers.
+
+    The checker defaults to the judge's model, base URL, API style and key; the ``--checker-*``
+    options override each in turn.
+
+    Args:
+        args: The parsed arguments.
+        corpus_path: The corpus file.
+
+    Returns:
+        The process exit status.
+    """
+    from evals.cli import gold_commands
+    from evals.run.endpoint import JudgeConfigError
+
+    try:
+        endpoint = eval_settings.judge_endpoint(
+            model=args.checker_model,
+            base_url=args.checker_base_url,
+            api_style=args.checker_api_style,
+        )
+    except JudgeConfigError as failure:
+        print(str(failure), file=sys.stderr)
+        return 2
+    return gold_commands.cmd_gold_check(
+        out_dir=eval_settings.OUT_DIR,
+        clones_dir=eval_settings.CLONES_DIR,
+        repo_name=args.repo,
+        endpoint=endpoint,
+        budget_usd=args.budget,
+        stop_usd=args.stop,
+        corpus_path=corpus_path,
+        concurrency=args.concurrency,
     )
 
 
@@ -380,6 +471,8 @@ def cmd_report(args: argparse.Namespace) -> int:
 
     run_dir = run_dir_for(eval_settings.OUT_DIR, args.run_name)
     default = "pilot_v1" if args.mode == "pilot" else f"report_{args.run_name}"
+    if args.mode == "full":
+        default = f"report_{args.run_name}_full"
     out = args.out or eval_settings.OUT_DIR / default
     try:
         report = build_report(
@@ -448,7 +541,7 @@ def cmd_judge(args: argparse.Namespace) -> int:
         sample_only=args.sample_only,
         seed=args.seed,
         sample_size=args.sample_size,
-        per_family_min=args.per_family_min,
+        include_unanswerable=args.include_unanswerable,
         concurrency=args.concurrency,
         clones_dir=eval_settings.CLONES_DIR,
     )

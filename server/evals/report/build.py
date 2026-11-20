@@ -7,6 +7,7 @@ checks its own prose against the wording rules before writing anything.
 
 from __future__ import annotations
 
+import csv
 import json
 import shutil
 from dataclasses import dataclass, field
@@ -23,7 +24,9 @@ from evals.report.figures import make_figures
 from evals.report.limitations import build_limitations
 from evals.report.load import RunData, load_run
 from evals.report.render import render_markdown
+from evals.report.render_simple import render_simple_markdown
 from evals.report.scores import Scores
+from evals.report.simple import QUESTION_COLUMNS, assemble_simple, question_rows
 from evals.report.summary import scope_lines, select_findings
 from evals.report.wording import check_wording
 
@@ -230,10 +233,40 @@ def assemble(data: RunData, *, mode: str, config: StatConfig) -> dict[str, Any]:
     return report
 
 
+MODES = ("simple", "full", "pilot")
+DEFAULT_MODE = "simple"
+
+
+QUESTIONS_JSONL = "questions.jsonl"
+QUESTIONS_CSV = "questions.csv"
+
+
+def write_question_rows(rows: list[dict[str, Any]], out: Path) -> dict[str, Path]:
+    """Write the per-question rows as JSON Lines and as CSV beside the report.
+
+    Args:
+        rows: The rows, each keyed by :data:`~evals.report.simple.QUESTION_COLUMNS`.
+        out: The report directory.
+
+    Returns:
+        The two paths, by file name.
+    """
+    jsonl = out / QUESTIONS_JSONL
+    with jsonl.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, allow_nan=False) + "\n")
+    table = out / QUESTIONS_CSV
+    with table.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(QUESTION_COLUMNS))
+        writer.writeheader()
+        writer.writerows({k: ("" if v is None else v) for k, v in row.items()} for row in rows)
+    return {QUESTIONS_JSONL: jsonl, QUESTIONS_CSV: table}
+
+
 def build_report(
     run_dir: Path,
     *,
-    mode: str = "full",
+    mode: str = DEFAULT_MODE,
     out_dir: Path,
     out_root: Path | None = None,
     judge_slug: str | None = None,
@@ -247,8 +280,11 @@ def build_report(
 
     Args:
         run_dir: ``<out>/runs/<name>``.
-        mode: ``full`` (one result per pre-registered hypothesis) or ``pilot`` (the pilot's
-            comparisons with minimum detectable differences, a findings summary and the
+        mode: ``simple`` (the default: arm tables with intervals, paired head-to-head rows,
+            change against explain, codebase style, cost against quality, the judge check and
+            the limitations), ``full`` (one result per pre-registered hypothesis, with
+            permutation tests, Holm correction and the channel analyses) or ``pilot`` (the older
+            pilot comparisons with minimum detectable differences, a findings summary and the
             limitations).
         out_dir: Where ``report.json``, ``report.md``, ``figures/`` and the manifest go.
         out_root: The eval output directory, for gold files when the run directory carries no
@@ -268,14 +304,18 @@ def build_report(
             wording rules.
         evals.report.load.RunNotFound: If the run has no generations.
     """
-    if mode not in ("full", "pilot"):
-        raise ReportError(f"unknown mode {mode!r}; use full or pilot")
+    if mode not in MODES:
+        raise ReportError(f"unknown mode {mode!r}; use one of {', '.join(MODES)}")
     if selftest:
         run_selftest()
     data = load_run(Path(run_dir), out_dir=out_root, judge_slug=judge_slug)
     config = StatConfig(n_boot=n_boot, n_perm=n_perm, n_boot_mean=n_boot_mean, seed=seed)
-    report = assemble(data, mode=mode, config=config)
-    graph = report.pop("_graph")
+    if mode == "simple":
+        report = assemble_simple(data, config)
+        graph = None
+    else:
+        report = assemble(data, mode=mode, config=config)
+        graph = report.pop("_graph")
 
     out = Path(out_dir)
     figures_dir = out / "figures"
@@ -292,7 +332,7 @@ def build_report(
             "arm": graph["arm"],
         }
 
-    markdown = render_markdown(report)
+    markdown = render_simple_markdown(report) if mode == "simple" else render_markdown(report)
     problems = check_wording(markdown)
     if problems:
         raise ReportError("the report breaks the wording rules: " + " | ".join(problems))
@@ -312,6 +352,8 @@ def build_report(
     )
     paths["report.md"] = out / "report.md"
     paths["report.md"].write_text(markdown, encoding="utf-8")
+    if mode == "simple":
+        paths.update(write_question_rows(question_rows(data), out))
     for source in sorted(Path(run_dir).glob("manifest*.json")):
         if source.name == MANIFEST_NAME or source.name == f"manifest.judge.{data.judge_slug}.json":
             shutil.copyfile(source, out / source.name)
@@ -319,4 +361,12 @@ def build_report(
     return Report(data=report, markdown=markdown, out_dir=out, paths=paths)
 
 
-__all__ = ["Report", "ReportError", "assemble", "build_report", "run_selftest"]
+__all__ = [
+    "DEFAULT_MODE",
+    "MODES",
+    "Report",
+    "ReportError",
+    "assemble",
+    "build_report",
+    "run_selftest",
+]

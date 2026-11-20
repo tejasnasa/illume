@@ -3,8 +3,9 @@
 After a generation pass the run directory receives ``gold.jsonl`` (the slice's items),
 ``gold_labels.jsonl`` (the hand verdicts on the gold), ``corpus_counts.json`` (counts per
 repository, with its language), ``files_at_base.json`` (every file at the base commit) and
-``graph.json`` (the import adjacency, file to the files it imports). Reading the database happens
-here and only here; :mod:`evals.report.load` reads the files.
+``graph.json`` (the import adjacency, file to the files it imports) and ``style.json`` (how the
+codebases differ, from the database and, for commit messages, the harness clones). Reading the
+database happens here and only here; :mod:`evals.report.load` reads the files.
 """
 
 from __future__ import annotations
@@ -21,14 +22,17 @@ from app.models import File, Repository, User
 from app.services.file_graph import build_adjacency, query_file_edges
 from evals.corpus.corpus import CORPUS_PATH, CorpusError, load_corpus
 from evals.corpus.report import corpus_counts
+from evals.corpus.style import repo_style, write_style
 from evals.gold.schema import GoldItem, write_jsonl
 from evals.gold.verify import Label, append_label, read_labels
+from evals.mining.clones import clone_dir
 from evals.report.load import (
     CORPUS_COUNTS,
     FILES_AT_BASE,
     GOLD_COPY,
     GOLD_LABELS_COPY,
     GRAPH,
+    STYLE,
 )
 
 
@@ -44,6 +48,7 @@ def capture_run_context(
     out_dir: Path,
     user_email: str,
     corpus_path: Path = CORPUS_PATH,
+    clones_dir: Path | None = None,
 ) -> list[str]:
     """Write the report's context files into a run directory.
 
@@ -53,7 +58,9 @@ def capture_run_context(
         items: The slice's gold items.
         out_dir: The eval output directory, where the gold hand labels live.
         user_email: The user the repositories were ingested for.
-        corpus_path: The corpus file, for each repository's language.
+        corpus_path: The corpus file, for each repository's language, era and base commit.
+        clones_dir: Where the harness clones live, for the commit measurements of the style
+            file; those are left out when it is omitted or a clone is missing.
 
     Returns:
         The names of repositories that were not found ready in the database and so were left
@@ -82,6 +89,7 @@ def capture_run_context(
     counts: dict[str, Any] = {}
     files: dict[str, list[str]] = {}
     graph: dict[str, dict[str, list[str]]] = {}
+    styles: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     for name in names:
         repository = (
@@ -102,10 +110,19 @@ def capture_run_context(
             missing.append(name)
             continue
         entry = corpus_counts(db, repository.id)
-        language = _language(corpus, name)
-        if language:
-            entry["language"] = language
+        pinned = _corpus_entry(corpus, name)
+        if pinned is not None:
+            entry["language"] = pinned.language
+            if pinned.era:
+                entry["era"] = pinned.era
+            if pinned.base_date:
+                entry["base_date"] = pinned.base_date.isoformat()
         counts[name] = entry
+        base_commit = repository.ingested_commit_sha or (pinned.base_commit if pinned else "")
+        clone = clone_dir(clones_dir, pinned.slug) if clones_dir and pinned else None
+        styles[name] = repo_style(
+            db, repository.id, clone if clone and clone.exists() else None, base_commit
+        )
         paths = {
             row.id: row.path
             for row in db.execute(
@@ -122,14 +139,16 @@ def capture_run_context(
     _write_json(run_dir / CORPUS_COUNTS, counts)
     _write_json(run_dir / FILES_AT_BASE, files)
     _write_json(run_dir / GRAPH, graph)
+    write_style(run_dir / STYLE, styles)
     return missing
 
 
-def _language(corpus: Any, name: str) -> str | None:
+def _corpus_entry(corpus: Any, name: str) -> Any:
+    """The corpus entry named ``name``, or ``None`` without a corpus or an entry."""
     if corpus is None:
         return None
     try:
-        return str(corpus.get(name).language)
+        return corpus.get(name)
     except CorpusError:
         return None
 
@@ -142,6 +161,7 @@ def capture_from_url(
     out_dir: Path,
     user_email: str,
     corpus_path: Path = CORPUS_PATH,
+    clones_dir: Path | None = None,
 ) -> list[str]:
     """:func:`capture_run_context` on a session opened (and closed) from a sync URL."""
     engine = create_engine(sync_url)
@@ -154,6 +174,7 @@ def capture_from_url(
                 out_dir=out_dir,
                 user_email=user_email,
                 corpus_path=corpus_path,
+                clones_dir=clones_dir,
             )
     finally:
         engine.dispose()

@@ -8,7 +8,7 @@ item has no row for it.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from evals.gold.schema import GoldItem
@@ -115,18 +115,18 @@ class Scores:
         self.rows = rows
 
     @classmethod
-    def build(cls, data: RunData) -> Scores:
-        """Score the change-set records of a run.
+    def build(cls, data: RunData, include: Callable[[GoldItem], bool] | None = None) -> Scores:
+        """Score the records of a run for the items that are selected.
 
         Args:
             data: The loaded run.
+            include: Which items to score; the change-set items when omitted.
 
         Returns:
-            The scores. Generations of other families or of unknown items are ignored.
+            The scores. Generations of other items or of unknown items are ignored.
         """
-        items = sorted(
-            (i for i in data.items.values() if i.family == CHANGESET), key=lambda i: i.id
-        )
+        selected = include or (lambda item: item.family == CHANGESET)
+        items = sorted((i for i in data.items.values() if selected(i)), key=lambda i: i.id)
         by_id = {i.id: i for i in items}
         rows: dict[str, dict[str, Score]] = {}
         for generation in data.generations:

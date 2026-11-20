@@ -25,6 +25,7 @@ from evals.report.load import (
     GOLD_COPY,
     GOLD_LABELS_COPY,
     GRAPH,
+    STYLE,
     default_judge_slug,
 )
 from evals.run.generate import GENERATIONS, ROUTES
@@ -111,6 +112,7 @@ COST = {
 }
 FILE_POOL = 30
 RUN_NAME = "synthetic"
+DEEPEVAL = "4.3.2"
 JUDGED_ON = "2026-11-01"
 
 
@@ -413,55 +415,74 @@ def _write_judging(
     generations: dict[tuple[str, str], Generation],
     rng: random.Random,
     n_labels: int,
+    *,
+    changeset_judged: float = 0.2,
 ) -> None:
-    version = JudgeVersion(
-        prompt_version="1", model=JUDGE_MODEL, host="openai", judged_on=JUDGED_ON
-    )
     by_id = {i.id: i for i in items}
     judgments: list[Judgment] = []
+    chosen: list[tuple[Generation, int, float]] = []
     for (item_id, arm), generation in sorted(generations.items()):
         item = by_id[item_id]
         if generation.status != "ok":
             continue
-        if item.family == "changeset" and rng.random() > 0.2:
+        if item.family == "changeset" and rng.random() > changeset_judged:
             continue
         skill = RECALL.get(arm, 0.5)
         correct = min(3, max(0, round(skill * 3 + rng.uniform(-1, 1))))
-        judgments.append(
-            Judgment(
-                judgment_key=judgment_key(
-                    generation_key=generation.record_key,
-                    prompt_version="1",
-                    model=JUDGE_MODEL,
-                    host="openai",
-                ),
-                generation_key=generation.record_key,
-                item_id=item_id,
-                family=item.family,
-                arm=arm,
-                judge=version,
-                correct=correct,
-                faithful=min(3, max(0, correct + rng.choice([-1, 0, 0, 1]))),
-                abstained=rng.random() < 0.05,
-                rationale="synthetic",
-                cost_usd=0.0001,
+        faithful = min(3, max(0, correct + rng.choice([-1, 0, 0, 1]))) / 3
+        chosen.append((generation, correct, faithful))
+        scores = {
+            "correctness": (correct / 3, correct),
+            "faithfulness": (faithful, None),
+            "answer_relevancy": (min(1.0, 0.5 + faithful / 2), None),
+        }
+        for metric, (score, rubric) in scores.items():
+            spec = {"correctness": "g", "faithfulness": "f", "answer_relevancy": "r"}[metric]
+            version = JudgeVersion(
+                deepeval_version=DEEPEVAL,
+                settings_hash=spec,
+                model=JUDGE_MODEL,
+                host="openai",
+                judged_on=JUDGED_ON,
             )
-        )
+            judgments.append(
+                Judgment(
+                    judgment_key=judgment_key(
+                        generation_key=generation.record_key,
+                        metric=metric,
+                        settings_hash=spec,
+                        deepeval_version=DEEPEVAL,
+                        model=JUDGE_MODEL,
+                        host="openai",
+                    ),
+                    generation_key=generation.record_key,
+                    item_id=item_id,
+                    family=item.family,
+                    arm=arm,
+                    metric=metric,  # type: ignore[arg-type]
+                    judge=version,
+                    score=score,
+                    rubric=rubric,
+                    cost_usd=0.0001,
+                )
+            )
     path = run_dir / f"judgments.{default_judge_slug()}.jsonl"
     path.write_text("".join(j.model_dump_json() + "\n" for j in judgments), encoding="utf-8")
 
-    labelled = rng.sample(judgments, min(n_labels, len(judgments)))
+    levels = ("wrong", "partly", "correct")
+    labelled = rng.sample(chosen, min(n_labels, len(chosen)))
     labels_file = run_dir / "judge_labels.jsonl"
-    for judgment in labelled:
-        assert judgment.correct is not None and judgment.faithful is not None
+    for generation, correct, faithful in labelled:
+        level = {0: 0, 1: 1, 2: 2, 3: 2}[correct]
+        level = min(2, max(0, level + rng.choice([-1, 0, 0, 0, 1])))
         append_judge_label(
             labels_file,
             HumanLabel(
-                generation_key=judgment.generation_key,
-                item_id=judgment.item_id,
-                family=judgment.family,
-                correct=min(3, max(0, judgment.correct + rng.choice([-1, 0, 0, 0, 1]))),
-                faithful=min(3, max(0, judgment.faithful + rng.choice([-1, 0, 0, 0, 1]))),
+                generation_key=generation.record_key,
+                item_id=generation.item_id,
+                family=by_id[generation.item_id].family,
+                correct=levels[level],  # type: ignore[arg-type]
+                made_something_up=(faithful < 0.8) != (rng.random() < 0.15),
             ),
         )
 
@@ -469,3 +490,269 @@ def _write_judging(
     for index, item in enumerate(sorted(items, key=lambda i: i.id)):
         verdict = "wrong" if index % 11 == 3 else "ambiguous" if index == 5 else "correct"
         append_label(gold_labels, Label(item_id=item.id, label=verdict))  # type: ignore[arg-type]
+
+
+SIMPLE_REPOS = {"repo-py": "Python", "repo-ts": "TypeScript", "repo-go": "Go"}
+ERAS = {"repo-py": "before AI", "repo-ts": "early AI", "repo-go": "latest AI"}
+EXTENSIONS = {"Python": "py", "TypeScript": "ts", "Go": "go"}
+_REPO_SKILL = {"repo-py": 1.1, "repo-ts": 1.0, "repo-go": 0.85}
+
+
+def _simple_files(repo: str) -> list[str]:
+    ext = EXTENSIONS[SIMPLE_REPOS[repo]]
+    return [f"src/{repo}/mod{n}.{ext}" for n in range(FILE_POOL)]
+
+
+def make_simple_items(
+    repos: tuple[str, ...], n_change: int, n_explain: int, rng: random.Random
+) -> list[GoldItem]:
+    """Blind change questions (one per pull request) and explain questions for each repository."""
+    items: list[GoldItem] = []
+    for repo in repos:
+        files = _simple_files(repo)
+        for pr in range(n_change):
+            gold = tuple(sorted(rng.sample(files, rng.randint(1, 5))))
+            items.append(
+                make_item(
+                    repo=repo,
+                    base_commit="a" * 40,
+                    family="changeset",
+                    template="changeset.blind",
+                    question=f"What changes for pull request {pr} of {repo}?",
+                    question_seed=f"{repo} pr {pr}",
+                    gold_files=gold,
+                    gold_prs=(pr,),
+                    post_cutoff=pr % 4 == 0,
+                    merges_since_base=pr,
+                    cluster=f"{repo}#{pr}",
+                )
+            )
+        for n in range(n_explain):
+            items.append(
+                make_item(
+                    repo=repo,
+                    base_commit="a" * 40,
+                    family="hand",
+                    template="hand.explain",
+                    question=f"How does module {n} of {repo} work?",
+                    question_seed=f"{repo} explain {n}",
+                    gold_files=tuple(sorted(rng.sample(files, rng.randint(1, 3)))),
+                    reference_answer=f"Module {n} of {repo} does one thing and hands off.",
+                )
+            )
+    return items
+
+
+def _simple_style(repo: str, rng: random.Random) -> dict[str, Any]:
+    """Codebase measurements from the real functions, on a handful of made-up rows."""
+    from datetime import UTC, datetime, timedelta
+
+    from evals.corpus.style import CommitRow, SymbolRow, code_style, history_style
+
+    extension = EXTENSIONS[SIMPLE_REPOS[repo]]
+    skill = _REPO_SKILL[repo]
+    symbols = [
+        SymbolRow(
+            kind="function",
+            name="f" * rng.randint(3, 14),
+            start_line=1,
+            end_line=int(6 * skill) + rng.randint(1, 20),
+            source="def f():\n    # note\n    return 1\n",
+            docstring="Does a thing.\nSecond line." if rng.random() < skill / 1.5 else None,
+            path=f"src/{repo}/m.{extension}",
+            language=SIMPLE_REPOS[repo],
+        )
+        for _ in range(25)
+    ]
+    base = datetime(2026, 6, 1, tzinfo=UTC)
+    commits = [
+        CommitRow(
+            "Dev",
+            "dev@example.com",
+            base - timedelta(days=20 * n),
+            "subject line\n\n"
+            + "body " * rng.randint(0, 30)
+            + (
+                "\nCo-Authored-By: Claude <noreply@anthropic.com>"
+                if repo == "repo-go" and n % 3 == 0
+                else ""
+            ),
+        )
+        for n in range(60)
+    ]
+    prs = [("desc " * rng.randint(0, 40), rng.randint(1, 12)) for _ in range(30)]
+    return {
+        **code_style(symbols, [rng.randint(40, 400) for _ in range(20)]),
+        **history_style(commits, prs),
+        "base_commit": "a" * 40,
+    }
+
+
+def build_simple_run(
+    root: Path,
+    *,
+    arms: tuple[str, ...] = PILOT_ARMS,
+    repos: tuple[str, ...] = tuple(SIMPLE_REPOS),
+    n_change: int = 12,
+    n_explain: int = 6,
+    seed: int = 0,
+    error_arm: str | None = "hybrid_hyde",
+    with_judge: bool = True,
+    with_style: bool = True,
+    with_checks: bool = True,
+    n_labels: int = 40,
+) -> Path:
+    """Write a synthetic run for the default report: eras, change and explain questions.
+
+    Args:
+        root: The output directory; the run goes in ``root / "runs" / "synthetic"``.
+        arms: The arms to generate; ``auto`` is composed from the arms it routes to.
+        repos: Which of :data:`SIMPLE_REPOS` to include.
+        n_change: Change questions per repository.
+        n_explain: Explain questions per repository.
+        seed: The seed of every random choice.
+        error_arm: An arm that fails on a few questions.
+        with_judge: Write a judgment per metric for every answer, and the judge's hand labels.
+        with_style: Write the codebase measurements.
+        with_checks: Write the independent check's verdicts on the explain questions.
+        n_labels: How many judged answers get a hand label.
+
+    Returns:
+        The run directory.
+    """
+    rng = random.Random(seed)
+    run_dir = root / "runs" / RUN_NAME
+    run_dir.mkdir(parents=True, exist_ok=True)
+    items = make_simple_items(repos, n_change, n_explain, rng)
+    write_jsonl(run_dir / GOLD_COPY, items)
+    files = {repo: _simple_files(repo) for repo in repos}
+
+    generations: dict[tuple[str, str], Generation] = {}
+    for arm in arms:
+        if arm == AUTO:
+            continue
+        for item in items:
+            failing = arm == error_arm and rng.random() < 0.08
+            generations[(item.id, arm)] = _generation(
+                item, arm, rng, files[item.repo], error=failing
+            )
+
+    routes: list[RouteRecord] = []
+    targets = {"local": "hybrid_rerank", "relational": "structural_rerank", "history": "agent"}
+    if AUTO in arms:
+        for item in items:
+            route = rng.choice(sorted(targets))
+            target = targets[route]
+            source = generations.get((item.id, target))
+            if source is None or source.status != "ok":
+                continue
+            decision = RouteRecord(
+                item_id=item.id,
+                route=route,
+                confidence=0.9,
+                resolved_preset=target,
+                target_arm=target,
+                cost_usd=0.00004,
+            )
+            routes.append(decision)
+            generations[(item.id, AUTO)] = source.model_copy(
+                update={
+                    "record_key": composed_record_key(source.record_key, decision),
+                    "arm": AUTO,
+                    "composed_from": target,
+                    "route": decision,
+                    "cost_usd": (source.cost_usd or 0.0) + 0.00004,
+                }
+            )
+
+    with (run_dir / GENERATIONS).open("w", encoding="utf-8") as handle:
+        for generation in generations.values():
+            handle.write(generation.model_dump_json() + "\n")
+    with (run_dir / ROUTES).open("w", encoding="utf-8") as handle:
+        for decision in routes:
+            payload = {
+                "key": _digest("route", decision.item_id),
+                "route": decision.model_dump(mode="json"),
+            }
+            handle.write(json.dumps(payload) + "\n")
+
+    counts = {
+        repo: {
+            "files": len(files[repo]),
+            "symbols": 10 * len(files[repo]),
+            "edges": 2 * len(files[repo]),
+            "commits": 120,
+            "prs": 80,
+            "cochange_pairs": 40,
+            "embeddings": {"symbol": 100},
+            "language": SIMPLE_REPOS[repo],
+            "era": ERAS[repo],
+        }
+        for repo in repos
+    }
+    (run_dir / CORPUS_COUNTS).write_text(json.dumps(counts), encoding="utf-8")
+    (run_dir / FILES_AT_BASE).write_text(json.dumps(files), encoding="utf-8")
+    (run_dir / GRAPH).write_text(json.dumps({repo: {} for repo in repos}), encoding="utf-8")
+    if with_style:
+        from evals.corpus.style import write_style
+
+        write_style(run_dir / STYLE, {repo: _simple_style(repo, rng) for repo in repos})
+
+    write_manifest(
+        run_dir,
+        arms={a: get_arm(a).config_hash() for a in arms},
+        prompt_version="synthetic",
+        models={"generator": GENERATOR_MODEL, "judge": JUDGE_MODEL},
+        reported_snapshots={},
+        price_table_version="synthetic",
+        agent_token_cap=300_000,
+        corpus_pins={repo: f"{n:040x}" for n, repo in enumerate(repos, start=1)},
+        split_hash="synthetic",
+        eval_instruction="Files:",
+        git={"sha": "0" * 40, "dirty": False},
+        uv_lock_sha256="0" * 64,
+        extra={"kind": "generate", "slice": "pilot"},
+    )
+    if with_judge:
+        _write_judging(run_dir, items, generations, rng, n_labels, changeset_judged=1.0)
+        write_manifest(
+            run_dir,
+            name=f"manifest.judge.{default_judge_slug()}.json",
+            arms={},
+            prompt_version="",
+            models={"generator": GENERATOR_MODEL, "judge": JUDGE_MODEL},
+            reported_snapshots={},
+            price_table_version="synthetic",
+            agent_token_cap=0,
+            corpus_pins={},
+            split_hash="",
+            eval_instruction="",
+            git={"sha": "0" * 40, "dirty": False},
+            uv_lock_sha256="0" * 64,
+            extra={"kind": "judge"},
+        )
+    if with_checks:
+        _write_checks(root, items)
+    return run_dir
+
+
+def _write_checks(root: Path, items: list[GoldItem]) -> None:
+    """One check record per explain question: mostly supported, some partly, one unsupported."""
+    from evals.gold.check import CheckRecord
+
+    verdicts = ["supported", "supported", "partly_supported", "supported", "unsupported"]
+    for n, item in enumerate(i for i in items if i.template == "hand.explain"):
+        directory = root / "gold" / item.repo
+        directory.mkdir(parents=True, exist_ok=True)
+        record = CheckRecord(
+            check_key=_digest("check", item.id),
+            item_id=item.id,
+            content_hash=_digest("content", item.id),
+            repo=item.repo,
+            verdict=verdicts[n % len(verdicts)],  # type: ignore[arg-type]
+            model="checker",
+            host="openai",
+            prompt_version="1",
+        )
+        with (directory / "checks.synthetic.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(record.model_dump_json() + "\n")

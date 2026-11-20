@@ -1,8 +1,9 @@
 """The pre-registered comparisons, as data, and the code that runs them.
 
-``PILOT_COMPARISONS`` mirrors the two tables of ``prereg/pilot.md`` and ``FULL_COMPARISONS`` the
-hypothesis table of ``prereg/v1.md``; a test parses both markdown tables and checks the ids and
-arms here against them. Every comparison is paired on the same items. Differences use
+``SIMPLE_COMPARISONS`` mirrors the comparison list of ``prereg/pilot.md`` and ``FULL_COMPARISONS``
+the hypothesis table of ``prereg/v1.md``; a test parses both files and checks the arms here
+against them. ``PILOT_COMPARISONS`` belongs to the older ``pilot`` report mode and keeps its own
+ids. Every comparison is paired on the same items. Differences use
 :mod:`evals.stats` (cluster bootstrap interval, cluster permutation test, Holm correction,
 minimum detectable difference, per-repository direction); ratio criteria use
 :mod:`evals.report.ratio`.
@@ -170,6 +171,22 @@ H6_COST_FRACTION = 0.25
 """H6's cost criterion: the arm costs under this share of the agent's cost."""
 
 PILOT_FAMILIES = ("primary", "secondary")
+
+SIMPLE_COMPARISONS: tuple[tuple[str, str], ...] = (
+    ("hybrid", "classic"),
+    ("hybrid_rerank", "hybrid"),
+    ("hybrid_hyde", "hybrid"),
+    ("hybrid_multiquery", "hybrid"),
+    ("structural", "hybrid"),
+    ("structural_rerank", "structural"),
+    ("structural", "structural_-cochange"),
+    ("agent", "structural_rerank"),
+    ("auto", "agent"),
+)
+"""The head-to-head pairs of the default report, first arm against second, in the order the
+design freeze (``prereg/pilot.md``) lists them; a test reads that file and checks this one."""
+SIMPLE_METRICS = ("recall", "correctness", "cost")
+"""The metrics each default-report comparison is run on."""
 
 
 def specs_for(mode: str) -> tuple[ComparisonSpec, ...]:
@@ -542,6 +559,8 @@ __all__ = [
     "FULL_COMPARISONS",
     "H6_COST_FRACTION",
     "PILOT_COMPARISONS",
+    "SIMPLE_COMPARISONS",
+    "SIMPLE_METRICS",
     "TOST_MARGIN",
     "ComparisonSpec",
     "ItemRef",

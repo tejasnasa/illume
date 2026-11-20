@@ -40,7 +40,7 @@ from evals.stats import PairedObs, paired_bootstrap_ci, pareto_frontier, wilson_
 
 CORRECT_RECALL = 1.0 - 1e-9
 DRIFT_WIDTH = 25
-JUDGED_FAMILIES = ("rationale", "hand")
+JUDGED_FAMILIES = ("changeset", "rationale", "hand")
 SANITY_FAMILY = "structural"
 SINGLE_SHOT_PAIRS_RERANK = (
     ("hybrid_rerank", "hybrid"),
@@ -647,7 +647,6 @@ def judge_results_section(
                         config,
                         f"judge:{family}:{arm}:faithful",
                     ),
-                    "abstained": wilson(sum(1 for j in mine if j.abstained), len(mine)),
                 }
             result[family] = {
                 "by_arm": per_arm,

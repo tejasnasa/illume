@@ -29,6 +29,23 @@ def pareto_figure(data: Mapping[str, Any]) -> tuple[str, dict[str, Any]] | None:
     return text, {"points": section["points"], "frontier": section["frontier"]}
 
 
+def cost_quality_figure(data: Mapping[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    """Dollars per answer against mean correctness for every arm, the frontier joined."""
+    section = data.get("cost_quality")
+    if not section:
+        return None
+    points = [(p["arm"], p["cost_per_answer"], p["correctness"]) for p in section["points"]]
+    text = svg.scatter_svg(
+        points,
+        frontier=section["frontier"],
+        highlight=[AUTO],
+        title="Cost against correctness",
+        xlabel="Dollars per answer",
+        ylabel="Mean correctness",
+    )
+    return text, {"points": section["points"], "frontier": section["frontier"]}
+
+
 def ablation_figure(data: Mapping[str, Any]) -> tuple[str, dict[str, Any]] | None:
     """The change in answer recall when each channel is removed, with its interval, in points."""
     section = data.get("ablation")
@@ -106,6 +123,7 @@ def drift_figure(data: Mapping[str, Any]) -> tuple[str, dict[str, Any]] | None:
 
 FIGURES = (
     ("pareto", pareto_figure),
+    ("cost_quality", cost_quality_figure),
     ("ablation", ablation_figure),
     ("steps_to_gold", steps_figure),
     ("drift", drift_figure),

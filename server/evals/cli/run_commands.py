@@ -399,7 +399,7 @@ def cmd_run_generate(
     if result.errors:
         print("some pairs ended as errors; running the command again retries them")
     print(f"records: {run_dir / GENERATIONS}")
-    _capture_context(capture, sync_url, run_dir, items, out_dir, corpus_path)
+    _capture_context(capture, sync_url, run_dir, items, out_dir, corpus_path, clones_dir)
     return 1 if result.errors else 0
 
 
@@ -410,6 +410,7 @@ def _capture_context(
     items: Sequence[GoldItem],
     out_dir: Path,
     corpus_path: Path,
+    clones_dir: Path | None = None,
 ) -> None:
     """Write the report's context files into the run directory; a failure is only reported."""
     if capture is None and sync_url is None:
@@ -428,6 +429,7 @@ def _capture_context(
             out_dir=out_dir,
             user_email=EVAL_USER_EMAIL,
             corpus_path=corpus_path,
+            clones_dir=clones_dir,
         )
         if missing:
             print(f"no ingested repository to capture for: {', '.join(missing)}", file=sys.stderr)

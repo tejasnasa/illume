@@ -622,14 +622,13 @@ def render_cutoff(data: Data) -> str:
 
 
 def _judge_table(block: Mapping[str, Any]) -> str:
-    headers = ["Arm", "n", "Correct (0 to 3)", "Faithful (0 to 3)", "Abstained"]
+    headers = ["Arm", "n", "Correct (0 to 3)", "Faithful (0 to 3)"]
     rows = [
         [
             code(arm),
             str(r["n"]),
             mean_num(r["correct"]),
             mean_num(r["faithful"]),
-            rate(r["abstained"]),
         ]
         for arm, r in block["by_arm"].items()
     ]
