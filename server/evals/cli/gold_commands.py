@@ -158,7 +158,7 @@ def cmd_gold_phrase(
     *,
     out_dir: Path,
     clones_dir: Path,
-    api_key: str,
+    endpoint: JudgeEndpoint,
     repo_name: str,
     corpus_path: Path = CORPUS_PATH,
     client_factory: Callable[[], Any] | None = None,
@@ -168,10 +168,10 @@ def cmd_gold_phrase(
     Args:
         out_dir: The eval output directory.
         clones_dir: Where harness clones live.
-        api_key: The key for the phraser; required unless ``client_factory`` is given.
+        endpoint: The phraser's model, where it is reached and its key; the judge's by default.
         repo_name: The corpus entry.
         corpus_path: The corpus file.
-        client_factory: Builds the model client; the real OpenAI client when omitted.
+        client_factory: Builds the model client; a client for ``endpoint`` when omitted.
 
     Returns:
         The process exit status.
@@ -182,14 +182,14 @@ def cmd_gold_phrase(
         print(f"{source} not found; run `gold build` first", file=sys.stderr)
         return 1
     if client_factory is None:
-        if not api_key:
-            print("OPENAI_API_KEY is not set in server/evals/.env.eval", file=sys.stderr)
+        try:
+            endpoint.require_key()
+        except JudgeConfigError as exc:
+            print(str(exc), file=sys.stderr)
             return 1
 
         def client_factory() -> Any:
-            from openai import AsyncOpenAI
-
-            return AsyncOpenAI(api_key=api_key)
+            return AsyncOpenAI(**endpoint.client_kwargs())
 
     try:
         corpus_repo = load_corpus(corpus_path).get(repo_name)
@@ -204,9 +204,11 @@ def cmd_gold_phrase(
         phrase_items(
             read_jsonl(source),
             client_factory=client_factory,
+            model=endpoint.model,
             cache_path=directory / "phrased.jsonl",
             leak_context=make_leak_context_factory(clone, corpus_repo.base_commit),
             concurrency=PHRASE_CONCURRENCY,
+            api_style=endpoint.api_style,
         )
     )
     path = write_jsonl(directory / PHRASED, result.items)

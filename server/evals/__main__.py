@@ -116,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--seed", type=int, default=0, help="generate: shuffle and subset seed")
     run.add_argument("--concurrency", type=int, default=4, help="generate: pairs at once")
     _add_budget_arguments(run)
-    run.add_argument("--judge-model", help="judge: the judge model (default JUDGE_MODEL or Luna)")
+    run.add_argument("--judge-model", help="judge: the judge model (default: the pinned one)")
     run.add_argument("--judge-base-url", help="judge: the judge's OpenAI-compatible base URL")
     run.add_argument(
         "--judge-api-style", choices=["responses", "chat"], help="judge: the transport"
@@ -338,15 +338,17 @@ def cmd_gold(args: argparse.Namespace) -> int:
     if args.action == "check":
         return cmd_gold_check(args, corpus_path)
     if args.action == "phrase":
+        from evals.run.endpoint import JudgeConfigError
+
         try:
-            key = eval_settings.require_key("OPENAI_API_KEY")
-        except eval_settings.EvalIsolationError as exc:
+            endpoint = eval_settings.judge_endpoint()
+        except JudgeConfigError as exc:
             print(str(exc), file=sys.stderr)
             return 1
         return gold_commands.cmd_gold_phrase(
             out_dir=eval_settings.OUT_DIR,
             clones_dir=eval_settings.CLONES_DIR,
-            api_key=key,
+            endpoint=endpoint,
             repo_name=args.repo,
             corpus_path=corpus_path,
         )

@@ -22,6 +22,7 @@ from tests.evals.run_helpers import (
     EMBEDDING,
     GENERATOR,
     ScriptedExecutor,
+    complete_table,
     flat_table,
     make_items,
 )
@@ -153,14 +154,12 @@ class TestRefusals:
 
         assert status == 0 and runtime.opened
 
-    def test_the_shipped_price_table_refuses_a_paid_run_before_anything_is_opened(
+    def test_an_unverified_price_table_refuses_a_paid_run_before_anything_is_opened(
         self, out_dir, capsys
     ):
-        from evals.run.pricing import PRICES_PATH, PriceTable
-
         runtime = RecordingRuntime()
 
-        status = generate(out_dir, table=PriceTable.load(PRICES_PATH), runtime=runtime)
+        status = generate(out_dir, table=complete_table(verified=False), runtime=runtime)
 
         assert status == 1 and not runtime.opened
         assert "price table is incomplete" in capsys.readouterr().err

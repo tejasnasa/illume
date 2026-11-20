@@ -12,6 +12,7 @@ from evals.run.judge_validation import (
     LABEL_SAMPLE_SIZE,
     RUBRIC_TO_LEVEL,
     UNFAITHFUL_BELOW,
+    Correctness,
     HumanLabel,
     build_sheet,
     format_agreement,
@@ -26,7 +27,7 @@ from evals.run.judge_validation import (
     sample_for_labelling,
     write_sheet,
 )
-from evals.run.records import JudgeVersion, Judgment
+from evals.run.records import JudgeVersion, Judgment, Metric
 from evals.stats import weighted_kappa, weighted_kappa_interval
 from tests.evals.judge_helpers import generation, item
 
@@ -56,7 +57,11 @@ def judgments_for(gold, arm="classic", correct=3, faithful=1.0, tag="") -> list[
     version = JudgeVersion(
         deepeval_version="4.3.2", settings_hash="h", model="m", host="openai", judged_on="d"
     )
-    scores = {"correctness": correct / 3, "faithfulness": faithful, "answer_relevancy": 0.9}
+    scores: dict[Metric, float] = {
+        "correctness": correct / 3,
+        "faithfulness": faithful,
+        "answer_relevancy": 0.9,
+    }
     return [
         Judgment(
             judgment_key=f"{tag}{metric}-{gen.record_key}",
@@ -259,7 +264,7 @@ class TestLabelling:
         assert parse_scores(text) is None
 
 
-def label(g: Grade, correct: str, made_up: bool) -> HumanLabel:
+def label(g: Grade, correct: Correctness, made_up: bool) -> HumanLabel:
     return HumanLabel(
         generation_key=g.generation_key,
         item_id=g.item_id,
@@ -374,16 +379,39 @@ class TestAgreement:
 
 
 class TestEndpointResolution:
-    def test_defaults_are_the_pinned_judge_on_openai_with_the_openai_key(self):
-        chosen = resolve_judge_endpoint({"OPENAI_API_KEY": "sk-openai"})
+    def test_defaults_are_the_pinned_judge_on_openrouter_with_the_openrouter_key(self):
+        chosen = resolve_judge_endpoint(
+            {"OPENAI_API_KEY": "sk-openai", "OPENROUTER_API_KEY": "sk-or"}
+        )
 
         assert (chosen.model, chosen.base_url, chosen.api_style) == (
-            "gpt-6-luna",
-            None,
-            "responses",
+            "anthropic/claude-haiku-5.5",
+            "https://openrouter.ai/api/v1",
+            "chat",
         )
-        assert chosen.host == "openai" and chosen.api_key == "sk-openai"
-        assert chosen.client_kwargs() == {"api_key": "sk-openai"}
+        assert chosen.host == "openrouter.ai" and chosen.api_key == "sk-or"
+        assert chosen.client_kwargs() == {
+            "api_key": "sk-or",
+            "base_url": "https://openrouter.ai/api/v1",
+        }
+
+    def test_the_openai_key_is_used_only_on_openais_endpoint(self):
+        chosen = resolve_judge_endpoint(
+            {
+                "OPENAI_API_KEY": "sk-openai",
+                "OPENROUTER_API_KEY": "sk-or",
+                "JUDGE_BASE_URL": "https://api.openai.com/v1",
+            }
+        )
+
+        assert chosen.api_key == "sk-openai"
+
+    def test_a_missing_openrouter_key_is_named(self):
+        chosen = resolve_judge_endpoint({"OPENAI_API_KEY": "sk-openai"})
+
+        assert chosen.api_key == ""
+        with pytest.raises(JudgeConfigError, match="OPENROUTER_API_KEY"):
+            chosen.require_key()
 
     def test_the_env_file_overrides_the_defaults(self):
         keys = {
@@ -416,9 +444,13 @@ class TestEndpointResolution:
             "responses",
         )
 
-    def test_the_openai_key_is_never_sent_to_another_host(self):
+    def test_no_provider_key_is_sent_to_another_host(self):
         chosen = resolve_judge_endpoint(
-            {"OPENAI_API_KEY": "sk-openai", "JUDGE_BASE_URL": "https://other.example.com/v1"}
+            {
+                "OPENAI_API_KEY": "sk-openai",
+                "OPENROUTER_API_KEY": "sk-or",
+                "JUDGE_BASE_URL": "https://other.example.com/v1",
+            }
         )
 
         assert chosen.api_key == ""

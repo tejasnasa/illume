@@ -24,6 +24,12 @@ ApiStyle = Literal["responses", "chat"]
 API_STYLES: tuple[str, ...] = ("responses", "chat")
 DEFAULT_HOST = "openai"
 """The host recorded when no base URL is set and the SDK's default endpoint is used."""
+DEFAULT_JUDGE_BASE_URL = "https://openrouter.ai/api/v1"
+"""Where the pinned judge is reached when no base URL is configured."""
+DEFAULT_JUDGE_API_STYLE: ApiStyle = "chat"
+"""The transport used when none is configured."""
+OPENROUTER_HOST = "openrouter.ai"
+OPENAI_HOST = "api.openai.com"
 
 
 class JudgeConfigError(ValueError):
@@ -85,7 +91,12 @@ class JudgeEndpoint:
             JudgeConfigError: If no key is configured for this endpoint.
         """
         if not self.api_key:
-            name = "JUDGE_API_KEY" if self.base_url else "OPENAI_API_KEY (or JUDGE_API_KEY)"
+            if self.host == OPENROUTER_HOST:
+                name = "OPENROUTER_API_KEY (or JUDGE_API_KEY)"
+            elif self.base_url is None or self.host == OPENAI_HOST:
+                name = "OPENAI_API_KEY (or JUDGE_API_KEY)"
+            else:
+                name = "JUDGE_API_KEY"
             raise JudgeConfigError(f"{name} is not set in server/evals/.env.eval")
         return self.api_key
 
@@ -99,9 +110,10 @@ def resolve_judge_endpoint(
 ) -> JudgeEndpoint:
     """The judge for a run: command-line values over the env file's, over the defaults.
 
-    Defaults when empty are the pinned judge model, OpenAI's own endpoint, the Responses API
-    and ``OPENAI_API_KEY``. The OpenAI key is used only for OpenAI's endpoint: a judge on
-    another base URL needs its own ``JUDGE_API_KEY`` so the OpenAI key is never sent elsewhere.
+    Defaults when empty are the pinned judge model on OpenRouter over chat completions. When
+    ``JUDGE_API_KEY`` is empty, the OpenRouter key is used for OpenRouter and the OpenAI key for
+    OpenAI's own endpoint, and no key for any other host: a judge elsewhere needs its own
+    ``JUDGE_API_KEY``, so neither provider's key is ever sent to a third party.
 
     Args:
         keys: The values read from the eval env file.
@@ -115,19 +127,25 @@ def resolve_judge_endpoint(
     Raises:
         JudgeConfigError: On an unknown API style or a base URL with no host.
     """
-    chosen_url = base_url or keys.get("JUDGE_BASE_URL") or None
-    key = keys.get("JUDGE_API_KEY") or ("" if chosen_url else keys.get("OPENAI_API_KEY", ""))
+    chosen_url = base_url or keys.get("JUDGE_BASE_URL") or DEFAULT_JUDGE_BASE_URL
+    host = urlparse(chosen_url).hostname
+    fallback = {OPENROUTER_HOST: "OPENROUTER_API_KEY", OPENAI_HOST: "OPENAI_API_KEY"}.get(
+        host or "", ""
+    )
+    key = keys.get("JUDGE_API_KEY") or (keys.get(fallback, "") if fallback else "")
     return JudgeEndpoint(
         model=model or keys.get("JUDGE_MODEL") or JUDGE_MODEL,
         base_url=chosen_url,
         api_key=key,
-        api_style=(api_style or keys.get("JUDGE_API_STYLE") or "responses"),  # type: ignore[arg-type]
+        api_style=(api_style or keys.get("JUDGE_API_STYLE") or DEFAULT_JUDGE_API_STYLE),  # type: ignore[arg-type]
     )
 
 
 __all__ = [
     "API_STYLES",
     "DEFAULT_HOST",
+    "DEFAULT_JUDGE_API_STYLE",
+    "DEFAULT_JUDGE_BASE_URL",
     "ApiStyle",
     "JudgeConfigError",
     "JudgeEndpoint",

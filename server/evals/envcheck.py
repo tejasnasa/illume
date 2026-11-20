@@ -20,7 +20,7 @@ EVAL_REDIS_URL = "redis://localhost:6381/0"
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 
 # Pinned generator model id for eval runs.
-EVAL_GENERATOR_MODEL = "deepseek-v4-1-flash-1017"
+EVAL_GENERATOR_MODEL = "deepseek-flash"
 
 # Keys read from the eval env file. GITHUB_TOKEN and the JUDGE_* keys are used by the harness
 # only and are never exported under a name the application reads.

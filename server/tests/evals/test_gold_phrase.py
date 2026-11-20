@@ -296,3 +296,25 @@ def test_duplicates_are_only_compared_within_a_repository():
 
 def test_normalisation_lowercases_strips_punctuation_and_collapses_whitespace():
     assert normalise_question("  Hello,   WORLD!! ") == "hello world"
+
+
+async def test_phrasing_works_over_chat_completions(tmp_path):
+    asked: list[dict] = []
+
+    async def create(**kwargs):
+        asked.append(kwargs)
+        message = SimpleNamespace(content="Can you add VAT to the total at checkout?")
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    result = await phrase_items(
+        [_blind()],
+        client_factory=lambda: client,
+        model="anthropic/claude-haiku-5.5",
+        cache_path=tmp_path / "phrased.jsonl",
+        leak_context=_context,
+        api_style="chat",
+    )
+
+    assert [i.question for i in result.items] == ["Can you add VAT to the total at checkout?"]
+    assert asked[0]["model"] == "anthropic/claude-haiku-5.5" and "messages" in asked[0]

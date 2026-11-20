@@ -8,9 +8,9 @@ silent provider-side change shows up as a difference there rather than going unn
 from app.services.decisions.openrouter import JEV_MODEL
 from app.services.retrieval.rerank.cohere import COHERE_MODEL as COHERE_RERANK_MODEL
 
-GENERATOR_MODEL = "deepseek-v4-1-flash-1017"
-JUDGE_MODEL = "gpt-6-luna"
-PHRASER_MODEL = "gpt-6-luna"
+GENERATOR_MODEL = "deepseek-flash"
+JUDGE_MODEL = "anthropic/claude-haiku-5.5"
+PHRASER_MODEL = JUDGE_MODEL
 
 __all__ = [
     "COHERE_RERANK_MODEL",

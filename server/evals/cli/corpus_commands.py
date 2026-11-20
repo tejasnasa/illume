@@ -15,7 +15,7 @@ from evals.corpus.report import corpus_counts, format_table
 from evals.corpus.snapshot import SnapshotError, restore, snapshot
 
 EVAL_USER_EMAIL = "eval-harness@example.com"
-GENERATOR_MODEL = "deepseek-v4-1-flash-1017"
+GENERATOR_MODEL = "deepseek-flash"
 
 
 def generator_config(api_key: str) -> LLMConfig:

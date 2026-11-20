@@ -141,6 +141,48 @@ class OffPeakWindow(_Frozen):
         return self.start_utc is not None and self.end_utc is not None
 
 
+class PeakHours(_Frozen):
+    """Peak hours as UTC ``HH:MM`` windows on given weekdays; every other hour is off-peak.
+
+    This describes a provider whose discount covers everything outside a few weekday windows,
+    which a single daily off-peak window cannot. Windows may not wrap past midnight. Public
+    holidays a provider also treats as off-peak are not modelled, so a call on one is priced at
+    the peak rate, which can only overstate the cost.
+
+    Attributes:
+        days: ISO weekdays the windows apply on, 1 for Monday to 7 for Sunday.
+        windows_utc: ``[start, end]`` pairs; a window covers ``start`` up to but not ``end``.
+    """
+
+    days: tuple[int, ...] = (1, 2, 3, 4, 5)
+    windows_utc: tuple[tuple[str, str], ...] = ()
+
+    @model_validator(mode="after")
+    def _valid(self) -> Self:
+        if not self.windows_utc:
+            raise ValueError("peak_hours needs at least one window")
+        if not self.days or any(day not in range(1, 8) for day in self.days):
+            raise ValueError("peak_hours days are ISO weekdays, 1 (Monday) to 7 (Sunday)")
+        for start, end in self.windows_utc:
+            if _parse_clock(start) >= _parse_clock(end):
+                raise ValueError(f"a peak window must end after it starts: {start}-{end}")
+        return self
+
+    def windows(self) -> list[tuple[time, time]]:
+        """The windows as times, in order of their start."""
+        return sorted((_parse_clock(a), _parse_clock(b)) for a, b in self.windows_utc)
+
+    def window_at(self, moment: datetime) -> tuple[time, time] | None:
+        """The peak window ``moment`` (in UTC) falls in, or ``None`` when it is off-peak."""
+        if moment.isoweekday() not in self.days:
+            return None
+        clock = moment.time()
+        for start, end in self.windows():
+            if start <= clock < end:
+                return start, end
+        return None
+
+
 def _parse_clock(text: str) -> time:
     try:
         return time.fromisoformat(text)
@@ -173,7 +215,9 @@ class PriceTable(_Frozen):
         version: A label recorded in every run manifest.
         as_of: When the rates were read from the providers' pages.
         verified: Whether the rates have been checked; a paid run needs ``True``.
-        off_peak: The off-peak window the ``off_peak`` rates apply in.
+        off_peak: The daily off-peak window the ``off_peak`` rates apply in.
+        peak_hours: Peak windows on given weekdays; when set, it replaces ``off_peak`` and every
+            hour outside them is off-peak.
         models: Chat model rates by model id.
         embeddings: Embedding rates, per million input tokens, by model id.
     """
@@ -182,6 +226,7 @@ class PriceTable(_Frozen):
     as_of: date | None = None
     verified: bool = False
     off_peak: OffPeakWindow = OffPeakWindow()
+    peak_hours: PeakHours | None = None
     models: dict[str, ModelPrice] = {}
     embeddings: dict[str, float | None] = {}
 
@@ -223,7 +268,7 @@ class PriceTable(_Frozen):
                     missing.append(f"embeddings.{key}")
                 continue
             missing.append(f"{name} (no entry)")
-        if needs_window and not self.off_peak.is_set:
+        if needs_window and self.peak_hours is None and not self.off_peak.is_set:
             missing.extend(["off_peak.start_utc", "off_peak.end_utc"])
         if missing:
             raise PricesIncomplete(missing)
@@ -231,11 +276,13 @@ class PriceTable(_Frozen):
     # --- the off-peak window --------------------------------------------------
 
     def is_off_peak(self, now: datetime) -> bool:
-        """Whether ``now`` falls inside the daily off-peak window.
+        """Whether ``now`` is off-peak: outside every peak window, or inside the off-peak one.
 
         Raises:
-            PricesIncomplete: When the window is not filled in.
+            PricesIncomplete: When neither ``peak_hours`` nor the off-peak window is filled in.
         """
+        if self.peak_hours is not None:
+            return self.peak_hours.window_at(_utc(now)) is None
         start, end = self._window()
         moment = _utc(now).time()
         if start < end:
@@ -246,6 +293,11 @@ class PriceTable(_Frozen):
         """Seconds until the window next opens; ``0`` when it is open now."""
         if self.is_off_peak(now):
             return 0.0
+        if self.peak_hours is not None:
+            current = _utc(now)
+            while (window := self.peak_hours.window_at(current)) is not None:
+                current = datetime.combine(current.date(), window[1], tzinfo=UTC)
+            return (current - _utc(now)).total_seconds()
         start, _ = self._window()
         current = _utc(now)
         opens = datetime.combine(current.date(), start, tzinfo=UTC)
@@ -315,6 +367,7 @@ __all__ = [
     "PRICES_PATH",
     "ModelPrice",
     "OffPeakWindow",
+    "PeakHours",
     "PriceTable",
     "PricesIncomplete",
     "Rates",

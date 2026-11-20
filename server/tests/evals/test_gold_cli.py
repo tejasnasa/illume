@@ -11,6 +11,7 @@ import pytest
 from evals.cli.gold_commands import cmd_gold_phrase, cmd_gold_split, cmd_gold_verify
 from evals.gold.schema import make_item, read_jsonl, write_jsonl
 from evals.gold.split import read_lock
+from evals.run.endpoint import resolve_judge_endpoint
 
 pytestmark = pytest.mark.unit
 
@@ -35,10 +36,13 @@ def _items(n):
 def test_phrase_fails_clearly_without_a_key(tmp_path, capsys):
     write_jsonl(tmp_path / "gold" / "demo" / "items.jsonl", _items(2))
     status = cmd_gold_phrase(
-        out_dir=tmp_path, clones_dir=tmp_path / "clones", api_key="", repo_name="demo"
+        out_dir=tmp_path,
+        clones_dir=tmp_path / "clones",
+        endpoint=resolve_judge_endpoint({}),
+        repo_name="demo",
     )
     assert status == 1
-    assert "OPENAI_API_KEY" in capsys.readouterr().err
+    assert "OPENROUTER_API_KEY" in capsys.readouterr().err
     assert not (tmp_path / "gold" / "demo" / "items.phrased.jsonl").exists()
 
 

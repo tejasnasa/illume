@@ -17,7 +17,7 @@ def _inputs(**overrides):
     inputs = {
         "arms": {"b": "hash-b", "a": "hash-a"},
         "prompt_version": "p1",
-        "models": {"generator": "deepseek-v4-1-flash-1017"},
+        "models": {"generator": "deepseek-flash"},
         "reported_snapshots": {"generator": "snap-1"},
         "price_table_version": "2026-11",
         "agent_token_cap": 50000,

@@ -113,7 +113,7 @@ def client_with(**parts: Any) -> Any:
 
 # --- the generation runner -------------------------------------------------------------
 
-GENERATOR = "deepseek-v4-1-flash-1017"
+GENERATOR = "deepseek-flash"
 EMBEDDING = "text-embedding-3-small"
 
 # Every call in the runner tests uses 100k cache-miss input tokens at $1.00 per 1M at peak,

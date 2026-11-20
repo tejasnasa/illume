@@ -1,45 +1,48 @@
 # Pinned price table for the evaluation's cost accounting.
 #
-# Every rate below is deliberately null: they are not known to the harness and must be filled in
-# from each provider's own pricing page before any paid run. A generate or judge run refuses to
-# start until every rate for the models it will call is a number and `verified` is true.
+# A generate or judge run refuses to start until every rate for the models it will call is a
+# number and `verified` is true. Bump `version` and `as_of` whenever a rate changes; the version
+# is written to every run manifest.
 #
-# Fill in:
-#   - version: any label you will recognise; bump it when a rate changes. It is written to every
-#     run manifest.
-#   - as_of: the date you read the pricing pages (YYYY-MM-DD).
-#   - verified: true once the rates have been checked against the pages.
-#   - every model: input cache-miss and cache-hit price and output price, in US dollars per
-#     1M tokens. DeepSeek is priced separately for peak and off-peak hours; the others have one
-#     set of `rates`.
-#   - off_peak: the daily off-peak window as UTC "HH:MM" times. It may wrap past midnight
-#     (for example start "16:30", end "00:30").
-#   - embeddings: US dollars per 1M input tokens.
+# Sources, read on 2026-11-21:
+#   - deepseek-flash: DeepSeek's API pricing page (api-docs.deepseek.com/quick_start/pricing).
+#     `deepseek-flash` is the model name to call; it is served by DeepSeek-V4.1-Flash-1017.
+#   - anthropic/claude-haiku-5.5: OpenRouter's model page. Cache writes are not priced
+#     separately here.
+#   - text-embedding-3-small: OpenAI's model page.
+#
+# Rates are US dollars per 1M tokens: input cache miss, input cache hit and output. DeepSeek is
+# priced separately for peak and off-peak hours. Its peak hours are 01:00-04:00 and
+# 06:00-10:00 UTC, Monday to Friday; every other hour, weekends included, is off-peak. Chinese
+# public holidays are also off-peak on DeepSeek's side but are not modelled, so a call on one is
+# priced at the peak rate, which can only overstate the cost.
 #
 # Cohere and Jev report their own cost on every call, so they need no rate here.
-version: "1"
-as_of: null
-verified: false
+version: "2"
+as_of: 2026-11-21
+verified: true
 
-off_peak:
-  start_utc: null
-  end_utc: null
+peak_hours:
+  days: [1, 2, 3, 4, 5]
+  windows_utc:
+    - ["01:00", "04:00"]
+    - ["06:00", "10:00"]
 
 models:
-  deepseek-v4-1-flash-1017:
+  deepseek-flash:
     peak:
-      input_cache_miss: null
-      input_cache_hit: null
-      output: null
+      input_cache_miss: 0.30
+      input_cache_hit: 0.006
+      output: 1.20
     off_peak:
-      input_cache_miss: null
-      input_cache_hit: null
-      output: null
-  gpt-6-luna:
+      input_cache_miss: 0.15
+      input_cache_hit: 0.003
+      output: 0.60
+  anthropic/claude-haiku-5.5:
     rates:
-      input_cache_miss: null
-      input_cache_hit: null
-      output: null
+      input_cache_miss: 0.10
+      input_cache_hit: 0.01
+      output: 0.50
 
 embeddings:
-  text-embedding-3-small: null
+  text-embedding-3-small: 0.02

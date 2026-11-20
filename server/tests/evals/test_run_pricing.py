@@ -15,34 +15,32 @@ OFF_PEAK = datetime(2026, 11, 19, 20, 0, tzinfo=UTC)
 
 
 class TestShippedTable:
-    def test_it_loads_with_every_rate_unset_and_is_not_verified(self):
+    def test_it_is_filled_dated_and_verified_for_every_model_the_harness_calls(self):
+        from evals.models import GENERATOR_MODEL, JUDGE_MODEL, PHRASER_MODEL
+
         table = PriceTable.load(PRICES_PATH)
 
-        assert (table.as_of, table.verified, table.off_peak.is_set) == (None, False, False)
-        rates = [
-            rate
-            for price in table.models.values()
-            for part in (price.rates, price.peak, price.off_peak)
-            if part is not None
-            for rate in part.model_dump().values()
-        ]
-        assert rates and all(rate is None for rate in rates)
-        assert all(rate is None for rate in table.embeddings.values())
+        assert table.verified and table.as_of is not None
+        table.require_complete([GENERATOR_MODEL, JUDGE_MODEL, PHRASER_MODEL, EMBEDDING])
 
-    def test_a_paid_run_is_refused_and_every_missing_rate_is_listed(self):
+    def test_the_generator_is_priced_by_deepseeks_weekday_peak_hours(self):
+        from evals.models import GENERATOR_MODEL
+
         table = PriceTable.load(PRICES_PATH)
+        thursday_peak = datetime(2026, 11, 19, 2, 30, tzinfo=UTC)
+        thursday_gap = datetime(2026, 11, 19, 5, 0, tzinfo=UTC)
+        saturday = datetime(2026, 11, 21, 2, 30, tzinfo=UTC)
+        call = Usage(
+            provider="deepseek",
+            model=GENERATOR_MODEL,
+            kind="generate",
+            input_tokens=1_000_000,
+            output_tokens=0,
+        )
 
-        with pytest.raises(PricesIncomplete) as refusal:
-            table.require_complete([GENERATOR, EMBEDDING, "gpt-6-luna"])
-
-        missing = refusal.value.missing
-        assert f"{GENERATOR}.peak.input_cache_miss" in missing
-        assert f"{GENERATOR}.off_peak.output" in missing
-        assert "gpt-6-luna.rates.input_cache_hit" in missing
-        assert f"embeddings.{EMBEDDING}" in missing
-        assert "off_peak.start_utc" in missing
-        assert any(entry.startswith("verified") for entry in missing)
-        assert "prices.yaml" in str(refusal.value)
+        assert not table.is_off_peak(thursday_peak)
+        assert table.is_off_peak(thursday_gap) and table.is_off_peak(saturday)
+        assert table.cost(call, thursday_peak) == pytest.approx(2 * table.cost(call, saturday))
 
     def test_it_pins_every_model_the_harness_calls(self):
         from evals.models import GENERATOR_MODEL, JUDGE_MODEL
@@ -51,6 +49,50 @@ class TestShippedTable:
 
         assert {GENERATOR_MODEL, JUDGE_MODEL} <= set(table.models)
         assert "text-embedding-3-small" in table.embeddings
+
+
+class TestPeakHours:
+    @staticmethod
+    def table() -> PriceTable:
+        return complete_table(
+            off_peak={"start_utc": None, "end_utc": None},
+            peak_hours={
+                "days": [1, 2, 3, 4, 5],
+                "windows_utc": [["01:00", "04:00"], ["06:00", "10:00"]],
+            },
+        )
+
+    @pytest.mark.parametrize(
+        ("moment", "off_peak"),
+        [
+            (datetime(2026, 11, 19, 0, 59, tzinfo=UTC), True),
+            (datetime(2026, 11, 19, 1, 0, tzinfo=UTC), False),
+            (datetime(2026, 11, 19, 3, 59, tzinfo=UTC), False),
+            (datetime(2026, 11, 19, 4, 0, tzinfo=UTC), True),
+            (datetime(2026, 11, 19, 9, 0, tzinfo=UTC), False),
+            (datetime(2026, 11, 19, 10, 0, tzinfo=UTC), True),
+            (datetime(2026, 11, 22, 7, 0, tzinfo=UTC), True),
+        ],
+    )
+    def test_membership_on_weekdays_and_weekends(self, moment, off_peak):
+        assert self.table().is_off_peak(moment) is off_peak
+
+    def test_the_window_satisfies_a_timed_model(self):
+        self.table().require_complete([GENERATOR, EMBEDDING])
+
+    def test_seconds_until_off_peak_is_the_end_of_the_current_window(self):
+        table = self.table()
+
+        assert table.seconds_until_off_peak(datetime(2026, 11, 19, 7, 30, tzinfo=UTC)) == 2.5 * 3600
+        assert table.seconds_until_off_peak(datetime(2026, 11, 19, 5, 0, tzinfo=UTC)) == 0
+
+    def test_bad_windows_are_rejected(self):
+        with pytest.raises(ValueError):
+            complete_table(peak_hours={"windows_utc": [["04:00", "01:00"]]})
+        with pytest.raises(ValueError):
+            complete_table(peak_hours={"days": [0], "windows_utc": [["01:00", "02:00"]]})
+        with pytest.raises(ValueError):
+            complete_table(peak_hours={"windows_utc": []})
 
 
 class TestRequireComplete:
@@ -144,8 +186,10 @@ class TestCost:
         assert complete_table().cost(Usage(provider="x", model="mystery", kind="other"), PEAK) == 0
 
     def test_a_rate_left_unset_cannot_price_a_call(self):
+        unset = {"input_cache_miss": None, "input_cache_hit": 0.1, "output": 2.0}
+        table = complete_table(models={GENERATOR: {"peak": unset, "off_peak": unset}})
         with pytest.raises(PricesIncomplete):
-            PriceTable.load(PRICES_PATH).cost(self.CALL, OFF_PEAK.replace(hour=1))
+            table.cost(self.CALL, OFF_PEAK.replace(hour=1))
 
 
 class TestOffPeakWindow:
@@ -186,8 +230,9 @@ class TestOffPeakWindow:
         )
 
     def test_an_unset_window_is_an_error_not_a_guess(self):
+        table = complete_table(off_peak={"start_utc": None, "end_utc": None})
         with pytest.raises(PricesIncomplete, match="off_peak"):
-            PriceTable.load(PRICES_PATH).is_off_peak(PEAK)
+            table.is_off_peak(PEAK)
 
     def test_an_empty_window_is_rejected(self):
         with pytest.raises(ValueError, match="same time"):

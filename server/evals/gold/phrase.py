@@ -248,9 +248,17 @@ def dedupe_questions(items: list[GoldItem]) -> tuple[list[GoldItem], list[Phrase
     return survivors, drops
 
 
-async def _ask(client: Any, model: str, messages: list[dict[str, str]]) -> str:
-    """One call; a failed call counts as an empty reply."""
+async def _ask(
+    client: Any, model: str, messages: list[dict[str, str]], api_style: str = "responses"
+) -> str:
+    """One call over the Responses API or chat completions; a failed call is an empty reply."""
     try:
+        if api_style == "chat":
+            response = await client.chat.completions.create(
+                model=model, messages=messages, max_tokens=MAX_OUTPUT_TOKENS
+            )
+            choices = getattr(response, "choices", None) or []
+            return _clean((choices[0].message.content if choices else "") or "")
         response = await client.responses.create(
             model=model, input=messages, max_output_tokens=MAX_OUTPUT_TOKENS
         )
@@ -267,6 +275,7 @@ async def phrase_items(
     cache_path: Path,
     leak_context: LeakContextFactory,
     concurrency: int = DEFAULT_CONCURRENCY,
+    api_style: str = "responses",
 ) -> PhraseResult:
     """Phrase every seed as a developer question.
 
@@ -278,6 +287,7 @@ async def phrase_items(
             are made, so an interrupted run resumes.
         leak_context: Builds an item's leak context (its gold paths and identifier test).
         concurrency: How many items are phrased at once.
+        api_style: ``responses`` for the Responses API or ``chat`` for chat completions.
 
     Returns:
         The phrased items with the duplicates removed, and every drop with its reason.
@@ -301,7 +311,9 @@ async def phrase_items(
         problems: list[str] = []
         async with gate:
             for strict in (False, True):
-                text = await _ask(client, model, _prompt(item, strict=strict, previous=problems))
+                text = await _ask(
+                    client, model, _prompt(item, strict=strict, previous=problems), api_style
+                )
                 result.calls += 1
                 problems = _problems(item, text, context)
                 if not problems:
