@@ -45,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
     gold.add_argument("--repo", help="corpus entry to build gold items for")
     gold.add_argument("--corpus", type=Path, help="corpus file (default: the shipped one)")
     gold.add_argument("--seed", type=int, default=0, help="sampling seed (default 0)")
+    gold.add_argument("--annotator", help="verify: use labels.<annotator>.jsonl")
+    gold.add_argument(
+        "--report", action="store_true", help="verify: print the error report, write verified items"
+    )
+    gold.add_argument("--all", action="store_true", help="split: use every repository")
+    gold.add_argument("--pilot", action="store_true", help="split: one pilot slice, no test split")
 
     run = commands.add_parser("run", help="generate answers or judge them")
     run.add_argument("action", choices=["generate", "judge"])
@@ -198,18 +204,47 @@ def cmd_gold(args: argparse.Namespace) -> int:
     from evals.cli import gold_commands
     from evals.corpus.corpus import CORPUS_PATH
 
-    if args.action != "build":
-        return cmd_not_built(f"gold {args.action}")
+    corpus_path = args.corpus or CORPUS_PATH
+    if args.action == "split":
+        return gold_commands.cmd_gold_split(
+            out_dir=eval_settings.OUT_DIR,
+            repo_name=args.repo,
+            all_repos=args.all,
+            pilot=args.pilot,
+            seed=args.seed,
+        )
     if not args.repo:
-        print("gold build needs --repo NAME", file=sys.stderr)
+        print(f"gold {args.action} needs --repo NAME", file=sys.stderr)
         return 2
+    if args.action == "phrase":
+        try:
+            key = eval_settings.require_key("OPENAI_API_KEY")
+        except eval_settings.EvalIsolationError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        return gold_commands.cmd_gold_phrase(
+            out_dir=eval_settings.OUT_DIR,
+            clones_dir=eval_settings.CLONES_DIR,
+            api_key=key,
+            repo_name=args.repo,
+            corpus_path=corpus_path,
+        )
+    if args.action == "verify":
+        return gold_commands.cmd_gold_verify(
+            out_dir=eval_settings.OUT_DIR,
+            repo_name=args.repo,
+            annotator=args.annotator,
+            report=args.report,
+            corpus_path=corpus_path,
+            seed=args.seed,
+        )
     assert_eval_url(eval_settings.DATABASE_URL, kind="database")
     return gold_commands.cmd_gold_build(
         async_url=eval_settings.DATABASE_URL,
         out_dir=eval_settings.OUT_DIR,
         clones_dir=eval_settings.CLONES_DIR,
         repo_name=args.repo,
-        corpus_path=args.corpus or CORPUS_PATH,
+        corpus_path=corpus_path,
         seed=args.seed,
     )
 
