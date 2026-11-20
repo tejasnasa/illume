@@ -31,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     corpus = commands.add_parser("corpus", help="pinned corpus ingestion and snapshots")
     corpus.add_argument("action", choices=["ingest", "snapshot", "restore", "report"])
+    corpus.add_argument("--repo", help="corpus entry to ingest")
+    corpus.add_argument("--corpus", type=Path, help="corpus file (default: the shipped one)")
+    corpus.add_argument("--name", help="snapshot name")
 
     commands.add_parser("mine", help="mine questions from pull requests")
 
@@ -113,6 +116,48 @@ def cmd_selftest() -> int:
     return 1 if failed else 0
 
 
+def cmd_corpus(args: argparse.Namespace) -> int:
+    """Dispatch a ``corpus`` subcommand against the eval database.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The process exit status.
+    """
+    from evals.cli import corpus_commands
+    from evals.corpus.corpus import CORPUS_PATH
+
+    assert_eval_url(eval_settings.SYNC_DATABASE_URL, kind="database")
+    url = eval_settings.SYNC_DATABASE_URL
+    if args.action == "ingest":
+        if not args.repo:
+            print("corpus ingest needs --repo NAME", file=sys.stderr)
+            return 2
+        return corpus_commands.cmd_ingest(
+            sync_url=url,
+            out_dir=eval_settings.OUT_DIR,
+            api_key=_generator_key(),
+            repo_name=args.repo,
+            corpus_path=args.corpus or CORPUS_PATH,
+        )
+    if args.action == "report":
+        return corpus_commands.cmd_report(sync_url=url)
+    if not args.name:
+        print(f"corpus {args.action} needs --name N", file=sys.stderr)
+        return 2
+    run = corpus_commands.cmd_snapshot if args.action == "snapshot" else corpus_commands.cmd_restore
+    return run(sync_url=url, out_dir=eval_settings.OUT_DIR, name=args.name)
+
+
+def _generator_key() -> str:
+    """Return the generator API key, or an empty string when it is not configured."""
+    try:
+        return eval_settings.require_key("AI_API_KEY")
+    except eval_settings.EvalIsolationError:
+        return ""
+
+
 def cmd_not_built(label: str) -> int:
     """Report a command whose implementation has not landed yet.
 
@@ -142,6 +187,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return cmd_db_migrate() if args.action == "migrate" else cmd_db_status()
     if args.command == "selftest":
         return cmd_selftest()
+    if args.command == "corpus":
+        return cmd_corpus(args)
     action = getattr(args, "action", None)
     return cmd_not_built(f"{args.command} {action}" if action else args.command)
 

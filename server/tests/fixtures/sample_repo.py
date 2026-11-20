@@ -24,6 +24,25 @@ The content is chosen so that each stage of the pipeline has something to find:
 
 The second commit exists so there is more than one entry in the git history -- ownership
 percentages and change frequency are meaningless with a single commit.
+
+`build_with_history` extends that repository for work that needs a longer, branchier past.
+It leaves `build()`'s two commits untouched and adds, on `main`, in order:
+
+1. the two commits from `build()`;
+2. a merge of pull request #101, a side branch cut from the first commit that adds
+   `docs/feature_a.md`;
+3. a whitespace-only commit: `src/util.py` keeps its tokens but gains trailing spaces and a
+   deeper indent, so a blame that ignores whitespace must look straight through it;
+4. a commit that moves `later()` from `src/late.py` to `src/util.py` with its lines
+   byte-identical, so a blame that follows moved lines must attribute them to the commit
+   that wrote them in `late.py`;
+5. a merge of pull request #102, a side branch cut from commit 4 that adds
+   `docs/feature_b.md` -- it lands *after* the chosen base commit, which is commit 4.
+
+A third pull request, #103, is merged on a separate branch, `staging`, that is cut from the
+second commit and never merged into `main`. Its merge commit carries a committer date
+*earlier* than the base commit's, but it is not an ancestor of the base commit: a filter
+that compares timestamps lets it through, a filter that asks git does not.
 """
 
 from __future__ import annotations
@@ -31,6 +50,7 @@ from __future__ import annotations
 import itertools
 import os
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 AUTHOR_NAME = "Ada Lovelace"
@@ -375,6 +395,180 @@ def build(root: Path) -> Path:
     )
 
     return root
+
+
+@dataclass(frozen=True)
+class HistoryRepo:
+    """The shape of the repository `build_with_history` made.
+
+    Attributes:
+        root: The repository directory.
+        first: SHA of the initial commit.
+        second: SHA of the commit that moves `nested.py` and adds `late.py`.
+        pr_a_merge: Merge commit of pull request #101 (an ancestor of the base commit).
+        whitespace: SHA of the whitespace-only commit.
+        moved: SHA of the commit that moves `later()`; this is the base commit.
+        pr_b_merge: Merge commit of pull request #102 (after the base commit).
+        pr_early_merge: Merge commit of pull request #103 on `staging`: an earlier
+            committer date than the base commit, and not an ancestor of it.
+        base: The chosen base commit (same as `moved`).
+        prs: Pull request number to merge commit SHA.
+        whitespace_file: The file the whitespace-only commit touched.
+        moved_function: Name of the function moved by `moved`.
+        moved_from: Path the function left.
+        moved_to: Path the function arrived at.
+    """
+
+    root: Path
+    first: str
+    second: str
+    pr_a_merge: str
+    whitespace: str
+    moved: str
+    pr_b_merge: str
+    pr_early_merge: str
+    base: str
+    prs: dict[int, str]
+    whitespace_file: str = "src/util.py"
+    moved_function: str = "later"
+    moved_from: str = "src/late.py"
+    moved_to: str = "src/util.py"
+
+
+PR_A_NUMBER = 101
+PR_B_NUMBER = 102
+PR_EARLY_NUMBER = 103
+STAGING_BRANCH = "staging"
+
+_LATE_DOC = '"""Added late so the second commit has work to do."""\n'
+
+
+def _commit_dated(repo: Path, message: str, timestamp: str, offset: int) -> str:
+    """Stage everything, commit with both dates pinned, and return the new SHA."""
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", message, env_extra=_dated(timestamp, offset))
+    return head_sha(repo)
+
+
+def _merge_dated(repo: Path, branch: str, message: str, timestamp: str, offset: int) -> str:
+    """Merge `branch` with a merge commit, pinning both dates, and return its SHA."""
+    _git(repo, "merge", "--no-ff", "-m", message, branch, env_extra=_dated(timestamp, offset))
+    return head_sha(repo)
+
+
+def _branch_commit(
+    repo: Path, branch: str, start: str, path: str, content: str, timestamp: str, offset: int
+) -> str:
+    """Create `branch` at `start`, commit one new file on it and return the commit SHA."""
+    _git(repo, "checkout", "-b", branch, start)
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content.encode("utf-8"))
+    return _commit_dated(repo, f"feat: add {path}", timestamp, offset)
+
+
+def build_with_history(root: Path) -> HistoryRepo:
+    """
+    Build the repository from `build()` and give it a longer, branchier history.
+
+    See the module docstring for the shape. Every commit has a fixed, shifted date and
+    the repository ends with `main` checked out.
+    """
+    build(root)
+    offset = _next_date_offset()
+    first, second = _git(root, "rev-list", "--reverse", "main").split()
+
+    # Pull request #101: cut from the first commit, merged onto main before the base.
+    _branch_commit(
+        root,
+        "feature-a",
+        first,
+        "docs/feature_a.md",
+        "# Feature A\n\nAdded through pull request 101.\n",
+        "2026-02-10T12:00:00+00:00",
+        offset,
+    )
+    _git(root, "checkout", "main")
+    pr_a_merge = _merge_dated(
+        root,
+        "feature-a",
+        "Merge pull request #101 from fixture/feature-a",
+        "2026-02-15T12:00:00+00:00",
+        offset,
+    )
+
+    # Whitespace only: same tokens, trailing spaces and a deeper indent.
+    util = root / "src" / "util.py"
+    util.write_bytes(
+        b'"""String helpers."""\n\n\ndef slugify(text: str) -> str:\n'
+        b'        """Lowercase a string and replace spaces with hyphens."""   \n'
+        b'        return text.strip().lower().replace(" ", "-")   \n'
+    )
+    whitespace = _commit_dated(root, "style: reformat util.py", "2026-03-01T12:00:00+00:00", offset)
+
+    # Move `later()` out of late.py and into util.py, lines unchanged.
+    moved_block = LATE_FILE.removeprefix(_LATE_DOC)
+    (root / "src" / "late.py").write_bytes(_LATE_DOC.encode("utf-8"))
+    util.write_bytes(util.read_bytes() + moved_block.encode("utf-8"))
+    moved = _commit_dated(
+        root, "refactor: move later() into util.py", "2026-04-01T12:00:00+00:00", offset
+    )
+
+    # Pull request #102: cut from the base commit, so it lands after it.
+    _branch_commit(
+        root,
+        "feature-b",
+        moved,
+        "docs/feature_b.md",
+        "# Feature B\n\nAdded through pull request 102.\n",
+        "2026-04-20T12:00:00+00:00",
+        offset,
+    )
+    _git(root, "checkout", "main")
+    pr_b_merge = _merge_dated(
+        root,
+        "feature-b",
+        "Merge pull request #102 from fixture/feature-b",
+        "2026-05-01T12:00:00+00:00",
+        offset,
+    )
+
+    # Pull request #103: merged on a branch main never receives, dated before the base.
+    _branch_commit(
+        root,
+        "side",
+        first,
+        "docs/side.md",
+        "# Side\n\nAdded through pull request 103.\n",
+        "2026-01-10T12:00:00+00:00",
+        offset,
+    )
+    _git(root, "checkout", "-b", STAGING_BRANCH, second)
+    pr_early_merge = _merge_dated(
+        root,
+        "side",
+        "Merge pull request #103 from fixture/side",
+        "2026-01-15T12:00:00+00:00",
+        offset,
+    )
+    _git(root, "checkout", "main")
+
+    return HistoryRepo(
+        root=root,
+        first=first,
+        second=second,
+        pr_a_merge=pr_a_merge,
+        whitespace=whitespace,
+        moved=moved,
+        pr_b_merge=pr_b_merge,
+        pr_early_merge=pr_early_merge,
+        base=moved,
+        prs={
+            PR_A_NUMBER: pr_a_merge,
+            PR_B_NUMBER: pr_b_merge,
+            PR_EARLY_NUMBER: pr_early_merge,
+        },
+    )
 
 
 def _next_date_offset() -> int:

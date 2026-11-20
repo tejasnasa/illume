@@ -1,0 +1,33 @@
+# The pinned evaluation corpus. Each entry is one repository frozen at a base commit B.
+#
+# Fields per entry under `repos`:
+#   name              Short identifier used on the command line (`--repo NAME`). Unique.
+#   url               Clone URL, e.g. https://github.com/owner/repo. The owner/repo pair
+#                     also keys the GitHub cache directory.
+#   language          Main language: Python, TypeScript, Go, or another that the tree-sitter
+#                     parser handles well.
+#   licence           One of MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause. Anything else is
+#                     rejected.
+#   base_commit       Full 40-character hex SHA of B, in quotes. Ingestion checks this commit out and
+#                     nothing newer is ever visible to retrieval.
+#   base_date         Commit date of B. Informational only.
+#   generator_cutoff  Training cutoff of the question generator (default 2026-10-17). Pull
+#                     requests merged after it are tagged post-cutoff and analysed apart.
+#   drift_window      Commits after B inspected by the drift check (default 100).
+#   history_prs       Merged pull requests before B ingested as history (default 200).
+#
+# Selection rules:
+#   - Permissive licence (MIT, Apache-2.0 or BSD).
+#   - 200 to 3,000 source files at B.
+#   - At least 300 merged pull requests with real descriptions.
+#   - At least 150 pull requests merged after B, so questions have somewhere to come from.
+#   - Not Illume itself.
+#
+# Example entry (kept commented out so the shipped file lists no repositories):
+#   - name: example
+#     url: https://github.com/owner/example
+#     language: Python
+#     licence: MIT
+#     base_commit: "0123456789abcdef0123456789abcdef01234567"
+#     base_date: 2026-06-01
+repos: []
