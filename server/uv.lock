@@ -2667,7 +2667,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "deepeval", specifier = ">=4.3.2" },
+    { name = "deepeval", specifier = "==4.3.2" },
     { name = "fakeredis", specifier = ">=2.38.0" },
     { name = "freezegun", specifier = ">=1.5.5" },
     { name = "mypy", specifier = ">=2.3.1" },

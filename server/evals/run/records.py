@@ -215,10 +215,11 @@ class Generation(_Record):
 
 
 class JudgeVersion(_Record):
-    """Who graded and with which prompt: the identity a judgment belongs to.
+    """Who graded and with which settings: the identity a judgment belongs to.
 
     Attributes:
-        prompt_version: The version of the judge's prompt and output schema.
+        deepeval_version: The DeepEval release the metric ran under.
+        settings_hash: A hash of the metric's settings; see ``evals.run.judge_metrics``.
         model: The judge model id asked for.
         host: The host the judge was called on (``openai`` for the SDK's default endpoint);
             never a path or a key.
@@ -227,34 +228,43 @@ class JudgeVersion(_Record):
             of the judgment's key, so resuming on another day does not grade a pair again.
     """
 
-    prompt_version: str
+    deepeval_version: str
+    settings_hash: str
     model: str
     host: str
     api_style: str = "responses"
     judged_on: str
 
 
+Metric = Literal["correctness", "faithfulness", "answer_relevancy"]
+METRIC_NAMES: tuple[str, ...] = ("correctness", "faithfulness", "answer_relevancy")
+RUBRIC_MAX = 3
+"""The top of the correctness rubric; the raw DeepEval score is the rubric value over this."""
+
+
 class Judgment(_Record):
-    """One grade of one generation by one judge, or the record that grading it failed.
+    """One metric's grade of one generation by one judge, or the record that grading it failed.
+
+    Each metric is judged and kept separately, so a generation has up to three judgments under one
+    judge, one per metric.
 
     Attributes:
-        judgment_key: A hash of the generation's key and the judge's identity; see
-            :func:`judgment_key`.
+        judgment_key: A hash of the generation's key, the metric and its settings and the
+            judge's identity; see :func:`judgment_key`.
         generation_key: The ``record_key`` of the generation graded.
         item_id: The gold item.
         family: The item's family, kept so results group without reading the gold again.
         arm: The generation's arm, kept for analysis only; the judge is never told it.
         repeat: Which repeat of the pair this is.
+        metric: Which metric this judgment is.
         judge: The judge's identity.
-        status: ``ok``, or ``error`` when the judge's output could not be used.
-        correct: How correct the answer is, 0 to 3.
-        faithful: How well the cited evidence supports the answer, 0 to 3.
-        abstained: Whether the answer declines to answer.
-        rationale: The judge's reasons.
-        raw: The judge's raw output, kept on an error record.
+        status: ``ok``, or ``error`` when the metric raised, timed out or returned nothing usable.
+        score: The raw DeepEval score, 0 to 1.
+        rubric: For correctness, the 0 to 3 rubric value the score stands for, when the judge
+            gave a whole one.
         error: Why the record is an error record.
         reported_model: The model the provider reported answering.
-        usages: The metered call.
+        usages: Every metered call the metric made.
         cost_usd: What grading cost; ``0`` on a reused judgment.
         reused_from: The key of the judgment this one was copied from, for a composed record
             whose answer is identical to its target's.
@@ -266,13 +276,11 @@ class Judgment(_Record):
     family: str
     arm: str
     repeat: int = 0
+    metric: Metric
     judge: JudgeVersion
     status: Literal["ok", "error"] = "ok"
-    correct: int | None = None
-    faithful: int | None = None
-    abstained: bool | None = None
-    rationale: str = ""
-    raw: str | None = None
+    score: float | None = None
+    rubric: int | None = None
     error: str | None = None
     reported_model: str | None = None
     usages: list[Usage] = Field(default_factory=list)
@@ -283,14 +291,14 @@ class Judgment(_Record):
     def _consistent(self) -> Self:
         if (self.status == "error") != (self.error is not None):
             raise ValueError("an error record needs `error`, and only an error record has it")
-        scores = (self.correct, self.faithful, self.abstained)
-        if self.status == "ok" and any(value is None for value in scores):
-            raise ValueError("a graded record needs correct, faithful and abstained")
-        if self.status == "error" and any(value is not None for value in scores):
+        if self.status == "ok" and self.score is None:
+            raise ValueError("a graded record needs a score")
+        if self.status == "error" and (self.score is not None or self.rubric is not None):
             raise ValueError("an error record is never scored")
-        for score in (self.correct, self.faithful):
-            if score is not None and not 0 <= score <= 3:
-                raise ValueError("scores run from 0 to 3")
+        if self.score is not None and not 0.0 <= self.score <= 1.0:
+            raise ValueError("scores run from 0 to 1")
+        if self.rubric is not None and (self.metric != "correctness" or not 0 <= self.rubric <= 3):
+            raise ValueError("only correctness carries a rubric value, from 0 to 3")
         return self
 
 
@@ -329,14 +337,30 @@ def record_key(
     )
 
 
-def judgment_key(*, generation_key: str, prompt_version: str, model: str, host: str) -> str:
-    """The key of one judgment: the generation graded and who graded it.
+def judgment_key(
+    *,
+    generation_key: str,
+    metric: str,
+    settings_hash: str,
+    deepeval_version: str,
+    model: str,
+    host: str,
+) -> str:
+    """The key of one judgment: the generation, the metric and who graded it.
 
-    The date is not part of it, so a run resumed on another day recognises finished pairs, while
-    a new prompt version, model or host grades the generation again.
+    The date is not part of it, so a run resumed on another day recognises finished metrics,
+    while a changed metric setting, DeepEval release, model or host grades that metric again and
+    leaves the others alone.
     """
     return _digest(
-        {"judge": generation_key, "prompt": prompt_version, "model": model, "host": host}
+        {
+            "judge": generation_key,
+            "metric": metric,
+            "settings": settings_hash,
+            "deepeval": deepeval_version,
+            "model": model,
+            "host": host,
+        }
     )
 
 
@@ -356,8 +380,11 @@ __all__ = [
     "CandidateRecord",
     "ChannelHitRecord",
     "Generation",
+    "METRIC_NAMES",
+    "RUBRIC_MAX",
     "JudgeVersion",
     "Judgment",
+    "Metric",
     "RouteRecord",
     "RunTokens",
     "StepRecordOut",

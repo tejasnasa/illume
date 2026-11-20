@@ -1,18 +1,19 @@
-"""The judge pass: grade recorded answers against the gold notes, resumably and on a budget.
+"""The judge pass: grade recorded answers with DeepEval metrics, resumably and on a budget.
 
-A judge sees the question, the reference notes quoted from the repository's own history, the gold
-files, the answer and the text of the evidence the answer cites. It never sees which arm, which
-configuration or which model produced the answer. It returns ``{correct, faithful, abstained,
-rationale}``.
+Three metrics are judged for every selected generation: ``correctness`` (G-Eval against the
+reference answer), ``faithfulness`` (claim by claim against the cited evidence) and
+``answer_relevancy``. Each is called directly through its ``a_measure`` and judged and cached
+separately; see :mod:`evals.run.judge_metrics` for what each is shown. The judge never sees which
+arm, which configuration or which model produced the answer.
 
-Judgments are appended to a JSONL file per judge identity and are keyed by the generation, the
-prompt version, the judge model and the judge host, so changing any of those grades again while
-leaving ``generations.jsonl`` untouched. Output that cannot be used (not JSON, a score out of
-range, a missing field) is stored as an error record with the raw text and is tried again on the
-next run; it is never scored.
+Judgments are appended to a JSONL file per judge identity, one record per generation and metric,
+keyed by the generation, the metric, a hash of that metric's settings, the DeepEval release, the
+judge model and the judge host. Changing any of those grades that metric again and leaves the
+others, and ``generations.jsonl``, alone. A metric that raises, times out or returns unusable
+output is stored as an error record and tried again on the next run; it is never scored.
 
-Two transports are supported: the Responses API with a strict JSON schema, and chat completions
-asked for a JSON object.
+Every call goes through :class:`evals.run.judge_model.MeteredJudgeModel`, so spend reaches the
+budget and the meter and the judge model stays configurable.
 
 Library code here takes nothing from ``evals.settings``.
 """
@@ -21,112 +22,46 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import math
-import time
-from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
-from openai import AsyncOpenAI, BadRequestError
+from openai import AsyncOpenAI
 
-from app.services.retrieval.citations import parse_key
-from app.services.retrieval.llm_json import ModelFailure, parse_json, text_format
 from evals.gold.schema import GoldItem
-from evals.metrics.answer import scored_gold
-from evals.metrics.citations import cited_keys_of, resolves, seen_keys
 from evals.run.budget import Budget, BudgetStop, UnpricedSpend
+from evals.run.deepeval_env import deepeval_version
 from evals.run.endpoint import JudgeEndpoint
 from evals.run.generate import final_records
-from evals.run.metering import Meter, usage_from_response
+from evals.run.judge_metrics import (
+    ANSWER_CHAR_BUDGET,
+    EVIDENCE_CHAR_BUDGET,
+    NO_EVIDENCE,
+    UNANSWERABLE_TAG,
+    UNAVAILABLE,
+    UNMATCHED,
+    EvidenceText,
+    MetricSpec,
+    default_metrics,
+    render_evidence,
+    rubric_value,
+)
+from evals.run.judge_model import JudgeOutputError, MeteredJudgeModel
+from evals.run.metering import Meter
 from evals.run.pricing import PriceTable
-from evals.run.records import Generation, JudgeVersion, Judgment, Usage, judgment_key
+from evals.run.records import RUBRIC_MAX, Generation, JudgeVersion, Judgment, Usage, judgment_key
 
-JUDGE_VERSION = "1"
-"""The version of the judge's prompt and output schema; bump it when either changes."""
-
-CHANGESET_FRACTION = 0.2
-EVIDENCE_CHAR_BUDGET = 6000
-"""The most evidence text, in characters, shown to the judge for one answer."""
-ANSWER_CHAR_BUDGET = 8000
-CALL_TIMEOUT_SECONDS = 180.0
-UNAVAILABLE = "(evidence text unavailable)"
-UNMATCHED = "(this key matches nothing the answer's retrieval found)"
-NO_EVIDENCE = "(the answer cites no evidence)"
-
-EvidenceText = Callable[[str], str | None]
-"""Maps a citation key to the text it stands for, or ``None`` when that is not known."""
+CHANGESET_FRACTION = 1.0
+"""The share of change-set clusters judged; every one by default."""
+METRIC_TIMEOUT_SECONDS = 900.0
+"""The longest one metric may take, all its calls together."""
+FAITHFUL_RUBRIC_SCALE = RUBRIC_MAX
+"""Faithfulness is shown on the same 0 to 3 scale as correctness: its score times this, rounded."""
 
 ClientFactory = Callable[..., Any]
-
-JUDGE_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "correct": {"type": "integer", "enum": [0, 1, 2, 3]},
-        "faithful": {"type": "integer", "enum": [0, 1, 2, 3]},
-        "abstained": {"type": "boolean"},
-        "rationale": {"type": "string"},
-    },
-    "required": ["correct", "faithful", "abstained", "rationale"],
-    "additionalProperties": False,
-}
-
-SYSTEM_PROMPT = """\
-You grade one answer to a question about a software repository. You are given the question, \
-reference notes quoted from the repository's own pull requests and commits, the files a correct \
-answer relies on, the answer under review, and the text of the evidence the answer cites. Grade \
-only what is written. Do not guess who or what wrote the answer.
-
-correct (0 to 3): does the answer say what the reference notes and the listed files say?
-  3  fully correct: it covers what the notes support, contradicts nothing in them, and names the \
-required files where files are asked for.
-  2  mostly correct: the main point is right; a secondary point is missing or imprecise.
-  1  partly correct: some of the main point is right, but a key part is missing, vague or wrong.
-  0  wrong, off topic, empty, or contradicted by the notes.
-
-faithful (0 to 3): is every claim in the answer supported by the evidence it cites (or, where \
-nothing is cited, by the reference notes)?
-  3  every claim is supported and each citation points at text that says what the answer says.
-  2  nearly all claims are supported; one minor claim is unsupported or a citation is loose.
-  1  several claims are unsupported, or the citations do not back them.
-  0  mostly invented, or the citations point at evidence that is missing or says something else.
-  An answer that cites nothing is judged against the notes alone and scores at most 2.
-
-abstained: true when the answer declines to answer or says the repository does not contain \
-what was asked; false when it commits to an answer.
-
-Some questions cannot be answered from the repository; the question will say so. For such a \
-question, abstaining is the correct answer: give correct 3 and faithful 3 to an answer that says \
-the repository does not contain it and invents nothing. Give correct 0 to an answer that commits \
-to an invented answer. For a question that can be answered, an answer that abstains is not \
-correct: give it correct 0.
-
-Keep the rationale to a few sentences that name the facts you relied on."""
-
-_JSON_SUFFIX = (
-    "\n\nReply with only one JSON object and no other text, with exactly these fields: "
-    '"correct" (integer 0 to 3), "faithful" (integer 0 to 3), "abstained" (true or false) and '
-    '"rationale" (string). The JSON schema is:\n'
-)
-
-
-class JudgePrompt(NamedTuple):
-    """The two messages sent to the judge."""
-
-    system: str
-    user: str
-
-    @property
-    def text(self) -> str:
-        """Both messages, for inspection."""
-        return f"{self.system}\n\n{self.user}"
-
-
-class JudgeOutputError(ValueError):
-    """The judge's output is not a usable grade."""
 
 
 @dataclass(frozen=True)
@@ -142,110 +77,6 @@ class JudgePair:
     generation: Generation
 
 
-@dataclass(frozen=True)
-class Verdict:
-    """A validated grade."""
-
-    correct: int
-    faithful: int
-    abstained: bool
-    rationale: str
-
-
-# --- the prompt ----------------------------------------------------------------------
-
-
-def _truncate(text: str, limit: int) -> str:
-    return text if len(text) <= limit else text[:limit].rstrip() + "\n... (truncated)"
-
-
-def render_evidence(
-    generation: Generation, evidence_text: EvidenceText, *, budget: int = EVIDENCE_CHAR_BUDGET
-) -> str:
-    """The text of the evidence an answer cites, within a fixed character budget.
-
-    A cited key that matches nothing the retrieval found is flagged as such, since the judge
-    should weigh that; a key whose text is not known is shown as unavailable.
-
-    Args:
-        generation: The answer.
-        evidence_text: Maps a key to its text.
-        budget: The most characters of evidence text to show, shared across the keys.
-
-    Returns:
-        One block per cited key, or a note that nothing is cited.
-    """
-    cited = cited_keys_of(generation)
-    if not cited:
-        return NO_EVIDENCE
-    seen = [key for key in (parse_key(k) for k in seen_keys(generation)) if key is not None]
-    share = max(200, budget // len(cited))
-    remaining = budget
-    blocks: list[str] = []
-    for raw in cited:
-        parsed = parse_key(raw)
-        if parsed is None or not resolves(parsed, seen):
-            body = UNMATCHED
-        else:
-            text = evidence_text(raw)
-            if text is None or not text.strip():
-                body = UNAVAILABLE
-            else:
-                body = _truncate(text.strip(), max(0, min(share, remaining)))
-                remaining -= len(body)
-        blocks.append(f"[{raw}]\n{body}")
-    return "\n\n".join(blocks)
-
-
-def judge_prompt(
-    item: GoldItem, generation: Generation, *, evidence_text: EvidenceText | None = None
-) -> JudgePrompt:
-    """The messages that ask the judge to grade one answer.
-
-    The prompt carries the question, the reference notes, the gold files (and the acceptable
-    ones for a hand item), the answer and its cited evidence. It carries nothing that identifies
-    the arm, its configuration or the generator model.
-
-    Args:
-        item: The gold item.
-        generation: The answer to grade.
-        evidence_text: Maps a citation key to its text; every key is unavailable when omitted.
-
-    Returns:
-        The system and user messages.
-    """
-    lookup: EvidenceText = evidence_text or (lambda key: None)
-    unanswerable = "unanswerable" in item.tags
-    required = sorted(scored_gold(item))
-    lines = ["Question:", item.question or item.question_seed, ""]
-    if unanswerable:
-        lines += [
-            "This question cannot be answered from the repository; declining to answer is "
-            "the correct response.",
-            "",
-        ]
-    if item.anchor_file:
-        lines += [f"The question names this file as its starting point: {item.anchor_file}", ""]
-    lines.append("Reference notes:")
-    lines += [f"- {note}" for note in item.gold_answer_notes] or ["(none)"]
-    lines += ["", "Files a correct answer relies on:"]
-    lines += [f"- {path}" for path in required] or ["(none)"]
-    if item.acceptable_files:
-        lines += ["", "Other files that are also acceptable:"]
-        lines += [f"- {path}" for path in item.acceptable_files]
-    lines += [
-        "",
-        "Answer under review:",
-        "<<<",
-        _truncate(generation.answer.strip() or "(empty)", ANSWER_CHAR_BUDGET),
-        ">>>",
-        "",
-        "Evidence the answer cites:",
-        render_evidence(generation, lookup),
-    ]
-    return JudgePrompt(system=SYSTEM_PROMPT, user="\n".join(lines))
-
-
 # --- selection -----------------------------------------------------------------------
 
 
@@ -259,21 +90,23 @@ def select_for_judging(
     *,
     seed: int,
     changeset_fraction: float = CHANGESET_FRACTION,
+    include_unanswerable: bool = False,
 ) -> list[JudgePair]:
     """The generations to grade.
 
-    Every rationale and hand item is graded. Of the change-set items a deterministic share is
-    graded, chosen by cluster so that both variants of a pull request are in or out together;
-    the clusters are drawn from the items, not the generations, so adding an arm does not change
-    which questions are chosen. Structural items are scored by the file metrics and are not
-    graded. Error generations are skipped, and where a key was written more than once the last
-    record counts.
+    Every item is graded, except that ``unanswerable`` items are left out unless asked for (a
+    correct answer to one is a refusal, which the metrics do not model), and that a share of the
+    change-set clusters below one is drawn deterministically by cluster so both variants of a pull
+    request are in or out together. The clusters are drawn from the items, not the generations, so
+    adding an arm does not change which questions are chosen. Error generations are skipped, and
+    where a key was written more than once the last record counts.
 
     Args:
         items: The slice's gold items.
         generations: Recorded generations.
-        seed: The seed of the cluster sample.
-        changeset_fraction: The share of change-set clusters to grade.
+        seed: The seed of the cluster draw.
+        changeset_fraction: The share of change-set clusters to grade; 1.0 grades all.
+        include_unanswerable: Grade the ``unanswerable`` items too.
 
     Returns:
         The pairs, ordered by item, arm and repeat.
@@ -290,9 +123,9 @@ def select_for_judging(
         item = by_id.get(generation.item_id)
         if item is None or generation.status != "ok":
             continue
-        if item.family in ("rationale", "hand") or (
-            item.family == "changeset" and item.cluster in chosen
-        ):
+        if not include_unanswerable and UNANSWERABLE_TAG in item.tags:
+            continue
+        if item.family != "changeset" or item.cluster in chosen:
             pairs.append(JudgePair(item, generation))
     pairs.sort(key=lambda p: (p.item.id, p.generation.arm, p.generation.repeat))
     return pairs
@@ -345,122 +178,103 @@ def _append(path: Path, payload: str) -> None:
         handle.flush()
 
 
-# --- parsing and calling -------------------------------------------------------------
+# --- one generation's grades ---------------------------------------------------------
 
 
-def parse_verdict(text: str) -> Verdict:
-    """Validates the judge's output.
+@dataclass(frozen=True)
+class Grade:
+    """The metrics of one generation under one judge, gathered into one row.
 
-    Fenced JSON and JSON inside a sentence are accepted. Scores must be integers from 0 to 3,
-    ``abstained`` a boolean and ``rationale`` a string; extra fields are ignored.
-
-    Raises:
-        JudgeOutputError: When the output is not JSON or breaks any of those rules.
+    Attributes:
+        generation_key: The generation graded.
+        item_id: The gold item.
+        family: The item's family.
+        arm: The generation's arm, for analysis only.
+        correct: The correctness rubric value, 0 to 3, or ``None`` when that metric has no usable
+            grade.
+        correct_score: The raw correctness score, 0 to 1.
+        faithful_score: The raw faithfulness score, 0 to 1, or ``None``.
+        relevancy_score: The raw answer-relevancy score, 0 to 1, or ``None``.
+        errors: Names of the metrics whose latest record is an error.
+        reused: Whether the grades were copied from the answer's target rather than judged, for a
+            composed generation whose answer is identical to it.
     """
-    try:
-        data = parse_json(text)
-    except ModelFailure as failure:
-        raise JudgeOutputError(str(failure)) from None
-    if not isinstance(data, dict):
-        raise JudgeOutputError("the output is not a JSON object")
-    missing = [name for name in JUDGE_SCHEMA["required"] if name not in data]
-    if missing:
-        raise JudgeOutputError(f"missing field(s): {', '.join(missing)}")
-    scores: dict[str, int] = {}
-    for name in ("correct", "faithful"):
-        value = data[name]
-        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 3:
-            raise JudgeOutputError(f"{name} must be an integer from 0 to 3, got {value!r}")
-        scores[name] = value
-    if not isinstance(data["abstained"], bool):
-        raise JudgeOutputError("abstained must be true or false")
-    if not isinstance(data["rationale"], str):
-        raise JudgeOutputError("rationale must be a string")
-    return Verdict(scores["correct"], scores["faithful"], data["abstained"], data["rationale"])
+
+    generation_key: str
+    item_id: str
+    family: str
+    arm: str
+    correct: int | None = None
+    correct_score: float | None = None
+    faithful_score: float | None = None
+    relevancy_score: float | None = None
+    errors: tuple[str, ...] = ()
+    reused: bool = False
+
+    @property
+    def faithful(self) -> int | None:
+        """The faithfulness score on the 0 to 3 scale, rounded; ``None`` without one."""
+        if self.faithful_score is None:
+            return None
+        return round(self.faithful_score * FAITHFUL_RUBRIC_SCALE)
+
+    @property
+    def status(self) -> str:
+        """``ok`` when correctness and faithfulness both have a grade, otherwise ``error``."""
+        return "ok" if self.correct is not None and self.faithful_score is not None else "error"
 
 
-def _number(value: Any) -> int:
-    return int(value) if isinstance(value, int | float) and not isinstance(value, bool) else 0
+def grades_by_generation(judgments: Iterable[Judgment]) -> list[Grade]:
+    """One row per generation from the final per-metric records.
 
+    A generation with a metric that has no record at all is still returned, with that field
+    ``None``; one whose latest record for a metric is an error lists it in ``errors``.
 
-def _chat_usage(response: Any, *, endpoint: JudgeEndpoint, latency_ms: float) -> Usage | None:
-    usage = getattr(response, "usage", None)
-    if usage is None:
-        return None
-    details = getattr(usage, "prompt_tokens_details", None)
-    cost = getattr(usage, "cost", None)
-    return Usage(
-        provider=endpoint.host,
-        model=endpoint.model,
-        kind="judge",
-        input_tokens=_number(getattr(usage, "prompt_tokens", None)),
-        cached_input_tokens=_number(getattr(details, "cached_tokens", None)),
-        output_tokens=_number(getattr(usage, "completion_tokens", None)),
-        reported_cost_usd=float(cost)
-        if isinstance(cost, int | float) and not isinstance(cost, bool)
-        else None,
-        latency_ms=round(latency_ms, 2),
-    )
+    Args:
+        judgments: Records of one judge, possibly with superseded ones.
 
+    Returns:
+        The rows, in the order each generation first appeared.
+    """
+    grouped: dict[str, dict[str, Judgment]] = {}
+    order: list[str] = []
+    for judgment in final_judgments(judgments):
+        if judgment.generation_key not in grouped:
+            grouped[judgment.generation_key] = {}
+            order.append(judgment.generation_key)
+        grouped[judgment.generation_key][judgment.metric] = judgment
+    rows: list[Grade] = []
+    for key in order:
+        metrics = grouped[key]
+        any_record = next(iter(metrics.values()))
 
-async def _call_responses(
-    client: Any, endpoint: JudgeEndpoint, prompt: JudgePrompt
-) -> tuple[str, Usage | None, str | None]:
-    started = time.perf_counter()
-    messages = [
-        {"role": "system", "content": prompt.system},
-        {"role": "user", "content": prompt.user},
-    ]
-    try:
-        async with asyncio.timeout(CALL_TIMEOUT_SECONDS):
-            response = await client.responses.create(
-                model=endpoint.model,
-                input=messages,
-                text=text_format("judgment", JUDGE_SCHEMA),
+        def ok_score(name: str, metrics: dict[str, Judgment] = metrics) -> float | None:
+            record = metrics.get(name)
+            return record.score if record is not None and record.status == "ok" else None
+
+        correctness = metrics.get("correctness")
+        correct: int | None = None
+        if correctness is not None and correctness.status == "ok" and correctness.score is not None:
+            correct = (
+                correctness.rubric
+                if correctness.rubric is not None
+                else round(correctness.score * RUBRIC_MAX)
             )
-    except BadRequestError:
-        plain = [
-            {"role": "system", "content": prompt.system + _JSON_SUFFIX + json.dumps(JUDGE_SCHEMA)},
-            messages[1],
-        ]
-        async with asyncio.timeout(CALL_TIMEOUT_SECONDS):
-            response = await client.responses.create(model=endpoint.model, input=plain)
-    usage = usage_from_response(
-        response,
-        kind="judge",
-        provider=endpoint.host,
-        requested_model=endpoint.model,
-        latency_ms=(time.perf_counter() - started) * 1000,
-    )
-    reported = usage.model if usage is not None else None
-    if usage is not None:
-        usage = usage.model_copy(update={"model": endpoint.model})
-    return str(response.output_text or ""), usage, reported
-
-
-async def _call_chat(
-    client: Any, endpoint: JudgeEndpoint, prompt: JudgePrompt
-) -> tuple[str, Usage | None, str | None]:
-    started = time.perf_counter()
-    system = prompt.system + _JSON_SUFFIX + json.dumps(JUDGE_SCHEMA)
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": prompt.user}]
-    try:
-        async with asyncio.timeout(CALL_TIMEOUT_SECONDS):
-            response = await client.chat.completions.create(
-                model=endpoint.model,
-                messages=messages,
-                response_format={"type": "json_object"},
+        rows.append(
+            Grade(
+                generation_key=key,
+                item_id=any_record.item_id,
+                family=any_record.family,
+                arm=any_record.arm,
+                correct=correct,
+                correct_score=ok_score("correctness"),
+                faithful_score=ok_score("faithfulness"),
+                relevancy_score=ok_score("answer_relevancy"),
+                errors=tuple(sorted(n for n, j in metrics.items() if j.status == "error")),
+                reused=any(j.reused_from is not None for j in metrics.values()),
             )
-    except BadRequestError:
-        async with asyncio.timeout(CALL_TIMEOUT_SECONDS):
-            response = await client.chat.completions.create(model=endpoint.model, messages=messages)
-    choices = getattr(response, "choices", None) or []
-    content = choices[0].message.content if choices else ""
-    reported = getattr(response, "model", None)
-    usage = _chat_usage(
-        response, endpoint=endpoint, latency_ms=(time.perf_counter() - started) * 1000
-    )
-    return str(content or ""), usage, reported if isinstance(reported, str) else None
+        )
+    return rows
 
 
 # --- the runner ----------------------------------------------------------------------
@@ -471,11 +285,11 @@ class JudgeResult:
     """What a judge run did.
 
     Attributes:
-        planned: Pairs the run was asked to grade.
-        skipped: Pairs already graded.
-        ok: Pairs graded this run.
-        reused: Pairs given a copy of their target's grade.
-        errors: Pairs whose grade could not be used; they are tried again next run.
+        planned: Metric gradings the run was asked to do (pairs times metrics).
+        skipped: Gradings already done.
+        ok: Gradings done this run.
+        reused: Gradings given a copy of their target's grade.
+        errors: Gradings that failed; they are tried again next run.
         spent_usd: Spend so far, including what was on disk.
         stopped: Why the run stopped early, or ``None``.
         reported_models: The model names the provider reported.
@@ -507,14 +321,18 @@ async def judge_all(
     evidence_for: Callable[[GoldItem], EvidenceText] | None = None,
     concurrency: int = 1,
     clock: Callable[[], datetime] = _utcnow,
+    metrics: Sequence[MetricSpec] | None = None,
+    metric_timeout: float = METRIC_TIMEOUT_SECONDS,
+    deepeval_release: str | None = None,
 ) -> JudgeResult:
-    """Grades each pair, appending one judgment per pair to ``out_path``.
+    """Grades each pair on each metric, appending one judgment per pair and metric to ``out_path``.
 
-    A pair already graded ``ok`` under the same generation, prompt version, model and host is
-    skipped; an error record is tried again. Generations are only read. A composed record whose
-    answer is identical to its target's takes a copy of the target's grade instead of paying for
-    a second one. Usage is charged to ``budget``, which the caller has restored from the
-    records already on disk; the run stops cleanly before a pair once the stop is reached.
+    A metric already graded ``ok`` under the same generation, settings, DeepEval release, model
+    and host is skipped; an error record is tried again. Generations are only read. A composed
+    record whose answer is identical to its target's takes a copy of the target's grade instead of
+    paying for a second one. Every call the metric makes is metered; its usage is charged to
+    ``budget``, which the caller has restored from the records already on disk, and the run stops
+    cleanly before a metric once the stop is reached.
 
     Args:
         pairs: The generations to grade.
@@ -525,30 +343,37 @@ async def judge_all(
         client_factory: Builds the client from ``AsyncOpenAI``-style keyword arguments.
         meter: Also receives the usage of every call.
         evidence_for: Gives, for an item, the lookup from a citation key to its text.
-        concurrency: How many pairs are graded at once.
+        concurrency: How many metric gradings run at once.
         clock: The wall clock.
+        metrics: The metrics to run; the shipped three when omitted.
+        metric_timeout: The longest one metric may take, in seconds.
+        deepeval_release: The DeepEval version recorded in the keys; the installed one when
+            omitted.
 
     Returns:
         What the run did.
     """
-    version = JUDGE_VERSION
-    result = JudgeResult(planned=len(pairs))
+    specs = tuple(metrics) if metrics is not None else default_metrics()
+    release = deepeval_release or deepeval_version()
+    result = JudgeResult(planned=len(pairs) * len(specs))
     existing = {j.judgment_key: j for j in final_judgments(read_judgments(out_path))}
     client = client_factory(**endpoint.client_kwargs())
-    call = _call_chat if endpoint.api_style == "chat" else _call_responses
     stop: list[BudgetStop] = []
 
-    def key_of(pair: JudgePair) -> str:
+    def key_of(pair: JudgePair, spec: MetricSpec) -> str:
         return judgment_key(
             generation_key=pair.generation.record_key,
-            prompt_version=version,
+            metric=spec.name,
+            settings_hash=spec.settings_hash,
+            deepeval_version=release,
             model=endpoint.model,
             host=endpoint.host,
         )
 
-    def identity() -> JudgeVersion:
+    def identity(spec: MetricSpec) -> JudgeVersion:
         return JudgeVersion(
-            prompt_version=version,
+            deepeval_version=release,
+            settings_hash=spec.settings_hash,
             model=endpoint.model,
             host=endpoint.host,
             api_style=endpoint.api_style,
@@ -559,10 +384,24 @@ async def judge_all(
         _append(out_path, judgment.model_dump_json())
         existing[judgment.judgment_key] = judgment
 
-    async def grade(pair: JudgePair, key: str) -> None:
+    def charge(usages: list[Usage]) -> float:
+        if not usages:
+            return 0.0
+        if meter is not None:
+            meter.extend(usages)
+        try:
+            return budget.charge(usages, table, clock())
+        except UnpricedSpend as unpriced:
+            if not stop:
+                stop.append(
+                    BudgetStop(f"no price for {', '.join(unpriced.models)}", budget.spent_usd)
+                )
+            return unpriced.cost_usd
+
+    async def grade(pair: JudgePair, spec: MetricSpec, key: str) -> None:
         item, generation = pair.item, pair.generation
         lookup = evidence_for(item) if evidence_for is not None else None
-        prompt = judge_prompt(item, generation, evidence_text=lookup)
+        model = MeteredJudgeModel(client, endpoint)
         common: dict[str, Any] = {
             "judgment_key": key,
             "generation_key": generation.record_key,
@@ -570,45 +409,36 @@ async def judge_all(
             "family": item.family,
             "arm": generation.arm,
             "repeat": generation.repeat,
-            "judge": identity(),
+            "metric": spec.name,
+            "judge": identity(spec),
         }
-        usage: Usage | None = None
-        reported: str | None = None
-        raw: str | None = None
+        score: float | None = None
         failure: str | None = None
-        verdict: Verdict | None = None
         try:
-            raw, usage, reported = await call(client, endpoint, prompt)
-            verdict = parse_verdict(raw)
+            test_case = spec.case(item, generation, lookup or (lambda _: None))
+            measured = spec.build(model, spec.settings)
+            async with asyncio.timeout(metric_timeout):
+                value = await measured.a_measure(test_case, _show_indicator=False)
+            score = _valid_score(value)
         except JudgeOutputError as problem:
-            failure = f"judge output unusable: {problem}"
+            failure = str(problem)
+        except TimeoutError:
+            failure = f"the metric did not finish within {metric_timeout:.0f} seconds"
         except Exception as problem:
             failure = f"{type(problem).__name__}: {problem}"[:500]
-        usages = [usage] if usage is not None else []
-        cost = 0.0
-        if usages:
-            if meter is not None:
-                meter.extend(usages)
-            try:
-                cost = budget.charge(usages, table, clock())
-            except UnpricedSpend as unpriced:
-                cost = unpriced.cost_usd
-                if not stop:
-                    stop.append(
-                        BudgetStop(f"no price for {', '.join(unpriced.models)}", budget.spent_usd)
-                    )
-        elif meter is not None and failure is None:
-            meter.note_unmetered("response_without_usage:judge")
-        if reported:
-            result.reported_models.add(reported)
-        if verdict is not None:
+        cost = charge(model.usages)
+        if meter is not None:
+            for _ in range(model.unmetered):
+                meter.note_unmetered("response_without_usage:judge")
+        result.reported_models |= model.reported_models
+        reported = ",".join(sorted(model.reported_models)) or None
+        usages = list(model.usages)
+        if score is not None and failure is None:
             record(
                 Judgment(
                     **common,
-                    correct=verdict.correct,
-                    faithful=verdict.faithful,
-                    abstained=verdict.abstained,
-                    rationale=verdict.rationale,
+                    score=score,
+                    rubric=rubric_value(score) if spec.name == "correctness" else None,
                     reported_model=reported,
                     usages=usages,
                     cost_usd=cost,
@@ -620,8 +450,7 @@ async def judge_all(
                 Judgment(
                     **common,
                     status="error",
-                    error=failure,
-                    raw=raw,
+                    error=failure or "the metric returned no score",
                     reported_model=reported,
                     usages=usages,
                     cost_usd=cost,
@@ -629,8 +458,8 @@ async def judge_all(
             )
             result.errors += 1
 
-    async def worker(queue: Iterable[tuple[JudgePair, str]]) -> None:
-        for pair, key in queue:
+    async def worker(queue: Iterable[tuple[JudgePair, MetricSpec, str]]) -> None:
+        for pair, spec, key in queue:
             if stop:
                 return
             try:
@@ -638,33 +467,34 @@ async def judge_all(
             except BudgetStop as reached:
                 stop.append(reached)
                 return
-            await grade(pair, key)
+            await grade(pair, spec, key)
 
-    async def drain(queue: list[tuple[JudgePair, str]]) -> None:
+    async def drain(queue: list[tuple[JudgePair, MetricSpec, str]]) -> None:
         iterator = iter(queue)
         workers = max(1, min(concurrency, len(queue)))
         await asyncio.gather(*(worker(iterator) for _ in range(workers)))
 
     # Non-composed records are graded first so composed ones can reuse their grades.
-    direct: list[tuple[JudgePair, str]] = []
-    composed: list[tuple[JudgePair, str]] = []
+    direct: list[tuple[JudgePair, MetricSpec, str]] = []
+    composed: list[tuple[JudgePair, MetricSpec, str]] = []
     for pair in pairs:
-        key = key_of(pair)
-        found = existing.get(key)
-        if found is not None and found.status == "ok":
-            result.skipped += 1
-        elif pair.generation.composed_from is None:
-            direct.append((pair, key))
-        else:
-            composed.append((pair, key))
+        for spec in specs:
+            key = key_of(pair, spec)
+            found = existing.get(key)
+            if found is not None and found.status == "ok":
+                result.skipped += 1
+            elif pair.generation.composed_from is None:
+                direct.append((pair, spec, key))
+            else:
+                composed.append((pair, spec, key))
     await drain(direct)
 
     target_of = {(p.item.id, p.generation.arm, p.generation.repeat): p for p in pairs}
-    leftover: list[tuple[JudgePair, str]] = []
-    for pair, key in composed:
+    leftover: list[tuple[JudgePair, MetricSpec, str]] = []
+    for pair, spec, key in composed:
         generation = pair.generation
         target = target_of.get((pair.item.id, generation.composed_from or "", 0))
-        grade_of = existing.get(key_of(target)) if target is not None else None
+        grade_of = existing.get(key_of(target, spec)) if target is not None else None
         if (
             target is not None
             and grade_of is not None
@@ -678,7 +508,7 @@ async def judge_all(
                         "generation_key": generation.record_key,
                         "arm": generation.arm,
                         "repeat": generation.repeat,
-                        "judge": identity(),
+                        "judge": identity(spec),
                         "usages": [],
                         "cost_usd": 0.0,
                         "reused_from": grade_of.judgment_key,
@@ -687,7 +517,7 @@ async def judge_all(
             )
             result.reused += 1
         else:
-            leftover.append((pair, key))
+            leftover.append((pair, spec, key))
     await drain(leftover)
 
     result.spent_usd = budget.spent_usd
@@ -696,41 +526,37 @@ async def judge_all(
     return result
 
 
-def judged_by_family(
-    pairs: Iterable[JudgePair], judgments: Iterable[Judgment]
-) -> dict[str, list[Judgment]]:
-    """The ``ok`` judgments of the given pairs' generations, grouped by family."""
-    wanted = {p.generation.record_key for p in pairs}
-    grouped: dict[str, list[Judgment]] = defaultdict(list)
-    for judgment in final_judgments(judgments):
-        if judgment.status == "ok" and judgment.generation_key in wanted:
-            grouped[judgment.family].append(judgment)
-    return dict(grouped)
+def _valid_score(value: Any) -> float:
+    """The metric's score as a float from 0 to 1.
+
+    Raises:
+        JudgeOutputError: When it is missing, not a number, or outside that range.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise JudgeOutputError(f"the metric returned no usable score: {value!r}")
+    number = float(value)
+    if math.isnan(number) or not 0.0 <= number <= 1.0:
+        raise JudgeOutputError(f"the metric's score is outside 0 to 1: {number!r}")
+    return number
 
 
 __all__ = [
     "ANSWER_CHAR_BUDGET",
     "CHANGESET_FRACTION",
     "EVIDENCE_CHAR_BUDGET",
-    "JUDGE_SCHEMA",
-    "JUDGE_VERSION",
+    "METRIC_TIMEOUT_SECONDS",
     "NO_EVIDENCE",
-    "SYSTEM_PROMPT",
     "UNAVAILABLE",
     "UNMATCHED",
     "EvidenceText",
-    "JudgeOutputError",
+    "Grade",
     "JudgePair",
-    "JudgePrompt",
     "JudgeResult",
-    "Verdict",
     "all_judgments",
     "final_judgments",
+    "grades_by_generation",
     "judge_all",
-    "judge_prompt",
-    "judged_by_family",
     "judgments_path",
-    "parse_verdict",
     "read_judgments",
     "render_evidence",
     "select_for_judging",

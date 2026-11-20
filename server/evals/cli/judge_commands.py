@@ -1,9 +1,10 @@
 """``run judge``, ``run judge-label`` and ``run judge-agreement``: the judge pass from the CLI.
 
-``run judge`` grades the selected generations of a run with the chosen judge, writes that judge's
-own ``judgments.<judge>.jsonl`` and a judge manifest beside the run's, and draws the blind sample
-a person labels. ``judge-label`` is the interactive labelling session. ``judge-agreement`` reports
-how well a judge agrees with the labels, or with a second judge, per family.
+``run judge`` grades the selected generations of a run with the chosen judge (three DeepEval
+metrics each), writes that judge's own ``judgments.<judge>.jsonl`` and a judge manifest beside the
+run's, and draws the blind sample of 30 answers a person labels. ``judge-label`` is the
+interactive labelling session. ``judge-agreement`` reports how well a judge agrees with the
+labels, or with a second judge, per family.
 
 Nothing here touches ``generations.jsonl``. Tests inject the client, the price table and the
 evidence lookup; the real ones are used only when they are omitted.
@@ -32,18 +33,20 @@ from evals.run.endpoint import JudgeConfigError, JudgeEndpoint
 from evals.run.evidence import evidence_for_items
 from evals.run.generate import GENERATIONS, ROUTES, read_generations, read_routes
 from evals.run.judge import (
-    JUDGE_VERSION,
+    CHANGESET_FRACTION,
     EvidenceText,
     all_judgments,
     final_judgments,
+    grades_by_generation,
     judge_all,
     judgments_path,
     read_judgments,
     select_for_judging,
 )
+from evals.run.judge_metrics import metric_configs
 from evals.run.judge_validation import (
-    FULL_PER_FAMILY,
-    PILOT_MIN_LABELS,
+    LABEL_SAMPLE_SIZE,
+    MIN_LABELS,
     SHEET_NAME,
     build_sheet,
     format_agreement,
@@ -59,8 +62,7 @@ from evals.run.judge_validation import (
 from evals.run.metering import Meter
 from evals.run.pricing import PRICES_PATH, PricesIncomplete, PriceTable
 
-DEFAULT_SAMPLE_SIZE = PILOT_MIN_LABELS
-DEFAULT_PER_FAMILY_MIN = 10
+DEFAULT_SAMPLE_SIZE = LABEL_SAMPLE_SIZE
 
 
 def judge_manifest_name(endpoint: JudgeEndpoint) -> str:
@@ -111,7 +113,7 @@ def _write_judge_manifest(
         extra={
             "kind": "judge",
             "judge": {
-                "prompt_version": JUDGE_VERSION,
+                **metric_configs(),
                 "model": endpoint.model,
                 "host": endpoint.host,
                 "api_style": endpoint.api_style,
@@ -131,7 +133,8 @@ def cmd_run_judge(
     sample_only: bool = False,
     seed: int = 0,
     sample_size: int = DEFAULT_SAMPLE_SIZE,
-    per_family_min: int = DEFAULT_PER_FAMILY_MIN,
+    include_unanswerable: bool = False,
+    changeset_fraction: float = CHANGESET_FRACTION,
     concurrency: int = 4,
     table: PriceTable | None = None,
     client_factory: Callable[..., Any] = AsyncOpenAI,
@@ -149,9 +152,10 @@ def cmd_run_judge(
         budget_usd: The spending cap; the run's generation spend counts against it.
         stop_usd: The spend at which judging stops cleanly.
         sample_only: Draw the labelling sample from existing judgments without calling a judge.
-        seed: The seed of the change-set cluster sample and the labelling sample.
+        seed: The seed of the change-set cluster draw and the labelling sample.
         sample_size: How many answers to put on the labelling sheet.
-        per_family_min: The fewest answers taken from each family.
+        include_unanswerable: Also grade the items marked unanswerable.
+        changeset_fraction: The share of change-set clusters to grade; every one by default.
         concurrency: Pairs graded at once.
         table: The price table; the shipped one when omitted.
         client_factory: Builds the judge client; ``AsyncOpenAI`` by default.
@@ -179,7 +183,13 @@ def cmd_run_judge(
         print(str(failure), file=sys.stderr)
         return 2
 
-    pairs = select_for_judging(items, generations, seed=seed)
+    pairs = select_for_judging(
+        items,
+        generations,
+        seed=seed,
+        changeset_fraction=changeset_fraction,
+        include_unanswerable=include_unanswerable,
+    )
     path = judgments_path(run_dir, endpoint)
     prices = table or PriceTable.load(PRICES_PATH)
     status = 0
@@ -227,18 +237,18 @@ def cmd_run_judge(
             (clock() if clock else datetime.now(UTC)).date().isoformat(),
         )
         print(
-            f"{result.ok} graded, {result.reused} reused, {result.errors} errors, "
+            f"{result.ok} metrics graded, {result.reused} reused, {result.errors} errors, "
             f"{result.skipped} already done; spent ${result.spent_usd:.4f} of ${budget.cap_usd:.2f}"
         )
         if result.stopped:
             print(f"stopped: {result.stopped}")
         if result.errors:
-            print("some grades were unusable; running the command again retries them")
+            print("some metrics failed; running the command again retries them")
         status = 1 if (result.errors or result.stopped) else 0
         print(f"judgments: {path}")
 
     sample = sample_for_labelling(
-        read_judgments(path), n=sample_size, seed=seed, per_family_min=per_family_min
+        grades_by_generation(read_judgments(path)), n=sample_size, seed=seed
     )
     lookup_for = evidence_for
     entries = build_sheet(
@@ -317,7 +327,7 @@ def cmd_judge_agreement(
     annotator: str | None = None,
     resamples: int = 2000,
     seed: int = 0,
-    minimum: int = PILOT_MIN_LABELS,
+    minimum: int = MIN_LABELS,
     print_fn: Callable[[str], None] = print,
 ) -> int:
     """Report how well a judge agrees with the hand labels, or with a second judge.
@@ -344,7 +354,9 @@ def cmd_judge_agreement(
         title = f"{endpoint.model}@{endpoint.host} against {compare.model}@{compare.host}"
     else:
         labels = read_labels(labels_path(run_dir, annotator))
-        report = judge_vs_human(mine, labels, resamples=resamples, seed=seed, minimum=minimum)
+        report = judge_vs_human(
+            grades_by_generation(mine), labels, resamples=resamples, seed=seed, minimum=minimum
+        )
         title = f"{endpoint.model}@{endpoint.host} against hand labels"
     if report.n == 0:
         print("nothing to compare: no answers graded and labelled by both", file=sys.stderr)
@@ -353,12 +365,11 @@ def cmd_judge_agreement(
     flagged = sorted(report.exploratory_families)
     if flagged:
         print_fn(f"exploratory (kappa below 0.6 or too few): {', '.join(flagged)}")
-    print_fn(f"the full run labels {FULL_PER_FAMILY} answers per family")
+    print_fn(f"the check labels {LABEL_SAMPLE_SIZE} answers across arms and question kinds")
     return 0
 
 
 __all__ = [
-    "DEFAULT_PER_FAMILY_MIN",
     "DEFAULT_SAMPLE_SIZE",
     "cmd_judge_agreement",
     "cmd_judge_label",

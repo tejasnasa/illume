@@ -22,8 +22,15 @@ from evals.run.adapters import run_single_shot
 from evals.run.budget import Budget
 from evals.run.endpoint import JudgeEndpoint
 from evals.run.generate import GENERATIONS, STOPPED, SUMMARY, generate, read_generations
-from evals.run.judge import judge_all, judgments_path, read_judgments, select_for_judging
+from evals.run.judge import (
+    grades_by_generation,
+    judge_all,
+    judgments_path,
+    read_judgments,
+    select_for_judging,
+)
 from evals.run.metering import Meter
+from tests.evals.judge_helpers import FakeJudge
 from tests.evals.run_helpers import PlainModel, complete_table, make_gold_item
 from tests.factories import make_user
 from tests.fixtures.agent_run import say
@@ -151,9 +158,7 @@ async def test_judging_the_generated_records_with_a_scripted_judge(db_session, s
     generations = run_dir / GENERATIONS
     before = generations.read_bytes()
     pairs = select_for_judging(items, read_generations(generations), seed=0)
-    judge_model = PlainModel(
-        [say('{"correct": 3, "faithful": 2, "abstained": false, "rationale": "ok"}') for _ in pairs]
-    )
+    judge_model = FakeJudge()
     judge = JudgeEndpoint("gpt-6-luna", api_key="test-key")
 
     with respx.mock(assert_all_mocked=True, assert_all_called=False):  # no network at all
@@ -168,10 +173,11 @@ async def test_judging_the_generated_records_with_a_scripted_judge(db_session, s
         )
 
     stored = read_judgments(judgments_path(run_dir, judge))
-    assert len(pairs) == 6 and (result.ok, result.errors) == (6, 0)
+    assert len(pairs) == 6 and (result.ok, result.errors) == (18, 0)  # three metrics each
     assert {j.generation_key for j in stored} == {p.generation.record_key for p in pairs}
-    assert all(j.status == "ok" and (j.correct, j.faithful) == (3, 2) for j in stored)
-    assert all("def verify_password" in text for text in judge_model.input_texts(0)[-1:])
+    assert all(j.status == "ok" for j in stored)
+    assert {g.correct for g in grades_by_generation(stored)} == {3}
+    assert any("def verify_password" in text for text in judge_model.texts())
     assert generations.read_bytes() == before
 
     write_jsonl(run_dir / "gold.jsonl", items)

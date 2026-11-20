@@ -30,7 +30,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "deepeval>=4.3.2",
+    "deepeval==4.3.2",
     "fakeredis>=2.38.0",
     "freezegun>=1.5.5",
     "mypy>=2.3.1",
