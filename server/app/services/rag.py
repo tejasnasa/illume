@@ -15,8 +15,9 @@ and because they are the reference the Classic preset is held equal to.
 
 import logging
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, Sequence
+from typing import Literal
 from uuid import UUID
 
 from openai import AsyncOpenAI
@@ -31,6 +32,7 @@ from app.services.retrieval.config import CLASSIC
 from app.services.retrieval.resolve import SourceReference, resolve_sources
 from app.services.retrieval.single_shot import answer, build_classic_prompt
 from app.services.retrieval.vector import prepare_filtered_vector_search
+from app.services.tracing import add_trace_metadata, traced, wrap_client
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,7 @@ def _apply_diversity_caps(embeddings: Sequence[Embedding], total: int = TOP_K) -
     return selected
 
 
+@traced("embed_query", run_type="embedding")
 async def _embed_query(client: AsyncOpenAI, query: str) -> list[float]:
     """Embeds the query with text-embedding-3-small."""
     response = await client.embeddings.create(
@@ -145,6 +148,29 @@ async def _resolve_source(db: AsyncSession, embedding: Embedding) -> SourceRefer
 _build_prompt = build_classic_prompt
 
 
+def _record_trace_metadata(
+    repository_id: UUID, llm: LLMConfig | None, candidates: Sequence, generated: bool
+) -> None:
+    """Attaches non-textual run metadata to the open trace: ids, counts and flags only."""
+    resolved = llm if llm is not None else LLMConfig.server_default()
+    distances = [
+        hit.raw_score
+        for candidate in candidates
+        for hit in candidate.channel_hits
+        if hit.channel == "dense" and hit.raw_score is not None
+    ]
+    add_trace_metadata(
+        repo_id=str(repository_id),
+        arm="classic",
+        model=resolved.model if resolved is not None else None,
+        key_source="byok" if resolved is not None and resolved.source == "user" else "server",
+        chunks_retrieved=len(candidates),
+        top_similarity=round(1 - min(distances), 4) if distances else None,
+        no_context_answer=not generated,
+    )
+
+
+@traced("rag_answer_question")
 async def answer_question(
     query: str,
     repository_id: UUID,
@@ -192,14 +218,14 @@ async def answer_question(
     # shard the index. The retrieval half of the pipeline therefore keeps
     # its single client; the generation client is built by the answerer from
     # the resolved credential, through the factory below.
-    embed_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    embed_client = wrap_client(AsyncOpenAI(api_key=settings.OPENAI_API_KEY))
 
     async def embed(texts: Sequence[str]) -> list[list[float]]:
         return [await _embed_query(embed_client, text) for text in texts]
 
     def generation_client(**client_kwargs):
         # Resolved on each call so the name patched on this module is the one used.
-        return AsyncOpenAI(**client_kwargs)
+        return wrap_client(AsyncOpenAI(**client_kwargs))
 
     logger.info(f"Answering query for repo {repository_id}: {query!r}")
     ctx = RetrievalContext(repository_id=repository_id, db=db, embed=embed)
@@ -212,5 +238,6 @@ async def answer_question(
         client_factory=generation_client,
     )
     logger.info(f"Retrieved {len(result.retrieval.candidates)} chunks from pgvector")
+    _record_trace_metadata(repository_id, llm, result.retrieval.candidates, result.generated)
 
     return RAGResponse(answer=result.answer, sources=result.sources, generated=result.generated)

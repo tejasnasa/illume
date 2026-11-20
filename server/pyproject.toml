@@ -12,6 +12,7 @@ dependencies = [
     "gitpython>=3.1.46",
     "httpx>=0.28.1",
     "langgraph>=1.2.19",
+    "langsmith>=0.14.16",
     "mcp==2.3.0",
     "openai>=2.31.0",
     "passlib[bcrypt]>=1.7.4",

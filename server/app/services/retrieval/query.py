@@ -23,6 +23,7 @@ from app.services.retrieval.candidate import QueryVariant
 from app.services.retrieval.channels.base import Emit
 from app.services.retrieval.config import QueryConfig
 from app.services.retrieval.llm_json import ModelFailure, call_json
+from app.services.tracing import wrap_client
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +191,7 @@ async def build_variants(
         wants_condense = wants_rewrites = False
 
     if resolved is not None and (wants_condense or wants_rewrites):
-        client = AsyncOpenAI(**resolved.client_kwargs())
+        client = wrap_client(AsyncOpenAI(**resolved.client_kwargs()))
 
     if wants_condense and client is not None and resolved is not None:
         try:

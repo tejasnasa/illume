@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from openai import AsyncOpenAI
 
 from app.core.config import settings
+from app.services.tracing import wrap_client
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 
@@ -21,7 +22,7 @@ async def embed_texts(texts: Sequence[str]) -> list[list[float]]:
     """Embeds a batch of query texts in one request, preserving input order."""
     if not texts:
         return []
-    client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    client = wrap_client(AsyncOpenAI(api_key=settings.OPENAI_API_KEY))
     response = await client.embeddings.create(model=EMBEDDING_MODEL, input=list(texts))
     ordered = sorted(response.data, key=lambda item: item.index)
     return [item.embedding for item in ordered]

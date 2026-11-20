@@ -48,6 +48,7 @@ from app.services.decisions.openrouter import (
 )
 from app.services.llm_config import LLMConfig
 from app.services.retrieval.llm_json import ModelFailure, call_json_response
+from app.services.tracing import wrap_client
 
 logger = logging.getLogger(__name__)
 
@@ -219,7 +220,7 @@ class LlmDecider:
 
     def _client(self) -> AsyncOpenAI:
         """A client for one decision call."""
-        return AsyncOpenAI(**self._llm.client_kwargs())
+        return wrap_client(AsyncOpenAI(**self._llm.client_kwargs()))
 
     async def _ask(
         self, client: AsyncOpenAI, user: str, format_name: str, schema: dict[str, Any]

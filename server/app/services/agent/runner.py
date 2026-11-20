@@ -63,6 +63,7 @@ from app.services.retrieval.channels.base import Embedder, Emit, no_emit
 from app.services.retrieval.config import AgentConfig, PipelineConfig
 from app.services.retrieval.embedding import embed_texts
 from app.services.retrieval.query import HistoryMessage
+from app.services.tracing import wrap_client
 
 logger = logging.getLogger(__name__)
 
@@ -317,7 +318,7 @@ async def run_agent(
         config=config,
         agent=agent_config,
         llm=llm,
-        client=factory(**llm.client_kwargs()),
+        client=wrap_client(factory(**llm.client_kwargs())),
         tool_ctx=tool_ctx,
         registry=registry or REGISTRY,
         brief=the_brief,

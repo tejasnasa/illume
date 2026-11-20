@@ -67,6 +67,7 @@ from app.services.retrieval.config import PipelineConfig
 from app.services.retrieval.embedding import embed_texts
 from app.services.retrieval.resolve import SourceReference
 from app.services.retrieval.single_shot import SingleShotAnswer, answer
+from app.services.tracing import add_trace_metadata, traced
 
 logger = logging.getLogger(__name__)
 
@@ -295,8 +296,17 @@ class RunSession:
             await self._release()
             self.recorder.end_stream()
 
+    @traced("rag_run")
     async def _execute(self) -> Outcome:
         request = self.request
+        add_trace_metadata(
+            repo_id=str(request.repository.id),
+            arm=request.preset,
+            execution=request.config.execution,
+            config_hash=request.config.config_hash(),
+            model=request.llm.model,
+            key_source="byok" if request.llm.source == "user" else "server",
+        )
         self.recorder.publish(
             EventType.RUN_STARTED,
             {

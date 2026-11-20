@@ -37,6 +37,7 @@ from app.services.retrieval.context import assemble_context
 from app.services.retrieval.pipeline import RetrievalResult, retrieve
 from app.services.retrieval.query import HistoryMessage
 from app.services.retrieval.resolve import SourceReference
+from app.services.tracing import wrap_client
 
 logger = logging.getLogger(__name__)
 
@@ -445,7 +446,7 @@ async def answer(
 
     client_kwargs, model, extras = _generation_settings(llm, classic=classic)
     factory = client_factory if client_factory is not None else AsyncOpenAI
-    client = factory(**client_kwargs)
+    client = wrap_client(factory(**client_kwargs))
 
     if classic:
         references = [candidate.reference for candidate in candidates]

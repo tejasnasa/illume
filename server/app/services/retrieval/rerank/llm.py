@@ -42,6 +42,7 @@ from app.services.llm_config import LLMConfig
 from app.services.retrieval.candidate import Candidate
 from app.services.retrieval.llm_json import ModelFailure, call_json
 from app.services.retrieval.rerank.base import RerankCall, position_scores, with_scores
+from app.services.tracing import wrap_client
 
 WINDOW_SIZE = 20
 
@@ -146,7 +147,7 @@ class LLMReranker:
         if not candidates:
             return []
 
-        client = AsyncOpenAI(**self._llm.client_kwargs())
+        client = wrap_client(AsyncOpenAI(**self._llm.client_kwargs()))
         total = len(candidates)
 
         if total <= WINDOW_SIZE:
