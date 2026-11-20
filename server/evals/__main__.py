@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
     gold.add_argument("--pilot", action="store_true", help="split: one pilot slice, no test split")
 
     run = commands.add_parser("run", help="generate answers or judge them")
-    run.add_argument("action", choices=["generate", "judge"])
+    run.add_argument("action", choices=["generate", "judge", "judge-label", "judge-agreement"])
     run.add_argument(
         "--slice", choices=["pilot", "tuning", "test"], help="generate: the slice to run"
     )
@@ -76,6 +76,21 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--seed", type=int, default=0, help="generate: shuffle and subset seed")
     run.add_argument("--concurrency", type=int, default=4, help="generate: pairs at once")
     _add_budget_arguments(run)
+    run.add_argument("--judge-model", help="judge: the judge model (default JUDGE_MODEL or Luna)")
+    run.add_argument("--judge-base-url", help="judge: the judge's OpenAI-compatible base URL")
+    run.add_argument(
+        "--judge-api-style", choices=["responses", "chat"], help="judge: the transport"
+    )
+    run.add_argument("--compare-judge-model", help="judge-agreement: a second judge's model")
+    run.add_argument("--compare-judge-base-url", help="judge-agreement: a second judge's base URL")
+    run.add_argument(
+        "--sample-only", action="store_true", help="judge: draw the labelling sample, no calls"
+    )
+    run.add_argument("--sample-size", type=int, default=40, help="judge: answers to label")
+    run.add_argument(
+        "--per-family-min", type=int, default=10, help="judge: fewest labelled per family"
+    )
+    run.add_argument("--annotator", help="judge-label, judge-agreement: whose labels")
 
     commands.add_parser("report", help="render a report from run outputs")
     commands.add_parser("selftest", help="run the metric self-tests")
@@ -309,7 +324,7 @@ def _generator_key() -> str:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """Run ``run generate``; ``run judge`` is not built yet.
+    """Run ``run generate`` or one of the judge commands.
 
     Args:
         args: The parsed arguments.
@@ -318,7 +333,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         The process exit status.
     """
     if args.action != "generate":
-        return cmd_not_built(f"run {args.action}")
+        return cmd_judge(args)
     if not args.slice or not args.run_name:
         print("run generate needs --slice and --run", file=sys.stderr)
         return 2
@@ -341,6 +356,63 @@ def cmd_run(args: argparse.Namespace) -> int:
         off_peak_only=args.off_peak_only,
         seed=args.seed,
         concurrency=args.concurrency,
+    )
+
+
+def cmd_judge(args: argparse.Namespace) -> int:
+    """Run ``run judge``, ``run judge-label`` or ``run judge-agreement``.
+
+    Args:
+        args: The parsed arguments.
+
+    Returns:
+        The process exit status.
+    """
+    from evals.cli import judge_commands
+    from evals.run.endpoint import JudgeConfigError, JudgeEndpoint
+
+    if not args.run_name:
+        print(f"run {args.action} needs --run", file=sys.stderr)
+        return 2
+    try:
+        endpoint = eval_settings.judge_endpoint(
+            model=args.judge_model, base_url=args.judge_base_url, api_style=args.judge_api_style
+        )
+        compare = (
+            JudgeEndpoint(
+                model=args.compare_judge_model or endpoint.model,
+                base_url=args.compare_judge_base_url,
+            )
+            if args.compare_judge_model or args.compare_judge_base_url
+            else None
+        )
+    except JudgeConfigError as failure:
+        print(str(failure), file=sys.stderr)
+        return 2
+    if args.action == "judge-label":
+        return judge_commands.cmd_judge_label(
+            out_dir=eval_settings.OUT_DIR, run_name=args.run_name, annotator=args.annotator
+        )
+    if args.action == "judge-agreement":
+        return judge_commands.cmd_judge_agreement(
+            out_dir=eval_settings.OUT_DIR,
+            run_name=args.run_name,
+            endpoint=endpoint,
+            compare=compare,
+            annotator=args.annotator,
+        )
+    return judge_commands.cmd_run_judge(
+        out_dir=eval_settings.OUT_DIR,
+        run_name=args.run_name,
+        endpoint=endpoint,
+        budget_usd=args.budget,
+        stop_usd=args.stop,
+        sample_only=args.sample_only,
+        seed=args.seed,
+        sample_size=args.sample_size,
+        per_family_min=args.per_family_min,
+        concurrency=args.concurrency,
+        clones_dir=eval_settings.CLONES_DIR,
     )
 
 

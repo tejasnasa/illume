@@ -20,7 +20,7 @@ from datetime import datetime
 
 from evals.arms import AUTO, get_arm
 from evals.run.pricing import PriceTable, UnpricedUsage
-from evals.run.records import Generation, RouteRecord, Usage
+from evals.run.records import Generation, Judgment, RouteRecord, Usage
 
 
 class BudgetStop(Exception):
@@ -118,7 +118,11 @@ class Budget:
             )
 
     def restore(
-        self, generations: Iterable[Generation], routes: Iterable[RouteRecord] = ()
+        self,
+        generations: Iterable[Generation],
+        routes: Iterable[RouteRecord] = (),
+        *,
+        judgments: Iterable[Judgment] = (),
     ) -> float:
         """Sets the spend to what existing records say was spent.
 
@@ -127,14 +131,25 @@ class Budget:
         Returns:
             The reconstructed spend.
         """
-        self.spent_usd = spent_in(generations, routes)
+        self.spent_usd = spent_in(generations, routes, judgments=judgments)
         return self.spent_usd
 
 
-def spent_in(generations: Iterable[Generation], routes: Iterable[RouteRecord] = ()) -> float:
-    """The total spend recorded on generation and routing records, composed ones excluded."""
-    return sum(g.cost_usd or 0.0 for g in generations if g.composed_from is None) + sum(
-        r.cost_usd or 0.0 for r in routes
+def spent_in(
+    generations: Iterable[Generation],
+    routes: Iterable[RouteRecord] = (),
+    *,
+    judgments: Iterable[Judgment] = (),
+) -> float:
+    """The total spend recorded on generation, routing and judgment records.
+
+    Composed generations are excluded because their cost is a copy of their target's. A judgment
+    reused from another record carries no cost of its own.
+    """
+    return (
+        sum(g.cost_usd or 0.0 for g in generations if g.composed_from is None)
+        + sum(r.cost_usd or 0.0 for r in routes)
+        + sum(j.cost_usd or 0.0 for j in judgments)
     )
 
 

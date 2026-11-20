@@ -22,14 +22,18 @@ LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
 # Pinned generator model id for eval runs.
 EVAL_GENERATOR_MODEL = "deepseek-v4-1-flash-1017"
 
-# Keys read from the eval env file. GITHUB_TOKEN is used by mining only and is never
-# exported under a name the application reads.
+# Keys read from the eval env file. GITHUB_TOKEN and the JUDGE_* keys are used by the harness
+# only and are never exported under a name the application reads.
 ENV_EVAL_KEYS = (
     "OPENAI_API_KEY",
     "AI_API_KEY",
     "AI_BASE_URL",
     "OPENROUTER_API_KEY",
     "GITHUB_TOKEN",
+    "JUDGE_MODEL",
+    "JUDGE_BASE_URL",
+    "JUDGE_API_KEY",
+    "JUDGE_API_STYLE",
 )
 
 # Every field of ``app.core.config.Settings``. A test compares this against

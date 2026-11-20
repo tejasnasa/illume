@@ -123,11 +123,12 @@ def build_manifest(
     return manifest
 
 
-def write_manifest(out_dir: Path, **kwargs: Any) -> Path:
-    """Write ``manifest.json`` into an output directory.
+def write_manifest(out_dir: Path, *, name: str = MANIFEST_NAME, **kwargs: Any) -> Path:
+    """Write a manifest into an output directory.
 
     Args:
         out_dir: The directory to write into; created if missing.
+        name: The file name; ``manifest.json`` unless a second manifest must sit beside it.
         **kwargs: Arguments for ``build_manifest``.
 
     Returns:
@@ -135,6 +136,6 @@ def write_manifest(out_dir: Path, **kwargs: Any) -> Path:
     """
     manifest = build_manifest(**kwargs)
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / MANIFEST_NAME
+    path = out_dir / name
     path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     return path

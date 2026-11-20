@@ -214,6 +214,86 @@ class Generation(_Record):
         return sum(u.reported_cost_usd or 0.0 for u in self.usages)
 
 
+class JudgeVersion(_Record):
+    """Who graded and with which prompt: the identity a judgment belongs to.
+
+    Attributes:
+        prompt_version: The version of the judge's prompt and output schema.
+        model: The judge model id asked for.
+        host: The host the judge was called on (``openai`` for the SDK's default endpoint);
+            never a path or a key.
+        api_style: The transport, ``responses`` or ``chat``.
+        judged_on: The date the grade was made, ``YYYY-MM-DD``. It is recorded but is not part
+            of the judgment's key, so resuming on another day does not grade a pair again.
+    """
+
+    prompt_version: str
+    model: str
+    host: str
+    api_style: str = "responses"
+    judged_on: str
+
+
+class Judgment(_Record):
+    """One grade of one generation by one judge, or the record that grading it failed.
+
+    Attributes:
+        judgment_key: A hash of the generation's key and the judge's identity; see
+            :func:`judgment_key`.
+        generation_key: The ``record_key`` of the generation graded.
+        item_id: The gold item.
+        family: The item's family, kept so results group without reading the gold again.
+        arm: The generation's arm, kept for analysis only; the judge is never told it.
+        repeat: Which repeat of the pair this is.
+        judge: The judge's identity.
+        status: ``ok``, or ``error`` when the judge's output could not be used.
+        correct: How correct the answer is, 0 to 3.
+        faithful: How well the cited evidence supports the answer, 0 to 3.
+        abstained: Whether the answer declines to answer.
+        rationale: The judge's reasons.
+        raw: The judge's raw output, kept on an error record.
+        error: Why the record is an error record.
+        reported_model: The model the provider reported answering.
+        usages: The metered call.
+        cost_usd: What grading cost; ``0`` on a reused judgment.
+        reused_from: The key of the judgment this one was copied from, for a composed record
+            whose answer is identical to its target's.
+    """
+
+    judgment_key: str
+    generation_key: str
+    item_id: str
+    family: str
+    arm: str
+    repeat: int = 0
+    judge: JudgeVersion
+    status: Literal["ok", "error"] = "ok"
+    correct: int | None = None
+    faithful: int | None = None
+    abstained: bool | None = None
+    rationale: str = ""
+    raw: str | None = None
+    error: str | None = None
+    reported_model: str | None = None
+    usages: list[Usage] = Field(default_factory=list)
+    cost_usd: float | None = None
+    reused_from: str | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> Self:
+        if (self.status == "error") != (self.error is not None):
+            raise ValueError("an error record needs `error`, and only an error record has it")
+        scores = (self.correct, self.faithful, self.abstained)
+        if self.status == "ok" and any(value is None for value in scores):
+            raise ValueError("a graded record needs correct, faithful and abstained")
+        if self.status == "error" and any(value is not None for value in scores):
+            raise ValueError("an error record is never scored")
+        for score in (self.correct, self.faithful):
+            if score is not None and not 0 <= score <= 3:
+                raise ValueError("scores run from 0 to 3")
+        return self
+
+
 def _digest(payload: Any) -> str:
     text = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -249,6 +329,17 @@ def record_key(
     )
 
 
+def judgment_key(*, generation_key: str, prompt_version: str, model: str, host: str) -> str:
+    """The key of one judgment: the generation graded and who graded it.
+
+    The date is not part of it, so a run resumed on another day recognises finished pairs, while
+    a new prompt version, model or host grades the generation again.
+    """
+    return _digest(
+        {"judge": generation_key, "prompt": prompt_version, "model": model, "host": host}
+    )
+
+
 def composed_record_key(target_key: str, route: RouteRecord) -> str:
     """The key of an ``auto`` record: the target generation plus the routing that chose it."""
     return _digest(
@@ -265,11 +356,14 @@ __all__ = [
     "CandidateRecord",
     "ChannelHitRecord",
     "Generation",
+    "JudgeVersion",
+    "Judgment",
     "RouteRecord",
     "RunTokens",
     "StepRecordOut",
     "Usage",
     "UsageKind",
     "composed_record_key",
+    "judgment_key",
     "record_key",
 ]
