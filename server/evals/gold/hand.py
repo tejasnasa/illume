@@ -12,7 +12,8 @@ from app.services.test_files import is_test_path
 from evals.gold.schema import GoldItem, make_item
 
 HAND_DIR = Path(__file__).with_name("hand")
-KINDS = ("architecture", "flow", "unanswerable")
+KINDS = ("architecture", "flow", "explain", "unanswerable")
+EXPLAIN_KIND = "explain"
 
 
 class HandError(ValueError):
@@ -44,9 +45,10 @@ def load_hand_items(path: Path, *, repo_name: str, base_commit: str) -> list[Gol
         base_commit: The commit the repository was ingested at.
 
     Returns:
-        One item per entry, template ``hand.<kind>``, ``gold_files`` the required files and
-        ``acceptable_files`` the optional ones. An ``unanswerable`` entry has no files and is
-        tagged ``unanswerable``. A missing file gives an empty list.
+        One item per entry, template ``hand.<kind>``, ``gold_files`` the required files,
+        ``acceptable_files`` the optional ones and ``reference_answer`` the entry's reference
+        answer, which an ``explain`` entry must have. An ``unanswerable`` entry has no files and
+        is tagged ``unanswerable``. A missing file gives an empty list.
 
     Raises:
         HandError: If the file cannot be parsed or an entry is malformed.
@@ -79,6 +81,12 @@ def load_hand_items(path: Path, *, repo_name: str, base_commit: str) -> list[Gol
             raise HandError(f"{label}: an unanswerable item has no files")
         if kind != "unanswerable" and not required:
             raise HandError(f"{label}: required_files is empty")
+        reference = entry.get("reference_answer")
+        if reference is not None and not isinstance(reference, str):
+            raise HandError(f"{label}: reference_answer must be a string")
+        reference = (reference or "").strip()
+        if kind == EXPLAIN_KIND and not reference:
+            raise HandError(f"{label}: an explain item needs a reference_answer")
         tags = _strings(entry.get("tags"), f"{label} tags")
         if kind == "unanswerable" and "unanswerable" not in tags:
             tags = (*tags, "unanswerable")
@@ -94,6 +102,7 @@ def load_hand_items(path: Path, *, repo_name: str, base_commit: str) -> list[Gol
                 gold_test_files=tuple(p for p in required if is_test_path(p)),
                 acceptable_files=acceptable,
                 gold_answer_notes=_strings(entry.get("notes"), f"{label} notes"),
+                reference_answer=reference,
                 tags=tags,
             )
         )

@@ -1,6 +1,20 @@
 # Format example for a hand-written set. Not loaded for any real repository: a real set
 # lives in hand/<corpus entry name>.yaml.
+#
+# An explain item needs a reference_answer (a few sentences) and required_files. The older
+# architecture and flow kinds load too, with or without a reference_answer.
 items:
+  - kind: explain
+    question: How does a login request end up with a session the browser keeps?
+    reference_answer: >-
+      The login route checks the submitted password against the stored hash, then signs a token
+      for the user and sets it as an httponly cookie on the response. Later requests are
+      identified by a middleware that decodes that cookie before any route runs.
+    required_files:
+      - app/api/auth.py
+      - app/middleware/auth.py
+    acceptable_files:
+      - app/core/security.py
   - kind: architecture
     question: Where does the application decide which user a request belongs to?
     required_files:

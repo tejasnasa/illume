@@ -1,6 +1,10 @@
 """The phrase, verify and split commands, without a model or a database."""
 
+import json
 import os
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -85,3 +89,55 @@ def test_verify_labels_then_reports_and_writes_the_verified_items(tmp_path, caps
     assert "structural" in capsys.readouterr().out
     verified = read_jsonl(tmp_path / "gold" / "demo" / "items.verified.jsonl")
     assert len(verified) == 1 and verified[0].verified == "correct"
+
+
+def test_split_defaults_to_the_single_pilot_slice(tmp_path):
+    write_jsonl(tmp_path / "gold" / "demo" / "items.jsonl", _items(5))
+    assert cmd_gold_split(out_dir=tmp_path, repo_name="demo", all_repos=False) == 0
+    lock = read_lock(tmp_path / "gold" / "split.lock.json")
+    assert lock["frozen_slice"] == "pilot" and lock["counts"] == {"pilot": 5}
+
+
+PARSE = """
+import json, sys
+from evals.__main__ import build_parser
+args = build_parser().parse_args(sys.argv[1:])
+print(json.dumps(vars(args), default=str))
+"""
+
+
+def _parse(*argv):
+    """Parse command-line arguments in a fresh process, where the eval settings load first."""
+    result = subprocess.run(
+        [sys.executable, "-c", PARSE, *argv],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=True,
+    )
+    return json.loads(result.stdout.splitlines()[-1])
+
+
+def test_the_command_line_defaults_to_the_lean_design():
+    build = _parse("gold", "build", "--repo", "demo")
+    for flag in (
+        "include_anchor",
+        "include_rationale",
+        "include_structural",
+        "include_unanswerable",
+        "tuning_test_split",
+    ):
+        assert build[flag] is False
+    assert _parse("run", "generate")["slice"] == "pilot"
+    opted = _parse(
+        "gold", "build", "--include-anchor", "--include-rationale", "--include-structural"
+    )
+    assert opted["include_anchor"] and opted["include_rationale"] and opted["include_structural"]
+    assert _parse("gold", "split", "--tuning-test-split")["tuning_test_split"] is True
+
+
+def test_check_takes_its_own_model_override_and_defaults_to_the_judge_model():
+    default = _parse("gold", "check", "--repo", "demo")
+    chosen = _parse("gold", "check", "--repo", "demo", "--checker-model", "m2")
+    assert default["checker_model"] is None and chosen["checker_model"] == "m2"

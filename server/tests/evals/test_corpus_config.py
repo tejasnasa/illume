@@ -89,3 +89,32 @@ def test_an_unknown_name_lists_the_known_ones(tmp_path):
 
 def test_the_shipped_corpus_parses_and_lists_no_repositories():
     assert load_corpus(CORPUS_PATH).repos == []
+
+
+def test_the_question_mix_defaults_to_thirty_five_change_and_twenty_five_explain(tmp_path):
+    repo = load_corpus(_write(tmp_path, _entry())).get("demo")
+    assert (repo.questions.change, repo.questions.explain, repo.questions.total) == (35, 25, 60)
+
+
+def test_a_question_mix_is_read_per_repository(tmp_path):
+    body = _entry() + "    questions: {change: 25, explain: 45}\n"
+    repo = load_corpus(_write(tmp_path, body)).get("demo")
+    assert (repo.questions.change, repo.questions.explain) == (25, 45)
+
+
+def test_an_unknown_or_negative_mix_entry_is_rejected(tmp_path):
+    with pytest.raises(CorpusError):
+        load_corpus(_write(tmp_path, _entry() + "    questions: {change: 10, rationale: 5}\n"))
+    with pytest.raises(CorpusError):
+        load_corpus(_write(tmp_path, _entry() + "    questions: {change: -1}\n"))
+
+
+def test_the_era_label_is_optional(tmp_path):
+    assert load_corpus(_write(tmp_path, _entry())).get("demo").era is None
+    labelled = load_corpus(_write(tmp_path, _entry(era="early AI"))).get("demo")
+    assert labelled.era == "early AI"
+
+
+def test_the_shipped_corpus_file_documents_the_era_field():
+    text = CORPUS_PATH.read_text(encoding="utf-8")
+    assert "era  " in text and "#     era: " in text

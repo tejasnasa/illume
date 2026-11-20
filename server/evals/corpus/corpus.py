@@ -10,12 +10,40 @@ from pydantic import BaseModel, ConfigDict, field_validator
 CORPUS_PATH = Path(__file__).with_name("corpus.yaml")
 PERMISSIVE_LICENCES = frozenset({"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause"})
 DEFAULT_GENERATOR_CUTOFF = date(2026, 10, 17)
+DEFAULT_CHANGE_QUESTIONS = 35
+DEFAULT_EXPLAIN_QUESTIONS = 25
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 class CorpusError(ValueError):
     """Raised when the corpus file is missing, malformed or names an unknown repository."""
+
+
+class QuestionMix(BaseModel):
+    """How many questions of each kind one repository contributes.
+
+    Attributes:
+        change: Change questions, mined from pull requests merged after the base commit.
+        explain: Explain questions, taken from the repository's hand file.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    change: int = DEFAULT_CHANGE_QUESTIONS
+    explain: int = DEFAULT_EXPLAIN_QUESTIONS
+
+    @field_validator("change", "explain")
+    @classmethod
+    def _not_negative(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("a question count cannot be negative")
+        return value
+
+    @property
+    def total(self) -> int:
+        """Questions per repository across both kinds."""
+        return self.change + self.explain
 
 
 class CorpusRepo(BaseModel):
@@ -28,10 +56,14 @@ class CorpusRepo(BaseModel):
         licence: An SPDX id from ``PERMISSIVE_LICENCES``.
         base_commit: The 40-hex commit ``B`` everything is ingested at.
         base_date: When ``B`` was committed; informational.
+        era: An optional label for the period the repository belongs to, such as ``before AI``;
+            the report prints it beside the repository's name.
         generator_cutoff: The generator model's training cutoff; pull requests merged after
             it are tagged post-cutoff.
         drift_window: How many commits after ``B`` the drift check looks at.
         history_prs: How many merged pull requests before ``B`` are ingested as history.
+        questions: How many change and explain questions the repository contributes; 35 and
+            25 when omitted.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -42,9 +74,11 @@ class CorpusRepo(BaseModel):
     licence: str
     base_commit: str
     base_date: date | None = None
+    era: str | None = None
     generator_cutoff: date = DEFAULT_GENERATOR_CUTOFF
     drift_window: int = 100
     history_prs: int = 200
+    questions: QuestionMix = QuestionMix()
 
     @field_validator("licence")
     @classmethod

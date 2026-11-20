@@ -11,10 +11,16 @@
 #   base_commit       Full 40-character hex SHA of B, in quotes. Ingestion checks this commit out and
 #                     nothing newer is ever visible to retrieval.
 #   base_date         Commit date of B. Informational only.
+#   era               Optional label for the period the repository belongs to, for example
+#                     "before AI", "early AI" or "latest AI". The report prints it beside
+#                     the repository's name.
 #   generator_cutoff  Training cutoff of the question generator (default 2026-10-17). Pull
 #                     requests merged after it are tagged post-cutoff and analysed apart.
 #   drift_window      Commits after B inspected by the drift check (default 100).
 #   history_prs       Merged pull requests before B ingested as history (default 200).
+#   questions         The question mix, `{change: N, explain: M}` (default 35 and 25, 60 in
+#                     all). A repository with fewer good pull requests takes more explain
+#                     questions, so keep the two summing to 60.
 #
 # Selection rules:
 #   - Permissive licence (MIT, Apache-2.0 or BSD).
@@ -30,4 +36,6 @@
 #     licence: MIT
 #     base_commit: "0123456789abcdef0123456789abcdef01234567"
 #     base_date: 2026-06-01
+#     era: before AI
+#     questions: {change: 35, explain: 25}
 repos: []

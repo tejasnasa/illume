@@ -12,15 +12,16 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_serializer, model_validator
 
 Family = Literal["changeset", "rationale", "structural", "hand"]
 Verdict = Literal["correct", "wrong", "ambiguous"]
 
 ID_HEX_LENGTH = 16
 
-# The fields that define an item. The question's phrasing and the verification verdict are
-# excluded, so rephrasing or verifying an item never changes its id.
+# The fields that define an item. The question's phrasing, the reference answer and the
+# verification verdict are excluded, so rephrasing, rewording the reference or verifying an item
+# never changes its id.
 ID_FIELDS = (
     "repo",
     "base_commit",
@@ -58,6 +59,9 @@ class GoldItem(BaseModel):
         gold_prs: Pull request numbers the answer rests on.
         gold_commits: Commits the answer rests on.
         gold_answer_notes: Facts quoted from the source, for the judge.
+        reference_answer: Hand items only: a few sentences saying what a correct answer
+            contains. Empty for every other item, and then left out of the serialised form so
+            items without one keep their bytes.
         circular_with: Channels whose data the item was derived from.
         post_cutoff: Whether the source pull request merged after the generator's cutoff.
         merges_since_base: How many mainline merges after the base commit the pull request
@@ -84,6 +88,7 @@ class GoldItem(BaseModel):
     gold_prs: tuple[int, ...] = ()
     gold_commits: tuple[str, ...] = ()
     gold_answer_notes: tuple[str, ...] = ()
+    reference_answer: str = ""
     circular_with: tuple[str, ...] = ()
     post_cutoff: bool | None = None
     merges_since_base: int | None = None
@@ -95,6 +100,13 @@ class GoldItem(BaseModel):
     @classmethod
     def _sorted_unique(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(sorted(set(value)))
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_reference(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if not data.get("reference_answer"):
+            data.pop("reference_answer", None)
+        return data
 
     @model_validator(mode="after")
     def _consistent(self) -> Self:

@@ -104,3 +104,40 @@ def test_jsonl_is_sorted_canonical_and_round_trips(tmp_path):
     assert "Né?" in raw.decode("utf-8")
     assert read_jsonl(path) == sorted(items, key=lambda item: item.id)
     assert write_jsonl(tmp_path / "again.jsonl", items).read_bytes() == raw
+
+
+def test_the_reference_answer_is_not_a_defining_field():
+    plain = _changeset()
+    worded = make_item(**{**plain.model_dump(exclude={"id"}), "reference_answer": "It retries."})
+    assert worded.id == plain.id
+    assert worded.reference_answer == "It retries."
+
+
+def test_an_item_without_a_reference_answer_serialises_without_the_key(tmp_path):
+    plain = _changeset()
+    assert "reference_answer" not in plain.model_dump()
+    assert "reference_answer" not in plain.model_dump(mode="json")
+    path = write_jsonl(tmp_path / "items.jsonl", [plain])
+    assert b"reference_answer" not in path.read_bytes()
+    assert read_jsonl(path) == [plain]
+
+
+def test_an_item_with_a_reference_answer_round_trips(tmp_path):
+    carrying = make_item(
+        repo="r",
+        base_commit=BASE,
+        family="hand",
+        template="hand.explain",
+        question="How does it retry?",
+        question_seed="How does it retry?",
+        gold_files=("a.py",),
+        reference_answer="It waits and tries again.",
+    )
+    path = write_jsonl(tmp_path / "items.jsonl", [carrying])
+    assert b'"reference_answer":"It waits and tries again."' in path.read_bytes()
+    assert read_jsonl(path) == [carrying]
+
+
+def test_ids_of_items_without_a_reference_answer_are_unchanged():
+    # Pinned from before the field existed, so frozen slices keep their ids.
+    assert _changeset().id == "837b5ad02220a627"

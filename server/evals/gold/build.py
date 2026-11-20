@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Repository
 from evals.corpus.corpus import CorpusRepo
 from evals.gold.changeset import build_changeset_items
+from evals.gold.check import all_checks, apply_checks
 from evals.gold.hand import hand_path, load_hand_items
+from evals.gold.mix import Selection, select_change_items, select_explain_items
 from evals.gold.rationale import build_rationale_items
 from evals.gold.schema import GoldItem, canonical_json, write_jsonl
 from evals.gold.structural import build_structural_items
@@ -18,7 +20,9 @@ from evals.mining.clones import clone_dir, default_tip, files_at, rev_exists
 from evals.mining.github_cache import load_prs
 from evals.mining.github_fetch import load_index
 
-TARGETS = {"changeset": 80, "rationale": 30, "structural": 10, "hand": 15}
+# Per-repository targets of the families that are off by default; the change and explain counts
+# come from each corpus entry's question mix.
+TARGETS = {"rationale": 30, "structural": 10}
 RATIONALE_OVERSAMPLE = 1.5
 DEFAULT_SEED = 0
 
@@ -62,6 +66,16 @@ async def _ready_repo_id(db: AsyncSession, name: str, base_commit: str):
     return row.id
 
 
+def _mix_entry(selection: Selection) -> dict[str, int]:
+    """One kind's requested, available, selected and short counts for the build log."""
+    return {
+        "requested": selection.requested,
+        "available": selection.available,
+        "selected": len(selection.items),
+        "shortfall": selection.shortfall,
+    }
+
+
 async def build_gold(
     db: AsyncSession,
     *,
@@ -70,8 +84,17 @@ async def build_gold(
     clones_dir: Path,
     seed: int = DEFAULT_SEED,
     hand_file: Path | None = None,
+    include_anchor: bool = False,
+    include_rationale: bool = False,
+    include_structural: bool = False,
+    include_unanswerable: bool = False,
 ) -> BuildOutcome:
-    """Run the four builders for one repository and write the results.
+    """Build one repository's questions to its question mix and write the results.
+
+    Change questions are mined from pull requests merged after the base commit and chosen by
+    cluster up to the mix's count; explain questions come from the hand file up to the mix's
+    count, minus any the independent check found unsupported. A pool smaller than the request is
+    reported in the build log and printed by the command, never an error.
 
     Args:
         db: A session on the eval database.
@@ -81,6 +104,12 @@ async def build_gold(
         clones_dir: Where harness clones live.
         seed: The sampling seed.
         hand_file: Overrides where the hand questions are read from.
+        include_anchor: Also build the change questions that name a starting file. Off by
+            default: only the blind variant is built.
+        include_rationale: Also build the "why" questions from blame. Off by default.
+        include_structural: Also build the import-graph questions; this needs the ingested
+            repository. Off by default.
+        include_unanswerable: Keep the hand items marked unanswerable. Off by default.
 
     Returns:
         Where the files were written and the per-family counts.
@@ -101,7 +130,6 @@ async def build_gold(
     prs = load_prs(cache_dir, corpus_repo.slug)
     post = [pr for pr in prs if pr.number in set(index.post_base)]
     pre = {pr.merge_commit_sha: pr for pr in prs if pr.number in set(index.pre_base)}
-    repo_id = await _ready_repo_id(db, corpus_repo.name, base)
 
     changeset = build_changeset_items(
         repo_name=corpus_repo.name,
@@ -112,26 +140,41 @@ async def build_gold(
         generator_cutoff=corpus_repo.generator_cutoff,
         tip=tip,
     )
-    rationale = build_rationale_items(
-        repo_name=corpus_repo.name,
-        clone=clone,
-        base_commit=base,
-        prs_by_merge_sha=pre,
-        tip=tip,
-        files=files_at(clone, base),
-        seed=seed,
-        per_repo_target=round(TARGETS["rationale"] * RATIONALE_OVERSAMPLE),
-        generator_cutoff=corpus_repo.generator_cutoff,
-    )
-    structural = await build_structural_items(
-        db, repo_name=corpus_repo.name, repo_id=repo_id, base_commit=base, seed=seed
-    )
+    rationale: list[GoldItem] = []
+    if include_rationale:
+        rationale = build_rationale_items(
+            repo_name=corpus_repo.name,
+            clone=clone,
+            base_commit=base,
+            prs_by_merge_sha=pre,
+            tip=tip,
+            files=files_at(clone, base),
+            seed=seed,
+            per_repo_target=round(TARGETS["rationale"] * RATIONALE_OVERSAMPLE),
+            generator_cutoff=corpus_repo.generator_cutoff,
+        )
+    structural: list[GoldItem] = []
+    if include_structural:
+        repo_id = await _ready_repo_id(db, corpus_repo.name, base)
+        structural = await build_structural_items(
+            db, repo_name=corpus_repo.name, repo_id=repo_id, base_commit=base, seed=seed
+        )
     hand = load_hand_items(
         hand_file or hand_path(corpus_repo.name), repo_name=corpus_repo.name, base_commit=base
     )
 
+    target_dir = Path(out_dir) / "gold" / corpus_repo.name
+    mix = corpus_repo.questions
+    change = select_change_items(
+        changeset.items, mix.change, seed=seed, include_anchor=include_anchor
+    )
+    outcome = apply_checks(hand, all_checks(target_dir))
+    explain = select_explain_items(
+        outcome.kept, mix.explain, seed=seed, include_unanswerable=include_unanswerable
+    )
+
     items: dict[str, GoldItem] = {
-        item.id: item for item in [*changeset.items, *rationale, *structural, *hand]
+        item.id: item for item in [*change.items, *rationale, *structural, *explain.items]
     }
     counts = dict(sorted(Counter(item.family for item in items.values()).items()))
     templates = dict(sorted(Counter(item.template for item in items.values()).items()))
@@ -142,11 +185,24 @@ async def build_gold(
         "seed": seed,
         "counts": counts,
         "templates": templates,
-        "targets": TARGETS,
+        "mix": {"change": _mix_entry(change), "explain": _mix_entry(explain)},
+        "checks": {
+            "dropped_unsupported": sorted(item.id for item in outcome.unsupported),
+            "partly_supported": [
+                {"item": item.id, "faulty_claim": record.faulty_claim}
+                for item, record in outcome.partly_supported
+            ],
+            "unchecked": len(outcome.unchecked),
+        },
+        "options": {
+            "include_anchor": include_anchor,
+            "include_rationale": include_rationale,
+            "include_structural": include_structural,
+            "include_unanswerable": include_unanswerable,
+        },
         "drops": dict(sorted(Counter(reason for _, reason in changeset.drops).items())),
         "dropped_prs": [{"pr": number, "reason": why} for number, why in changeset.drops],
     }
-    target_dir = Path(out_dir) / "gold" / corpus_repo.name
     items_path = write_jsonl(target_dir / "items.jsonl", items.values())
     log_path = target_dir / "build_log.json"
     log_path.write_bytes((canonical_json(log) + "\n").encode("utf-8"))

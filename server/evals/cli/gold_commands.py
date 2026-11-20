@@ -1,16 +1,26 @@
-"""``gold build``: generate a repository's gold items."""
+"""``gold build``, ``phrase``, ``check``, ``verify`` and ``split``: a repository's gold items."""
 
 import asyncio
 import sys
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from openai import AsyncOpenAI
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from evals.corpus.corpus import CORPUS_PATH, CorpusError, load_corpus
-from evals.gold.build import DEFAULT_SEED, TARGETS, BuildOutcome, GoldBuildError, build_gold
-from evals.gold.hand import HandError
+from evals.gold.build import DEFAULT_SEED, BuildOutcome, GoldBuildError, build_gold
+from evals.gold.check import (
+    all_checks,
+    apply_checks,
+    check_items,
+    checks_path,
+    read_checks,
+    spent_on_disk,
+)
+from evals.gold.hand import HandError, hand_path, load_hand_items
 from evals.gold.phrase import make_leak_context_factory, phrase_items
 from evals.gold.schema import read_jsonl, write_jsonl
 from evals.gold.split import LOCK_NAME, make_pilot, make_split, write_lock, write_slices
@@ -25,7 +35,11 @@ from evals.gold.verify import (
     run_verification,
     sample_for_verification,
 )
-from evals.mining.clones import clone_dir, rev_exists
+from evals.mining.clones import clone_dir, rev_exists, show_file
+from evals.run.budget import Budget
+from evals.run.endpoint import JudgeConfigError, JudgeEndpoint
+from evals.run.metering import Meter
+from evals.run.pricing import PRICES_PATH, PricesIncomplete, PriceTable
 
 ITEMS = "items.jsonl"
 PHRASED = "items.phrased.jsonl"
@@ -41,13 +55,19 @@ async def _run(
     repo_name: str,
     corpus_path: Path,
     seed: int,
+    options: dict[str, bool],
 ) -> BuildOutcome:
     corpus_repo = load_corpus(corpus_path).get(repo_name)
     engine = create_async_engine(async_url)
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
             return await build_gold(
-                db, corpus_repo=corpus_repo, out_dir=out_dir, clones_dir=clones_dir, seed=seed
+                db,
+                corpus_repo=corpus_repo,
+                out_dir=out_dir,
+                clones_dir=clones_dir,
+                seed=seed,
+                **options,
             )
     finally:
         await engine.dispose()
@@ -61,8 +81,12 @@ def cmd_gold_build(
     repo_name: str,
     corpus_path: Path = CORPUS_PATH,
     seed: int = DEFAULT_SEED,
+    include_anchor: bool = False,
+    include_rationale: bool = False,
+    include_structural: bool = False,
+    include_unanswerable: bool = False,
 ) -> int:
-    """Build one repository's gold items and print the counts against the targets.
+    """Build one repository's gold items and print the counts against its question mix.
 
     Args:
         async_url: The eval database's async URL.
@@ -71,10 +95,20 @@ def cmd_gold_build(
         repo_name: The corpus entry to build.
         corpus_path: The corpus file.
         seed: The sampling seed.
+        include_anchor: Also build the change questions that name a starting file.
+        include_rationale: Also build the "why" questions.
+        include_structural: Also build the import-graph questions.
+        include_unanswerable: Keep the hand items marked unanswerable.
 
     Returns:
         The process exit status.
     """
+    options = {
+        "include_anchor": include_anchor,
+        "include_rationale": include_rationale,
+        "include_structural": include_structural,
+        "include_unanswerable": include_unanswerable,
+    }
     try:
         outcome = asyncio.run(
             _run(
@@ -84,16 +118,26 @@ def cmd_gold_build(
                 repo_name=repo_name,
                 corpus_path=corpus_path,
                 seed=seed,
+                options=options,
             )
         )
     except (CorpusError, GoldBuildError, HandError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    for family, target in TARGETS.items():
-        found = outcome.counts.get(family, 0)
-        print(f"{family:<11} {found:>4} (target {target} after verification)")
+    for kind, entry in outcome.log["mix"].items():
+        line = f"{kind:<11} {entry['selected']:>4} of {entry['requested']} requested"
+        if entry["shortfall"]:
+            line += f" (short by {entry['shortfall']}; {entry['available']} available)"
+        print(line)
+    for family, found in outcome.counts.items():
+        print(f"family {family:<11} {found:>4}")
     for reason, count in outcome.log["drops"].items():
         print(f"dropped {reason}: {count}")
+    checks = outcome.log["checks"]
+    if checks["dropped_unsupported"]:
+        print(f"dropped as unsupported by the check: {len(checks['dropped_unsupported'])}")
+    for flagged in checks["partly_supported"]:
+        print(f"partly supported, fix: {flagged['item']}: {flagged['faulty_claim']}")
     print(f"written: {outcome.items_path}")
     return 0
 
@@ -249,7 +293,7 @@ def cmd_gold_split(
     out_dir: Path,
     repo_name: str | None,
     all_repos: bool,
-    pilot: bool,
+    pilot: bool = True,
     seed: int = DEFAULT_SEED,
 ) -> int:
     """Split the items into slices and write the lock.
@@ -258,7 +302,8 @@ def cmd_gold_split(
         out_dir: The eval output directory.
         repo_name: Restrict to one repository.
         all_repos: Use every repository that has items.
-        pilot: Put everything in one ``pilot`` slice.
+        pilot: Put everything in one ``pilot`` slice, the default; false makes the tuning and
+            test split.
         seed: The hashing seed.
 
     Returns:
@@ -287,3 +332,115 @@ def cmd_gold_split(
         print(f"{name:<8} {count:>5}")
     print(f"written: {root / LOCK_NAME}")
     return 0
+
+
+def cmd_gold_check(
+    *,
+    out_dir: Path,
+    clones_dir: Path,
+    repo_name: str,
+    endpoint: JudgeEndpoint,
+    budget_usd: float,
+    stop_usd: float,
+    corpus_path: Path = CORPUS_PATH,
+    hand_file: Path | None = None,
+    concurrency: int = 4,
+    table: PriceTable | None = None,
+    client_factory: Callable[..., Any] = AsyncOpenAI,
+    clock: Callable[[], datetime] | None = None,
+    print_fn: Callable[[str], None] = print,
+) -> int:
+    """Check a repository's hand-written reference answers against its files at the base commit.
+
+    Each hand item with a reference answer and required files goes to the checker model with its
+    question, the reference answer and the text of its files from the harness clone. Results are
+    appended to ``checks.<checker>.jsonl`` in the repository's gold directory; items already
+    checked are skipped and failed ones tried again. Afterwards the verdicts are summarised:
+    ``unsupported`` items are dropped by the next ``gold build``, and ``partly_supported`` ones
+    are listed with the claim at fault so they can be fixed.
+
+    Args:
+        out_dir: The eval output directory.
+        clones_dir: Where harness clones live.
+        repo_name: The corpus entry.
+        endpoint: The checker model and where it is reached.
+        budget_usd: The spending cap; the checks already on disk count against it.
+        stop_usd: The spend at which checking stops cleanly.
+        corpus_path: The corpus file.
+        hand_file: Overrides where the hand questions are read from.
+        concurrency: Items checked at once.
+        table: The price table; the shipped one when omitted.
+        client_factory: Builds the client; ``AsyncOpenAI`` by default.
+        clock: The wall clock, replaced in tests.
+        print_fn: Prints a line.
+
+    Returns:
+        The process exit status: 0 when every item has a verdict, 1 when something failed or
+        stopped the run, 2 for a bad argument.
+    """
+    try:
+        corpus_repo = load_corpus(corpus_path).get(repo_name)
+        budget = Budget(cap_usd=budget_usd, stop_usd=stop_usd)
+        hand = load_hand_items(
+            hand_file or hand_path(repo_name),
+            repo_name=repo_name,
+            base_commit=corpus_repo.base_commit,
+        )
+    except (CorpusError, HandError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    clone = clone_dir(clones_dir, corpus_repo.slug)
+    base = corpus_repo.base_commit
+    if not clone.exists() or not rev_exists(clone, base):
+        print("no clone at the base commit; run `mine` first", file=sys.stderr)
+        return 1
+    items = [item for item in hand if item.reference_answer and item.gold_files]
+    if not items:
+        print(f"no hand items with a reference answer for {repo_name}", file=sys.stderr)
+        return 1
+    prices = table or PriceTable.load(PRICES_PATH)
+    try:
+        endpoint.require_key()
+        prices.require_complete([endpoint.model])
+    except (JudgeConfigError, PricesIncomplete) as failure:
+        print(str(failure), file=sys.stderr)
+        return 1
+
+    directory = _gold_dir(out_dir, repo_name)
+    path = checks_path(directory, endpoint)
+    budget.spent_usd = spent_on_disk(read_checks(path))
+    kwargs: dict[str, Any] = {} if clock is None else {"clock": clock}
+    result = asyncio.run(
+        check_items(
+            items,
+            endpoint=endpoint,
+            out_path=path,
+            budget=budget,
+            table=prices,
+            read_file=lambda _item, file_path: show_file(clone, base, file_path),
+            client_factory=client_factory,
+            meter=Meter(),
+            concurrency=concurrency,
+            **kwargs,
+        )
+    )
+    print_fn(
+        f"{result.ok} checked, {result.skipped} already done, {result.errors} errors; "
+        f"spent ${result.spent_usd:.4f} of ${budget.cap_usd:.2f}"
+    )
+    if result.stopped:
+        print_fn(f"stopped: {result.stopped}")
+    outcome = apply_checks(items, all_checks(directory))
+    supported = len(outcome.kept) - len(outcome.partly_supported) - len(outcome.unchecked)
+    print_fn(
+        f"supported {supported}, partly supported {len(outcome.partly_supported)}, "
+        f"unsupported {len(outcome.unsupported)}, unchecked {len(outcome.unchecked)}"
+    )
+    for item, record in outcome.partly_supported:
+        print_fn(f"partly supported, fix: {item.question[:80]!r}: {record.faulty_claim}")
+    for item in outcome.unsupported:
+        print_fn(f"unsupported, dropped by `gold build`: {item.question[:80]!r}")
+    if result.errors:
+        print_fn("some checks failed; running the command again retries them")
+    print_fn(f"checks: {path}")
+    return 1 if (result.errors or result.stopped or outcome.unchecked) else 0
