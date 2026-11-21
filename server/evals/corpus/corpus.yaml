@@ -38,4 +38,28 @@
 #     base_date: 2026-06-01
 #     era: before AI
 #     questions: {change: 35, explain: 25}
-repos: []
+repos:
+  - name: pvlib
+    url: https://github.com/pvlib/pvlib-python
+    language: Python
+    licence: BSD-3-Clause
+    base_commit: "2cf4ee00a4e5ebe1ad2307c3d15ac48045c11406"
+    base_date: 2026-04-29
+    era: before AI
+    questions: {change: 35, explain: 25}
+  - name: langroid
+    url: https://github.com/langroid/langroid
+    language: Python
+    licence: MIT
+    base_commit: "a9186b51d8540bc0beec6612be9a7737c4b4ad24"
+    base_date: 2026-05-28
+    era: early AI
+    questions: {change: 35, explain: 25}
+  - name: rakazo
+    url: https://github.com/elie222/rakazo
+    language: TypeScript
+    licence: Apache-2.0
+    base_commit: "8986956f40950ee30f75355e9ec96f007774bc53"
+    base_date: 2026-09-30
+    era: latest AI
+    questions: {change: 35, explain: 25}

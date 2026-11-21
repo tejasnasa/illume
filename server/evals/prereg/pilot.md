@@ -79,3 +79,26 @@ any other judge or DeepEval version are never mixed with these.
 - **Budget stop:** questions an arm did not reach before a budget stop are listed. Nothing is
   imputed.
 - **No other exclusions:** no question is removed after seeing results.
+
+## Amendments
+
+Each amendment is dated and appended; the text above it is left as frozen. An amendment made
+after any result exists says so.
+
+### 2026-11-22: corpus languages and size
+
+Made before any ingestion, generation or judgment has run, so no result informed it.
+
+- **Languages.** The corpus is two Python repositories (before AI, early AI) and one TypeScript
+  repository (latest AI), replacing "All three share one language". One TypeScript repository
+  keeps the results from describing Python alone. Language and era coincide for that
+  repository, so any difference involving it is reported as an observation about that
+  repository, not as an effect of its language or its era.
+- **Size.** The before-AI repository has 187 code files at its base commit, 129 of them outside
+  tests, under the 200-file guide in `corpus.yaml`. It is kept because the files are large: about
+  400k tokens of non-test code, more than the `agent` arm's 300k input cap, so every arm still
+  has to search rather than read the whole repository. The report states both figures.
+- **Training cutoff.** Every repository's change questions come from pull requests merged before
+  the generator's training cutoff, apart from a handful in the before-AI repository. All arms
+  share one answering model, so remembered changes would favour every arm alike; the
+  post-cutoff questions are still reported apart, as the corpus file already provides.

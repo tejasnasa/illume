@@ -87,8 +87,14 @@ def test_an_unknown_name_lists_the_known_ones(tmp_path):
         corpus.get("other")
 
 
-def test_the_shipped_corpus_parses_and_lists_no_repositories():
-    assert load_corpus(CORPUS_PATH).repos == []
+def test_the_shipped_corpus_pins_one_repository_per_era():
+    repos = load_corpus(CORPUS_PATH).repos
+
+    assert [repo.era for repo in repos] == ["before AI", "early AI", "latest AI"]
+    assert len({repo.name for repo in repos}) == len(repos)
+    for repo in repos:
+        assert len(repo.base_commit) == 40, repo.name
+        assert repo.questions.total == 60, repo.name
 
 
 def test_the_question_mix_defaults_to_thirty_five_change_and_twenty_five_explain(tmp_path):
