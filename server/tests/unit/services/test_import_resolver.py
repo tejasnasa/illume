@@ -103,6 +103,48 @@ class TestJavaScriptRelative:
         assert resolved == "src/deep/thing"
 
 
+class TestJavaScriptExtensions:
+    """ESM imports name the file they import; the result must still be a stem."""
+
+    @pytest.mark.parametrize(
+        "specifier",
+        [
+            "./engine/service.ts",
+            "./engine/service.tsx",
+            "./engine/service.mts",
+            "./engine/service.cts",
+            "./engine/service.js",
+            "./engine/service.jsx",
+            "./engine/service.mjs",
+            "./engine/service.cjs",
+        ],
+    )
+    def test_code_extension_is_stripped(self, specifier, tmp_path):
+        resolved = resolve_import(
+            "typescript", specifier, "apps/server/src/index.ts", str(tmp_path)
+        )
+
+        assert resolved == "apps/server/src/engine/service"
+
+    def test_nodenext_js_specifier_matches_a_ts_source(self, tmp_path):
+        """Under NodeNext a `.ts` file is imported as `.js`; both reduce to one stem."""
+        as_js = resolve_import("typescript", "../lib/db.js", "src/api/index.ts", str(tmp_path))
+        bare = resolve_import("typescript", "../lib/db", "src/api/index.ts", str(tmp_path))
+
+        assert as_js == bare == "src/lib/db"
+
+    @pytest.mark.parametrize("specifier", ["./styles.css", "./data.json", "./logo.svg"])
+    def test_non_code_extensions_are_kept(self, specifier, tmp_path):
+        resolved = resolve_import("typescript", specifier, "src/index.ts", str(tmp_path))
+
+        assert resolved == "src/" + specifier[2:]
+
+    def test_only_the_trailing_extension_is_stripped(self, tmp_path):
+        resolved = resolve_import("typescript", "./foo.test.ts", "src/index.ts", str(tmp_path))
+
+        assert resolved == "src/foo.test"
+
+
 class TestJavaScriptExternal:
     @pytest.mark.parametrize(
         "specifier",
@@ -128,6 +170,25 @@ class TestTsConfigAliases:
         )
 
         assert resolved == "src/components/Button"
+
+    def test_alias_to_a_named_file_resolves_to_its_stem(self, tmp_path):
+        """A monorepo alias often points at an entry file, extension included."""
+        write(
+            tmp_path / "tsconfig.json",
+            {
+                "compilerOptions": {
+                    "baseUrl": ".",
+                    "paths": {"@acme/domain": ["./packages/domain/src/index.ts"]},
+                }
+            },
+        )
+        ts_paths = load_ts_paths(tmp_path)
+
+        resolved = resolve_import(
+            "typescript", "@acme/domain", "apps/server/src/main.ts", str(tmp_path), ts_paths
+        )
+
+        assert resolved == "packages/domain/src/index"
 
     def test_alias_map_is_loaded_with_wildcards_stripped(self, tmp_path):
         write(

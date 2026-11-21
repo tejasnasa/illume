@@ -209,8 +209,8 @@ def resolve_import(
     if language == "python":
         return _resolve_python_import(import_name, importing_file, repo_root)
     elif language in ("javascript", "typescript", "tsx", "jsx"):
-        return _resolve_js_import(
-            import_name, importing_file, repo_root, ts_paths, workspace_map
+        return _strip_code_extension(
+            _resolve_js_import(import_name, importing_file, repo_root, ts_paths, workspace_map)
         )
     elif language == "java":
         return _resolve_java_import(import_name)
@@ -301,6 +301,25 @@ def _resolve_js_import(
             parts.append(part)
 
     return "/".join(parts)
+
+
+_JS_CODE_EXTENSIONS = (".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs")
+
+
+def _strip_code_extension(resolved: str | None) -> str | None:
+    """Drop a JS/TS source extension so the result is a path stem.
+
+    ESM code names the file it imports, as ``./service.ts`` or, under
+    ``NodeNext``, as ``./service.js`` for a ``service.ts`` source. Files are
+    indexed by extensionless stem, so the extension has to go for the import to
+    match. Other extensions (``.css``, ``.json``) are left as written.
+    """
+    if resolved is None:
+        return None
+    for extension in _JS_CODE_EXTENSIONS:
+        if resolved.endswith(extension):
+            return resolved[: -len(extension)]
+    return resolved
 
 
 def _resolve_ts_alias(import_name: str, importing_file: str, ts_paths: TsPaths) -> str | None:
