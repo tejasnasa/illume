@@ -8,6 +8,7 @@ import dashboard from "@/assets/dashboard.png";
 import explorer from "@/assets/explorer.png";
 import graph from "@/assets/graph.png";
 import BackgroundGraph from "@/components/BackgroundGraph";
+import SiteNavbar from "@/components/SiteNavbar";
 import graphData from "@/data/data2.json";
 import {
   ArrowDownIcon,
@@ -164,54 +165,7 @@ export default function Home() {
         />
       </div>
 
-      <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl border-b border-(--border)">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link
-            href={"/"}
-            className="relative h-12 flex items-center justify-center m-2 gap-2"
-          >
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-10 w-40 rounded-full bg-(--chart-1)/30 blur-xl" />
-            </div>
-            <StarFourIcon
-              className="relative text-(--chart-1)"
-              weight="fill"
-              size={24}
-            />
-            <span className="text-xl font-semibold">Illume</span>
-          </Link>
-
-          <div className="flex items-center gap-1">
-            {["Features", "How It Works"].map((item) => (
-              <a
-                key={item}
-                href={`#${item.toLowerCase().replace(/\s+/g, "-")}`}
-                className="hidden sm:block px-4 py-2 text-sm text-(--muted-foreground) hover:text-(--foreground) rounded-lg hover:bg-(--secondary) transition-all duration-200"
-              >
-                {item}
-              </a>
-            ))}
-            <Link
-              href="/contact"
-              className="hidden sm:block px-4 py-2 text-sm text-(--muted-foreground) hover:text-(--foreground) rounded-lg hover:bg-(--secondary) transition-all duration-200"
-            >
-              Contact
-            </Link>
-            {/* <Link
-              href="/login"
-              className="ml-2 flex items-center gap-2 px-5 py-2 text-sm rounded-full border border-(--primary) text-(--muted-foreground) hover:text-(--foreground) hover:border-(--primary) transition-all duration-200"
-            >
-              <span className="hidden sm:inline">Login</span>
-            </Link> */}
-            <Link
-              href="/login"
-              className="ml-2 flex items-center gap-2 px-4 py-2 text-sm rounded-full border bg-(--primary) border-(--border)  hover:border-white transition-all duration-200"
-            >
-              <span className="sm:inline">Login</span>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <SiteNavbar />
 
       <section className="relative max-w-6xl mx-auto min-h-screen flex items-center py-20 px-6 lg:px-0 overflow-hidden">
         <div className="w-full flex flex-col lg:flex-row items-center">
@@ -602,6 +556,12 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-5">
+            <Link
+              href="/docs"
+              className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
+            >
+              Docs
+            </Link>
             <Link
               href="/contact"
               className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"

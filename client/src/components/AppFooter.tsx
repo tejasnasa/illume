@@ -57,6 +57,12 @@ export default function AppFooter() {
 
         <div className="flex items-center gap-5">
           <Link
+            href="/docs"
+            className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
+          >
+            Docs
+          </Link>
+          <Link
             href="/contact"
             className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
           >
