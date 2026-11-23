@@ -65,7 +65,17 @@ def ensure_clone(url: str, clones_dir: Path, *, slug: str) -> Path:
     """
     target = clone_dir(clones_dir, slug)
     if (target / ".git").exists() or (target / "HEAD").exists():
-        result = git(target, "fetch", "--prune", "--tags", "origin", timeout=CLONE_TIMEOUT_SECONDS)
+        # `--force` lets an upstream tag rewrite overwrite the local tag. The clone is a
+        # read-only mirror and every revision the harness uses is pinned by SHA.
+        result = git(
+            target,
+            "fetch",
+            "--prune",
+            "--tags",
+            "--force",
+            "origin",
+            timeout=CLONE_TIMEOUT_SECONDS,
+        )
         if result.returncode != 0:
             raise RuntimeError(f"git fetch failed for {slug}: {result.stderr.strip()}")
         return target

@@ -150,6 +150,8 @@ def _run_git_log(clone_path: Path) -> str:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
             timeout=120,
         )

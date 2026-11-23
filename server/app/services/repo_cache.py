@@ -310,6 +310,8 @@ def _run_git(repo_dir: Path, *args: str, timeout: int, env_extra: dict | None = 
         capture_output=True,
         env=_git_env(env_extra),
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         check=False,
     )

@@ -1,5 +1,7 @@
 """Harness clones and the git queries run against them."""
 
+import subprocess
+
 import pytest
 
 from evals.mining import clones
@@ -41,6 +43,27 @@ class TestEnsureClone:
         again = ensure_clone(str(history.root), tmp_path / "clones", slug="fixture/sample")
         assert again == target
         assert default_tip(target) == sample_repo.head_sha(history.root) != before
+
+    def test_a_tag_moved_upstream_does_not_fail_the_refresh(self, tmp_path, history):
+        """The clone is a read-only mirror pinned by SHA, so an upstream tag rewrite wins."""
+        root = history.root
+        subprocess.run(["git", "-C", str(root), "tag", "moving", history.base], check=True)
+        target = ensure_clone(str(root), tmp_path / "clones", slug="fixture/sample")
+        subprocess.run(
+            ["git", "-C", str(root), "tag", "-f", "moving", sample_repo.head_sha(root)],
+            check=True,
+            capture_output=True,
+        )
+
+        ensure_clone(str(root), tmp_path / "clones", slug="fixture/sample")
+
+        moved = subprocess.run(
+            ["git", "-C", str(target), "rev-parse", "moving^{commit}"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert moved.stdout.strip() == sample_repo.head_sha(root)
 
     def test_a_bad_url_raises(self, tmp_path):
         with pytest.raises(RuntimeError, match="git clone failed"):
