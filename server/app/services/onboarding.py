@@ -270,7 +270,9 @@ def _annotate_files(
                 model=model,
                 **response_kwargs,
                 input=[{"role": "user", "content": prompt}],
-                max_output_tokens=1500,
+                # Reasoning models spend part of this budget before writing any output, so it
+                # has to cover both or the JSON is cut off mid-string.
+                max_output_tokens=6000,
             )
         except Exception as exc:
             # The batch range and exception class travel with the error so an

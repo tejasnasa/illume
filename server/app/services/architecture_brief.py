@@ -423,7 +423,9 @@ def _call_llm_narrative(prompt: str, llm: LLMConfig | None = None) -> str:
                     {"role": "user", "content": prompt},
                 ],
             ),
-            max_output_tokens=4000,
+            # Reasoning models spend part of this budget before writing any output, so it
+            # has to cover both or the narrative is cut off.
+            max_output_tokens=8000,
             **response_kwargs,
         )
         content = response.output_text

@@ -250,7 +250,9 @@ def build_glossary(
                         model=model,
                         **response_kwargs,
                         input=[{"role": "user", "content": p}],
-                        max_output_tokens=3000,
+                        # Reasoning models spend part of this budget before writing any
+                        # output, so it has to cover both or the JSON is cut off.
+                        max_output_tokens=8000,
                     )
                 ),
             )

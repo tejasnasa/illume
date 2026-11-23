@@ -192,4 +192,4 @@ def test_empty_response_kwargs_stays_empty_at_the_sdk_boundary(monkeypatch):
 
     architecture_brief._call_llm_narrative("prompt", llm=config)
 
-    assert responses.kwargs_list == [{"max_output_tokens": 4000}]
+    assert responses.kwargs_list == [{"max_output_tokens": 8000}]
