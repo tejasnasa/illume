@@ -1,0 +1,268 @@
+items:
+  - kind: explain
+    question: When does a long conversation get summarised, and when is that summary actually used in place of the old messages?
+    reference_answer: >-
+      Compaction is enqueued once the messages not yet compacted reach the history window plus a
+      batch size (50 each), counting from a stored cursor that marks the last compacted message.
+      Each pass takes the next batch after the cursor. When building context, the stored summary is
+      used only if it exists, is at most 20,000 characters, a cursor is set, and the messages after the
+      cursor are contiguous; otherwise the full message window is kept so no gap appears.
+    required_files:
+      - packages/adapters/src/history-compaction.ts
+  - kind: explain
+    question: How much recent history does a bot see, and how are memories recalled from older conversations presented to it?
+    reference_answer: >-
+      The visible history window is 50 messages only when semantic memory is enabled, the thread
+      has been compacted and memory recall succeeded; otherwise a legacy window of 200 is used. At
+      most five recalled memories are included, each with optional provenance, id and entity, inside
+      a tagged block labelled as possibly outdated, untrusted historical data. The compacted summary
+      is similarly wrapped in a tag and escaped so it cannot pose as instructions.
+    required_files:
+      - packages/adapters/src/history-compaction.ts
+  - kind: explain
+    question: How does the summariser avoid getting stuck on a batch that is too big?
+    reference_answer: >-
+      The transcript handed to the summariser is capped at 40,000 characters, and a prompt larger
+      than the transcript cap plus the previous-summary cap plus a margin is refused before the
+      model is called. The timeout scales with prompt size, from two minutes at or below 8,000
+      characters up to an eight-minute cap. Permanent failures are logged as non-retryable, since
+      the cursor does not advance on failure and the same batch would otherwise be retried forever.
+    required_files:
+      - packages/adapters/src/history-compaction.ts
+  - kind: explain
+    question: With several workers running, how is one of them chosen to do the periodic recovery sweep?
+    reference_answer: >-
+      Leadership is a Postgres session advisory lock taken with a two-key form (a fixed namespace
+      plus a lock id) so it cannot collide with other users of the one-key API. A worker holds the
+      lock on a dedicated pooled connection; if that connection errors it is dropped and released
+      as destroyed. Followers retry acquiring on every interval, so a dead leader is replaced. On
+      release the lock is explicitly unlocked, and a connection whose unlock is uncertain is
+      destroyed rather than returned to the pool.
+    required_files:
+      - packages/adapters/src/job-reconciler.ts
+  - kind: explain
+    question: What does the periodic recovery sweep put back on the job queue?
+    reference_answer: >-
+      Every interval (30 seconds by default) the elected reconciler loads, in batches of 100 with
+      cursors, runs that are queued or whose leased or running state has an expired lease, and
+      enqueues a continue job for each. It also enqueues wake-up jobs for routines due within the
+      next minute, a messaging delivery job when outbound messages are due, and delivery jobs for
+      completed messaging runs that were never mirrored.
+    required_files:
+      - packages/adapters/src/job-reconciler.ts
+  - kind: explain
+    question: How are background jobs scheduled, deduplicated and cancelled?
+    reference_answer: >-
+      Jobs go to Graphile Worker through a publisher that shares the caller's Postgres pool rather
+      than opening its own. Enqueueing passes the job's available-at time as the run time, its
+      replace key as the job key, and its maximum attempts; cancelling removes the job by key with
+      a SQL call. An in-memory queue implements the same publisher and host interfaces.
+    required_files:
+      - packages/adapters/src/wakeup.ts
+  - kind: explain
+    question: What happens to the background job runner when Postgres runs out of connections?
+    reference_answer: >-
+      The worker host supervises its Graphile runner. If the runner dies with a too-many-connections
+      error, it relaunches it after a bounded exponential backoff (200 ms doubling, capped at
+      30 seconds), retrying the launch with the same backoff while the database stays saturated.
+      Any other error is rethrown, and stopping the host wakes any pending sleep and stops the
+      loop.
+    required_files:
+      - packages/adapters/src/wakeup.ts
+  - kind: explain
+    question: When an integration exposes a lot of tools, how does the bot avoid being handed all of them at once?
+    reference_answer: >-
+      Connectors return their tools directly only up to a limit of 20. Beyond that they expose
+      three wrapper tools instead: search the catalog, load one tool's schema, and execute a loaded
+      tool. Search results are capped at 10, a loaded schema must stay under 100 KB, and tool names
+      are disambiguated when the same name appears in more than one install. The MCP, installed and
+      Pipedream connectors all use this.
+    required_files:
+      - packages/adapters/src/lazy-tool-catalog.ts
+    acceptable_files:
+      - packages/adapters/src/mcp-connector.ts
+      - packages/adapters/src/installed-connectors.ts
+      - packages/adapters/src/pipedream-connector.ts
+  - kind: explain
+    question: How are tool search results ranked when a bot searches a large tool catalog?
+    reference_answer: >-
+      Each catalog entry gets a score against the lower-cased query: 0 for an exact name or short
+      name, 1 for a prefix match, 2 when the name, short name or group contains the query, 3 when
+      only the description does, and 4 for no match. Entries scoring 4 are dropped, the rest are
+      sorted by score, and the result count is clamped between 1 and the search limit.
+    required_files:
+      - packages/adapters/src/lazy-tool-catalog.ts
+  - kind: explain
+    question: How do a bot's replies in a text-messaging conversation get delivered, without relying on the bot calling a send tool?
+    reference_answer: >-
+      Delivery is an automatic mirror: every text-bearing bot message of a messaging run is copied
+      into an outbox and sent. Direct-message runs go to the owner's conversation; channel runs post
+      to the group with an attribution prefix and are also fanned out internally to approved peer
+      bots' threads, so bot-to-bot traffic never goes through the provider. For the one provider
+      that enforces a consecutive-outbound cap, rows stay pending after 140 DMs without a reply
+      from the owner; other providers are not held. A row is declared lost after five send
+      attempts.
+    required_files:
+      - packages/adapters/src/messaging-delivery.ts
+  - kind: explain
+    question: How does the API stop oversized request bodies before they are parsed?
+    reference_answer: >-
+      A middleware bounds JSON entry points: auth routes at 64 KB and RPC routes at 16 MB. If a
+      numeric content length is declared without chunked encoding, it rejects anything over the
+      limit with a 413. Otherwise it reads the stream chunk by chunk, cancelling and returning 413
+      as soon as the size passes the limit, and then rebuilds the request with the buffered body so
+      the framework parser can read it.
+    required_files:
+      - apps/api/src/request-body-limit.ts
+  - kind: explain
+    question: How is an incoming webhook for a bot authenticated and turned into work, and how are retries from the sender handled?
+    reference_answer: >-
+      The generic webhook route reads the body with a size bound before looking up the bot, so size
+      errors do not reveal which bots exist, then requires a bearer token matching the bot's secret
+      using a constant-time comparison; a missing bot, missing secret or bad token all give the same
+      401. It finds up to five active webhook-enabled routines for the bot and delivers the event
+      with an idempotency key taken from the Idempotency-Key header, the X-Idempotency-Key header,
+      or the payload's id or event_id.
+    required_files:
+      - apps/api/src/webhook.ts
+    acceptable_files:
+      - packages/core/src/secrets-guard.ts
+  - kind: explain
+    question: How are GitHub webhook deliveries verified?
+    reference_answer: >-
+      The GitHub route checks the signature header is of the form sha256= followed by 64 hex
+      characters, computes an HMAC-SHA256 of the raw body with the configured secret, and compares
+      the two with a timing-safe comparison. Recognised event names are kept, and any other event
+      name is mapped to a generic event before the delivery is turned into a prompt for the bot.
+    required_files:
+      - apps/api/src/github-webhook.ts
+  - kind: explain
+    question: How does the workspace-wide search decide what to return?
+    reference_answer: >-
+      Search trims the query and returns nothing for an empty one. It first matches bots (not
+      archived) by name, title or description and chat groups by name, case-insensitively and
+      within the actor's space, with these conversation hits capped. The rest of a 25-result budget
+      goes to content hits: files, group files, routines, messages and links found in messages.
+      Hits are deduplicated by a key built from the kind and the ids of the bot, group, message,
+      file and routine, plus the URL.
+    required_files:
+      - apps/api/src/search.ts
+  - kind: explain
+    question: What happens when I send a message while the bot is still busy running a routine or webhook turn?
+    reference_answer: >-
+      A routine, webhook or creation-intro turn runs on its own prompt rather than the
+      conversation. A user message that arrives while such a run is busy is stored as pending
+      steering without starting a run; that run never picks it up, and the continuation started
+      when it finishes answers with the full thread. This avoids two overlapping runs on a dedicated
+      computer both replying. Composer text answers a waiting question only when no steerable
+      conversational run is active; otherwise it steers that run.
+    required_files:
+      - apps/api/src/thread-target.ts
+  - kind: explain
+    question: How are OAuth tokens and API keys kept out of what the model sees from third-party tool servers?
+    reference_answer: >-
+      For each connection the code collects the secret values to hide: the stored secret, OAuth
+      access and refresh tokens, a client secret, and header values. Authorization, cookie and
+      session headers always count; credential-named keys count only when the value looks like a
+      secret, skipping common config words like production or true and, for ambiguous token keys,
+      numeric-only values. Tool results and errors are then redacted by replacing each secret with a
+      redacted marker before they reach the model.
+    required_files:
+      - packages/adapters/src/mcp-oauth.ts
+      - packages/adapters/src/mcp-connector.ts
+    acceptable_files:
+      - packages/core/src/events.ts
+      - packages/adapters/src/connector-safety.ts
+  - kind: explain
+    question: What stops the server from starting in production with placeholder secrets?
+    reference_answer: >-
+      Secret resolution allows built-in development placeholders only when development secrets are
+      allowed: an explicit opt-in variable, running under Vitest, or NODE_ENV of development or
+      test. Otherwise a missing auth secret or encryption key, or one equal to the development
+      placeholder, throws an error telling the operator to set long random values. Dedicated sidecar
+      tokens are resolved by a similar helper.
+    required_files:
+      - packages/core/src/secrets-guard.ts
+  - kind: explain
+    question: How does the automatic safety reviewer decide whether a bot's action needs the user's approval?
+    reference_answer: >-
+      The auto-review judge asks a checker model whether the action is unexpected or dangerous
+      relative to the user's task, with the tool name, connector, truncated arguments, task, bot
+      description and matching rules, all marked as untrusted data. The model must reply with JSON
+      deciding pass or ask with a short reason. The call has a timeout (1.5 s by default,
+      configurable within bounds), and a timeout, failure or unparseable reply yields an error
+      decision.
+    required_files:
+      - packages/adapters/src/auto-review.ts
+  - kind: explain
+    question: How are sensitive tool arguments hidden from the safety reviewer?
+    reference_answer: >-
+      Before review, the arguments are rebuilt key by key: values under keys that look like
+      passwords, secrets, tokens, API keys, authorization, cookies or credentials are replaced with
+      a redacted marker; strings have known secret values replaced; numbers, booleans and null pass
+      through; nested values are serialised and redacted recursively, with unserialisable values
+      marked as such.
+    required_files:
+      - packages/adapters/src/auto-review.ts
+  - kind: explain
+    question: When does a bot's cloud computer get put to sleep?
+    reference_answer: >-
+      Touching a running computer schedules a sleep job after an idle period (ten minutes by
+      default, configurable but at least 30 seconds) and keeps the sandbox alive. When the job
+      fires, the computer is suspended only if it is still running, has no active run and has no
+      background shell work, which a probe detects through marker files held open by processes. If
+      anything is still active the sleep is rescheduled; otherwise the state is moved to suspending
+      with a timestamp check so a concurrent change aborts the suspension.
+    required_files:
+      - packages/adapters/src/computer-idle.ts
+  - kind: explain
+    question: How is the very first account sign-up protected against two people signing up at the same time?
+    reference_answer: >-
+      First-account admission is serialised twice: inside a process by chaining a promise gate, and
+      across API processes by a transaction-scoped Postgres advisory lock held from the allowlist
+      check until the signup finishes. The transaction commits on release, which drops the lock,
+      so a second allowlisted signup cannot insert a user until the first is visible.
+    required_files:
+      - packages/auth/src/index.ts
+  - kind: explain
+    question: How does the sandbox supervisor decide whether it is safe to retry a computer action another way?
+    reference_answer: >-
+      The supervisor tries a fast HTTP control service first and can fall back to running the
+      action through docker exec. It falls back only when the control service was never reached,
+      which it recognises from pre-connection errors such as connection refused or host not found.
+      Timeouts, aborts and mid-flight failures count as possibly partly applied, so the actions are
+      not replayed.
+    required_files:
+      - infra/sandboxes/supervisor/src/supervisor-logic.ts
+  - kind: explain
+    question: How does the self-update sidecar run git and Docker commands without leaking secrets or allowing command injection?
+    reference_answer: >-
+      Child processes get an environment rebuilt from an allowlist of connectivity and Docker
+      variables rather than the application's secret-filled environment, with git prompts disabled
+      and the deployment directory marked as a safe directory. Every command runs as an argument
+      list with no shell, so a repository URL or branch reaches git as a single argument and cannot
+      become part of a command line or service definition.
+    required_files:
+      - infra/updater/src/index.ts
+  - kind: explain
+    question: How are a bot's memory documents saved so that concurrent edits don't lose history?
+    reference_answer: >-
+      The markdown memory store scopes documents by space, user, scope, bot and path. A commit runs
+      in a serializable transaction that creates the document or updates it with an incremented
+      revision and appends a revision record; serialization conflicts retry the whole transaction
+      up to a limit so revision numbers come from fresh state. Search is a simple case-insensitive
+      match on content or path.
+    required_files:
+      - packages/memory/src/index.ts
+    acceptable_files:
+      - packages/db/src/transaction-retry.ts
+  - kind: explain
+    question: When choosing which saved model credential becomes a workspace's default, how is a credential tied to a restricted model handled?
+    reference_answer: >-
+      The first ready credential in the given order is preferred. If its saved model is unset or
+      equals the requested one it is used. Otherwise, if another ready credential exists and the
+      preferred one's saved model is restricted to certain auth kinds in the catalog, the other
+      credential is chosen; else the preferred one stays. Separately, a model can be rejected for a
+      credential whose auth kind the catalog does not allow for it.
+    required_files:
+      - packages/adapters/src/model-selection.ts

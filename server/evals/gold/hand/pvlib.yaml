@@ -1,0 +1,279 @@
+items:
+  - kind: explain
+    question: If I set up a full simulation without saying which DC power model to use, how does the library decide which one to run?
+    reference_answer: >-
+      The simulation chain infers the DC model from the keys that the module parameters of every
+      array have in common. Sandia coefficients (A0, A1, C3) select the SAPM model; the
+      single-diode reference parameters with an Adjust key select CEC, and without it De Soto;
+      the gamma_ref/mu_gamma family selects PVsyst; pdc0 with gamma_pdc selects PVWatts. If none
+      match, it raises an error telling the user to set the DC model explicitly.
+    required_files:
+      - pvlib/modelchain.py
+  - kind: explain
+    question: What happens when I name a cell temperature model that doesn't match the temperature parameters on my arrays?
+    reference_answer: >-
+      When a temperature model is given by name, the simulation chain also infers a model from
+      the temperature parameters the arrays share (a/b/deltaT for SAPM, u_c/u_v for PVsyst,
+      u0/u1 for Faiman, noct_installed for Fuentes, noct with module_efficiency for the SAM NOCT
+      model). If the named model and the inferred one differ, it raises a ValueError listing the
+      common parameters, so every array must carry parameters for the same model.
+    required_files:
+      - pvlib/modelchain.py
+  - kind: explain
+    question: How is the reflection loss model at the module surface chosen when I don't specify one?
+    reference_answer: >-
+      The simulation chain compares the keys shared by every array's module parameters against a
+      table of the parameter sets each incidence-angle-modifier model needs, checking physical,
+      then SAPM, ASHRAE, Martin-Ruiz and interpolation in that order. The first match is used,
+      and the actual modifier is computed by the system object, which looks up the model
+      function and passes it the matching module parameters. If nothing matches, an error
+      suggests setting the model explicitly or choosing no loss.
+    required_files:
+      - pvlib/modelchain.py
+      - pvlib/iam.py
+    acceptable_files:
+      - pvlib/pvsystem.py
+  - kind: explain
+    question: When I run a simulation from weather data with direct, global and diffuse irradiance, in what order do the modelling steps happen?
+    reference_answer: >-
+      Running from broadband weather first prepares the inputs (times, solar position, airmass,
+      plane-of-array irradiance and angle of incidence), then applies the incidence-angle loss,
+      the spectral loss and the effective-irradiance step. After that a shared routine sets the
+      cell temperature (using supplied cell or module temperature when present), then runs the
+      DC model, the DC ohmic loss model, the losses model and finally the AC inverter model.
+      Missing air temperature and wind speed are filled with 20 C and 0 m/s.
+    required_files:
+      - pvlib/modelchain.py
+  - kind: explain
+    question: How does the sun-position calculation pick between its different algorithms?
+    reference_answer: >-
+      The main solar position function takes a method name and dispatches on it: the NREL SPA
+      via a C extension, the NREL SPA in Python either compiled with numba or as plain numpy, the
+      PyEphem library, or a built-in ephemeris calculation. Before dispatching it fills in
+      whichever of altitude and pressure is missing from the other (defaulting to sea level and
+      101325 Pa), and an unknown method raises an error.
+    required_files:
+      - pvlib/solarposition.py
+  - kind: explain
+    question: How does the Python solar position algorithm switch between plain numpy and numba-compiled code?
+    reference_answer: >-
+      The SPA module decides at import time from the PVLIB_USE_NUMBA environment variable: if it
+      is set and numba imports, its functions are wrapped with numba's jit, otherwise a no-op
+      decorator is used and a warning is issued if numba is missing. When the solar position code
+      asks for the other mode than the one the module was loaded in, it sets the environment
+      variable, reloads the SPA module, warns that it is reloading, and removes the variable
+      again.
+    required_files:
+      - pvlib/solarposition.py
+      - pvlib/spa.py
+  - kind: explain
+    question: How is the total irradiance on a tilted panel put together from its parts?
+    reference_answer: >-
+      The total-irradiance function computes the sky diffuse part with the chosen transposition
+      model, the ground-reflected part from GHI, albedo (or a named surface type) and tilt, and
+      the angle of incidence. It then sums them: the direct component is DNI times the cosine of
+      the angle of incidence, floored at zero, the diffuse is sky plus ground, and the global is
+      direct plus diffuse. The result holds poa_global, poa_direct, poa_diffuse, poa_sky_diffuse
+      and poa_ground_diffuse.
+    required_files:
+      - pvlib/irradiance.py
+  - kind: explain
+    question: Which sky diffuse models need extra inputs, and what happens if I leave them out?
+    reference_answer: >-
+      The sky diffuse dispatcher requires extraterrestrial DNI for the Hay-Davies, Reindl, Perez
+      and Perez-Driesse models and raises a ValueError naming the model when it is missing. The
+      Perez model also needs relative airmass; if none is supplied it is computed from the solar
+      zenith with the atmosphere module's default model, while Perez-Driesse computes its own.
+      Isotropic, Klucher and King need neither, and an unknown model name raises an error.
+    required_files:
+      - pvlib/irradiance.py
+    acceptable_files:
+      - pvlib/atmosphere.py
+  - kind: explain
+    question: Where does the clear-sky model get atmospheric turbidity for a location, and how is it turned into a daily value?
+    reference_answer: >-
+      Linke turbidity is read from a bundled HDF5 file holding a global grid with twelve monthly
+      values per cell. Latitude and longitude are converted to grid indices, the twelve values for
+      that cell are read, and by default they are interpolated to daily values; otherwise each
+      timestamp takes its month's value. The stored integers are divided by 20 to give the
+      turbidity.
+    required_files:
+      - pvlib/clearsky.py
+    acceptable_files:
+      - pvlib/tools.py
+  - kind: explain
+    question: When I ask a site for its clear-sky irradiance without passing anything extra, what does it fill in for me?
+    reference_answer: >-
+      The location object computes extraterrestrial radiation from the times if not given,
+      derives pressure from its altitude, and computes solar position. For the Ineichen model it
+      looks up Linke turbidity for its latitude and longitude (interpolated by default) and
+      computes absolute airmass from the solar position, unless either is passed in. It then calls
+      the Ineichen, Haurwitz or simplified Solis function, raising an error for any other model
+      name.
+    required_files:
+      - pvlib/location.py
+    acceptable_files:
+      - pvlib/clearsky.py
+  - kind: explain
+    question: How do the bundled module and inverter databases get loaded, and can I load one from somewhere else?
+    reference_answer: >-
+      The database loader accepts either a short name or a path, but not both and not neither.
+      Names map to CSV files shipped in the package's data directory (CEC modules, Sandia modules,
+      CEC and ADR inverters); a path may be a local file or an http URL, which is downloaded. The
+      CSV is parsed by skipping two unit rows, replacing spaces in column names, normalising
+      product names, and transposing so each product is a column; ADR coefficient strings are
+      parsed into lists of floats.
+    required_files:
+      - pvlib/pvsystem.py
+  - kind: explain
+    question: How does the Sandia inverter model handle clipping and night-time?
+    reference_answer: >-
+      After computing AC power from DC power and voltage with the efficiency equations, the model
+      applies limits: output is capped at the rated AC power (Paco), and whenever DC input is
+      below the start-up power (Pso) the output is set to the negative night tare (-Pnt),
+      representing self-consumption.
+    required_files:
+      - pvlib/inverter.py
+  - kind: explain
+    question: How does the inverter model work when an inverter has several DC inputs?
+    reference_answer: >-
+      For multiple inputs the Sandia model sums the DC power of all inputs, computes the
+      efficiency-based AC output at that total power for each input's voltage, and weights each
+      input's contribution by its share of total DC power. The same clipping and start-up limits
+      are then applied to the combined output using the total DC power.
+    required_files:
+      - pvlib/inverter.py
+  - kind: explain
+    question: How does a single-axis tracker decide its rotation angle when rows would shade each other?
+    reference_answer: >-
+      The tracker first computes the ideal rotation that points the panel at the sun as a
+      projected solar zenith angle, and blanks times when the sun is below the horizon. With
+      backtracking on, it uses the ground coverage ratio and cross-axis tilt to compute a
+      correction that rotates away from the ideal angle only when row-to-row shading would occur.
+      The angle is then clipped to the minimum and maximum rotation, and surface tilt, azimuth and
+      angle of incidence are derived from it.
+    required_files:
+      - pvlib/tracking.py
+    acceptable_files:
+      - pvlib/shading.py
+  - kind: explain
+    question: How are the key points of a module's current-voltage curve computed, and what choices of solver are there?
+    reference_answer: >-
+      The single-diode entry point takes the five diode parameters and a method. With the default
+      Lambert W method it uses an explicit analytical solution. Otherwise it uses the Bishop
+      formulation with a numerical root finder (Newton, Brent or Chandrupatla) to find
+      open-circuit voltage, the maximum power point, short-circuit current, and currents at half
+      of Voc and between Voc and Vmp.
+    required_files:
+      - pvlib/pvsystem.py
+      - pvlib/singlediode.py
+  - kind: explain
+    question: How is the maximum power point found in the explicit diode solution?
+    reference_answer: >-
+      The Lambert W path first computes open-circuit voltage, then searches for the voltage that
+      maximises power using SciPy's elementwise minimiser when it is available. If that import
+      fails it falls back to a vectorised golden-section search over voltages from zero to a
+      little above Voc. The current at that voltage, and at the intermediate points, are then
+      computed with the Lambert W expression.
+    required_files:
+      - pvlib/singlediode.py
+    acceptable_files:
+      - pvlib/tools.py
+  - kind: explain
+    question: Why do some system methods return a single value for one array but a tuple for several?
+    reference_answer: >-
+      Methods that compute per-array results are wrapped by a decorator that returns the only
+      element when the result has length one and the whole tuple otherwise. The decorator adds an
+      unwrap keyword that callers, such as the simulation chain, set to False to always get a
+      tuple.
+    required_files:
+      - pvlib/pvsystem.py
+    acceptable_files:
+      - pvlib/modelchain.py
+  - kind: explain
+    question: How does the project mark a function as deprecated so that users get warned?
+    reference_answer: >-
+      A decorator builds a deprecation message from the release it was deprecated in, an optional
+      alternative, an addendum and a removal version. It wraps the function so every call emits a
+      warning, using the project's own deprecation warning class or PendingDeprecationWarning, and
+      it prepends a deprecated directive to the docstring. A separate decorator handles renamed
+      keyword arguments by warning, moving the value to the new name, and erroring if both names
+      are passed.
+    required_files:
+      - pvlib/_deprecation.py
+  - kind: explain
+    question: How does fetching a typical meteorological year from the European PV data service work?
+    reference_answer: >-
+      The TMY getter calls the service's tmy endpoint. On an error response it raises the
+      service's JSON error message if there is one, otherwise the HTTP error. It parses the reply
+      as JSON, CSV or EPW depending on the requested format, rejecting the retired basic format,
+      optionally renames columns to the library's variable names, and can shift the UTC data to a
+      fixed offset and force all timestamps into one year.
+    required_files:
+      - pvlib/iotools/pvgis.py
+  - kind: explain
+    question: How does the bifacial row model combine front and back irradiance?
+    reference_answer: >-
+      The infinite-sheds model computes plane-of-array irradiance twice, once for the front
+      surface and once for the back surface (tilt and azimuth flipped), each accounting for ground
+      shadows, view factors and row shading. It renames the columns with front and back prefixes
+      and sets the global value to front plus back times bifaciality, scaled by the shade and
+      transmission factors.
+    required_files:
+      - pvlib/bifacial/infinite_sheds.py
+    acceptable_files:
+      - pvlib/bifacial/utils.py
+  - kind: explain
+    question: How is airmass computed, and how is it corrected for site pressure?
+    reference_answer: >-
+      Relative airmass is computed from the zenith angle with one of several published formulas
+      chosen by name (Kasten-Young 1989 by default, Kasten 1966, simple secant, Pickering, Young
+      and Irvine, Young 1994, Gueymard 1993 or 2003), with zenith angles above 90 degrees giving
+      NaN. Absolute airmass multiplies relative airmass by the site pressure divided by 101325 Pa.
+    required_files:
+      - pvlib/atmosphere.py
+  - kind: explain
+    question: How does the library estimate how much of a panel stays covered by snow over time?
+    reference_answer: >-
+      The NREL snow model marks a timestep as fully covered when snowfall exceeds a threshold
+      (and depth is above a threshold if given). Snow slides off when air temperature exceeds
+      irradiance divided by a negative coefficient; the amount per step is a coefficient times the
+      sine of tilt times the step length. When snow depth is given and falls below its threshold,
+      the whole remaining cover slides off in that step. Sliding accumulates within each period between
+      snowfalls and is subtracted from full coverage, clipped at zero. A separate function turns
+      coverage into DC loss assuming any partly covered string is lost.
+    required_files:
+      - pvlib/snow.py
+  - kind: explain
+    question: How does the soiling model decide when rain cleans the panels?
+    reference_answer: >-
+      The HSU model sums rainfall over a rolling accumulation period and treats any time where
+      that sum reaches the cleaning threshold as a cleaning event. Deposited particulate mass
+      accumulates from PM2.5 and PM10 concentrations times deposition velocities, the timestep
+      length and the cosine of tilt; at each cleaning the accumulated mass resets. The soiling
+      ratio is one minus a fitted error-function term of the accumulated mass.
+    required_files:
+      - pvlib/soiling.py
+  - kind: explain
+    question: How does the library smooth a single-sensor irradiance series to represent a whole plant's variability?
+    reference_answer: >-
+      The wavelet variability model decomposes the clear-sky index time series into wavelets at
+      several timescales, computes a variability reduction for each timescale from the plant's
+      positions and the cloud speed, divides each wavelet except the lowest-frequency one by the
+      square root of its variability reduction, and sums the wavelets back into a smoothed
+      series. It returns the smoothed series together with the wavelets and timescales.
+    required_files:
+      - pvlib/scaling.py
+  - kind: explain
+    question: How does the system work out cell temperature with different thermal models?
+    reference_answer: >-
+      The system's cell temperature method takes plane-of-array irradiance, air temperature,
+      wind speed and a model name, picks the matching function from the temperature module (SAPM,
+      PVsyst, Faiman, Fuentes, SAM NOCT and others), and passes it the required and optional
+      parameters drawn from each array's temperature model parameters. The simulation chain calls
+      it with the irradiance appropriate for cell temperature and the weather columns.
+    required_files:
+      - pvlib/pvsystem.py
+    acceptable_files:
+      - pvlib/temperature.py
+      - pvlib/modelchain.py

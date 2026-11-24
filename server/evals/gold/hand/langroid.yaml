@@ -1,0 +1,277 @@
+items:
+  - kind: explain
+    question: In one turn of a multi-agent conversation, how is it decided who gets to respond to the current message?
+    reference_answer: >-
+      A task's step tries its responders in order (the agent's LLM, the agent itself, and any
+      sub-tasks, with the human user tried first if allowed and not yet tried) until one gives a
+      valid response. A responder is skipped if it sent the pending message, if a sub-task's
+      agent cannot respond to it, if the message names a different recipient, or if the message
+      blocks that responder. The first valid response becomes the new pending message; if none is
+      valid, a NO_ANSWER response is used if one came back, otherwise the step is recorded as
+      invalid. A message addressed to an unknown recipient produces an error message instead.
+    required_files:
+      - langroid/agent/task.py
+  - kind: explain
+    question: How does the framework notice that agents are stuck talking in circles?
+    reference_answer: >-
+      The task counts how often each message occurs. Once enough messages have been seen, it looks
+      at the most common ones for a sharp drop in frequency, using a dominance factor and a wait
+      factor from the task config, to find a small set of dominant messages; if the recent
+      messages are all from that set it treats it as a loop. It also counts alternating NO_ANSWER
+      replies. When either check fires during a run it raises an infinite-loop exception that
+      points to the config parameters for tuning or disabling the detection.
+    required_files:
+      - langroid/agent/task.py
+  - kind: explain
+    question: What are the different ways a task decides it is finished?
+    reference_answer: >-
+      The task's done check returns a flag and a status code. It is done if killed; if
+      done-on-tool is configured and the result has a tool; if the message chain matches a
+      configured done sequence; if the result contains the DONE string (when string signals are
+      recognised) or a done/final-result tool; if the user quits; when it has stalled for too many
+      steps; when the LLM cost exceeds the limit; or when the result is addressed back to the
+      calling task. Stalled and cost exits carry their own status codes.
+    required_files:
+      - langroid/agent/task.py
+    acceptable_files:
+      - langroid/agent/tools/orchestration.py
+  - kind: explain
+    question: How can I describe, as a short pattern string, the sequence of events that should end a task?
+    reference_answer: >-
+      Done sequences can be written as comma-separated event tokens. Single letters stand for
+      events: T for any tool, A for an agent response, L for an LLM response, U for a user
+      response, N for no response and C for any content; T[name] names a specific tool and
+      C[pattern] matches content. Full words like TOOL and AGENT are also accepted. The parser
+      turns each token into an event object and raises an error for invalid tokens or an empty
+      pattern; the task then checks the message chain against these sequences.
+    required_files:
+      - langroid/agent/done_sequence_parser.py
+    acceptable_files:
+      - langroid/agent/task.py
+  - kind: explain
+    question: When an LLM writes a tool call inside its plain text reply, how does the agent find and recognise it?
+    reference_answer: >-
+      The agent first looks for XML tool candidates in the text and, if there are none, for
+      top-level JSON objects. Each candidate is parsed into a dict (from JSON or from the XML
+      fields); its request field names the tool, which must be one the agent knows. The matching
+      tool class validates the fields; a validation error is tagged with the tool class and
+      re-raised, and malformed attempts set a flag so the error can be reported back to the LLM.
+    required_files:
+      - langroid/agent/base.py
+    acceptable_files:
+      - langroid/agent/xml_tool_message.py
+      - langroid/parsing/parse_json.py
+  - kind: explain
+    question: What happens if the model emits a tool call but forgets to say which tool it is?
+    reference_answer: >-
+      When the parsed dict has no request field, the agent tries to infer the tool, but only among
+      the tools it actually handles (optionally narrowed to those enabled for inference). A tool
+      is a candidate if the dict's keys are a subset of its fields and include at least one
+      field that is not inherited from the base tool class, and the dict validates against it. If
+      exactly one tool qualifies it is used; otherwise the attempt is treated as a tool error.
+    required_files:
+      - langroid/agent/base.py
+  - kind: explain
+    question: How can a tool definition carry its own handling logic without me writing a method on the agent?
+    reference_answer: >-
+      When a tool is enabled, the agent records it as known and, depending on the flags, as
+      usable by the LLM and handled. If the tool class defines a handle method and the agent has
+      no method named after the tool (or its custom handler name), the agent creates one wrapping
+      handle. If instead it defines a response method, a method is added that calls it with the
+      agent, and with the chat document when the method takes one. At handling time the agent
+      looks up the method by name and turns its result into a chat document.
+    required_files:
+      - langroid/agent/base.py
+      - langroid/agent/chat_agent.py
+  - kind: explain
+    question: What does the agent send back to the model when a tool call has missing or invalid fields?
+    reference_answer: >-
+      The agent builds an error message from the validation error. It takes the tool's name from
+      the tool class attached to the exception, or one passed in, falling back to an unknown tool
+      name, and lists the bad fields and their problems so the LLM can fix the call and try
+      again.
+    required_files:
+      - langroid/agent/base.py
+  - kind: explain
+    question: How are model responses cached so repeated identical requests don't cost anything?
+    reference_answer: >-
+      The OpenAI-compatible model class builds a cache key from the function name and the sorted
+      request arguments, hashed with SHA-256. If caching is enabled globally it looks the key up
+      and returns the cached response, otherwise it calls the API and stores the response under
+      that key. The cache backend is Redis (or a fake Redis) chosen from the global cache type;
+      any other type raises an error, and lookup or store failures are logged rather than raised.
+    required_files:
+      - langroid/language_models/openai_gpt.py
+    acceptable_files:
+      - langroid/cachedb/redis_cachedb.py
+  - kind: explain
+    question: Which API failures are retried, and how long does it wait between attempts?
+    reference_answer: >-
+      Model calls are wrapped in a retry decorator, with sync and async versions. It retries on
+      request exceptions, timeouts, rate limits and general API errors. Authentication errors are
+      caught first and re-raised without retrying, and it also re-raises immediately when the
+      error text says BadRequestError, ConnectionError or NotFoundError. Each retry multiplies the delay by an exponential base (1.3 by default) with
+      random jitter, sleeps, and gives up after a maximum number of retries (5 by default).
+    required_files:
+      - langroid/language_models/utils.py
+    acceptable_files:
+      - langroid/language_models/openai_gpt.py
+  - kind: explain
+    question: How does the library avoid creating a fresh HTTP client for every model object?
+    reference_answer: >-
+      A module-level cache maps a SHA-256 hash of the client type and its configuration (API key,
+      base URL, timeout and so on) to a client and a last-used time, guarded by a reentrant lock.
+      Getter functions for OpenAI, Groq and others return the cached client when the key matches,
+      otherwise create and store one. Every stored client is also tracked in a weak set, and an
+      exit hook closes the synchronous ones when the process ends; async clients, which cannot be
+      awaited at exit, are left to the operating system.
+    required_files:
+      - langroid/language_models/client_cache.py
+  - kind: explain
+    question: When answering questions over documents, how are results from keyword and semantic search merged?
+    reference_answer: >-
+      The document-chat agent gathers semantic search results from the vector store and,
+      optionally, BM25 keyword matches and fuzzy matches, each fetched at a multiple of the
+      configured chunk count. With reciprocal rank fusion enabled it scores each chunk by summing
+      one over its rank plus a constant across the lists, treating a missing rank as worse than
+      the worst, and keeps the top chunks. Without rank fusion it appends the keyword and fuzzy
+      matches to the semantic results, removes duplicates, and leaves ordering to the
+      cross-encoder reranker when one is configured.
+    required_files:
+      - langroid/agent/special/doc_chat_agent.py
+  - kind: explain
+    question: After retrieving document chunks, what reordering is applied before they reach the model?
+    reference_answer: >-
+      Retrieved passages can be reranked with a cross-encoder model when one is configured and
+      rank fusion is off, then reordered for diversity by repeatedly picking the passage least
+      similar on average to those already chosen, using the vector store's embeddings, and then
+      reordered to the periphery so the most relevant passages sit at the start and end. Context
+      windows around each passage are added either before or after reranking depending on
+      configuration, and the list is cut to the configured number of relevant chunks.
+    required_files:
+      - langroid/agent/special/doc_chat_agent.py
+  - kind: explain
+    question: What happens when a conversation grows longer than the model's context window?
+    reference_answer: >-
+      Before calling the model, the chat agent compares the history's token count plus the
+      maximum output tokens with the model's context length. It first lowers the output budget to
+      fit; if that would drop below the minimum output tokens it truncates older messages, never
+      the system message and only up to just before the last user message, replacing each with a
+      short truncated stub until the history fits. If it runs out of messages to truncate it
+      raises an error suggesting a larger context length or fewer output tokens.
+    required_files:
+      - langroid/agent/chat_agent.py
+  - kind: explain
+    question: How can I run the same task over many inputs at once, and what happens when some fail?
+    reference_answer: >-
+      The batch helpers clone the task for each input and run the copies with asyncio. They can
+      run everything concurrently with gather, run sequentially, or stop at the first completed
+      result and cancel the rest. Exception handling is configurable to raise, return None, or
+      return the exception for a failed input; the older boolean flag is still accepted with a
+      deprecation warning.
+    required_files:
+      - langroid/agent/batch.py
+  - kind: explain
+    question: What tools can an agent use to end a task, hand a message on, or send it to another agent?
+    reference_answer: >-
+      The orchestration tools turn into agent responses that the task loop reacts to. The done
+      tools signal the task is finished with a content result (one variant is for agent code
+      only, not for the LLM, and can carry extra tools). The pass tool hands on the current
+      message, walking up past messages that are themselves pass calls; forward does the same but
+      sets a named recipient; and the send tools address new content to a named agent.
+    required_files:
+      - langroid/agent/tools/orchestration.py
+    acceptable_files:
+      - langroid/agent/task.py
+  - kind: explain
+    question: How does the library pull JSON out of messy model output and cope with malformed JSON?
+    reference_answer: >-
+      It finds candidate substrings by matching nested curly braces with a parser grammar, then
+      tries to repair each candidate with a JSON-repair library, keeping those that can be turned
+      into JSON. A separate lenient parser tries Python literal evaluation, then JSON repair, then
+      YAML, before giving up with an error. A helper reads one field from the first top-level JSON
+      object and never raises.
+    required_files:
+      - langroid/parsing/parse_json.py
+  - kind: explain
+    question: How is the right vector database backend created from a configuration?
+    reference_answer: >-
+      The base vector store has a factory that checks which config class it was given and builds
+      the matching backend: Qdrant, Chroma, LanceDB, Meilisearch, Postgres, Weaviate or Pinecone.
+      An unknown config logs a warning and returns no vector store rather than raising.
+    required_files:
+      - langroid/vector_store/base.py
+  - kind: explain
+    question: When the model writes pandas code to analyse a table, how is it stopped from running something dangerous?
+    reference_answer: >-
+      Unless full evaluation is explicitly enabled, the expression is parsed into a Python AST and
+      walked by a validator before it is evaluated against the dataframe. The validator allows
+      only whitelisted dataframe method calls, rejects dunder and private attributes, blocked
+      keyword arguments, disallowed operators and non-literal subscripts, and limits method-chain
+      length, nesting depth and numeric size, raising an unsafe-command error at the first
+      violation. Both the table chat agent and the vector store's dataframe calculation use it.
+    required_files:
+      - langroid/utils/pandas_utils.py
+    acceptable_files:
+      - langroid/agent/special/table_chat_agent.py
+      - langroid/vector_store/base.py
+  - kind: explain
+    question: How does the database chat agent keep the model from running unsafe SQL?
+    reference_answer: >-
+      Before executing a query the SQL agent validates it unless dangerous operations are
+      explicitly allowed. It rejects queries matching patterns that enable code execution or
+      filesystem access, parses the query with sqlglot in the engine's dialect (rejecting it if
+      parsing fails), and only permits the configured statement types. A rejection is returned
+      to the model as a tool result asking for a compliant query. Database errors roll back the
+      session and produce a retry message.
+    required_files:
+      - langroid/agent/special/sql/sql_chat_agent.py
+  - kind: explain
+    question: How does the database chat agent learn what the tables and columns mean?
+    reference_answer: >-
+      If no descriptions are supplied, the agent extracts them from the database with an
+      extractor chosen by dialect: PostgreSQL and MySQL have dedicated ones that read the stored
+      comments, and other databases use a default one. The descriptions are merged into the table
+      metadata. With schema tools enabled, the model instead gets tools to list tables, fetch a
+      table's schema and fetch column descriptions on demand.
+    required_files:
+      - langroid/agent/special/sql/sql_chat_agent.py
+      - langroid/agent/special/sql/utils/description_extractors.py
+  - kind: explain
+    question: How does the parser decide what kind of document it was given and which library reads it?
+    reference_answer: >-
+      The document type comes from an explicit type if given, plain-text detection, the file
+      extension for paths, or MIME sniffing for raw bytes; unsupported extensions raise an error.
+      The parser factory then picks a reader per type from the configuration, for PDFs choosing
+      among libraries such as fitz, pymupdf4llm, pypdfium2, docling, pypdf, unstructured, an
+      image-based parser or an LLM-based parser. If a PDF yields no chunks it is re-read with the
+      image-based parser.
+    required_files:
+      - langroid/parsing/document_parser.py
+  - kind: explain
+    question: How are web pages fetched and turned into documents, and can I swap the crawler?
+    reference_answer: >-
+      The URL loader takes a crawler config, defaulting to a Trafilatura crawler, and a factory
+      builds the matching crawler: Trafilatura, Firecrawl, Exa or Crawl4AI. Crawlers that need a
+      parser are given one built from the parsing config, and loading simply asks the crawler to
+      crawl the URLs into documents.
+    required_files:
+      - langroid/parsing/url_loader.py
+  - kind: explain
+    question: How are tool calls written in XML parsed safely, especially when a field contains code?
+    reference_answer: >-
+      XML tool candidates are found with relaxed rules that accept a fragment missing its root
+      opening tag but having the closing tag. Field values are read with an lxml parser that
+      keeps CDATA sections and disables entity resolution, DTD loading and network access. When
+      generating XML, code-like fields are wrapped in CDATA so their contents survive.
+    required_files:
+      - langroid/agent/xml_tool_message.py
+  - kind: explain
+    question: Where does the agent turn a tool's return value into a reply that continues the conversation?
+    reference_answer: >-
+      Handling a tool looks up the agent method named by the tool's handler or request name,
+      returning nothing if there is none. It calls the method with the tool, and also with the
+      chat document when the method accepts one, then converts the result into a chat document
+      attributed to that tool, truncating overly long results.
+    required_files:
+      - langroid/agent/base.py
