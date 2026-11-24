@@ -545,6 +545,29 @@ class TestAuto:
             items[2].id: "structural_rerank",
         }
 
+    async def test_a_subset_on_auto_routes_only_those_items_and_reuses_their_answers(
+        self, tmp_path
+    ):
+        items = make_items(10)
+        targets = {item.id: "classic" for item in items}
+        router = self.make_router(targets)
+        executor = ScriptedExecutor()
+
+        result = await run(
+            tmp_path,
+            items,
+            ["classic", "auto"],
+            executor,
+            router=router,
+            subsets={"classic": 3, "auto": 3},
+            seed=3,
+        )
+
+        chosen = sorted(subset_ids(items, 3, 3))
+        assert sorted(router.calls) == chosen
+        assert sorted(i for i, _, _ in executor.calls) == chosen  # no fill generations
+        assert result.auto_written == 3
+
     async def test_auto_records_carry_the_route_and_the_decision_cost(self, tmp_path):
         items = make_items(1)
         targets = {items[0].id: "classic"}

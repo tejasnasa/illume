@@ -38,7 +38,10 @@ from app.services.retrieval.config import (
 )
 from evals.models import GENERATOR_MODEL
 
-EVAL_INSTRUCTION = "End your answer with a list headed `Files:` naming every file that must change."
+EVAL_INSTRUCTION = (
+    "End your answer with a list headed `Files:` naming every file that must change, or, for a "
+    "question about existing behaviour, the files that implement it."
+)
 """Appended to every question for every arm; the only prompt difference from production."""
 
 EVAL_AGENT_MAX_INPUT_TOKENS = 300_000

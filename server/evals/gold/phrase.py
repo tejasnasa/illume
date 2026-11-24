@@ -29,7 +29,9 @@ from evals.models import PHRASER_MODEL
 
 PROMPT_VERSION = "phrase-v1"
 NEAR_DUPLICATE_JACCARD = 0.9
-MAX_OUTPUT_TOKENS = 600
+# Reasoning models spend part of this budget before writing any output, so it has to cover
+# both or the reply comes back empty.
+MAX_OUTPUT_TOKENS = 2000
 DEFAULT_CONCURRENCY = 1
 EMPTY = "<empty>"
 

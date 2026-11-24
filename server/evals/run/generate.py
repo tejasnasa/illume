@@ -788,9 +788,13 @@ async def generate(
     await run.drain(pairs)
 
     if wants_auto and run.stop is None:
-        routes = await run.route_all(items)
+        auto_items = list(items)
+        if subsets and AUTO in subsets:
+            keep = set(subset_ids(auto_items, subsets[AUTO], seed))
+            auto_items = [item for item in auto_items if item.id in keep]
+        routes = await run.route_all(auto_items)
         if run.stop is None:
-            await run.compose(items, routes)
+            await run.compose(auto_items, routes)
 
     result = run.result
     result.spent_usd = budget.spent_usd

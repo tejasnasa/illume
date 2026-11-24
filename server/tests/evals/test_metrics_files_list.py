@@ -20,6 +20,14 @@ def test_backticks():
     assert paths("Files:\n- `src/a.py`\n- `b.py` handles auth") == ("src/a.py", "b.py")
 
 
+def test_a_bare_path_wins_over_backticked_symbols_in_its_description():
+    text = (
+        "Files:\n- pvlib/clearsky.py (`lookup_linke_turbidity`, `_interpolate`)\n"
+        "- the module `src/b.py`"
+    )
+    assert paths(text) == ("pvlib/clearsky.py", "src/b.py")
+
+
 @pytest.mark.parametrize(
     "item",
     [

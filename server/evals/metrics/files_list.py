@@ -23,6 +23,7 @@ _LINK = re.compile(r"\[(?P<text>[^\]]*)\]\((?P<target>[^)]*)\)")
 _BACKTICKED = re.compile(r"`(?P<code>[^`]+)`")
 _LINE_SUFFIX = re.compile(r":\d+(?:\s*[-–—]\s*\d+)?(?::\d+)?$")
 _PATHISH = re.compile(r"[/\\]|\.\w")
+_LEADING_PATH = re.compile(r"[/\\]|\.\w+$")
 _LINES_PHRASE = re.compile(r"^lines?\s+\d", re.IGNORECASE)
 _NOT_PATHS = frozenset({"none", "n/a", "na", "-", "—", "nothing"})
 _STRIP = "`*_<>\"'"
@@ -99,6 +100,9 @@ def parse_item(text: str) -> str | None:
         candidate = link.group("text") if (not target or "://" in target) else target
     else:
         code = _BACKTICKED.search(body)
+        lead = _clean(_first_token(body))
+        if code and code.start() > 0 and _LEADING_PATH.search(lead):
+            code = None  # a bare path whose description quotes symbols in backticks
         candidate = code.group("code") if code else body
     candidate = _clean(_first_token(candidate.strip().strip(_STRIP)))
     if not candidate or candidate.lower() in _NOT_PATHS or "://" in candidate:
