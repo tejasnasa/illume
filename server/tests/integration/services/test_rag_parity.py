@@ -200,7 +200,7 @@ async def reference_answer_question(
         model=generation_model,
         **generation_response_kwargs,
         input=cast(ResponseInputParam, messages),
-        max_output_tokens=3000,
+        max_output_tokens=8000,
     )
     return ReferenceOutcome((response.output_text or "").strip(), sources, True)
 
@@ -462,7 +462,7 @@ class TestAnswerParity:
             "max_output_tokens",
             *(["reasoning"] if sends_reasoning else []),
         }
-        assert live_request["max_output_tokens"] == 3000
+        assert live_request["max_output_tokens"] == 8000
         roles = [message["role"] for message in live_request["input"]]
         assert roles == ["system", *(turn.role for turn in history or []), "user"]
 

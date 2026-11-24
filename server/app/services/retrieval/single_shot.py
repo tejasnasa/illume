@@ -43,7 +43,9 @@ logger = logging.getLogger(__name__)
 
 NO_CONTEXT_ANSWER = "No relevant code was found in this repository for your question."
 
-MAX_OUTPUT_TOKENS = 3000
+# Reasoning models spend part of this budget before writing any output, so it has to cover
+# both or the answer comes back empty.
+MAX_OUTPUT_TOKENS = 8000
 
 ClientFactory = Callable[..., Any]
 """Builds the generation client from ``AsyncOpenAI``-style keyword arguments."""

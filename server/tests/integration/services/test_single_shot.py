@@ -135,7 +135,7 @@ class TestClassicShape:
 
         [call] = responses.calls
         assert call["model"] == "test-model"
-        assert call["max_output_tokens"] == MAX_OUTPUT_TOKENS == 3000
+        assert call["max_output_tokens"] == MAX_OUTPUT_TOKENS == 8000
         assert call["reasoning"] == {"effort": "minimal"}
         assert "stream" not in call
         assert call["input"] == [
@@ -186,7 +186,7 @@ class TestCitingPresets:
         assert "file level" in system and "no call graph" in system
         assert "[Source 1]" not in system  # not the chat prompt
         assert call["input"][-1] == {"role": "user", "content": QUESTION}
-        assert call["max_output_tokens"] == 3000
+        assert call["max_output_tokens"] == 8000
 
     async def test_hybrid_rerank_uses_cohere_when_configured(
         self, db_session, seeded, generation, reranker
