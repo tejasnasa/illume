@@ -92,6 +92,49 @@ class TestListRepos:
         assert "q" not in route.calls.last.request.url.params
 
     @respx.mock
+    async def test_a_search_finds_a_repository_beyond_the_first_page(self, client, linked):
+        filler = [
+            {**REPO, "name": f"repo-{i}", "full_name": f"example/repo-{i}"} for i in range(100)
+        ]
+        pages = {"1": filler, "2": [REPO]}
+        route = respx.get(f"{API}/user/repos").mock(
+            side_effect=lambda request: httpx.Response(
+                200, json=pages.get(request.url.params["page"], [])
+            )
+        )
+
+        body = (await client.get("/api/v1/github/repos?q=cool")).json()
+
+        assert [r["name"] for r in body] == ["cool-project"]
+        assert [c.request.url.params["page"] for c in route.calls] == ["1", "2"]
+        assert route.calls.last.request.url.params["per_page"] == "100"
+
+    @respx.mock
+    async def test_a_search_paginates_the_matches(self, client, linked):
+        matches = [
+            {**REPO, "name": f"cool-{i}", "full_name": f"example/cool-{i}"} for i in range(5)
+        ]
+        respx.get(f"{API}/user/repos").mock(return_value=httpx.Response(200, json=matches))
+
+        body = (await client.get("/api/v1/github/repos?q=cool&page=2&per_page=2")).json()
+
+        assert [r["name"] for r in body] == ["cool-2", "cool-3"]
+
+    @respx.mock
+    async def test_a_search_stops_scanning_at_the_page_cap(self, client, linked):
+        from app.api.v1.github_proxy import SEARCH_MAX_PAGES
+
+        filler = [
+            {**REPO, "name": f"repo-{i}", "full_name": f"example/repo-{i}"} for i in range(100)
+        ]
+        route = respx.get(f"{API}/user/repos").mock(return_value=httpx.Response(200, json=filler))
+
+        body = (await client.get("/api/v1/github/repos?q=cool")).json()
+
+        assert body == []
+        assert route.call_count == SEARCH_MAX_PAGES
+
+    @respx.mock
     async def test_the_name_filter_is_case_insensitive(self, client, linked):
         respx.get(f"{API}/user/repos").mock(return_value=httpx.Response(200, json=[REPO]))
 

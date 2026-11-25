@@ -25,6 +25,11 @@ router = APIRouter(prefix="/api/v1/github", tags=["github"])
 GITHUB_API = "https://api.github.com"
 TIMEOUT = 15.0
 
+# A name search scans the account's repositories in pages of this size, up to this many
+# pages (1000 repositories), and paginates the matches itself.
+SEARCH_PAGE_SIZE = 100
+SEARCH_MAX_PAGES = 10
+
 
 class GitHubRepoItem(BaseModel):
     """Repository entry from the authenticated user's GitHub account."""
@@ -123,6 +128,51 @@ def _require_token(user: User) -> str:
     return user.github_access_token
 
 
+async def _fetch_repo_page(
+    client: httpx.AsyncClient, token: str, page: int, per_page: int
+) -> list[dict]:
+    """Fetch one page of the user's own repositories, newest first.
+
+    Raises:
+        HTTPException: 401 if the token expired, 502 if GitHub returns an error.
+    """
+    url = (
+        f"{GITHUB_API}/user/repos?sort=updated&direction=desc"
+        f"&per_page={per_page}&page={page}&type=owner"
+    )
+    res = await _gh_get(client, url, token)
+    if res.status_code == 401:
+        raise HTTPException(
+            status_code=401, detail="GitHub token expired. Please re-authenticate."
+        )
+    if res.status_code != 200:
+        logger.warning(
+            "GitHub /user/repos returned %d: %s", res.status_code, res.text[:200]
+        )
+        raise HTTPException(
+            status_code=502, detail="Failed to fetch repositories from GitHub"
+        )
+    return res.json()
+
+
+async def _search_repos(
+    client: httpx.AsyncClient, token: str, needle: str, page: int, per_page: int
+) -> list[dict]:
+    """Return one page of the user's repositories whose name contains ``needle``.
+
+    GitHub's repository listing cannot filter by name, so the listing is scanned until
+    the requested page of matches is full or the account runs out of repositories.
+    """
+    wanted = page * per_page
+    matches: list[dict] = []
+    for github_page in range(1, SEARCH_MAX_PAGES + 1):
+        raw = await _fetch_repo_page(client, token, github_page, SEARCH_PAGE_SIZE)
+        matches.extend(r for r in raw if needle in (r.get("name") or "").lower())
+        if len(raw) < SEARCH_PAGE_SIZE or len(matches) >= wanted:
+            break
+    return matches[(page - 1) * per_page : wanted]
+
+
 @router.get("/repos", response_model=list[GitHubRepoItem])
 async def list_my_repos(
     page: PageNumber = 1,
@@ -136,14 +186,18 @@ async def list_my_repos(
 ):
     """List the authenticated user's GitHub repositories, newest first.
 
+    Without ``q`` this is one page of GitHub's listing. With ``q`` the listing is
+    scanned (up to ``SEARCH_MAX_PAGES`` pages) and ``page``/``per_page`` paginate the
+    matches, so a repository far down the list is still found.
+
     Args:
-        page: 1-indexed GitHub API page.
+        page: 1-indexed page.
         per_page: Repos per page (max 100).
-        q: Optional case-insensitive name substring filter applied locally.
+        q: Optional case-insensitive name substring filter.
         current_user: User whose linked GitHub token is used.
 
     Returns:
-        Filtered repository items for the requested page.
+        Repository items for the requested page.
 
     Raises:
         HTTPException: 403 if GitHub is not linked, 401 if the token
@@ -151,45 +205,26 @@ async def list_my_repos(
     """
     token = _require_token(current_user)
 
-    url = f"{GITHUB_API}/user/repos?sort=updated&direction=desc&per_page={per_page}&page={page}&type=owner"
-
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        res = await _gh_get(client, url, token)
+        if q:
+            raw_repos = await _search_repos(client, token, q.lower(), page, per_page)
+        else:
+            raw_repos = await _fetch_repo_page(client, token, page, per_page)
 
-    if res.status_code == 401:
-        raise HTTPException(
-            status_code=401, detail="GitHub token expired. Please re-authenticate."
+    return [
+        GitHubRepoItem(
+            full_name=r["full_name"],
+            name=r["name"],
+            private=r.get("private", False),
+            default_branch=r.get("default_branch", "main"),
+            description=r.get("description"),
+            language=r.get("language"),
+            updated_at=r["updated_at"],
+            html_url=r["html_url"],
+            stargazers_count=r.get("stargazers_count", 0),
         )
-    if res.status_code != 200:
-        logger.warning(
-            "GitHub /user/repos returned %d: %s", res.status_code, res.text[:200]
-        )
-        raise HTTPException(
-            status_code=502, detail="Failed to fetch repositories from GitHub"
-        )
-
-    raw_repos = res.json()
-
-    results = []
-    for r in raw_repos:
-        name_lower = (r.get("name") or "").lower()
-        if q and q.lower() not in name_lower:
-            continue
-        results.append(
-            GitHubRepoItem(
-                full_name=r["full_name"],
-                name=r["name"],
-                private=r.get("private", False),
-                default_branch=r.get("default_branch", "main"),
-                description=r.get("description"),
-                language=r.get("language"),
-                updated_at=r["updated_at"],
-                html_url=r["html_url"],
-                stargazers_count=r.get("stargazers_count", 0),
-            )
-        )
-
-    return results
+        for r in raw_repos
+    ]
 
 
 @router.get("/repos/{owner}/{repo}/branches", response_model=list[GitHubBranch])
