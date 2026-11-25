@@ -26,7 +26,7 @@ from evals.run.judge_metrics import (
     settings_hash,
 )
 from evals.run.metering import Meter
-from evals.run.records import Judgment
+from evals.run.records import CandidateRecord, Judgment
 from tests.evals.judge_helpers import (
     CITED,
     FakeJudge,
@@ -187,6 +187,40 @@ class TestWhatTheMetricsAreShown:
 
         assert evidence_pieces(gen, {}.get) == []
 
+    def test_a_short_piece_hands_its_unused_share_to_a_long_one(self):
+        other = "F:app/auth/tokens.py:1-90"
+        gen = generation(
+            item("hand", 0),
+            answer=f"It validates input [{CITED}] and signs tokens [{other}].",
+            candidates=[
+                CandidateRecord(key=CITED, rank=1, source_type="symbol"),
+                CandidateRecord(key=other, rank=2, source_type="symbol"),
+            ],
+        )
+        long_text = "x" * 900
+
+        short_piece, long_piece = evidence_pieces(
+            gen, {CITED: CODE, other: long_text}.get, budget=1000
+        )
+
+        assert short_piece.endswith(CODE)
+        assert long_piece.endswith(long_text)
+
+    def test_pieces_are_cut_only_when_the_whole_set_does_not_fit(self):
+        gen = generation(item("hand", 0))
+
+        (piece,) = evidence_pieces(gen, {CITED: "q" * 500}.get, budget=100)
+
+        assert piece.endswith("(truncated)")
+        assert piece.count("q") == 100
+
+    def test_an_answer_citing_nothing_is_held_to_the_context_it_was_shown(self):
+        gen = generation(item("hand", 0), answer="It validates input.", cited_keys=[])
+
+        pieces = evidence_pieces(gen, {CITED: CODE}.get)
+
+        assert pieces == [f"[app/auth/security.py:10-20]\n{CODE}"]
+
     def test_an_answer_citing_nothing_is_judged_against_a_note_saying_so(self, tmp_path):
         gold = item("hand", 0)
         bare = generation(gold, answer="It validates input.", cited_keys=[], candidates=[])
@@ -236,10 +270,22 @@ class TestGrading:
         assert sorted(n for n in names if n in {"Truths", "Claims", "Statements"}) == [
             "Claims",
             "Statements",
-            "Truths",
-        ]
+        ]  # faithfulness reads the evidence itself: no truth-extraction call
         assert names.count("Verdicts") == 2
-        assert len(names) == 6
+        assert len(names) == 5
+
+    def test_faithfulness_verdicts_read_the_cited_evidence_verbatim(self, tmp_path):
+        model = FakeJudge()
+
+        run([pair()], model, tmp_path)
+
+        verdict_prompts = [
+            text
+            for name, text in zip(model.names(), model.texts(), strict=True)
+            if name == "Verdicts" and "Retrieval Contexts" in text
+        ]
+        assert len(verdict_prompts) == 1
+        assert f"[app/auth/security.py:10-20]\n{CODE}" in verdict_prompts[0]
 
     def test_every_call_is_structured_and_shows_nothing_about_the_arm(self, tmp_path):
         pairs = [pair("hand", 0, "structural_rerank"), pair("changeset", 1, "hybrid")]
@@ -462,13 +508,13 @@ class TestMeteringAndBudget:
         result, path = run([pair()], FakeJudge(), tmp_path, budget=budget, meter=meter)
 
         records = read_judgments(path)
-        assert sum(len(j.usages) for j in records) == 6
+        assert sum(len(j.usages) for j in records) == 5
         # 1000 input and 50 output tokens per call at the table rates.
-        assert budget.spent_usd == pytest.approx(6 * 0.0011)
+        assert budget.spent_usd == pytest.approx(5 * 0.0011)
         assert result.spent_usd == pytest.approx(budget.spent_usd)
         assert sum(j.cost_usd or 0 for j in records) == pytest.approx(budget.spent_usd)
         assert all(u.kind == "judge" and u.model == "gpt-6-luna" for j in records for u in j.usages)
-        assert len(meter.usages) == 6
+        assert len(meter.usages) == 5
         assert result.reported_models == {"reported-judge-model"}
 
     def test_the_run_stops_cleanly_at_the_stop_threshold(self, tmp_path):
@@ -488,7 +534,7 @@ class TestMeteringAndBudget:
 
         spent = budget.restore([], judgments=final_judgments(all_judgments(tmp_path)))
 
-        assert spent == pytest.approx(6 * 0.0011)
+        assert spent == pytest.approx(5 * 0.0011)
 
     def test_an_unpriced_judge_model_stops_the_run(self, tmp_path):
         result, _ = run([pair("hand", 0), pair("hand", 1)], FakeJudge(), tmp_path, table=_blank())
@@ -537,7 +583,7 @@ class TestTransports:
 
         assert result.ok == 3
         retries = [r for r in model.requests if "text" not in r]
-        assert len(retries) == 6 and all("JSON schema" in r["input"][0]["content"] for r in retries)
+        assert len(retries) == 5 and all("JSON schema" in r["input"][0]["content"] for r in retries)
 
     def test_chat_json_mode_rejection_falls_back_to_a_plain_request(self, tmp_path):
         chat = endpoint("m", "https://api.example.org/v1", api_style="chat")
@@ -561,7 +607,7 @@ class TestComposedRecords:
 
         result, path = run([JudgePair(gold, target), JudgePair(gold, composed)], model, tmp_path)
 
-        assert (result.ok, result.reused) == (3, 3) and model.calls == 6
+        assert (result.ok, result.reused) == (3, 3) and model.calls == 5
         copies = [j for j in read_judgments(path) if j.arm == "auto"]
         assert len(copies) == 3 and all(j.reused_from and j.usages == [] for j in copies)
         assert all(j.cost_usd == 0 for j in copies)

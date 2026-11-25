@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 
 NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
 PAIRS = 8  # four hand items by two arms
-CALLS = PAIRS * 6  # six model calls to grade one answer on all three metrics
+CALLS = PAIRS * 5  # five model calls to grade one answer on all three metrics
 
 
 @pytest.fixture
