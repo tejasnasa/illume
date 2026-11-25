@@ -50,6 +50,42 @@ class TestCreate:
         assert uuid.UUID(body["repo_id"])
         assert isinstance(body["repo_num"], int)
 
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://github.com/example/cool-project.git",
+            "https://github.com/example/cool-project/",
+            "https://github.com/my-org/repo.name_v2",
+        ],
+    )
+    async def test_accepts_github_repository_urls(self, client, db_session, owner, dispatched, url):
+        response = await client.post(COLLECTION, json={"github_url": url})
+
+        assert response.status_code == 202
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://evil.example/owner/repo",
+            "https://github.com.evil.example/owner/repo",
+            "http://github.com/owner/repo",
+            "https://token@github.com/owner/repo",
+            "https://github.com/owner",
+            "https://github.com/owner/repo/tree/main",
+            "https://github.com/owner/..",
+            "file:///etc/passwd",
+            "/srv/repos/project",
+            "http://169.254.169.254/latest/meta-data",
+        ],
+    )
+    async def test_rejects_anything_but_a_github_repository_url(
+        self, client, db_session, owner, dispatched, url
+    ):
+        response = await client.post(COLLECTION, json={"github_url": url})
+
+        assert response.status_code == 422
+        assert dispatched == []
+
     async def test_persists_the_repository(self, client, db_session, owner, dispatched):
         from sqlalchemy import select
 

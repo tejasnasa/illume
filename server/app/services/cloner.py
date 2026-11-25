@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.models import Repository
 from app.services._publish import publish_log
 from app.services._stages import Phase, Stage
-from app.services.repo_cache import CLONE_CACHE_ENABLED
+from app.services.repo_cache import CLONE_CACHE_ENABLED, redact_git_error
 from app.services.repo_cache import ensure_clone as _ensure_cached_clone
 from app.services.repo_cache import refresh_clone as _refresh_cached_clone
 
@@ -184,7 +184,10 @@ def clone_repository(
         if not commit_sha:
             clone_kwargs["single_branch"] = True
 
-        git_repo = git.Repo.clone_from(clone_url, tmp_dir, **clone_kwargs)
+        try:
+            git_repo = git.Repo.clone_from(clone_url, tmp_dir, **clone_kwargs)
+        except git.GitCommandError as exc:
+            raise redact_git_error(exc)
 
         if commit_sha:
             publish_log(

@@ -51,6 +51,7 @@ from app.services.push import notify_user, sync_event
 from app.services.repo_cache import (
     CLONE_CACHE_ENABLED,
     ensure_clone,
+    redact_credentials,
 )
 from app.services.scanner import (
     apply_file_delta,
@@ -478,7 +479,7 @@ def sync_repository(self, repo_id: str, access_token: str | None = None) -> dict
             summary = _do_sync(db, repo, access_token, generation, now)
         except Exception as exc:
             db.rollback()
-            error_message = f"{type(exc).__name__}: {exc}"
+            error_message = f"{type(exc).__name__}: {redact_credentials(str(exc))}"
             try:
                 _record_failure(db, repo, error_message, datetime.now(UTC))
             except Exception as rec_exc:

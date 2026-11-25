@@ -23,6 +23,7 @@ from app.services.cloner import cleanup_clone, clone_repository
 from app.services.entitlements import llm_config_for
 from app.services.pipeline import run_full_analysis
 from app.services.push import NotifyEvent, notify_user
+from app.services.repo_cache import redact_credentials
 from app.tasks._parallel import run_pr_fetch_in_thread
 
 logger = logging.getLogger(__name__)
@@ -219,7 +220,12 @@ def ingest_repository(
             # ``run_full_analysis``, so the stage that raised is genuinely
             # unknown here. Naming the last stage that happened to publish
             # would be a guess the client would render as fact.
-            publish("status_update", f"Error: {exc}", status="failed", phase=Phase.FAILED)
+            publish(
+                "status_update",
+                f"Error: {redact_credentials(str(exc))}",
+                status="failed",
+                phase=Phase.FAILED,
+            )
             publish("error", "ERROR", phase=Phase.FAILED)
             # The repository may be gone entirely, in which case there is no
             # owner to notify.

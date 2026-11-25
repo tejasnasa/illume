@@ -22,6 +22,7 @@ worker indefinitely.
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -297,6 +298,38 @@ def _git_env(env_extra: dict | None = None) -> dict:
     }
 
 
+_URL_CREDENTIALS = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s'\"]+@")
+
+
+def redact_credentials(text: str) -> str:
+    """Mask the credentials in every URL in ``text``.
+
+    Git echoes the clone URL, token included, when a token is rejected (for example
+    ``could not read Password for 'https://<token>@github.com'``), so any git output
+    that reaches a log, a stored error or the browser goes through this first.
+    """
+    return _URL_CREDENTIALS.sub(r"\1*****@", text) if text else text
+
+
+def redact_git_error(exc: git.GitCommandError) -> git.GitCommandError:
+    """Mask URL credentials in a git error's captured output, in place.
+
+    GitPython masks the command line it prints, but keeps stdout, stderr and the raw
+    arguments (which ``repr`` shows) verbatim.
+    """
+    exc.stdout = redact_credentials(exc.stdout)
+    exc.stderr = redact_credentials(exc.stderr)
+    exc.args = tuple(
+        [redact_credentials(str(part)) for part in arg]
+        if isinstance(arg, (list, tuple))
+        else redact_credentials(arg)
+        if isinstance(arg, str)
+        else arg
+        for arg in exc.args
+    )
+    return exc
+
+
 def _run_git(repo_dir: Path, *args: str, timeout: int, env_extra: dict | None = None) -> str:
     """Run a git subprocess inside ``repo_dir`` with a hard timeout.
 
@@ -319,8 +352,8 @@ def _run_git(repo_dir: Path, *args: str, timeout: int, env_extra: dict | None = 
         raise git.GitCommandError(
             list(args),
             result.returncode,
-            stderr=result.stderr,
-            stdout=result.stdout,
+            stderr=redact_credentials(result.stderr),
+            stdout=redact_credentials(result.stdout),
         )
     return result.stdout
 
@@ -487,7 +520,10 @@ def _ephemeral_clone(
     if not commit_sha:
         clone_kwargs["single_branch"] = True
     clone_url = _build_clone_url(github_url, access_token)
-    git_repo = git.Repo.clone_from(clone_url, tmp_dir, **clone_kwargs)
+    try:
+        git_repo = git.Repo.clone_from(clone_url, tmp_dir, **clone_kwargs)
+    except git.GitCommandError as exc:
+        raise redact_git_error(exc)
     if commit_sha:
         git_repo.git.checkout(commit_sha)
     try:

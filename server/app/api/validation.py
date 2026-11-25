@@ -17,6 +17,7 @@ here so that the next free-text or paginated endpoint inherits the checks rather
 than reintroducing the shape.
 """
 
+import re
 from typing import Annotated
 
 from fastapi import Query
@@ -128,6 +129,36 @@ OptionalFreeText = Annotated[str | None, NoControlCharacters]
 """An optional ``str`` that cannot contain a control character when present."""
 
 PageNumber = Annotated[int, Query(ge=1, le=MAX_PAGE)]
+
+_GITHUB_REPO_URL = re.compile(
+    r"https://github\.com/[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?/[A-Za-z0-9._-]+?(?:\.git)?/?"
+)
+
+
+def _github_repo_url(value: str) -> str:
+    """Accept only an ``https://github.com/<owner>/<repo>`` URL.
+
+    The clone step embeds the user's GitHub OAuth token in the URL it fetches, so any
+    other host would receive that token, and a non-GitHub address would let the worker
+    fetch from hosts on its own network.
+
+    Args:
+        value: The submitted URL.
+
+    Returns:
+        The value unchanged when it is a GitHub repository URL.
+
+    Raises:
+        ValueError: If the value is not an ``https://github.com/<owner>/<repo>`` URL.
+    """
+    repo = value.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
+    if not _GITHUB_REPO_URL.fullmatch(value) or repo.strip(".") == "":
+        raise ValueError("must be a repository URL of the form https://github.com/<owner>/<repo>")
+    return value
+
+
+GitHubRepoUrl = Annotated[str, AfterValidator(_github_repo_url)]
+"""A ``str`` that is an ``https://github.com/<owner>/<repo>`` URL."""
 """A 1-indexed page number, bounded so its offset cannot overflow ``BIGINT``."""
 
 MAX_QUESTION_CHARS = 4000

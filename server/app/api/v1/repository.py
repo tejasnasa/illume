@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select
 
 from app.api.deps import get_current_user, get_repo_for_user
-from app.api.validation import FreeText, OptionalFreeText
+from app.api.validation import GitHubRepoUrl, OptionalFreeText
 from app.core.database import AsyncSession, get_async_db
 from app.models import Repository, User
 from app.services.entitlements import aclaim_free_ingestion
@@ -42,7 +42,7 @@ ALLOWED_AUTO_UPDATE_INTERVALS: tuple[int, ...] = (1, 3, 6, 12, 24)
 class RepositoryCreate(BaseModel):
     """Payload for ingesting a new repository at an optional ref."""
 
-    github_url: FreeText
+    github_url: GitHubRepoUrl
     branch: OptionalFreeText = None
     commit_sha: OptionalFreeText = None
 
