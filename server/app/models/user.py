@@ -11,6 +11,7 @@ from sqlalchemy import Boolean, DateTime, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.models.encrypted import EncryptedString
 
 
 class User(Base):
@@ -32,12 +33,16 @@ class User(Base):
     password: Mapped[str | None] = mapped_column(String, nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String, nullable=True)
     github_id: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
-    github_access_token: Mapped[str | None] = mapped_column(String, nullable=True)
+    github_access_token: Mapped[str | None] = mapped_column(
+        EncryptedString("users", "github_access_token"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
     ai_provider: Mapped[str | None] = mapped_column(String, nullable=True)
-    ai_api_key: Mapped[str | None] = mapped_column(String, nullable=True)
+    ai_api_key: Mapped[str | None] = mapped_column(
+        EncryptedString("users", "ai_api_key"), nullable=True
+    )
     ai_model: Mapped[str | None] = mapped_column(String, nullable=True)
     ai_key_validated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

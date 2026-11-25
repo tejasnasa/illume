@@ -65,13 +65,12 @@ def seed(engine) -> dict[str, uuid.UUID]:
     return ids
 
 
-def test_the_revision_follows_the_mcp_tokens_and_is_the_head(alembic_config):
+def test_the_revision_follows_the_mcp_tokens(alembic_config):
     from alembic.script import ScriptDirectory
 
     script = ScriptDirectory.from_config(alembic_config)
 
     assert script.get_revision(REVISION).down_revision == PARENT
-    assert script.get_current_head() == REVISION
     assert len(script.get_heads()) == 1
 
 

@@ -27,6 +27,7 @@ os.environ.update(
         "SYNC_DATABASE_URL": TEST_SYNC_DB_URL,
         "REDIS_URL": TEST_REDIS_URL,
         "SECRET_KEY": "test-secret-key-not-for-production",
+        "CREDENTIAL_ENCRYPTION_KEY": "test-credential-encryption-key-not-for-production",
         "OPENAI_API_KEY": "test-openai-key",
         "AI_MODEL": "gpt-4o-mini",
         "ACCESS_TOKEN_EXPIRE_MINUTES": "1440",

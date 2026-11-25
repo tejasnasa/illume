@@ -39,6 +39,7 @@ export const serverEnv = {
   SYNC_DATABASE_URL: "postgresql://illume:test@localhost:5433/illume_test",
   REDIS_URL: "redis://localhost:6380/0",
   SECRET_KEY: "test-secret-key-not-for-production",
+  CREDENTIAL_ENCRYPTION_KEY: "test-credential-encryption-key-not-for-production",
   ACCESS_TOKEN_EXPIRE_MINUTES: "1440",
   FRONTEND_URL: CLIENT_URL,
   ENVIRONMENT: "development",

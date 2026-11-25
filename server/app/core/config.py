@@ -34,6 +34,13 @@ class Settings(BaseSettings):
             Empty makes those unavailable, and decisions fall back to the user's model.
         ACCESS_TOKEN_EXPIRE_MINUTES (int): JWT token validity duration.
         SECRET_KEY (str): Secret key for JWT signing.
+        CREDENTIAL_ENCRYPTION_KEY (str): Key that encrypts stored credentials (users'
+            AI keys and GitHub tokens), at least 32 characters; generate one with
+            ``openssl rand -base64 32``. Losing it makes every stored credential
+            unreadable, so it must be kept apart from the database backups.
+        CREDENTIAL_ENCRYPTION_KEY_PREVIOUS (str): Comma-separated earlier keys, still
+            tried when decrypting, so the key can be rotated without a re-encryption
+            step. Empty when the key has never been rotated.
         FRONTEND_URL (str): CORS allowed origin for the frontend.
         ENVIRONMENT (str): Deployment environment (e.g., development, production).
         GITHUB_CLIENT_ID (str): GitHub OAuth client ID.
@@ -71,6 +78,8 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     SECRET_KEY: str
+    CREDENTIAL_ENCRYPTION_KEY: str
+    CREDENTIAL_ENCRYPTION_KEY_PREVIOUS: str = ""
     FRONTEND_URL: str
     ENVIRONMENT: str = "development"
     GITHUB_CLIENT_ID: str
