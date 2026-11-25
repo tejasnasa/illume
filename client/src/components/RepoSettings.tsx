@@ -17,6 +17,7 @@ import { useState } from "react";
 import ExportIllumeButton from "./ExportIllumeButton";
 import GitGraph from "./GitGraph";
 import Button from "./ui/Button";
+import Input from "./ui/Input";
 import Modal from "./ui/Modal";
 
 /**
@@ -65,6 +66,8 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // Deleting is permanent, so the button stays disabled until the name is typed.
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
   // Owner/name feed the version graph; empty strings hide that section.
@@ -304,14 +307,28 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
                 Delete Repository
               </h1>
             </div>
-            <p className="text-(--muted-foreground) mb-12 text-sm">
-              Are you sure you want to delete this repository?
+            <p className="text-(--muted-foreground) mb-3 text-sm">
+              This permanently deletes the repository and all of its analysis,
+              chat history and settings. Type{" "}
+              <span className="font-mono font-semibold text-(--foreground)">
+                {repo.name}
+              </span>{" "}
+              to confirm.
             </p>
+            <Input
+              value={deleteConfirmation}
+              onChange={(e) => setDeleteConfirmation(e.target.value)}
+              aria-label="Repository name to confirm deletion"
+              placeholder={repo.name}
+              autoComplete="off"
+              className="w-full mb-14"
+            />
             <Button
               onClick={handleDelete}
               loading={isDeleting}
+              disabled={deleteConfirmation !== repo.name}
               size="sm"
-              className="font-semibold absolute bottom-4 right-4 bg-red-500 hover:bg-red-600 text-white border-none"
+              className="font-semibold absolute bottom-4 right-4 bg-red-500 hover:bg-red-600 disabled:bg-red-500/40 text-white border-none"
             >
               DELETE
             </Button>

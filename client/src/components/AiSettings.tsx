@@ -19,6 +19,7 @@ import {
 import { useMemo } from "react";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
+import Modal from "./ui/Modal";
 import OptionMenu from "./ui/OptionsMenu";
 
 /**
@@ -210,17 +211,56 @@ export default function AiSettings({ user }: Props) {
 
         <div className="flex items-center justify-end gap-2 pt-2">
           {configured && (
-            <Button
-              type="button"
-              size="sm"
-              loading={isRemoving}
-              disabled={isSubmitting}
-              onClick={handleRemove}
-              className="border-red-500 bg-white text-red-500 hover:border-red-700 border-2 gap-1.5"
+            <Modal
+              className="p-4 w-120"
+              trigger={
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isSubmitting || isRemoving}
+                  className="border-red-500 bg-white text-red-500 hover:border-red-700 border-2 gap-1.5"
+                >
+                  <TrashIcon weight="duotone" size={15} />
+                  Remove key
+                </Button>
+              }
             >
-              <TrashIcon weight="duotone" size={15} />
-              Remove key
-            </Button>
+              <div className="flex items-center gap-3 mb-1 text-red-400 text-2xl">
+                <TrashIcon weight="duotone" />
+                <h1 className="font-bold text-(--foreground) tracking-tight">
+                  Remove API key
+                </h1>
+              </div>
+              <p className="text-(--muted-foreground) mb-12 text-sm">
+                Illume will delete your saved key and stop using it. You can add
+                a key again at any time.
+              </p>
+              {rootError && (
+                <p className="absolute bottom-4 left-4 text-xs text-red-400 max-w-[45%]">
+                  {rootError}
+                </p>
+              )}
+              <div className="absolute bottom-4 right-4 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  data-alert-dialog-close
+                  disabled={isRemoving}
+                  className="bg-white text-(--foreground) border border-(--border)"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  loading={isRemoving}
+                  onClick={handleRemove}
+                  className="font-semibold bg-red-500 hover:bg-red-600 text-white border-none"
+                >
+                  REMOVE
+                </Button>
+              </div>
+            </Modal>
           )}
           <Button
             type="submit"

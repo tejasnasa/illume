@@ -358,7 +358,12 @@ describe("save", () => {
 });
 
 describe("remove", () => {
-  it("calls the remove action", async () => {
+  async function confirmRemove(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: /Remove key/i }));
+    await user.click(screen.getByRole("button", { name: /^REMOVE$/ }));
+  }
+
+  it("asks for confirmation and does nothing when cancelled", async () => {
     const user = userEvent.setup();
     render(
       <AiSettings
@@ -371,6 +376,28 @@ describe("remove", () => {
     );
 
     await user.click(screen.getByRole("button", { name: /Remove key/i }));
+    expect(screen.getByText(/delete your saved key/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Cancel$/ }));
+
+    expect(
+      screen.queryByText(/delete your saved key/i),
+    ).not.toBeInTheDocument();
+    expect(removeAiCredentialsMock).not.toHaveBeenCalled();
+  });
+
+  it("calls the remove action", async () => {
+    const user = userEvent.setup();
+    render(
+      <AiSettings
+        user={makeUser({
+          has_ai_key: true,
+          ai_provider: "openai",
+          ai_model: "gpt-5.6",
+        })}
+      />,
+    );
+
+    await confirmRemove(user);
 
     await waitFor(() =>
       expect(removeAiCredentialsMock).toHaveBeenCalledTimes(1),
@@ -389,7 +416,7 @@ describe("remove", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Remove key/i }));
+    await confirmRemove(user);
 
     await waitFor(() =>
       expect(removeAiCredentialsMock).toHaveBeenCalledTimes(1),
@@ -412,12 +439,12 @@ describe("remove", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Remove key/i }));
+    await confirmRemove(user);
 
     await waitFor(() =>
       expect(
-        screen.getByText(/Server rejected the request/i),
-      ).toBeInTheDocument(),
+        screen.getAllByText(/Server rejected the request/i).length,
+      ).toBeGreaterThan(0),
     );
   });
 });
