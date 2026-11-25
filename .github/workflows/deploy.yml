@@ -89,12 +89,16 @@ jobs:
             mkdir -p /home/tejas/illume_data/clone_cache
             mkdir -p /home/tejas/illume_data/state
 
+            # Each container keeps at most five 20 MB log files. Docker's default json-file
+            # driver never rotates, so an unattended droplet would eventually fill its disk.
             docker stop illume-server || true
             docker rm illume-server || true
             docker run -d \
               --name illume-server \
               --network illume-net \
               --restart unless-stopped \
+              --log-opt max-size=20m \
+              --log-opt max-file=5 \
               -p 8000:8000 \
               --env-file /home/tejas/illume.env \
               ghcr.io/${{ env.IMAGE_NAME }}:latest
@@ -112,6 +116,8 @@ jobs:
               --name illume-worker \
               --network illume-net \
               --restart unless-stopped \
+              --log-opt max-size=20m \
+              --log-opt max-file=5 \
               --env-file /home/tejas/illume.env \
               -v /home/tejas/illume_data/clone_cache:/tmp/illume/clone_cache \
               ghcr.io/${{ env.IMAGE_NAME }}:latest \
@@ -132,6 +138,8 @@ jobs:
               --name illume-beat \
               --network illume-net \
               --restart unless-stopped \
+              --log-opt max-size=20m \
+              --log-opt max-file=5 \
               --env-file /home/tejas/illume.env \
               -v /home/tejas/illume_data/state:/var/illume \
               ghcr.io/${{ env.IMAGE_NAME }}:latest \
