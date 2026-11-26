@@ -12,16 +12,19 @@ import { headers } from "next/headers";
  * @param id - ID of the repository whose glossary to browse.
  * @param page - 1-indexed page number.
  * @param page_size - Entries per page.
- * @returns Paginated entries plus total count.
+ * @param letter - Optional initial to filter by, or `#` for names that start
+ *   with anything but a letter.
+ * @returns Paginated entries plus total count and the initials on offer.
  * @throws Error if the fetch fails.
  */
 export async function GetGlossary(
   id: string,
   page: number,
   page_size: number,
+  letter?: string,
 ): Promise<Glossary> {
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/glossary?page=${page}&page_size=${page_size}`,
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/repository/${id}/glossary?page=${page}&page_size=${page_size}${letter ? `&letter=${encodeURIComponent(letter)}` : ""}`,
     {
       headers: { cookie: (await headers()).get("cookie") ?? "" },
       cache: "no-store",

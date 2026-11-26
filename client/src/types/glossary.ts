@@ -21,4 +21,6 @@ export default interface Glossary {
   total: number;
   page: number;
   page_size: number;
+  /** Initials with at least one term, in order; `#` collects the rest. */
+  letters?: string[];
 }

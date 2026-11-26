@@ -53,6 +53,16 @@ describe("GetGlossary", () => {
 
     expect(captured.query).toContain("page=3");
     expect(captured.query).toContain("page_size=25");
+    expect(captured.query).not.toContain("letter=");
+  });
+
+  it("sends the letter filter encoded, when there is one", async () => {
+    const captured = captureQuery();
+    const { GetGlossary } = await import("@/api/glossary");
+
+    await GetGlossary(REPO_ID, 1, 10, "#");
+
+    expect(captured.query).toContain("letter=%23");
   });
 
   it("forwards the cookie", async () => {

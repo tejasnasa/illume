@@ -5,17 +5,16 @@
 "use client";
 
 import { useGlossarySearch } from "@/hooks/useGlossarySearch";
-import {
-  BookOpenTextIcon,
-  MagnifyingGlassIcon,
-  XIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
 import GlossaryEntry from "./ui/GlossaryEntry";
+import { PAGER_BUTTON } from "./ui/pager";
 
 /**
  * Shows the glossary heading and swaps default content for search results.
  *
  * @param repoId - ID of the repository whose glossary to search.
+ * @param repoNumber - User-scoped repository number, for chat links.
+ * @param countLine - The idle summary under the heading.
  * @param children - Default glossary content shown when idle.
  * @param github_url - Repository URL for source links in entries.
  * @param commitSha Repository's ingested commit, pinned in source links.
@@ -24,12 +23,16 @@ import GlossaryEntry from "./ui/GlossaryEntry";
  */
 export default function GlossarySearch({
   repoId,
+  repoNumber,
+  countLine,
   children,
   github_url,
   commitSha,
   branch,
 }: {
   repoId: string;
+  repoNumber?: number;
+  countLine?: string;
   children: React.ReactNode;
   github_url: string;
   commitSha?: string | null;
@@ -38,97 +41,113 @@ export default function GlossarySearch({
   const { form, onSubmit, results, page, loading, error, goToPage, reset } =
     useGlossarySearch(repoId);
   const isSearching = results !== null;
+  const lastPage = results ? Math.max(1, Math.ceil(results.total / results.page_size)) : 1;
 
   return (
-    <div className="w-full">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-        <div className="flex-1">
-          <div>
-            <div className="flex items-center gap-3 mb-2 text-(--primary)">
-              <BookOpenTextIcon size={28} weight="duotone" />
-              <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
-                Codebase Glossary
-              </h1>
-            </div>
-            <p className="text-(--muted-foreground)">
-              Domain terms, core classes, and functions explained in plain
-              English.
-            </p>
-          </div>
+    <div className="flex w-full flex-col gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-5">
+        <div className="flex flex-col gap-3">
+          <p
+            aria-hidden="true"
+            className="m-0 font-pixel text-[13px] tracking-[0.12em] text-(--muted-foreground)"
+          >
+            &gt; illume define<span className="caret text-(--accent)">_</span>
+          </p>
+          <h1 className="m-0 font-pixel text-[clamp(2.4rem,5vw,4.2rem)] leading-none font-normal tracking-[-0.02em]">
+            <span className="gradient-text">Codebase Glossary</span>
+          </h1>
+          <p className="m-0 text-base text-zinc-400">
+            {countLine ?? "Domain terms, core classes, and functions explained in plain English."}
+          </p>
         </div>
-        <form onSubmit={onSubmit} className="relative w-full md:w-80 group">
-          <MagnifyingGlassIcon
-            size={18}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-(--muted-foreground) group-focus-within:text-(--primary) transition-colors"
-          />
+        <form onSubmit={onSubmit} role="search" className="relative w-full sm:w-95">
+          <span
+            aria-hidden="true"
+            className="absolute top-1/2 left-3.5 -translate-y-1/2 font-pixel text-sm text-(--faint-foreground)"
+          >
+            ⌕
+          </span>
           <input
             {...form.register("query")}
+            type="search"
+            aria-label="Search the glossary"
             placeholder="Search definitions..."
-            className="w-full bg-(--secondary)/30 border border-(--border) rounded-sm pl-11 pr-12 py-2.5 text-sm outline-none focus:border-(--primary)/50 focus:ring-2 focus:ring-(--primary)/20 transition-all text-(--foreground)"
+            className="w-full rounded-sm border border-(--border) bg-(--card) py-3 pr-12 pl-9.5 text-sm text-(--foreground) outline-none focus:border-(--accent)"
           />
           {isSearching && (
             <button
               type="button"
               onClick={reset}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors"
+              aria-label="Clear search"
+              className="absolute top-1/2 right-3 -translate-y-1/2 rounded-sm px-1.5 py-0.5 font-pixel text-xs text-(--muted-foreground) hover:cursor-pointer hover:bg-(--secondary) hover:text-(--foreground)"
             >
-              <XIcon size={14} weight="bold" />
+              ✕
             </button>
           )}
         </form>
-      </div>
+      </header>
 
       {error && (
-        <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <div
+          role="alert"
+          className="rounded-sm border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm text-red-300"
+        >
           {error}
         </div>
       )}
 
       {isSearching ? (
-        <div className="w-full">
-          <div className="flex justify-between items-center mb-6">
-            <span className="text-sm font-medium text-(--muted-foreground)">
+        <div className="flex w-full flex-col gap-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span
+              aria-live="polite"
+              className="font-pixel text-xs tracking-[0.08em] text-(--muted-foreground) uppercase"
+            >
               {loading ? (
-                <span className="flex items-center gap-2">
-                  <div className="w-3.5 h-3.5 rounded-full border-2 border-(--primary) border-t-transparent animate-spin" />
-                  Searching...
-                </span>
+                <span className="blink">Searching...</span>
               ) : (
                 `Showing ${results.entries.length} of ${results.total} entries`
               )}
             </span>
             <div className="flex gap-2">
               <button
+                type="button"
                 disabled={page <= 1 || loading}
                 onClick={() => goToPage(page - 1)}
-                className="px-4 py-2 rounded-lg text-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-50 transition-colors"
+                className={`${PAGER_BUTTON} disabled:cursor-default disabled:opacity-40`}
               >
                 Previous
               </button>
               <button
-                disabled={
-                  page >= Math.ceil(results.total / results.page_size) ||
-                  loading
-                }
+                type="button"
+                disabled={page >= lastPage || loading}
                 onClick={() => goToPage(page + 1)}
-                className="px-4 py-2 rounded-lg text-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-50 transition-colors"
+                className={`${PAGER_BUTTON} disabled:cursor-default disabled:opacity-40`}
               >
                 Next
               </button>
             </div>
           </div>
           {results.entries.length === 0 ? (
-            <div className="text-center py-24 glass-card rounded-2xl text-(--muted-foreground)">
-              No glossary entries found matching your query.
-            </div>
+            <p className="m-0 rounded-md border border-dashed border-white/12 p-12 text-center font-pixel text-sm text-(--muted-foreground)">
+              No terms match.{" "}
+              {repoNumber !== undefined ? (
+                <Link href={`/repo/${repoNumber}/chat`} className="text-(--accent) hover:underline">
+                  Try the chat instead.
+                </Link>
+              ) : (
+                "Try the chat instead."
+              )}
+            </p>
           ) : (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {results.entries.map((entry, idx) => (
                 <GlossaryEntry
                   key={entry.id}
                   entry={entry}
                   start={(page - 1) * results.page_size + 1}
                   github_url={github_url}
+                  repoNumber={repoNumber}
                   commitSha={commitSha}
                   branch={branch}
                   idx={idx}
