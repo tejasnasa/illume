@@ -23,7 +23,7 @@ from openai import (
     AuthenticationError,
 )
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -96,6 +96,7 @@ class UserResponse(BaseModel):
     name: str
     avatar_url: str | None = None
     github_id: str | None = None
+    created_at: datetime | None = None
     ai_provider: str | None = None
     ai_model: str | None = None
     has_ai_key: bool = False
@@ -214,6 +215,60 @@ async def logout(response: Response):
     return MessageResponse(message="Logged out successfully")
 
 
+class DeleteAccountRequest(BaseModel):
+    """The caller's own email, typed back to confirm the deletion."""
+
+    confirm_email: str = Field(max_length=320)
+
+
+@router.delete("/me", status_code=204)
+async def delete_account(
+    payload: DeleteAccountRequest,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_db),
+):
+    """Delete the caller's account and everything it owns.
+
+    Every table that belongs to a user -- repositories and all their analysis,
+    chats, conversations, agent runs, MCP and push tokens -- references
+    ``users.id`` with ``ON DELETE CASCADE``, so removing the one row removes
+    the rest in the same transaction. A core ``DELETE`` is used rather than
+    ``db.delete`` so the database's cascade does that work, not the ORM.
+
+    The email has to be typed back. The client already asks for it, and
+    requiring it here as well means no request can delete an account by
+    accident, whatever sends it.
+
+    Args:
+        payload: The confirmation, which must match the account's email.
+        response: Response used to clear the session cookie.
+        current_user: The account to delete.
+        db: Async database session.
+
+    Returns:
+        None (204 No Content), with the session cookie cleared.
+
+    Raises:
+        HTTPException: 401 if unauthenticated, 400 if the confirmation does not
+            match.
+    """
+    if payload.confirm_email.strip().lower() != current_user.email.strip().lower():
+        raise HTTPException(status_code=400, detail="The email does not match this account")
+
+    await db.execute(delete(User).where(User.id == current_user.id))
+    await db.commit()
+
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        samesite="lax",
+        secure=settings.ENVIRONMENT == "production",
+        domain=settings.DOMAIN,
+    )
+    return None
+
+
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
     """Return the currently authenticated user.
@@ -236,6 +291,7 @@ async def me(current_user: User = Depends(get_current_user)):
         name=current_user.name,
         avatar_url=current_user.avatar_url,
         github_id=current_user.github_id,
+        created_at=current_user.created_at,
         ai_provider=current_user.ai_provider,
         ai_model=current_user.ai_model,
         has_ai_key=bool(current_user.ai_api_key),
