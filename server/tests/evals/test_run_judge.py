@@ -3,6 +3,7 @@
 import asyncio
 import os
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 import respx
@@ -11,6 +12,7 @@ from evals.run import judge as judge_module
 from evals.run.budget import Budget
 from evals.run.deepeval_env import deepeval_version
 from evals.run.judge import (
+    Grade,
     JudgePair,
     grades_by_generation,
     judge_all,
@@ -642,10 +644,8 @@ class TestEnvironment:
 # --- empty answers -------------------------------------------------------------------
 
 
-def _grade(key: str, **fields):
-    from evals.run.judge import Grade
-
-    base = {
+def _grade(key: str, **fields: Any) -> Grade:
+    base: dict[str, Any] = {
         "generation_key": key,
         "item_id": "hand-0",
         "family": "hand",
