@@ -133,6 +133,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="judge: also grade the items marked unanswerable",
     )
     run.add_argument("--annotator", help="judge-label, judge-agreement: whose labels")
+    run.add_argument(
+        "--wait",
+        action="store_true",
+        help="judge with a ':batch' model: keep polling and running rounds until done",
+    )
 
     report = commands.add_parser("report", help="build a report from a run directory")
     report.add_argument("--run", dest="run_name", required=True, help="the run to report on")
@@ -546,6 +551,7 @@ def cmd_judge(args: argparse.Namespace) -> int:
         include_unanswerable=args.include_unanswerable,
         concurrency=args.concurrency,
         clones_dir=eval_settings.CLONES_DIR,
+        wait=args.wait,
     )
 
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,6 +36,7 @@ from evals.run.generate import GENERATIONS, ROUTES, read_generations, read_route
 from evals.run.judge import (
     CHANGESET_FRACTION,
     EvidenceText,
+    JudgeResult,
     all_judgments,
     final_judgments,
     grades_by_generation,
@@ -42,6 +44,17 @@ from evals.run.judge import (
     judgments_path,
     read_judgments,
     select_for_judging,
+)
+from evals.run.judge_batch import (
+    BatchApi,
+    BatchChatClient,
+    Exchange,
+    ReplyStore,
+    batch_dir,
+    collect,
+    is_batch_model,
+    send,
+    stored_spend,
 )
 from evals.run.judge_metrics import metric_configs
 from evals.run.judge_validation import (
@@ -63,6 +76,10 @@ from evals.run.metering import Meter
 from evals.run.pricing import PRICES_PATH, PricesIncomplete, PriceTable
 
 DEFAULT_SAMPLE_SIZE = LABEL_SAMPLE_SIZE
+BATCH_POLL_SECONDS = 60.0
+"""How often ``--wait`` checks the batches in flight."""
+WAITING = 3
+"""The exit status of a batch judge that has batches in flight or requests still to send."""
 
 
 def judge_manifest_name(endpoint: JudgeEndpoint) -> str:
@@ -142,8 +159,19 @@ def cmd_run_judge(
     clones_dir: Path | None = None,
     corpus_path: Path = CORPUS_PATH,
     clock: Callable[[], Any] | None = None,
+    wait: bool = False,
+    batch_api: BatchApi | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    poll_seconds: float = BATCH_POLL_SECONDS,
 ) -> int:
     """Grade a run's selected generations and draw the blind sample to label.
+
+    A judge model ending in ``:batch`` is judged through OpenRouter's batch API in rounds (see
+    :mod:`evals.run.judge_batch`). Each step collects the batches that have finished, grades
+    every metric whose replies are all in, and sends the requests the next round needs. Without
+    ``wait`` the command returns after one step, with :data:`WAITING` while batches are out, and
+    is run again later. With ``wait`` it keeps polling and running rounds until every metric is
+    graded or something stops it.
 
     Args:
         out_dir: The eval output directory.
@@ -164,10 +192,14 @@ def cmd_run_judge(
         clones_dir: Where the harness clones live; needed when ``evidence_for`` is omitted.
         corpus_path: The corpus file.
         clock: The wall clock, replaced in tests.
+        wait: For a batch judge, keep going until every metric is graded.
+        batch_api: The batch API client; a real one when omitted.
+        sleep: Waits between polls, replaced in tests.
+        poll_seconds: How long ``wait`` waits between polls.
 
     Returns:
         The process exit status: 0 on success, 1 when something stopped it or any grade
-        failed, 2 for a bad argument.
+        failed, 2 for a bad argument, :data:`WAITING` when a batch judge still has work out.
     """
     run_dir = run_dir_for(out_dir, run_name)
     generations = read_generations(run_dir / GENERATIONS)
@@ -214,20 +246,41 @@ def cmd_run_judge(
             judgments=final_judgments(all_judgments(run_dir)),
         )
         kwargs: dict[str, Any] = {} if clock is None else {"clock": clock}
-        result = asyncio.run(
-            judge_all(
+        waiting = False
+        if is_batch_model(endpoint.model):
+            outcome = _judge_in_batches(
                 pairs,
+                run_dir=run_dir,
                 endpoint=endpoint,
-                out_path=path,
                 budget=budget,
                 table=prices,
-                client_factory=client_factory,
-                meter=Meter(),
+                generations=generations,
                 evidence_for=evidence_for,
                 concurrency=concurrency,
-                **kwargs,
+                api=batch_api,
+                wait=wait,
+                sleep=sleep,
+                poll_seconds=poll_seconds,
+                kwargs=kwargs,
             )
-        )
+            if isinstance(outcome, int):
+                return outcome
+            result, waiting = outcome
+        else:
+            result = asyncio.run(
+                judge_all(
+                    pairs,
+                    endpoint=endpoint,
+                    out_path=path,
+                    budget=budget,
+                    table=prices,
+                    client_factory=client_factory,
+                    meter=Meter(),
+                    evidence_for=evidence_for,
+                    concurrency=concurrency,
+                    **kwargs,
+                )
+            )
         reported = result.reported_models
         _write_judge_manifest(
             run_dir,
@@ -245,6 +298,9 @@ def cmd_run_judge(
         if result.errors:
             print("some metrics failed; running the command again retries them")
         status = 1 if (result.errors or result.stopped) else 0
+        if waiting and not result.stopped:
+            status = WAITING
+            print(f"{result.pending} metrics are waiting on batch replies; run this again later")
         print(f"judgments: {path}")
 
     sample = sample_for_labelling(
@@ -263,6 +319,89 @@ def cmd_run_judge(
         print("no graded answers to sample; run `run judge` first", file=sys.stderr)
         status = 1
     return status
+
+
+def _judge_in_batches(
+    pairs: list[Any],
+    *,
+    run_dir: Path,
+    endpoint: JudgeEndpoint,
+    budget: Budget,
+    table: PriceTable,
+    generations: list[Any],
+    evidence_for: Callable[[GoldItem], EvidenceText] | None,
+    concurrency: int,
+    api: BatchApi | None,
+    wait: bool,
+    sleep: Callable[[float], None],
+    poll_seconds: float,
+    kwargs: dict[str, Any],
+) -> tuple[JudgeResult, bool] | int:
+    """Run batch rounds; the last round's result and whether work is still out, or an exit status.
+
+    The spend counted is the run's generation spend, every other judge's judgments, and this
+    judge's stored replies and batches in flight, so a reply is counted once however many rounds
+    replay it.
+    """
+    if endpoint.api_style != "chat":
+        print("a batch judge uses chat completions; pass --judge-api-style chat", file=sys.stderr)
+        return 2
+    path = judgments_path(run_dir, endpoint)
+    store = ReplyStore.open(batch_dir(run_dir, endpoint))
+    client = api or BatchApi(endpoint)
+    others = [
+        judgment
+        for other in sorted(run_dir.glob("judgments.*.jsonl"))
+        if other != path
+        for judgment in final_judgments(read_judgments(other))
+    ]
+    routes = list(read_routes(run_dir / ROUTES).values())
+    while True:
+        exchange = Exchange()
+        collect(store, client, exchange)
+        while wait and exchange.waiting and not exchange.collected:
+            sleep(poll_seconds)
+            exchange = Exchange()
+            collect(store, client, exchange)
+        budget.restore(generations, routes, judgments=others)
+        budget.spent_usd += stored_spend(store, endpoint, table)
+        result = asyncio.run(
+            judge_all(
+                pairs,
+                endpoint=endpoint,
+                out_path=path,
+                budget=budget,
+                table=table,
+                client_factory=lambda **_: BatchChatClient(store),
+                meter=Meter(),
+                evidence_for=evidence_for,
+                concurrency=concurrency,
+                batch=True,
+                **kwargs,
+            )
+        )
+        send(
+            store,
+            client,
+            endpoint,
+            table,
+            room_usd=budget.stop_usd - budget.spent_usd,
+            exchange=exchange,
+        )
+        result.spent_usd = budget.spent_usd + exchange.sent_usd
+        print(
+            f"batches: {exchange.collected} collected ({exchange.replies} replies, "
+            f"{exchange.failed} failed), {exchange.waiting} still running, "
+            f"{exchange.submitted} sent ({exchange.sent} requests, "
+            f"estimated ${exchange.sent_usd:.4f})"
+        )
+        if exchange.held:
+            print(f"{exchange.held} requests not sent: {exchange.held_reason}")
+            if not store.in_flight and result.stopped is None:
+                result.stopped = exchange.held_reason
+        if not wait or not store.in_flight:
+            return result, bool(store.in_flight or store.queued)
+        sleep(poll_seconds)
 
 
 def _real_evidence(

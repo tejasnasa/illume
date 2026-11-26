@@ -9,6 +9,9 @@
 #     `deepseek-flash` is the model name to call; it is served by DeepSeek-V4.1-Flash-1017.
 #   - anthropic/claude-haiku-5.5: OpenRouter's model page. Cache writes are not priced
 #     separately here.
+#   - anthropic/claude-haiku-5.5:batch: OpenRouter's model listing, read on 2026-11-26. The same
+#     model through OpenRouter's batch API, at half the input and output rates. OpenRouter does
+#     not list a batch cache-hit rate, so the hit rate is the full one, which can only overstate.
 #   - text-embedding-3-small: OpenAI's model page.
 #
 # Rates are US dollars per 1M tokens: input cache miss, input cache hit and output. DeepSeek is
@@ -18,8 +21,8 @@
 # priced at the peak rate, which can only overstate the cost.
 #
 # Cohere and Jev report their own cost on every call, so they need no rate here.
-version: "2"
-as_of: 2026-11-21
+version: "3"
+as_of: 2026-11-26
 verified: true
 
 peak_hours:
@@ -43,6 +46,11 @@ models:
       input_cache_miss: 0.10
       input_cache_hit: 0.01
       output: 0.50
+  anthropic/claude-haiku-5.5:batch:
+    rates:
+      input_cache_miss: 0.05
+      input_cache_hit: 0.01
+      output: 0.25
 
 embeddings:
   text-embedding-3-small: 0.02

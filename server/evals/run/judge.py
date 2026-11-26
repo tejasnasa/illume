@@ -36,6 +36,7 @@ from evals.run.budget import Budget, BudgetStop, UnpricedSpend
 from evals.run.deepeval_env import deepeval_version
 from evals.run.endpoint import JudgeEndpoint
 from evals.run.generate import final_records
+from evals.run.judge_batch import BatchPending
 from evals.run.judge_metrics import (
     ANSWER_CHAR_BUDGET,
     EVIDENCE_CHAR_BUDGET,
@@ -51,7 +52,7 @@ from evals.run.judge_metrics import (
 )
 from evals.run.judge_model import JudgeOutputError, MeteredJudgeModel
 from evals.run.metering import Meter
-from evals.run.pricing import PriceTable
+from evals.run.pricing import PriceTable, UnpricedUsage
 from evals.run.records import RUBRIC_MAX, Generation, JudgeVersion, Judgment, Usage, judgment_key
 
 CHANGESET_FRACTION = 1.0
@@ -290,6 +291,7 @@ class JudgeResult:
         ok: Gradings done this run.
         reused: Gradings given a copy of their target's grade.
         errors: Gradings that failed; they are tried again next run.
+        pending: Gradings waiting on a batch reply; they carry on next run.
         spent_usd: Spend so far, including what was on disk.
         stopped: Why the run stopped early, or ``None``.
         reported_models: The model names the provider reported.
@@ -300,6 +302,7 @@ class JudgeResult:
     ok: int = 0
     reused: int = 0
     errors: int = 0
+    pending: int = 0
     spent_usd: float = 0.0
     stopped: str | None = None
     reported_models: set[str] = field(default_factory=set)
@@ -324,6 +327,7 @@ async def judge_all(
     metrics: Sequence[MetricSpec] | None = None,
     metric_timeout: float = METRIC_TIMEOUT_SECONDS,
     deepeval_release: str | None = None,
+    batch: bool = False,
 ) -> JudgeResult:
     """Grades each pair on each metric, appending one judgment per pair and metric to ``out_path``.
 
@@ -349,6 +353,11 @@ async def judge_all(
         metric_timeout: The longest one metric may take, in seconds.
         deepeval_release: The DeepEval version recorded in the keys; the installed one when
             omitted.
+        batch: The client answers from a batch reply store (see :mod:`evals.run.judge_batch`).
+            A metric that meets a request with no reply yet is left for the next run, unrecorded
+            and uncharged. Spend is not charged here either: replies are paid for when their
+            batch runs, so the caller counts them in ``budget`` from the store. A composed record
+            whose target is still pending waits for it rather than asking the same questions.
 
     Returns:
         What the run did.
@@ -384,11 +393,22 @@ async def judge_all(
         _append(out_path, judgment.model_dump_json())
         existing[judgment.judgment_key] = judgment
 
+    def price(usages: list[Usage]) -> float:
+        total = 0.0
+        for usage in usages:
+            try:
+                total += table.cost(usage, clock())
+            except UnpricedUsage:
+                continue
+        return total
+
     def charge(usages: list[Usage]) -> float:
         if not usages:
             return 0.0
         if meter is not None:
             meter.extend(usages)
+        if batch:
+            return price(usages)
         try:
             return budget.charge(usages, table, clock())
         except UnpricedSpend as unpriced:
@@ -420,6 +440,9 @@ async def judge_all(
             async with asyncio.timeout(metric_timeout):
                 value = await measured.a_measure(test_case, _show_indicator=False)
             score = _valid_score(value)
+        except BatchPending:
+            result.pending += 1
+            return
         except JudgeOutputError as problem:
             failure = str(problem)
         except TimeoutError:
@@ -516,6 +539,14 @@ async def judge_all(
                 )
             )
             result.reused += 1
+        elif (
+            batch
+            and target is not None
+            and grade_of is None
+            and target.generation.answer == generation.answer
+            and target.generation.composed_from is None
+        ):
+            result.pending += 1
         else:
             leftover.append((pair, spec, key))
     await drain(leftover)
