@@ -1,14 +1,13 @@
 """Glossary browsing and search routes.
 
 Exposes paginated, alphabetically ordered glossary entries per repository,
-with optional exact file-path filtering and case-insensitive name/definition
-search.
+with optional exact file-path or first-letter filtering and case-insensitive
+name/definition search.
 """
 
 import logging
 import uuid
-
-from typing import Annotated
+from typing import Annotated, Literal
 
 from app.api.deps import get_repo_for_user
 from app.api.validation import NoControlCharacters, PageNumber
@@ -22,6 +21,40 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/repository", tags=["glossary"])
+
+# What a name starting with anything other than an ASCII letter files under.
+OTHER_INITIAL = "#"
+
+# The values the letter filter accepts: one uppercase letter, or the catch-all.
+Initial = Literal[
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+    "#",
+]
 
 
 class GlossaryEntryResponse(BaseModel):
@@ -38,12 +71,25 @@ class GlossaryEntryResponse(BaseModel):
 
 
 class GlossaryListResponse(BaseModel):
-    """Paginated glossary page with total count for the query."""
+    """Paginated glossary page with total count for the query.
+
+    Attributes:
+        letters: The initials that have at least one term, in order, so a
+            letter filter can disable the rest. Only the browse route fills
+            it; search leaves it empty.
+    """
 
     entries: list[GlossaryEntryResponse]
     total: int
     page: int
     page_size: int
+    letters: list[str] = []
+
+
+def _initial(name: str) -> str:
+    """Return the letter a name files under, or the catch-all for the rest."""
+    first = name[:1].upper()
+    return first if "A" <= first <= "Z" else OTHER_INITIAL
 
 
 @router.get("/{repo_id}/glossary", response_model=GlossaryListResponse)
@@ -57,6 +103,10 @@ async def browse_glossary(
         Query(description="Filter entries by file path (exact match)"),
         NoControlCharacters,
     ] = None,
+    letter: Annotated[
+        Initial | None,
+        Query(description="Only names starting with this letter; # for the rest"),
+    ] = None,
     db: AsyncSession = Depends(get_async_db),
 ) -> GlossaryListResponse:
     """Browse glossary entries alphabetically with pagination.
@@ -67,10 +117,13 @@ async def browse_glossary(
         page: 1-indexed page number.
         page_size: Entries per page (max 100).
         file_path: Optional exact file-path filter.
+        letter: Optional first-letter filter, case-insensitive. ``#`` keeps
+            names that start with anything but an ASCII letter.
         db: Async database session.
 
     Returns:
-        Paginated entries plus total count.
+        Paginated entries plus total count, and the initials present before
+        the letter filter applies.
 
     Raises:
         HTTPException: 401 if unauthenticated, 404 if the repo is not found.
@@ -92,16 +145,27 @@ async def browse_glossary(
     if file_path is not None:
         base_query = base_query.where(GlossaryEntry.file_path == file_path)
 
-    # Count via subquery so the total reflects filters before pagination.
-    count_result = await db.execute(
-        select(func.count()).select_from(base_query.subquery())
+    # Read before the letter filter, so the rail still shows every letter on offer.
+    initials_result = await db.execute(
+        select(func.left(GlossaryEntry.name, 1)).where(base_query.whereclause).distinct()
     )
+    present = {_initial(row[0] or "") for row in initials_result}
+    letters = sorted(present - {OTHER_INITIAL}) + (
+        [OTHER_INITIAL] if OTHER_INITIAL in present else []
+    )
+
+    starts_with_letter = GlossaryEntry.name.op("~")("^[A-Za-z]")
+    if letter == OTHER_INITIAL:
+        base_query = base_query.where(~starts_with_letter)
+    elif letter is not None:
+        base_query = base_query.where(func.upper(func.left(GlossaryEntry.name, 1)) == letter)
+
+    # Count via subquery so the total reflects filters before pagination.
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total: int = count_result.scalar_one()
 
     rows_result = await db.execute(
-        base_query.order_by(GlossaryEntry.name)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        base_query.order_by(GlossaryEntry.name).offset((page - 1) * page_size).limit(page_size)
     )
     entries = rows_result.scalars().all()
 
@@ -110,6 +174,7 @@ async def browse_glossary(
         total=total,
         page=page,
         page_size=page_size,
+        letters=letters,
     )
 
 
@@ -163,15 +228,11 @@ async def search_glossary(
         ),
     )
 
-    count_result = await db.execute(
-        select(func.count()).select_from(base_query.subquery())
-    )
+    count_result = await db.execute(select(func.count()).select_from(base_query.subquery()))
     total: int = count_result.scalar_one()
 
     rows_result = await db.execute(
-        base_query.order_by(GlossaryEntry.name)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
+        base_query.order_by(GlossaryEntry.name).offset((page - 1) * page_size).limit(page_size)
     )
     entries = rows_result.scalars().all()
 

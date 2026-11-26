@@ -127,6 +127,55 @@ class TestBrowse:
         assert (await client.get(f"{browse_url(repo)}?{param}={value}")).status_code == 422
 
 
+class TestLetterFilter:
+    async def test_keeps_only_names_with_that_initial(self, client, glossary):
+        _, repo = glossary
+        body = (await client.get(browse_url(repo), params={"letter": "C"})).json()
+
+        assert [e["name"] for e in body["entries"]] == ["Cache", "CacheEviction"]
+        assert body["total"] == 2
+
+    async def test_matches_the_initial_case_insensitively(self, client, db_session, glossary):
+        _, repo = glossary
+        await make_glossary_entry(db_session, repo, name="retry_once", file_path="src/b.py")
+        await db_session.commit()
+
+        body = (await client.get(browse_url(repo), params={"letter": "R"})).json()
+
+        assert {e["name"] for e in body["entries"]} == {"RetryPolicy", "retry_once"}
+
+    async def test_the_catch_all_keeps_names_that_start_with_anything_else(
+        self, client, db_session, glossary
+    ):
+        _, repo = glossary
+        await make_glossary_entry(db_session, repo, name="_private", file_path="src/b.py")
+        await make_glossary_entry(db_session, repo, name="2fa", file_path="src/b.py")
+        await db_session.commit()
+
+        body = (await client.get(browse_url(repo), params={"letter": "#"})).json()
+
+        assert {e["name"] for e in body["entries"]} == {"_private", "2fa"}
+
+    async def test_lists_the_initials_on_offer_whatever_the_filter(
+        self, client, db_session, glossary
+    ):
+        _, repo = glossary
+        await make_glossary_entry(db_session, repo, name="_private", file_path="src/b.py")
+        await db_session.commit()
+
+        everything = (await client.get(browse_url(repo))).json()
+        filtered = (await client.get(browse_url(repo), params={"letter": "Z"})).json()
+
+        assert everything["letters"] == ["C", "R", "Z", "#"]
+        assert filtered["letters"] == everything["letters"]
+
+    async def test_rejects_anything_but_one_letter(self, client, glossary):
+        _, repo = glossary
+        response = await client.get(browse_url(repo), params={"letter": "ab"})
+
+        assert response.status_code == 422
+
+
 class TestSearch:
     async def test_matches_names_case_insensitively(self, client, glossary):
         """`ilike` must fold both directions, not just lowercase the query."""
