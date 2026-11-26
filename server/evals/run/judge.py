@@ -36,7 +36,7 @@ from evals.run.budget import Budget, BudgetStop, UnpricedSpend
 from evals.run.deepeval_env import deepeval_version
 from evals.run.endpoint import JudgeEndpoint
 from evals.run.generate import final_records
-from evals.run.judge_batch import BatchPending
+from evals.run.judge_batch import BatchPending, track_served
 from evals.run.judge_metrics import (
     ANSWER_CHAR_BUDGET,
     EVIDENCE_CHAR_BUDGET,
@@ -482,6 +482,7 @@ async def judge_all(
         }
         score: float | None = None
         failure: str | None = None
+        served = track_served() if batch else None
         try:
             test_case = spec.case(item, generation, lookup or (lambda _: None))
             measured = spec.build(model, spec.settings)
@@ -493,6 +494,10 @@ async def judge_all(
             return
         except JudgeOutputError as problem:
             failure = str(problem)
+            reject = getattr(client, "reject_served", None)
+            if served and reject is not None and reject(served, failure):
+                result.pending += 1
+                return
         except TimeoutError:
             failure = f"the metric did not finish within {metric_timeout:.0f} seconds"
         except Exception as problem:

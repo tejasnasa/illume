@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -49,6 +50,9 @@ HTTP_TIMEOUT_SECONDS = 120.0
 FINAL_STATUSES = frozenset({"completed", "failed", "expired", "cancelled"})
 REPLIES = "replies.jsonl"
 BATCHES = "batches.json"
+
+_SERVED: ContextVar[list[tuple[str, dict[str, Any]]] | None] = ContextVar("served", default=None)
+"""The stored replies handed out to the current grading, as ``(key, request)`` pairs."""
 
 
 class BatchPending(Exception):
@@ -155,10 +159,13 @@ class ReplyStore:
         replies: The latest reply per key.
         in_flight: The batches sent and not collected.
         queued: Requests with no reply and not in flight, by key.
+        paid: Every stored reply that carried a completion, in file order, including ones a
+            later record replaced; each was paid for once.
     """
 
     directory: Path
     replies: dict[str, Reply] = field(default_factory=dict)
+    paid: list[Reply] = field(default_factory=list)
     in_flight: list[InFlight] = field(default_factory=list)
     queued: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -174,12 +181,15 @@ class ReplyStore:
                     continue
                 try:
                     raw = json.loads(text)
-                    store.replies[raw["key"]] = Reply(
+                    reply = Reply(
                         key=raw["key"],
                         body=raw.get("body"),
                         error=raw.get("error"),
                         attempts=int(raw.get("attempts", 1)),
                     )
+                    store.replies[reply.key] = reply
+                    if reply.body is not None:
+                        store.paid.append(reply)
                 except ValueError, KeyError, TypeError:
                     continue
         batches = store.directory / BATCHES
@@ -221,6 +231,33 @@ class ReplyStore:
         with (self.directory / REPLIES).open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
         self.replies[reply.key] = reply
+        if reply.body is not None:
+            self.paid.append(reply)
+
+    def reject(self, key: str, body: dict[str, Any], reason: str) -> bool:
+        """Mark a stored reply as unusable and queue its request again, while attempts remain.
+
+        The reply came back but the judge could not read it (not JSON, or a field missing), so
+        replaying it would fail the same way on every run. Its cost stays counted.
+
+        Args:
+            key: The request's key.
+            body: The request, to send again.
+            reason: Why the reply was unusable.
+
+        Returns:
+            Whether the request was queued again; ``False`` once it has been sent
+            :data:`MAX_ATTEMPTS` times, when the failure is final.
+        """
+        previous = self.replies.get(key)
+        if previous is None or not previous.ok:
+            return False
+        error = f"unusable reply: {reason}"[:500]
+        self.add(Reply(key=key, error=error, attempts=previous.attempts))
+        if previous.attempts >= MAX_ATTEMPTS:
+            return False
+        self.queue(key, body)
+        return True
 
     def save_in_flight(self) -> None:
         """Rewrite ``batches.json``."""
@@ -260,7 +297,37 @@ class BatchChatClient:
             raise BatchPending(key)
         if not reply.ok:
             raise BatchRequestFailed(f"batch request failed: {reply.error}"[:500])
+        served = _SERVED.get()
+        if served is not None:
+            served.append((key, body))
         return _namespace(reply.body)
+
+    def reject_served(self, served: list[tuple[str, dict[str, Any]]], reason: str) -> bool:
+        """Reject every reply one grading used, so the unreadable one is asked again.
+
+        Args:
+            served: What :func:`track_served` recorded for the grading.
+            reason: Why the grading could not read its reply.
+
+        Returns:
+            Whether any request was queued again.
+        """
+        queued = False
+        for key, body in served:
+            queued = self.store.reject(key, body, reason) or queued
+        return queued
+
+
+def track_served() -> list[tuple[str, dict[str, Any]]]:
+    """Start recording, for the current task, the stored replies the client hands out.
+
+    A grading calls this first. The list it returns fills with ``(key, request)`` pairs, so a
+    grading whose reply cannot be read can reject exactly the replies it used; concurrent
+    gradings run in their own tasks and so keep separate lists.
+    """
+    served: list[tuple[str, dict[str, Any]]] = []
+    _SERVED.set(served)
+    return served
 
 
 # --- cost ----------------------------------------------------------------------------
@@ -292,7 +359,7 @@ def stored_spend(store: ReplyStore, endpoint: JudgeEndpoint, table: PriceTable) 
     """
     now = _utcnow()
     total = sum(batch.estimate_usd for batch in store.in_flight)
-    for reply in store.replies.values():
+    for reply in store.paid:
         usage = reply_usage(reply, endpoint)
         if usage is not None:
             try:

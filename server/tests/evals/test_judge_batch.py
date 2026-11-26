@@ -47,6 +47,7 @@ class FakeBatches:
         finish: Whether a submitted batch is finished the first time it is asked about.
         fail: Custom ids to answer with an error, every time.
         refuse: Raise from ``submit`` with this status code.
+        garble: Custom ids to answer with text that is not JSON, and how many times.
     """
 
     def __init__(
@@ -56,11 +57,13 @@ class FakeBatches:
         finish: bool = True,
         fail: set[str] | None = None,
         refuse: int | None = None,
+        garble: dict[str, int] | None = None,
     ) -> None:
         self.judge = judge
         self.finish = finish
         self.fail = fail or set()
         self.refuse = refuse
+        self.garble = dict(garble or {})
         self.batches: dict[str, list[tuple[str, dict[str, Any]]]] = {}
         self.finished: set[str] = set()
         self.models: list[str] = []
@@ -91,13 +94,17 @@ class FakeBatches:
                 yield {"custom_id": key, "response": None, "error": {"message": "overloaded"}}
                 continue
             self.judge.requests.append(body)
+            content = self.judge._reply(body)
+            if self.garble.get(key, 0) > 0:
+                self.garble[key] -= 1
+                content = "Sorry, here is my answer: {"
             yield {
                 "custom_id": key,
                 "response": {
                     "status_code": 200,
                     "body": {
                         "model": "reported-batch-model",
-                        "choices": [{"message": {"content": self.judge._reply(body)}}],
+                        "choices": [{"message": {"content": content}}],
                         "usage": {"prompt_tokens": 1000, "completion_tokens": 50},
                     },
                 },
@@ -254,6 +261,50 @@ def test_a_request_that_keeps_failing_is_sent_again_then_recorded_as_an_error(re
     errors = [j for j in graded if j.status == "error"]
     assert status == 1 and errors and all(j.metric == "faithfulness" for j in errors)
     assert "overloaded" in errors[0].error
+
+
+def _first_claims_key(out, run_dir):
+    probe = FakeBatches(FakeJudge())
+    judge(out, batch_api=probe, wait=True)
+    key = next(key for key, body in probe.batches["b0"] if _schema_name(body) == "Claims")
+    for path in run_dir.glob("judgments.*"):
+        path.unlink()
+    for path in batch_dir(run_dir, batch_endpoint()).iterdir():
+        path.unlink()
+    return key
+
+
+def test_an_unreadable_reply_is_asked_again_and_then_graded(recorded):
+    out, run_dir = recorded
+    claims = _first_claims_key(out, run_dir)
+    batches = FakeBatches(FakeJudge(), garble={claims: 1})
+
+    status = judge(out, batch_api=batches, wait=True)
+
+    sent = [key for requests in batches.batches.values() for key, _ in requests]
+    assert status == 0 and sent.count(claims) == 2
+    assert len(scores(run_dir, batch_endpoint())) == ITEMS * 2 * 3
+    # Both replies were paid for, so both stay in the spend.
+    store = ReplyStore.open(batch_dir(run_dir, batch_endpoint()))
+    assert len(store.paid) == len(set(sent)) + 1
+    assert stored_spend(store, batch_endpoint(), complete_table()) == pytest.approx(
+        0.0011 * len(store.paid)
+    )
+
+
+def test_a_reply_that_stays_unreadable_becomes_an_error(recorded):
+    out, run_dir = recorded
+    claims = _first_claims_key(out, run_dir)
+    batches = FakeBatches(FakeJudge(), garble={claims: 5})
+
+    status = judge(out, batch_api=batches, wait=True)
+
+    sent = [key for requests in batches.batches.values() for key, _ in requests]
+    assert sent.count(claims) == MAX_ATTEMPTS
+    errors = [
+        j for j in read_judgments(judgments_path(run_dir, batch_endpoint())) if j.status == "error"
+    ]
+    assert status == 1 and errors and all(j.metric == "faithfulness" for j in errors)
 
 
 def test_a_batch_judge_needs_chat_completions(recorded):
