@@ -1,492 +1,295 @@
-# Ingestion Pipeline
+# The ingestion pipeline
 
-You paste a GitHub URL into the dashboard and press **Add**. The page becomes a live diagram: clone,
-then pull requests and parsing fanning out, then git history, then four stages that light up in pairs.
-A minute later the repository is `ready`, and there is a reading order, a glossary, a graph and a
-brief where before there was a URL.
+Ingestion is the background job that turns a GitHub URL into everything Illume shows: the file and symbol tables, the dependency graph, git ownership, co-change pairs, criticality scores, the glossary, the reading order, the vector index and the architecture brief. It is one Celery task, `ingest_repository` in [`server/app/tasks/ingest.py`](../../server/app/tasks/ingest.py), that clones the repository and then runs the shared stage sequence in [`server/app/services/pipeline.py`](../../server/app/services/pipeline.py). This page walks through every stage in order, says what each one reads and writes, and links to the deep-dive pages for the parts that need one.
 
-This document follows that run from the queued task to the `ready` status. Ingestion is the largest
-piece of the system: it spans a clone, a multi-language parser, a dependency resolver, a git
-historian, a scorer, and four model-backed generators, three of which run concurrently on threads
-against a single database.
+## What ingestion produces
 
-If you are reading for the first time, [The pipeline at a glance](#the-pipeline-at-a-glance) is the
-map. If you are preparing to discuss it,
-[Design decisions and trade-offs](#design-decisions-and-trade-offs) collects the reasoning.
+A repository row starts life as `status = "pending"` and ends as `"ready"` (or `"failed"`). In between, the pipeline fills these tables, all keyed by the repository's UUID:
 
-## Contents
+| Output                                 | Table(s)                                                                                      | Written by                                                                                     | Read by                                                   |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Source files with language and size    | `files`                                                                                       | [`scanner.process_repository_files`](../../server/app/services/scanner.py)                     | graph, explorer, stats, every LLM stage                   |
+| Functions, classes, methods, imports   | `ast_symbols`                                                                                 | `scanner` via [`parser.parse_file`](../../server/app/services/parser.py)                       | resolver, glossary, embedder, graph, agent tools          |
+| Import edges                           | `dependencies`                                                                                | [`dependency_resolver.resolve_dependencies`](../../server/app/services/dependency_resolver.py) | graph, reading order, brief, export, structural retrieval |
+| Fan-in and fan-out per file            | `files.fan_in`, `files.fan_out`                                                               | `dependency_resolver.compute_fan_metrics`                                                      | criticality, glossary ranking, graph sizing               |
+| Tech stack and entry points            | `repositories.detected_stack`, `entry_points`                                                 | [`stack_detector`](../../server/app/services/stack_detector.py)                                | brief, repository page                                    |
+| Merged pull requests (up to 200)       | `pull_requests`                                                                               | [`pr_fetcher.fetch_pull_requests`](../../server/app/services/pr_fetcher.py)                    | embedder, history retrieval                               |
+| Commits (newest 500)                   | `commits`                                                                                     | [`git_analyzer.analyze_git_history`](../../server/app/services/git_analyzer.py)                | co-change, embedder, activity feed, history retrieval     |
+| Ownership, bus factor, knowledge silos | `code_owners`, `files.change_frequency`, `files.git_last_modified`, `files.has_tests`         | `git_analyzer`                                                                                 | criticality, ownership endpoints, brief                   |
+| Files that change together             | `file_cochange`                                                                               | [`cochange.build_cochange`](../../server/app/services/cochange.py)                             | the co-change retrieval channel and agent tool            |
+| Criticality level and reasons          | `files.criticality`, `files.criticality_reasons`                                              | [`criticality.run_criticality_scoring`](../../server/app/services/criticality.py)              | graph colour, brief, explorer                             |
+| Glossary                               | `glossary_entries`                                                                            | [`glossary_builder.build_glossary`](../../server/app/services/glossary_builder.py)             | glossary page, embedder (symbol descriptions)             |
+| Reading order                          | `onboarding_guides.reading_order`                                                             | [`onboarding.build_reading_order`](../../server/app/services/onboarding.py)                    | guide endpoint, graph tour, embedder (file chunks)        |
+| Vector index                           | `embeddings`                                                                                  | [`embedder.generate_embeddings`](../../server/app/services/embedder.py)                        | every retrieval arm                                       |
+| Architecture brief                     | `onboarding_guides.architecture_brief`, `critical_files`, `repositories.architecture_summary` | [`architecture_brief.generate_brief`](../../server/app/services/architecture_brief.py)         | repository home page, export, MCP resources               |
 
-- [The pipeline at a glance](#the-pipeline-at-a-glance)
-- [Where an ingestion starts](#where-an-ingestion-starts)
-- [The stages](#the-stages)
-  - [clone](#clone)
-  - [pr_fetch](#pr_fetch)
-  - [parse](#parse)
-  - [resolve_dependencies and compute_fan_metrics](#resolve_dependencies-and-compute_fan_metrics)
-  - [detect_stack](#detect_stack)
-  - [git_history](#git_history)
-  - [criticality](#criticality)
-  - [The LLM phase](#the-llm-phase)
-- [Concurrency, and the rule that makes it safe](#concurrency-and-the-rule-that-makes-it-safe)
-- [Two orderings that are load-bearing](#two-orderings-that-are-load-bearing)
-- [Idempotency](#idempotency)
-- [Failure and retry](#failure-and-retry)
-- [Progress and instrumentation](#progress-and-instrumentation)
-- [Troubleshooting](#troubleshooting)
-- [Design decisions and trade-offs](#design-decisions-and-trade-offs)
-- [Related documentation](#related-documentation)
+The deterministic half (files through criticality) needs no model at all. The LLM half (glossary, reading order, brief) runs on whichever credential the repository's owner resolves to, and embeddings always run on the operator's OpenAI key. [Generation](generation.md) and [BYOK and encryption](../security/byok-and-encryption.md) explain that split.
 
 ## The pipeline at a glance
 
-Everything runs from the Celery task `ingest_repository` in `server/app/tasks/ingest.py`, whose work
-lives in `run_full_analysis` in `server/app/services/pipeline.py`:
+The braces in the diagram are real concurrency: those stages run on separate threads at the same time. The arrows are dependencies, so read them as "must finish before", not as a flat list.
 
 ```mermaid
 flowchart TD
-    Clone["clone_repository"]
-
-    PR["fetch_pull_requests<br/>own thread, overlaps everything below"]
-
-    subgraph PARSE["process_repository_files"]
-        direction LR
-        P1["parse"] --> P2["resolve_dependencies"] --> P3["compute_fan_metrics"] --> P4["detect_stack"]
-    end
-
-    Git["analyze_git_history<br/>cap 500 commits"]
-    Readme["read README.md"]
-    Crit["run_criticality_scoring<br/>must follow git history"]
-
-    Clone --> PR
-    Clone --> P1
-    Clone --> Git
-    Clone --> Readme
-    P4 --> Crit
-    Git --> Crit
-    Readme --> Crit
-
-    subgraph PAIR1["glossary and reading order — two threads, joined together"]
-        direction LR
-        Gloss["build_glossary"]
-        RO["build_reading_order"]
-    end
-
-    subgraph PAIR2["embeddings and brief — brief in a thread, embedder on the main thread"]
-        direction LR
-        Embed["embed_repository_symbols"]
-        Brief["generate_brief"]
-    end
-
-    Crit --> Gloss
-    Crit --> RO
-    Crit --> Embed
-    Crit --> Brief
-
-    Gloss --> Ready(["status = ready"])
-    RO --> Ready
-    Embed --> Ready
-    Brief --> Ready
+  Q["POST /api/v1/repository<br/>or PUT /reingest"] --> T["ingest_repository<br/>Celery task"]
+  T --> CL["clone<br/>cloner.clone_repository"]
+  CL --> PRT["pr_fetch thread<br/>run_pr_fetch_in_thread"]
+  CL --> P["parse<br/>process_repository_files"]
+  P --> RD["resolve_dependencies"]
+  RD --> FM["compute_fan_metrics"]
+  FM --> DS["detect_stack"]
+  DS --> GH["git_history<br/>analyze_git_history"]
+  GH --> CC["cochange<br/>build_cochange"]
+  CC --> CR["criticality<br/>run_criticality_scoring"]
+  CR --> GL["glossary thread"]
+  CR --> RO["reading_order thread"]
+  GL --> J1["glossary_and_reading_order_join"]
+  RO --> J1
+  J1 --> EM["generate_embeddings<br/>main thread"]
+  J1 --> BR["brief thread"]
+  EM --> J2["embed_and_brief_join"]
+  BR --> J2
+  J2 --> CU["cleanup_clone"]
+  PRT --> PJ["pr_future.result()"]
+  CU --> PJ
+  PJ --> RDY["status = ready<br/>analysis_commit_sha stamped"]
 ```
 
-Four rules in that diagram are load-bearing:
+Three overlapped groups exist, each documented in depth on [concurrency and failure](concurrency-and-failure.md):
 
-- **Three pairs overlap, and the rule that makes that safe is not exception handling** — it is that
-  no database session is ever shared across a thread.
-- **Criticality runs after git history**, because it reads two columns only the git analyzer writes.
-- **The parser runs before the git analyzer**, because the parser deletes every file row first.
-- **Only the brief may fail without failing the run.**
+| Group                         | Threads                                                              | Pool                                                       |
+| ----------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------- |
+| PR fetch beside everything    | one `ingest-pr` thread                                               | `ThreadPoolExecutor(max_workers=1)` in `ingest_repository` |
+| Glossary beside reading order | two `pipeline-llm` threads                                           | `ThreadPoolExecutor(max_workers=2)` in `run_full_analysis` |
+| Embeddings beside the brief   | the main thread embeds, one `pipeline-brief` thread writes the brief | `ThreadPoolExecutor(max_workers=1)` in `run_full_analysis` |
+
+Inside the embedder, glossary builder and reading-order builder there is a fourth, finer layer: up to `LLM_MAX_WORKERS = 4` network calls in flight at once through [`_concurrency.py`](../../server/app/services/_concurrency.py).
 
 ## Where an ingestion starts
 
-Three things queue a full analysis:
+Two routes in [`server/app/api/v1/repository.py`](../../server/app/api/v1/repository.py) queue the task. Both return `202 Accepted` at once; the work happens on the worker.
 
-| Trigger                                   | Route or task                                | Notes                                       |
-| ----------------------------------------- | -------------------------------------------- | ------------------------------------------- |
-| Adding a repository                       | `POST /api/v1/repository`                    | The normal path                              |
-| Re-ingesting                              | `PUT /api/v1/repository/{repo_id}/reingest`  | Deletes the row first, then recreates it     |
-| A sync deciding a full rebuild is cheaper | `sync_repository`                            | Force-push, or over the size thresholds      |
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant API as FastAPI route
+  participant DB as Postgres
+  participant R as Redis broker
+  participant W as Celery worker
+  B->>API: POST /api/v1/repository
+  API->>DB: claim a free ingestion (keyless users only)
+  API->>DB: INSERT repositories (status pending)
+  API->>DB: COMMIT (claim and insert together)
+  API->>R: ingest_repository.delay(repo_id, github token, branch, sha)
+  API-->>B: 202 with repo_id and repo_num
+  B->>API: WebSocket /api/v1/ws/ingest/repo_id
+  R->>W: deliver task
+  W->>DB: stages write rows
+  W->>R: PUBLISH task:repo_id:logs
+  R-->>API: pub/sub frame
+  API-->>B: frame relayed verbatim
+```
 
-In every case the task runs on a **sync** database session, because Celery is a sync caller. Routes
-use the async engine. This split runs through the whole codebase — see
-[architecture.md](../architecture.md#async-and-sync-are-split-by-caller).
+### Creating a repository
 
-The task is declared `@celery.task(bind=True, max_retries=3)`, and everything below happens inside a
-`get_db_context()` block that owns the session and its rollback.
+`create_repository` takes a `RepositoryCreate` body: `github_url` (validated by `GitHubRepoUrl` in [`server/app/api/validation.py`](../../server/app/api/validation.py) to be exactly `https://github.com/<owner>/<repo>`), plus an optional `branch` and `commit_sha`. The URL rule matters for security: the clone step embeds the user's GitHub token in the URL it fetches, so any other host would receive that token.
+
+Before inserting, `_require_quota_for_creation` decides who pays:
+
+- A user with a stored AI key (`LLMConfig.from_user` returns a config) is admitted with no counter touched.
+- A keyless user must still have free ingestions left. `aclaim_free_ingestion` in [`server/app/services/entitlements.py`](../../server/app/services/entitlements.py) is a conditional `UPDATE users SET free_ingestions_used = free_ingestions_used + 1 WHERE free_ingestions_used < 3`. It does not commit, so the claim and the `Repository` insert land in one transaction. When the cap (`FREE_INGESTIONS = 3`) is spent the route answers `402` with `QUOTA_EXHAUSTED_DETAIL`.
+
+New rows are always created with `auto_update_enabled=False`: a free repository must not keep syncing on the operator's key. The task is dispatched with the owner's decrypted `github_access_token` as a Celery argument.
+
+### Re-ingesting
+
+`PUT /{repo_id}/reingest` requires a stored key (`_require_user_key`, else `402`) and a repository in `ready` or `failed` (else `400`). It **deletes the `repositories` row and inserts a new one with the same `id` and `repo_number`**. Every child row cascades away, so the new ingest starts from an empty slate. The auto-update toggle, interval and `next_sync_at` are copied across so a re-ingest does not silently switch off a schedule the user chose.
+
+Re-ingesting while a background sync holds the row is allowed (the row's `status` is still `ready`). The sync detects it at its next watermark write, because the replacement row has no `sync_generation`. See [auto-update sync](sync.md#generations-and-the-reingest-race).
+
+## The task wrapper
+
+`ingest_repository(self, repo_id, access_token=None, branch=None, commit_sha=None)` is declared `@celery.task(bind=True, max_retries=3)`. It owns four things and delegates the rest:
+
+1. **The database session.** `get_db_context()` wraps `get_sync_db()` so that an exception is thrown back into the generator with `gen.throw(exc)`, which is what makes the generator's `except: rollback` arm reachable. The original wrapper resumed the generator with `next(gen)`, which skipped the rollback.
+2. **The clone.** `with stage("clone"): clone_repository(...)` returns `(tmp_dir, actual_branch, actual_sha)`. The branch and SHA are committed onto the row (`ingested_branch`, `ingested_commit_sha`) before any analysis runs.
+3. **The PR fetch thread**, started immediately after the clone and joined at the very end.
+4. **The outcome.** On success it stamps `analysis_commit_sha = actual_sha`, sets `status = "ready"`, commits, publishes the two terminal frames and sends a push notification. On failure it rolls back, marks the row `failed`, publishes the failure frames and asks Celery to retry.
+
+Before handing anything to a thread, the task captures the scalars the threads need: `repo_id_value`, `repo_github_url`, and the owner's `LLMConfig` from `llm_config_for(owner)`. Threads never receive the ORM `Repository` instance. That rule, and why it is the thing that makes the overlap safe, is on [concurrency and failure](concurrency-and-failure.md#the-scalars-only-rule).
+
+Everything between the clone and the outcome is `run_full_analysis(db, repo, tmp_dir, redis_client, publish, manage_status=True, overlap_llm=True, llm_config=llm_config)`. The sync task calls the same function with `manage_status=False` and `overlap_llm=False`, which is why the stage sequence lives in a service module rather than in the task.
 
 ## The stages
 
-Every stage name is a member of the `Stage` enum in `server/app/services/_stages.py`, and a unit test
-parses every `stage(...)` call out of `app/` to assert the two sets stay equal. The values are
-`clone`, `pr_fetch`, `parse`, `resolve_dependencies`, `compute_fan_metrics`, `detect_stack`,
-`git_history`, `criticality`, `glossary`, `reading_order`, `generate_embeddings`, `brief`, `ready`,
-plus the two join stages.
-
-That parity test is why `grep stage=` and `grep stage_timer` describe the same graph.
+Each subsection names the stage's `Stage` enum value (from [`server/app/services/_stages.py`](../../server/app/services/_stages.py)), which is both the timer label in the worker log and the `stage` field on its progress frames.
 
 ### clone
 
-`services/cloner.py` → `repo_cache.ensure_clone`.
+[`cloner.clone_repository`](../../server/app/services/cloner.py) first flips the row to `status = "cloning"` (unless `manage_status=False`). Then one of two paths runs:
 
-Produces a working tree at the requested commit, and writes `ingested_branch` and
-`ingested_commit_sha` immediately — committed *before* any analysis, so a later failure still records
-what was attempted. When the clone cache is enabled, this is a fetch-and-reset rather than a fresh
-clone; see [sync.md](sync.md#the-clone-cache).
+- **Clone cache enabled** (`CLONE_CACHE_ENABLED = True`, the default): delegates to [`repo_cache.ensure_clone`](../../server/app/services/repo_cache.py), which keeps a persistent working tree per repository under the system temp directory. A pinned `commit_sha` cannot be served from the cache (it tracks one branch), so a pinned ingest falls back to an ephemeral clone.
+- **Cache disabled**: `git.Repo.clone_from` into `tempfile.mkdtemp(prefix="illume_<repo_id>_")`, single-branch unless a commit is pinned, then `git checkout <sha>` when one is.
+
+The OAuth token is injected into the HTTPS URL's userinfo (`https://<token>@github.com/...`). Every git error passes through `redact_git_error` before it can reach a log or the browser, because git echoes the URL, token included, when a token is rejected.
+
+The returned branch is `"detached"` when a specific commit was checked out. When no branch is given, `_branch_for` falls back to `repo.default_branch` and then to `"main"` (`default_branch` is never written by the pipeline, so in practice an unspecified branch means `main` on the cache path and the remote's default branch on the ephemeral path).
+
+The [clone cache](clone-cache.md) page covers the cache's eviction, token hygiene and failure fallbacks, and records one quirk that matters here: `ingest_repository` calls `cleanup_clone(tmp_dir)` in a `finally` whether or not the path came from the cache, so an initial ingest deletes its own cache entry when it finishes.
 
 ### pr_fetch
 
-`services/pr_fetcher.py`.
+Runs on its own thread from the moment the clone finishes. [`pr_fetcher.fetch_pull_requests`](../../server/app/services/pr_fetcher.py) pages through `GET /repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100`, keeps only PRs with a `merged_at`, and stops at `MAX_PRS = 200`, an empty page, or a short page. Rows go in with `ON CONFLICT (repository_id, number) DO NOTHING`.
 
-Up to 200 merged pull requests, newest-updated first, in pages of 100. Only merged PRs are kept. The
-walk stops on an empty or short page, or at the cap.
+| Constant          | Value  | Meaning                                       |
+| ----------------- | ------ | --------------------------------------------- |
+| `MAX_PRS`         | 200    | Merged PRs kept per repository                |
+| `PER_PAGE`        | 100    | GitHub page size                              |
+| `REQUEST_TIMEOUT` | 20.0 s | Per-request `httpx` timeout                   |
+| `MAX_RETRIES`     | 3      | Attempts on a `429` or `403` before giving up |
 
-This stage runs on **its own single-worker thread** and is joined last, after the clone has already
-been cleaned up — so its network time is almost entirely hidden behind the parse and the git
-analysis. It is the cheapest overlap in the pipeline and the one that buys the most.
+A `429` or `403` sleeps for `retry_after_seconds(response)` ([`github_http.py`](../../server/app/services/github_http.py)): `Retry-After` if present, else the time until `X-RateLimit-Reset`, else `DEFAULT_RETRY_AFTER_SECONDS = 60`. Every other non-200 raises `GitHubClientError`, which reaches the task through `pr_future.result()` and fails the ingestion.
 
 ### parse
 
-`services/scanner.py` → `process_repository_files`, which contains four timed stages of its own.
+[`scanner.process_repository_files`](../../server/app/services/scanner.py) flips `status = "parsing"`, deletes every `File` row for the repository (the cascade removes symbols, edges, ownership rows, co-change pairs and file-scoped embeddings), walks the tree and parses every file `is_scannable` accepts. Rows are built as plain dicts and flushed every `FILE_BATCH_SIZE = 500` files with `INSERT ... ON CONFLICT (repository_id, path) DO NOTHING`, one commit per batch. Progress frames are rate-limited to one every `max(50, total // 20)` files.
 
-`parse` walks the tree and runs tree-sitter over each file, producing `File` rows and their
-`AstSymbol` rows. It **deletes every existing `File` row for the repository first**, cascading away
-their symbols and edges — which is what makes a retried ingestion safe rather than duplicating
-everything.
-
-It commits in batches of **500 files** (`FILE_BATCH_SIZE`) rather than once at the end, so a
-partially completed parse is a state the system has to tolerate. The idempotency rules below are what
-make that tolerable.
-
-> `process_repository_files` is deliberately **not** wrapped in its own timer. It contains four timed
-> stages, and wrapping it as well would count their time twice in the profile.
+The parser, the language table, symbol kinds, complexity and docstrings are on [parsing and dependencies](parsing-and-dependencies.md).
 
 ### resolve_dependencies and compute_fan_metrics
 
-`services/dependency_resolver.py`.
-
-`resolve_dependencies` turns import specifiers into `Dependency` edges between symbols, and
-`compute_fan_metrics` writes `fan_in` and `fan_out` for every file.
-
-`resolve_dependencies` is **insert-only**, which is why the whole-repository edge delete has to run
-before it. It resolves candidate files through a five-strategy chain: exact stem, the package index
-map, a unique short stem, a language-family filter, then an exact-suffix score — with a
-disambiguation pass when several files match.
+`resolve_dependencies` turns each stored `import` symbol into at most one `Dependency` row pointing at a symbol in the imported file, via a five-step matching chain. `compute_fan_metrics` collapses those edges to file pairs and writes `fan_in` and `fan_out`. Both are described on [parsing and dependencies](parsing-and-dependencies.md#resolving-imports-to-files).
 
 ### detect_stack
 
-`services/stack_detector.py`.
-
-Reads manifests (`package.json`, `go.mod`, `Cargo.toml`, `Gemfile`, `composer.json`, `pom.xml`,
-`build.gradle`), Python import patterns, and CI config filenames into `detected_stack`, and infers
-entry points from filename conventions and main-guard patterns. It is explicitly best-effort:
-unreadable files are skipped rather than failing the stage.
+`detect_stack(repo_root)` and `detect_entry_points(repo_root)` in [`stack_detector.py`](../../server/app/services/stack_detector.py) read manifests (`package.json`, `go.mod`, `Cargo.toml`, `Gemfile`, `composer.json`, `pom.xml`, `build.gradle`), CI and infrastructure files, and raw source text, and store a JSON summary of languages, frameworks, databases, CI/CD and infrastructure, plus a list of likely entry-point files. It is best-effort pattern matching; unreadable files are skipped silently.
 
 ### git_history
 
-`services/git_analyzer.py`.
+[`git_analyzer.analyze_git_history`](../../server/app/services/git_analyzer.py) runs `git log --numstat -n500`, stores the commits, aggregates per-file ownership and sets `has_tests` on every file. [Git intelligence](git-intelligence.md) has the details.
 
-Runs `git log --numstat -n 500` and derives per-file ownership, change frequency, last-modified
-dates, test presence, and up to 500 `Commit` rows. The full treatment is in
-[git-intelligence.md](git-intelligence.md).
+### cochange
+
+[`cochange.build_cochange`](../../server/app/services/cochange.py) counts, over the stored commits, how often each pair of current files changed in the same commit, and keeps the strongest pairs. It reads the commit rows `git_history` just wrote and the file rows `parse` wrote, so it follows both. See [git intelligence](git-intelligence.md#co-change).
 
 ### criticality
 
-`services/criticality.py`.
+[`criticality.run_criticality_scoring`](../../server/app/services/criticality.py) grades every file `critical`, `caution` or `safe` from fan-in, path patterns, staleness and test coverage. It reads `git_last_modified` and `has_tests`, which only `git_history` writes, so it must run after it. This is one of the two load-bearing orderings described below.
 
-Scores every file from fan-in, path sensitivity, staleness, and test presence, then classifies it
-`critical`, `caution`, or `safe`. See
-[Two orderings that are load-bearing](#two-orderings-that-are-load-bearing) for why this stage's
-position is not negotiable.
+### glossary and reading_order
 
-### The LLM phase
+Both run at once on two threads, each with its own session. The glossary builder asks the model to define the most important symbols; the reading-order builder topologically sorts the file graph into tiers and asks the model to annotate the files. [Generation](generation.md) describes both.
 
-Four stages, dispatched as two overlapped pairs:
+### generate_embeddings and brief
 
-| Pair | Stage | Thread |
-| --- | --- | --- |
-| 1 | `build_glossary` | worker thread |
-| 1 | `build_reading_order` | worker thread |
-| 2 | `embed_repository_symbols` | **main thread** |
-| 2 | `generate_brief` | worker thread |
+The main thread embeds while a second thread writes the architecture brief. The embedder flips `status = "embedding"` and writes every chunk type in the order commits, PRs, README, annotated files, symbols; [the index](../retrieval/index-and-embeddings.md) covers chunking. The brief reads files, symbols, dependencies, owners, the glossary and the reading order, but never the `embeddings` table, which is what makes the overlap safe.
 
-The two pairs are joined by the named stages `glossary_and_reading_order_join` and
-`embed_and_brief_join`. Those exist so the time spent waiting for the slower of a pair is measured
-and visible rather than hidden inside the pair's own timers.
+### ready
 
-`embed ∥ brief` is sound because the brief reads no `Embedding` rows and the guide upsert writes only
-the columns it is handed — so the brief cannot overwrite the reading order the other thread is
-writing.
+Not a timed stage. After the PR thread is joined, the task stamps `analysis_commit_sha`, sets `status = "ready"`, commits, and publishes `status_update` and `done` frames with `stage=ready, phase=done`. `_notify` sends the `INGEST_COMPLETED` push to the owner's registered devices; a push failure is logged and swallowed because the analysis is already durable.
 
-See [generation.md](generation.md) for the credential model and what each service produces, and
-[retrieval.md](retrieval.md) for what the embedder writes.
+## Repository status
 
-## Concurrency, and the rule that makes it safe
-
-**The rule is not exception handling — it is that a database session is never shared across
-threads.** Every overlapped call lives in `server/app/tasks/_parallel.py` and obeys two constraints:
-
-1. **It receives only scalars** — a `repo_id`, a `github_url`, credentials. No ORM instance bound to
-   the main thread's identity map is ever handed to a worker.
-2. **It opens its own session** inside the thread.
-
-One helper looks like a violation, and it is worth understanding why it is not. The brief helper
-loads the `Repository` row inside its own thread, because `generate_brief` adds the row back to the
-session and must therefore be working with a row that session knows about. The session is still the
-thread's own — what changes is that the object is loaded per-thread rather than passed across.
-
-This constraint is also why credentials travel as a frozen `LLMConfig` rather than a contextvar.
-
-## Two orderings that are load-bearing
-
-Both have been wrong at some point, and both fail silently when they are.
-
-### Criticality scoring must follow git history
-
-`run_criticality_scoring` reads `File.git_last_modified` and `File.has_tests`. Those columns are
-written only by the git analyzer. Score before it, and every file is graded against `NULL` and
-`false` — which reads as "nothing is stale, nothing lacks tests", so the scores come out quietly
-wrong rather than raising.
-
-The unit tests inject those values directly into the scorer, so they pass regardless of the order the
-pipeline uses. This is one of the few places where the test suite cannot catch a regression.
-
-### The parser runs before the git analyzer
-
-`process_repository_files` deletes every `File` row before re-inserting. Git history is then applied
-to the freshly inserted rows. Running git history first would mean its updates landed on rows that
-were about to be deleted.
-
-## Idempotency
-
-A full parse can be running twice at once — two workers on the same repository, or a re-ingest that
-races a sync. The pipeline is written so that this inserts once rather than duplicating:
-
-| Table           | Constraint                                | Conflict behaviour on a full parse         |
-| --------------- | ----------------------------------------- | ------------------------------------------ |
-| `files`         | `(repository_id, path)`                   | `ON CONFLICT DO NOTHING`                   |
-| `commits`       | `(repository_id, hash)`                   | `ON CONFLICT DO NOTHING`                   |
-| `pull_requests` | `(repository_id, number)`                 | `ON CONFLICT DO NOTHING`                   |
-| `code_owners`   | unique on `file_id`                       | `ON CONFLICT DO UPDATE`                    |
-| `embeddings`    | `(repository_id, source_type, source_id)` | Not needed — the table is emptied first     |
-| `dependencies`  | `(source_symbol_id, target_symbol_id)`    | Not needed — removed by cascade first       |
-
-Each is worth a sentence, because they do not all work the same way:
-
-- **`files`, `commits`, `pull_requests`** use `ON CONFLICT DO NOTHING`, so a second concurrent pass
-  inserts nothing and the first pass's rows win.
-- **`code_owners`** uses `ON CONFLICT DO UPDATE`, because re-analysis should refresh the ownership
-  statistics rather than keep the first result.
-- **`ast_symbols`** has no conflict clause, and needs none. A file row delete cascades to its symbols,
-  so a re-insert cannot collide.
-- **`embeddings`** has no conflict clause on a full parse either. `generate_embeddings` deletes every
-  row for the repository first and then inserts plainly. The `ON CONFLICT DO UPDATE` clause appears
-  only in `incremental` mode.
-- **`dependencies`** are removed the same way as symbols. On a full parse the `File` delete cascades
-  through `ast_symbols` to both of an edge's endpoint columns.
-
-That last point corrects a natural but wrong assumption: **`delete_repo_edges` is not called on the
-full-parse path at all.** It is called only by the sync path, where files are *not* deleted wholesale
-and the edges therefore have to be cleared explicitly.
-
-## Failure and retry
-
-On an exception, in this exact order:
-
-1. The exception is logged.
-2. **`db.rollback()` runs.** This is not incidental. Without it, the query that reloads the
-   repository raises `PendingRollbackError`, the bare `except` swallows that, and the row's status is
-   left frozen at whatever stage it reached — a repository that looks like it is still parsing,
-   forever.
-3. The repository is reloaded and set to `status = "failed"`.
-4. A failure frame is published.
-5. `self.retry(countdown=10)` is raised.
-
-The countdown is a **fixed 10 seconds**, not a backoff. `max_retries=3` means three retries after the
-original attempt, so a repository can be attempted **four times** in total — which is why the
-progress UI shows `attempt N of 4`.
-
-The clone is removed in a `finally`, so a failed run does not leak disk.
-
-### Status transitions
+`Repository.status` is a Postgres enum, `repo_status`, with seven values. Five are written by the ingest path; `analyzing` exists in the enum and nowhere in the code.
 
 ```mermaid
 stateDiagram-v2
-    direction LR
-    [*] --> pending
-    pending --> cloning
-    cloning --> parsing
-    parsing --> embedding
-    embedding --> ready
-
-    cloning --> failed
-    parsing --> failed
-    embedding --> failed
-
-    ready --> [*]
-    failed --> [*]
+  direction LR
+  [*] --> pending
+  pending --> cloning
+  cloning --> parsing
+  parsing --> embedding
+  embedding --> ready
+  cloning --> failed
+  parsing --> failed
+  embedding --> failed
+  failed --> cloning: Celery retry
+  ready --> pending: reingest recreates the row
+  failed --> pending: reingest recreates the row
 ```
 
-The intermediate states are written by the services themselves. `manage_status=False` suppresses
-them, which is what the sync path uses so it does not disturb a `ready` repository.
+| Status      | Set by                                                                              | What the UI does                                         |
+| ----------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `pending`   | `server_default` on insert, and the reingest route                                  | Shows the progress view and opens the WebSocket          |
+| `cloning`   | `cloner._update_status`                                                             | Progress view                                            |
+| `parsing`   | `scanner._update_status`, stays set through criticality, glossary and reading order | Progress view                                            |
+| `embedding` | `scanner.embed_repository_symbols`                                                  | Progress view                                            |
+| `analyzing` | nothing                                                                             | Unused                                                   |
+| `ready`     | `ingest_repository`                                                                 | Every page works; the graph endpoint stops answering 409 |
+| `failed`    | the task's `except` arm                                                             | Shows the error and offers re-ingest                     |
 
-## Progress and instrumentation
+A background sync never touches `status`; it has its own `sync_status` column. [Auto-update sync](sync.md#why-a-sync-keeps-status-ready) explains why.
 
-Progress frames are published to Redis on the channel `task:{repo_id}:logs`, and the WebSocket
-endpoint relays that channel verbatim.
+## Two orderings that are load-bearing
 
-Frames carry `stage=` and `phase=` when those fields apply, and the client renders node states from
-them rather than inferring anything from event names. The four LLM stages each publish an explicit
-`*_complete` frame rather than being assumed finished when something downstream starts.
+Both were wrong at some point, and the unit tests cannot catch either regression because they inject the values directly.
 
-Two kinds of frame deliberately omit a field:
+1. **`criticality` must follow `git_history`.** Scoring reads `File.git_last_modified` and `File.has_tests`. The parse stage deletes and re-inserts every file, so those columns are `NULL` and `False` until the git analyzer runs. Scoring first would grade every file as untouched and untested. The same rule applies on the sync path, where `_run_step_a` calls `analyze_git_history` before `run_criticality_scoring`.
+2. **The parse insert is idempotent.** `_flush_files` inserts with `ON CONFLICT (repository_id, path) DO NOTHING`, backed by the unique constraint `uq_file_repo_path`. Without it, two workers on the same repository (a retry racing a slow first attempt, or a re-ingest racing a sync) insert duplicate rows instead of failing.
 
-- The **failure frame** carries `phase=failed` and **no `stage`**, because the catch-all runs outside
-  the pipeline and genuinely cannot know which stage raised.
-- A few **status frames** carry a `stage` but no `phase`.
+A third ordering is real but less fragile: `cochange` must follow both `parse` (it maps paths to current file ids) and `git_history` (it reads `commits.changed_files_list`). It sits between them and `criticality` in both `run_full_analysis` and `_run_step_a`.
 
-See [websockets.md](../websockets.md) for the full frame contract.
+## Idempotency of each write
 
-### Per-stage instrumentation
+| Table              | Constraint                                                    | Conflict behaviour                                                                       |
+| ------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `files`            | `uq_file_repo_path (repository_id, path)`                     | `ON CONFLICT DO NOTHING` on ingest; `DO UPDATE` on the sync delta                        |
+| `ast_symbols`      | none                                                          | Not needed: the parent file is deleted first and the cascade takes the symbols           |
+| `dependencies`     | `uq_dependency_edge (source_symbol_id, target_symbol_id)`     | Plain insert; the cascade (ingest) or `delete_repo_edges` (sync) empties the table first |
+| `commits`          | `uq_commit_repo_hash (repository_id, hash)`                   | `ON CONFLICT DO NOTHING`                                                                 |
+| `pull_requests`    | `uq_pr_repo_number (repository_id, number)`                   | `ON CONFLICT DO NOTHING`                                                                 |
+| `code_owners`      | unique `file_id`                                              | `ON CONFLICT DO UPDATE` of owner, contributors and silo flag                             |
+| `file_cochange`    | primary key `(file_a_id, file_b_id)`                          | The repository's rows are deleted, then reinserted                                       |
+| `glossary_entries` | none                                                          | Full mode deletes the repository's entries first                                         |
+| `embeddings`       | `uq_embedding_source (repository_id, source_type, source_id)` | Full mode deletes every row first; incremental mode upserts                              |
 
-`services/_stage_timer.py` logs one `stage_timer` line per stage with its wall-clock time, a
-`tracemalloc` peak, and (on Linux) the `VmHWM` delta. To profile a run:
+## Progress and the live log
+
+Every stage publishes JSON frames to the Redis channel `task:{repo_id}:logs`, and the WebSocket endpoint relays them verbatim to the browser. Each frame carries `event`, `message`, `timestamp`, and (except the failure frame) a `stage` and a `phase` (`started`, `progress`, `done`, `failed`). The client drives its pipeline diagram from `stage` and `phase` alone. The complete frame catalogue is on [WebSockets](../interfaces/websockets.md).
+
+Two publishers exist and they do not behave the same:
+
+- `publish_log` in [`server/app/services/_publish.py`](../../server/app/services/_publish.py), used by every service, swallows Redis errors and logs a warning, and also writes an `INFO` line with the stage and phase so a worker-log grep lines up with what the browser saw.
+- The `publish` closure inside `ingest_repository`, used for the `*_started`/`*_complete` frames of the LLM stages and the terminal frames, calls `redis_client.publish` directly with no `try`. A Redis outage at that moment raises, which fails the task and triggers a retry.
+
+## Per-stage timing
+
+[`server/app/services/_stage_timer.py`](../../server/app/services/_stage_timer.py) logs one line per stage:
+
+```text
+stage_timer stage=parse wall=41.27s tracemalloc_peak=184736512 vmhwm_delta_kb=212044
+stage_timer stage=glossary wall=18.02s mem=not_measured
+stage_timer stage=glossary_and_reading_order_join wall=19.40s mem=not_measured
+```
+
+Concurrent stages pass `measure_memory=False` and log `mem=not_measured`, because both memory counters are process-global. Compare each concurrent stage's wall time with its `*_join` line: the join should land near the maximum of its members, not their sum. Grep a production worker with:
 
 ```bash
 docker logs illume-worker 2>&1 | grep stage_timer
 ```
 
-**Concurrent stages pass `measure_memory=False` and log `mem=not_measured`.** Both memory counters
-are process-global, so a delta measured across a window in which another thread was allocating would
-attribute that thread's allocations to this stage. For those stages, compare each one's wall-clock
-against the corresponding `*_join` line: a well-overlapped pair lands near `max()`, not the sum.
+What `tracemalloc_peak` does and does not mean is explained on [concurrency and failure](concurrency-and-failure.md#reading-the-stage-timer).
 
-## Troubleshooting
+## Failure, briefly
 
-**A repository is stuck in `parsing`, `cloning`, or `embedding` and never moves.**
+On any exception the task rolls back first, marks the row `failed`, publishes a failure frame with no `stage`, and raises `self.retry(exc=exc, countdown=10)`. With `max_retries=3` a repository is attempted at most four times, ten seconds apart. Each retry starts the pipeline from the clone. The push notification for a failure is sent only on the final attempt (`_is_final_attempt`). [Concurrency and failure](concurrency-and-failure.md#failure-and-retry) covers the failure path line by line, including the cases where a late failure throws away a completed analysis.
 
-The task died without setting `failed`. Check the worker log for the traceback. The most common cause
-is the worker being killed mid-run — an OOM, or a deploy restarting the container — which leaves the
-row as-is. Re-ingest is safe: the row is deleted and recreated, and every insert is idempotent.
+## Design trade-offs and limits
 
-**A repository is `failed` and retried four times.**
-
-Read the last traceback in the worker log. The failure frame carries no `stage`, so the traceback is
-the only place the failing stage is named.
-
-**Criticality looks wrong — everything is `safe`, or nothing is stale.**
-
-Almost always the scoring-before-git-history ordering. Confirm `git_history` appears before
-`criticality` in the `stage_timer` lines.
-
-**A stage's wall-clock time is roughly the sum of two concurrent stages rather than the max.**
-
-The overlap is not happening. Check that the helper is opening its own session, and that nothing
-raised immediately — an immediate failure makes `future.result()` return at once.
-
-**Memory spikes on a large repository.**
-
-Look for a `stage_timer` line with a large `tracemalloc` peak. `parse` and `generate_embeddings` are
-the two that scale with repository size — and the embedder's peak is a known defect: it loads the
-repository's rows into memory rather than streaming them.
-Concurrent stages cannot report memory by design, so check the container's own memory usage too.
-
-**Ingestion reaches `ready` but a later stage's data is missing.**
-
-Only the brief can be missing on a `ready` repository: it degrades to a placeholder string rather
-than raising. A missing glossary or reading order means the run did **not** succeed — those stages
-propagate their failures.
-
-## Design decisions and trade-offs
-
-### Why overlap stages rather than run them sequentially?
-
-Because the pipeline is dominated by waiting: network calls to GitHub, to the model provider, and to
-the embedding API. The box is memory-constrained but has idle CPU, so a bounded thread pool buys
-wall-clock for almost nothing.
-
-The cost is that Stage A is a real concurrency problem, and every future stage must be written with
-the session rule in mind. The overlap is a deliberate trade of simplicity for time.
-
-### Why the "scalars only, own session" rule instead of locking?
-
-Because a SQLAlchemy session is not thread-safe, and a shared one fails unpredictably rather than
-reliably — it might work in testing and corrupt state under load. Passing only scalars removes the
-possibility structurally rather than guarding against it.
-
-The cost is that each thread re-loads what it needs, and credentials must be threaded explicitly
-through every generation call.
-
-### Why does the parser delete all files rather than diff them?
-
-Because on a full parse there is nothing to diff against — the row may have been ingested months ago
-by a different code version, and reconciling two arbitrary states is far more complex than rebuilding
-one. Deleting and re-inserting is simple, and the cascade removes the symbols, edges and ownership
-rows that would otherwise go stale.
-
-The cost is that a full parse throws away work it could theoretically have reused, which is exactly
-what the [sync](sync.md) path exists to avoid.
-
-### Why batch commits mid-parse instead of committing once?
-
-Because a large repository's parse can take minutes, and holding one transaction open that long
-holds locks and grows the WAL. Committing every 500 files bounds both.
-
-The cost is that a crashed parse leaves a partial file set behind — which is why the `files` unique
-constraint and `ON CONFLICT DO NOTHING` matter. A retry has to tolerate half the work already being
-there.
-
-### Why is `delete_repo_edges` not used on the full-parse path?
-
-Because the cascade already does it. Deleting every `File` row cascades through `ast_symbols` to both
-endpoint columns of every `Dependency` edge, so the edges are gone before `resolve_dependencies` runs.
-Calling `delete_repo_edges` as well would be a redundant whole-table delete.
-
-It exists for the sync path, where files are *not* deleted and the edges have to be cleared
-explicitly.
-
-### Why does the failure handler roll back before anything else?
-
-Because the alternative is a repository frozen forever in a status it never left. Without the
-rollback, the reload query raises `PendingRollbackError`, the bare `except` swallows that too, and
-the status write never happens — so the row keeps whatever stage it reached and the UI polls it
-indefinitely.
-
-This is the single most consequential line in the error path, and it is easy to reorder by accident
-when adding logging above it.
-
-### Why retry at all, rather than fail immediately?
-
-Because the most common ingestion failures are transient: a GitHub rate limit, a clone timeout, a
-provider hiccup. Retrying three times with a fixed delay converts most of those into successes.
-
-The cost is that a genuinely broken repository is attempted four times over forty seconds, which is
-why the count is small and why the sync path takes the opposite approach — see
-[sync.md](sync.md#why-does-a-failed-sync-disable-itself-instead-of-retrying-forever).
-
-### Why do concurrent stages not report memory?
-
-Because both memory counters — `tracemalloc` and `VmHWM` — are process-global. A delta measured
-across a window in which another thread was allocating attributes that thread's allocations to this
-stage, producing a number that looks precise and means nothing.
-
-Recording `mem=not_measured` is the honest option: it tells the reader the number is unavailable
-rather than giving them a wrong one.
-
-### Why publish progress best-effort?
-
-Because the progress stream is a report about the work, not part of it. A Redis blip failing an
-otherwise complete analysis would be the tail wagging the dog.
-
-The cost is that the guarantee is not uniform — the task's own publisher closure calls
-`redis_client.publish` directly, with no `try`/`except`, so pipeline-level frames do not have the same
-protection as the sub-service ones.
+- **One task, not a Celery chain.** A chain would let stages retry independently, but each link would need to reload state and the overlap would need a chord. One task keeps the session, the clone and the scalars in one place. The cost is that a failure anywhere restarts everything from the clone.
+- **Full rebuild on every ingest.** The parse stage deletes every file first. There is nothing to diff against on a first ingest, and reconciling an arbitrary old state is far more complex than rebuilding. The [sync path](sync.md) exists for the incremental case.
+- **Only imports become edges.** `dep_type` allows `calls`, `inherits` and `instantiates`, but the resolver only ever writes `imports`, so the call graph is never captured and the `Called by:` and `Calls:` lines in symbol chunks are always empty.
+- **No size cap on what is ingested.** There is no limit on file count or repository size beyond the clone cache's per-repository ceiling (which only decides cache versus ephemeral). A very large repository is bounded only by the worker's memory, which is why the worker runs one task at a time.
+- **PR fetch can fail a finished analysis.** The PR thread is joined after the embedder and the brief. A `GitHubClientError` raised there marks the row failed and retries the whole pipeline, even though every other stage succeeded.
+- **The PR join is late, so embeddings may miss PRs.** PR rows are written by the PR thread, but the embedder reads `pull_requests` whenever it reaches that source type. If the PR fetch is still sleeping on a rate limit when embedding starts, those PRs exist in the table but have no vectors until the next full re-embed.
+- **`analyzing` is a dead enum value**, and `parsing` stays set through several stages that are not parsing.
 
 ## Related documentation
 
-- [sync.md](sync.md) — the incremental path, which reuses these stages and adds the lease, the
-  watermarks, and the full-rebuild escalation.
-- [generation.md](generation.md) — the credential model and the four LLM services this pipeline
-  dispatches.
-- [retrieval.md](retrieval.md) — what `generate_embeddings` writes, and how chunking decides it.
-- [graph.md](graph.md) — what the dependency edges this pipeline builds are turned into.
-- [git-intelligence.md](git-intelligence.md) — the `git_history` and `criticality` stages in
-  detail.
-- [websockets.md](../websockets.md) — the frame contract the progress stream follows.
+- [Concurrency and failure](concurrency-and-failure.md): the thread pools, the scalars-only rule, the stage timer and the failure path in full.
+- [Parsing and dependencies](parsing-and-dependencies.md): tree-sitter, symbol kinds, import resolution and fan metrics.
+- [Git intelligence](git-intelligence.md): history mining, ownership, co-change, test detection and criticality.
+- [Generation](generation.md): the glossary, the reading order and the brief.
+- [The index and embeddings](../retrieval/index-and-embeddings.md): what the embedder writes.
+- [Auto-update sync](sync.md): the incremental path that reuses these stages.
+- [WebSockets](../interfaces/websockets.md): every progress frame.

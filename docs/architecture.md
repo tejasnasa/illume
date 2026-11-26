@@ -1,321 +1,207 @@
 # Architecture
 
-Illume turns a GitHub repository into an interactive onboarding workspace. It clones the repository
-and parses it into symbols with tree-sitter, then builds a dependency graph between files. It mines
-the git history for ownership and change patterns, and scores every file for criticality. Finally, a
-language model writes a glossary, an ordered reading path, and an architecture brief. All of it is
-served through a web application with a 3D dependency graph and a chat interface that answers
-questions from the code itself.
+Illume turns a GitHub repository into an onboarding kit: a dependency graph, ownership and risk scores, a glossary, a reading order, an architecture brief, and a chat that answers questions from the code with citations. This page describes the whole system on one page: the processes, how a repository moves through them, the main request paths, where state lives, who pays for each model call, and the design decisions that shape everything else. Each section links to the page that covers its subject in depth.
 
-This is the entry point to the documentation. It explains how the system is put together, what happens
-when someone uses it, and which decisions shaped it — so a reader can go to the right document instead
-of reading all of them.
+## Terms used on this page
 
-If you are reading for the first time, [The two applications](#the-two-applications) and
-[The four flows](#the-four-flows) are the map. If you are preparing to discuss the system,
-[Design decisions and trade-offs](#design-decisions-and-trade-offs) collects the reasoning.
+- **Ingest**: the background task that clones a repository, analyses it and writes every artefact. It runs once when a repository is added and again on a re-ingest.
+- **Sync**: the background task that brings an ingested repository up to its remote head, rebuilding only what changed.
+- **Snapshot**: the branch and commit an ingest or sync analysed. Everything Illume shows describes the snapshot, not the live repository.
+- **Artefact**: anything the pipeline writes for a repository: files, symbols, edges, scores, glossary, reading order, brief, embeddings.
+- **Preset**: a named retrieval configuration that chat runs, from `classic` (one vector search) to `deep_agent_workers` (a planner fanning out to tool-using workers).
+- **BYOK**: bring your own key. A user's own model-provider key, stored encrypted, which pays for that user's generation and chat.
+- **MCP**: the Model Context Protocol, which lets AI coding tools call Illume's tools from outside the web app.
 
-## Contents
-
-- [The two applications](#the-two-applications)
-  - [Why two](#why-two)
-- [Repository layout](#repository-layout)
-- [The four flows](#the-four-flows)
-  - [Adding a repository](#adding-a-repository)
-  - [Keeping it current](#keeping-it-current)
-  - [Asking a question](#asking-a-question)
-  - [Loading a page](#loading-a-page)
-- [Where state lives](#where-state-lives)
-- [Auth is the spine](#auth-is-the-spine)
-- [Cross-cutting conventions](#cross-cutting-conventions)
-  - [Async and sync are split by caller](#async-and-sync-are-split-by-caller)
-  - [No session crosses a thread](#no-session-crosses-a-thread)
-  - [Idempotency is enforced by the database](#idempotency-is-enforced-by-the-database)
-  - [Configuration is environment-only](#configuration-is-environment-only)
-- [Known limits](#known-limits)
-- [Design decisions and trade-offs](#design-decisions-and-trade-offs)
-- [Related documentation](#related-documentation)
-
-## The two applications
-
-| | `server/` | `client/` |
-| --- | --- | --- |
-| What | FastAPI API, Celery workers, the analysis pipeline | Next.js application |
-| Language | Python 3.14 | TypeScript, React 19 |
-| Serves | HTTP API, one WebSocket | Every page a user sees |
-| Deployed | Three containers on a droplet | Separately |
-
-They communicate two ways: the browser calls the API directly at an absolute URL, and server
-components forward the incoming cookie to the API on the user's behalf. There is no proxy layer and no
-BFF.
-
-### Why two
-
-Because the analysis is long-running, CPU- and memory-heavy, and has nothing in common with rendering
-a React page. Ingestion shells out to `git`, runs tree-sitter over thousands of files, and holds
-hundreds of megabytes at peak — that work cannot live inside a Next.js request, and it must survive
-the request that started it.
-
-The cost is a second deployment, a second toolchain, and the CORS and cookie arrangement described
-below.
-
-## Repository layout
-
-```
-illume/
-├── client/                     Next.js 16 — App Router
-│   ├── src/app/                routes: dashboard, settings, contact, repo/[id]/{explorer,glossary,graph}
-│   ├── src/api/                server-side fetchers (cookie forwarded)
-│   ├── src/actions/            server actions ("use server")
-│   ├── src/components/         UI, including the three graph components
-│   ├── src/hooks/              client hooks
-│   └── src/proxy.ts            the middleware auth gate
-│
-├── server/                     FastAPI + Celery
-│   ├── app/api/v1/             11 routers under /api/v1
-│   ├── app/core/               config, both database engines, security, Celery, Redis, health
-│   ├── app/middleware/         AuthMiddleware — the JWT cookie gate
-│   ├── app/models/             12 SQLAlchemy models
-│   ├── app/services/           the domain logic (parser, graph, embedder, rag, sync helpers)
-│   ├── app/tasks/              Celery: ingest, sync, the auto-update sweep
-│   ├── alembic/                24 migrations, one linear chain
-│   └── tests/                  pytest
-│
-└── docs/                       this documentation
-```
+## The system at a glance
 
 ```mermaid
-flowchart TD
-    subgraph FE["client/ — Next.js on :3000"]
-        PAGES["server components<br/>pages and layouts"]
-        ACTIONS["server actions<br/>mutations"]
-        CLIENT["client components<br/>hooks and forms"]
+flowchart TB
+    subgraph CLIENTS["Clients"]
+        WEB["Web client<br/>Next.js 16"]
+        MOB["Mobile app<br/>Expo"]
+        AI["AI coding tools<br/>MCP clients"]
+        LOC["mcp-local<br/>stdio launcher"]
     end
-
-    subgraph BE["server/ — FastAPI on :8000"]
-        ROUTES["api/v1 routers"]
-        MW["AuthMiddleware"]
-        SERVICES["services/<br/>parser, graph, embedder, rag"]
+    subgraph DROPLET["Backend host"]
+        API["API<br/>FastAPI + /mcp"]
+        WRK["Worker<br/>Celery, one process"]
+        BEAT["Beat<br/>Celery scheduler"]
+        CACHE[("Clone cache<br/>bind mount")]
     end
-
-    CP["Celery worker<br/>+ beat"]
-    PG[("PostgreSQL<br/>+ pgvector")]
+    PG[("Postgres<br/>+ pgvector")]
     RD[("Redis")]
-
-    PAGES -->|"forwards the browser's cookie"| ROUTES
-    ACTIONS -->|"forwards the cookie header"| ROUTES
-    CLIENT -->|"direct fetch, credentials: include"| ROUTES
-    ROUTES --> MW --> ROUTES
-    ROUTES --> SERVICES --> PG
-    ROUTES --> RD
-    CP --> PG
-    CP <-->|"progress pub/sub"| RD
+    GH["GitHub<br/>git and REST"]
+    OAI["OpenAI<br/>embeddings"]
+    GEN["Generation provider<br/>user key or free tier"]
+    OR["OpenRouter<br/>rerankers and decisions"]
+    WEB -->|"cookie JWT, HTTP, WebSocket, SSE"| API
+    MOB -->|"bearer JWT"| API
+    AI -->|"MCP token"| API
+    LOC -->|"MCP token"| API
+    AI -.->|"stdio"| LOC
+    API --> PG
+    API --> RD
+    WRK --> PG
+    WRK --> RD
+    BEAT --> RD
+    WRK --> CACHE
+    WRK --> GH
+    API --> GH
+    WRK --> OAI
+    API --> OAI
+    WRK --> GEN
+    API --> GEN
+    API --> OR
 ```
 
-## The four flows
+| Part         | What it is                                                                                                              | Code                                                                   | In depth                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------- |
+| API          | FastAPI app: 16 routers, the ingest WebSocket, the chat event stream, and the MCP server at `/mcp`                      | [`server/app/main.py`](../server/app/main.py)                          | [API reference](api.md)                   |
+| Worker       | one Celery process consuming the `celery` queue (ingests) and the `sync` queue (updates)                                | [`server/app/tasks/`](../server/app/tasks/)                            | [ingestion](pipeline/ingestion.md)        |
+| Beat         | Celery's scheduler: the auto-update sweep every 10 minutes and a nightly prune of agent steps                           | [`app/tasks/autoupdate.py`](../server/app/tasks/autoupdate.py)         | [auto-update](pipeline/sync.md)           |
+| Postgres     | every artefact, every account, chat history and agent runs; pgvector for embeddings, `pg_trgm` and full-text for search | [`server/app/models/`](../server/app/models/)                          | [data model](reference/data-model.md)     |
+| Redis        | Celery broker and results, the ingest progress channel, agent run slots and rate limits                                 | [`app/core/redis.py`](../server/app/core/redis.py)                     | [WebSockets](interfaces/websockets.md)    |
+| Web client   | server components for reads, client components for live views, the 3D graph, chat                                       | [`client/`](../client/)                                                | [frontend overview](frontend/overview.md) |
+| Mobile app   | a separate React Native app with its own API client and a three.js graph                                                | [`mobile/`](../mobile/)                                                | [mobile app](mobile/overview.md)          |
+| MCP          | tools, resources and prompts for AI coding tools, plus a local stdio launcher                                           | [`server/app/mcp/`](../server/app/mcp/), [`mcp-local/`](../mcp-local/) | [MCP server](mcp/server.md)               |
+| Eval harness | an offline harness that measures the presets on mined questions                                                         | [`server/evals/`](../server/evals/)                                    | [eval harness](evals/harness.md)          |
 
-### Adding a repository
+## The life of a repository
 
-`POST /api/v1/repository` writes a `Repository` row and queues a Celery task. The response is `202` —
-the work is asynchronous. The browser then opens a WebSocket and watches progress frames as the worker
-moves through the pipeline.
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> pending: POST /api/v1/repository
+    pending --> cloning: worker picks up the ingest
+    cloning --> parsing
+    parsing --> embedding
+    embedding --> ready
+    cloning --> failed
+    parsing --> failed
+    embedding --> failed
+    ready --> ready: auto-update sync
+    ready --> pending: reingest
+    failed --> pending: reingest
+```
 
-The full treatment is in [pipeline/ingestion.md](pipeline/ingestion.md). The essential shape: stages
-run in dependency order, three pairs of them overlap on thread pools, and the repository becomes
-`ready` only after the LLM phase completes.
+1. **Add.** The API validates the GitHub URL, charges a free ingestion if the user has no key, inserts the row as `pending`, and queues `ingest_repository`.
+2. **Ingest.** The worker runs [`run_full_analysis`](../server/app/services/pipeline.py) after the clone. The stages are deterministic first (parse, resolve imports, fan-in and fan-out, stack, git history, co-change, criticality) and model-backed second (glossary and reading order together, then embeddings and the brief together). Each stage publishes progress frames that the browser receives over a WebSocket. See [ingestion](pipeline/ingestion.md).
+3. **Use.** At `ready`, the pages, the graph, chat and MCP all read the stored artefacts. Nothing at request time touches the repository itself, except the agent's `read_file` tool, which fetches a file from GitHub at the ingested commit.
+4. **Keep current.** With auto-update on, the beat process sweeps for due repositories and the worker syncs each one. A sync keeps `status = 'ready'` and swaps the graph in one transaction, so readers see the old version or the new one and never a mix of both. See [auto-update](pipeline/sync.md).
+5. **Re-ingest.** This deletes the row and every child row, then recreates it with the same id and number and runs the full ingest again.
 
-### Keeping it current
+## Request paths
 
-A per-repository switch enables background updates. Celery beat sweeps every ten minutes for
-repositories whose next update is due, claims each with a conditional update, and dispatches a worker
-task. The worker refreshes the clone, reads the head commit, and — if both of the repository's
-watermarks already match — stops immediately.
+### A page load
 
-Otherwise it reprocesses only what changed, escalating to a full rebuild when the diff is unusable or
-large. See [pipeline/sync.md](pipeline/sync.md).
+Server components fetch from the API on the Next.js server, forwarding the browser's cookie. Client components fetch directly from the browser with `credentials: "include"`. Nothing is cached: every fetch is `cache: "no-store"`. See [frontend overview](frontend/overview.md#data-fetching).
 
-### Asking a question
+### A chat question
 
-The chat embeds the question, retrieves the nearest chunks from the index built at ingest time,
-narrows them with per-type caps, and asks a model to answer from those chunks alone. History is
-replayed as real conversation turns. See [pipeline/retrieval.md](pipeline/retrieval.md).
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant A as API
+    participant R as Retrieval
+    participant G as Agent
+    participant M as Model provider
+    B->>A: POST chat/stream with question, preset and conversation
+    A->>A: resolve the key, claim a free message if keyless, take a run slot
+    alt single-shot preset
+        A->>R: rewrite, search channels, fuse, rerank, diversify
+        R-->>A: ranked evidence
+        A->>M: answer from the evidence with citation keys
+    else agent preset
+        A->>G: seed retrieval, then tool calls in a loop
+        G->>M: decide the next tool, read results, repeat
+        G->>M: synthesise the answer
+    end
+    A-->>B: server-sent events with steps, graph nodes, answer and sources
+    A->>A: persist the turn and the run
+```
 
-### Loading a page
+The `auto` choice first asks a decision model what kind of question it is and then runs the matching preset. See [chat](retrieval/chat.md), [retrieval arms](retrieval/retrieval-arms.md), [the chat agent](retrieval/agent.md) and [the router](retrieval/router.md).
 
-Server components fetch through `src/api/*` with the browser's cookie forwarded; client components
-fetch the API directly with `credentials: "include"`. Both strategies exist for good reasons — see
-[frontend.md](frontend.md#data-fetching-three-strategies-deliberately).
+### An MCP call
+
+An AI tool sends a JSON-RPC request to `/mcp` with a personal token. The MCP layer authenticates the token, applies per-user rate limits, resolves the `repo` argument to one of the token owner's repositories, and calls the same tool registry the chat agent uses. `ask_illume` runs a whole chat answer. See [the MCP server](mcp/server.md).
 
 ## Where state lives
 
-| State | Lives in | Lifetime |
-| --- | --- | --- |
-| Users, repositories, all analysis data | PostgreSQL | Until deleted |
-| Embeddings | PostgreSQL, via pgvector | Rebuilt on re-analysis |
-| Session identity | A JWT in an `access_token` cookie | Until the token's `exp` |
-| Task queue and results | Redis | Task-scoped |
-| Live progress frames | Redis pub/sub, channel `task:{repo_id}:logs` | Fire-and-forget |
-| Clone cache | Disk, `/tmp/illume/clone_cache` | Until evicted at 2 GiB |
-| Beat's schedule | A file at `/var/illume/celerybeat-schedule` | Until the file is lost |
+| State                              | Where                                                                         | Lifetime                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| accounts, keys (encrypted), tokens | Postgres `users`, `mcp_tokens`, `push_tokens`                                 | until the account is deleted                               |
+| repository artefacts               | Postgres, every child table keyed by `repository_id` with `ON DELETE CASCADE` | until re-ingest or delete                                  |
+| chat history and agent runs        | Postgres `conversations`, `chat_messages`, `agent_runs`, `agent_steps`        | agent steps are pruned nightly                             |
+| progress frames                    | Redis pub/sub channel `task:{repo_id}:logs`                                   | not stored: a subscriber that is not listening misses them |
+| task queue                         | Redis                                                                         | until the worker acknowledges a task                       |
+| clones                             | the clone cache on a host bind mount, or a temporary directory                | the cache is evicted least-recently-used                   |
+| the beat schedule                  | a file on a host bind mount                                                   | across deploys                                             |
+| the web session                    | an httponly `access_token` cookie                                             | `ACCESS_TOKEN_EXPIRE_MINUTES`                              |
 
-The last two are the ones that need infrastructure help: both live on disk inside containers, so both
-are bind-mounted in production. Without those mounts every deploy destroys the clone cache and resets
-the beat cadence. See [deployment.md](deployment.md).
+## Async and sync, split by caller
 
-## Auth is the spine
+The most important code convention: **FastAPI routes use the async engine (`asyncpg`), and Celery tasks and Alembic use the sync engine (`psycopg2`).** Both engines are in [`app/core/database.py`](../server/app/core/database.py). A service takes the flavour of its caller, so a few exist twice. `file_graph.py`, for example, exports both `query_file_edges` and `query_file_edges_async`.
 
-Every request passes through `AuthMiddleware`, which decodes the `access_token` cookie into
-`request.state.user_id` — except on an allow-list of public paths. Routers then either read that
-attribute or take a `get_current_user` dependency, and ownership is enforced by filtering `user_id` in
-each query rather than by any ORM-level scoping.
+| Async (routes, MCP, chat)                                                          | Sync (worker, Alembic)                                                                                                                                                                    |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `graph_builder`, `rag`, `illume_exporter`, `retrieval/`, `agent/`, `conversations` | `scanner`, `dependency_resolver`, `embedder`, `glossary_builder`, `onboarding`, `architecture_brief`, `git_analyzer`, `pr_fetcher`, `cloner`, `criticality`, `cochange`, `stack_detector` |
 
-Two consequences worth knowing early:
+The reason is the callers. The API serves many requests on one event loop and must not block. The worker runs one long task at a time and gains nothing from an event loop, but it does run some stages on threads, which the sync engine handles simply. Settings are always imported as `from app.core.config import settings`, never constructed.
 
-- **There is no global scoping.** A route that forgets the `user_id` filter is a data leak, not a bug
-  that fails loudly. The ownership check is the one thing that must not be omitted on a new endpoint.
-- **Ownership failures return `404`, not `403`.** A `403` would confirm the resource exists, leaking
-  the existence of other users' repositories.
+## Concurrency
 
-The full picture, including the OAuth flow and the BYOK credential store, is in [auth.md](auth.md).
+- **The worker runs one task at a time** (`--concurrency=1`). An ingest peaks at several hundred megabytes, and a second concurrent ingest would multiply that on a small machine. Syncs and ingests share that one process, so they serialise.
+- **Inside an ingest, some stages overlap on threads**: pull-request fetching overlaps the parse and git analysis, the glossary overlaps the reading order, and embeddings overlap the brief. Every overlapped stage receives only scalars (`repo_id`, `github_url`, an `LLMConfig`) and opens its own database session. No session or ORM object crosses a thread. See [concurrency and failure](pipeline/concurrency-and-failure.md).
+- **The API is async**, and an agent run is bounded by per-user run slots in Redis and by budgets on turns, tool calls, tokens and time. Its parallel tool calls each get their own session.
 
-## Cross-cutting conventions
+## Who pays for each model call
 
-### Async and sync are split by caller
+| Call                                      | Credential                                            | Why                                                                                       |
+| ----------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| embeddings (ingest, sync, every question) | the operator's `OPENAI_API_KEY`, always               | the vector dimension (1536) is part of the schema, so every repository must use one model |
+| glossary, reading order, brief            | the owner's key, or the operator's free-tier key      | the cost scales with the user's repositories                                              |
+| chat answers and agent turns              | the asking user's key, or the free tier (10 messages) | the same                                                                                  |
+| rerankers, decisions, the auto router     | the operator's `OPENROUTER_API_KEY`                   | small, fixed-size calls; when the key is missing, each falls back                         |
 
-FastAPI routes use the async engine (asyncpg). Celery tasks and Alembic use the sync engine
-(psycopg2). Both live in `app/core/database.py`.
+The choice is made once per request or task and carried as a frozen `LLMConfig` through every service and thread. It is never stored in a context variable, because threads do not inherit those. See [BYOK and encryption](security/byok-and-encryption.md).
 
-The consequence is that some services exist in two flavours, and the rule for a new service is *match
-the flavour of your caller*.
+## Security boundaries
 
-**Why:** the alternative is one engine everywhere, which means either making the workers fully async —
-Celery is a sync framework, so this fights the tooling — or making the routes sync, which blocks the
-event loop under load. **The cost** is duplication, and the risk of writing a service in the wrong
-flavour, which surfaces as a runtime error rather than a compile error.
+- **Authentication** is a JWT in an httponly cookie for the web, the same JWT as a bearer header for mobile, and separate revocable tokens for MCP. `AuthMiddleware` decodes it once per request. See [authentication](security/auth.md).
+- **Ownership** is a `user_id` filter in every query, and another user's repository returns 404, never 403. A test derives every repository-scoped route from the app and proves each one rejects other users.
+- **Stored credentials** (AI keys and GitHub tokens) are encrypted with AES-256-GCM under `CREDENTIAL_ENCRYPTION_KEY`.
+- **Untrusted repositories**: git runs with prompts disabled and the global and system configuration ignored. Repository text reaches models only inside fenced `<source>` blocks.
+- **Known issues** are listed in [authentication](security/auth.md#known-security-issues): prefix-matched public paths, the WebSocket token in a query parameter, and no rate limiting on login or register.
 
-### No session crosses a thread
+## Design decisions
 
-The pipeline runs three pairs of stages concurrently. The rule that makes this safe is not exception
-handling — it is that **no database session is ever shared across threads**. Every overlapped helper
-receives only scalars and opens its own session.
+| Decision                                                           | Why                                                                                                             | Cost                                                              |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| one ingest task with overlapped stages, not a Celery chain         | one place owns status, retries and cleanup, and overlapped stages buy wall-clock time without a second process  | a failure anywhere retries everything                             |
+| the deterministic half needs no model                              | the graph, scores and ownership work even when every provider is down                                           | the model-backed artefacts can be missing while the graph is fine |
+| store the snapshot, answer from it                                 | answers, citations and the graph agree with each other and are reproducible                                     | answers lag the live repository until the next sync               |
+| syncs keep `status = 'ready'` and swap the graph transactionally   | the product stays usable during an update                                                                       | a sync shows no live progress                                     |
+| a configurable retrieval pipeline instead of one method            | presets can be compared on the same questions, and the eval harness measures them                               | more code paths to test; channels run one after another           |
+| one tool registry for the agent and MCP                            | a tool written once works in chat and in outside tools                                                          | one description has to suit both audiences                        |
+| BYOK with a small free tier                                        | users try it without a key, and heavy use is paid by the user                                                   | the operator pays for embeddings for everyone                     |
+| real Postgres and Redis in tests, fakes only for OpenAI and GitHub | the defects this project has hit were query, constraint and schema defects that a mocked database cannot report | tests need Docker                                                 |
+| one droplet, three containers                                      | simple and cheap                                                                                                | no redundancy; a deploy interrupts running tasks                  |
 
-**Why:** a SQLAlchemy session is not thread-safe, and a shared one fails unpredictably rather than
-reliably. **The cost** is that each thread re-loads what it needs, and credentials must be passed
-explicitly — which is why `LLMConfig` is a frozen dataclass rather than a contextvar.
+## Design trade-offs and limits
 
-### Idempotency is enforced by the database
-
-Concurrent ingestion of the same repository is made safe by unique constraints and `ON CONFLICT`
-clauses, not by application-level locking.
-
-**Why:** two workers can always race — a re-ingest during a sync, or a retried task. A constraint holds
-under every interleaving; a check-then-insert does not. **The cost** is that the schema now carries
-correctness weight, so the constraints are documented as invariants in
-[data-model.md](data-model.md).
-
-### Configuration is environment-only
-
-A single `Settings` class reads the process environment and a `.env` file. Every field is required
-except three, which means anything importing `app.core.config` needs a complete environment.
-
-**Why:** it removes a class of "works on my machine" divergence, and makes a missing variable a
-startup failure rather than a runtime surprise. **The cost** is that a fresh checkout, a CI job, or a
-standalone script fails with a validation error unless the variables are set — which is why
-`llm_providers.py` and the OpenAI stub server deliberately import no configuration at all.
-
-The converse convention is that **tunables live in code, not in `Settings`**. Sync intervals, cache
-ceilings, quota limits, and analysis caps are module-level constants, because adding a `Settings` field
-is another way for an unrelated process to fail to start. A code change plus a deploy is the intended
-way to change them, and each is documented next to the behaviour it controls rather than in a central
-list.
-
-## Known limits
-
-Recorded so a reader is not surprised by them. These are design boundaries, not defects.
-
-- **The graph payload has no node cap and no cache.** A large repository produces a large response,
-  rebuilt on every request.
-- **Long code chunks are skipped, not truncated.** A function over the token limit is absent from the
-  search index entirely.
-- **The call graph does not exist.** The dependency table declares `calls`, `inherits` and
-  `instantiates`, but only `imports` is ever written — so the embedder's `Called by:` and `Calls:`
-  lines are always empty.
-- **Test detection is name-based**, so unconventional test names are missed.
-- **Re-ingest deletes and recreates** the repository row, cascading away every child row.
-
-## Design decisions and trade-offs
-
-### Why a separate backend instead of API routes inside Next.js?
-
-Because ingestion is a long-running job with different resource characteristics from a page render. It
-shells out to `git`, parses thousands of files, and holds hundreds of megabytes at peak. Putting it in
-a Next.js route would tie it to the request lifecycle, and the request that started it would be gone
-long before the work finished.
-
-The separate app also lets the worker run on a box sized for memory rather than for serving pages.
-
-### Why does the browser call the API directly instead of through a proxy?
-
-Because a proxy would double every payload — the graph response, the chat answer, the live progress
-frames — and add a hop for no benefit. The cost is CORS pinned to a single configured origin, and
-cookies that have to be forwarded explicitly on the server side.
-
-The mixed model that results — some fetches server-side with the cookie forwarded, some client-side
-with `credentials: "include"` — is the price of both.
-
-### Why is `status` separate from `sync_status`?
-
-Because they mean different things to different readers. `status` is the user-visible lifecycle, and
-the graph endpoint, the nav and the progress view all key off it. `sync_status` is a narrow state
-machine for a background update that only the settings panel reads.
-
-Keeping them apart is what allows a background update to run without changing `status` — so the
-product stays usable while it happens.
-
-### Why does ownership return 404 rather than 403?
-
-Because a `403` confirms the resource exists. An attacker enumerating repository ids could distinguish
-"exists but not mine" from "does not exist", which leaks the existence of other users' repositories.
-
-The cost is that a legitimate user who mistypes an id cannot tell the two cases apart either. That is
-the intended trade, and it is why the API documents "not found" and "not mine" as the same condition.
-
-### Why two graph joins instead of one?
-
-Because they want different outputs, and they had already drifted. One needs collapsed counts and a
-dominant edge type; the other needs a streaming adjacency map it can fold into integers.
-
-The cost is that a change to edge derivation must be checked in both places — which is the kind of
-duplication that is only acceptable while it stays visible. See
-[pipeline/graph.md](pipeline/graph.md#one-join-two-implementations).
-
-### Why is progress publishing best-effort but contact email is not?
-
-These two are opposites, deliberately. Progress frames are published inside a swallowed exception:
-losing one must never fail the analysis that is reporting on itself. The contact form does the
-reverse — every mail failure raises, because the request's only product *is* the email, and a
-swallowed failure means the operator never learns a visitor wrote while the visitor is told it was
-sent.
-
-The correct failure behaviour depends on whether the side effect is the point of the request or an
-observation about it.
-
-### Why is the deploy gated on CI rather than on the push?
-
-Because it removes the window in which a red build could reach production, and it means the image is
-built from the exact commit CI validated.
-
-The cost is accepted deliberately: a documentation-only commit still rebuilds and restarts the
-containers, costing a few seconds of API downtime. A missed backend deploy costs more than a brief
-restart.
+- **Single machine.** The API, worker and beat share one host. A large ingest competes with request handling for memory, and a host outage is a full outage.
+- **No call graph.** The dependency resolver writes only `imports` edges, so "who calls this function" is answered by search, not by a graph.
+- **Snapshots lag.** An answer can describe code that has since changed; chat marks such answers as stale when the snapshot moves.
+- **Lost frames.** Progress is pub/sub without storage, so a browser that connects late sees only later frames, and reconstructs earlier ones from the row's status.
+- **Killed ingests need a hand.** Syncs have a lease that expires; ingests do not, so a worker killed mid-ingest leaves a row that needs a manual fix ([runbook](operations/runbook.md#a-repository-shows-progress-forever)).
+- **The judge is unvalidated.** The eval harness's judged metrics have not yet been checked against hand labels, so judged results are exploratory ([judging](evals/judging-and-statistics.md#validating-the-judge)).
 
 ## Related documentation
 
-- [pipeline/ingestion.md](pipeline/ingestion.md) — the analysis, stage by stage.
-- [pipeline/sync.md](pipeline/sync.md) — background updates, locking and watermarks.
-- [pipeline/generation.md](pipeline/generation.md) — the LLM services and the credential model.
-- [pipeline/retrieval.md](pipeline/retrieval.md) — the index and the chat.
-- [pipeline/graph.md](pipeline/graph.md) — the dependency graph and its rendering.
-- [data-model.md](data-model.md) — the schema, its constraints and its migrations.
-- [auth.md](auth.md) — authentication, authorisation and the credential store.
-- [deployment.md](deployment.md) — the containers, the CI/CD pipeline, and what survives a deploy.
+- [Documentation index](README.md): every page and the glossary.
+- [Repository layout](getting-started/repository-layout.md): where each part lives.
+- [Ingestion](pipeline/ingestion.md): the pipeline in depth.
+- [Chat](retrieval/chat.md): how questions are answered.
+- [API reference](api.md): every route.
+- [Deployment](operations/deployment.md): the containers in production.

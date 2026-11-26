@@ -34,23 +34,101 @@ export const INDEX_SLUG = "README";
  * missing from every group is still listed, under {@link OTHER_SECTION}.
  */
 export const DOC_SECTIONS = [
-  { title: "Foundations", slugs: ["architecture", "data-model"] },
+  {
+    title: "Start here",
+    slugs: [
+      "architecture",
+      "getting-started/local-setup",
+      "getting-started/first-ingest",
+      "getting-started/repository-layout",
+    ],
+  },
   {
     title: "The pipeline",
     slugs: [
       "pipeline/ingestion",
+      "pipeline/parsing-and-dependencies",
       "pipeline/git-intelligence",
-      "pipeline/sync",
       "pipeline/generation",
-      "pipeline/retrieval",
-      "pipeline/graph",
+      "pipeline/concurrency-and-failure",
+      "pipeline/clone-cache",
+      "pipeline/sync",
     ],
   },
   {
-    title: "Interfaces",
-    slugs: ["api", "websockets", "exports", "frontend", "mobile"],
+    title: "Search and chat",
+    slugs: [
+      "retrieval/index-and-embeddings",
+      "retrieval/retrieval-arms",
+      "retrieval/chat",
+      "retrieval/agent",
+      "retrieval/router",
+    ],
   },
-  { title: "Supporting systems", slugs: ["auth", "deployment", "testing"] },
+  {
+    title: "The graph",
+    slugs: ["graph/dependency-graph", "graph/rendering"],
+  },
+  {
+    title: "Interfaces",
+    slugs: [
+      "api",
+      "interfaces/websockets",
+      "interfaces/illume-export",
+      "mcp/server",
+    ],
+  },
+  {
+    title: "Clients",
+    slugs: [
+      "frontend/overview",
+      "frontend/docs-site",
+      "mobile/overview",
+      "mobile/graph-renderer",
+    ],
+  },
+  {
+    title: "Security",
+    slugs: ["security/auth", "security/byok-and-encryption"],
+  },
+  {
+    title: "Evaluation",
+    slugs: [
+      "evals/harness",
+      "evals/judging-and-statistics",
+      "evals/results-full-v1",
+    ],
+  },
+  {
+    title: "Testing and operations",
+    slugs: [
+      "testing/overview",
+      "testing/backend",
+      "testing/frontend-and-e2e",
+      "operations/ci-cd",
+      "operations/deployment",
+      "operations/runbook",
+    ],
+  },
+  {
+    title: "Reference",
+    slugs: [
+      "reference/cli",
+      "reference/environment",
+      "reference/constants",
+      "reference/data-model",
+    ],
+  },
+  {
+    title: "Guides",
+    slugs: [
+      "guides/add-a-pipeline-stage",
+      "guides/add-a-retrieval-arm",
+      "guides/add-an-endpoint",
+      "guides/add-an-mcp-tool",
+      "guides/change-the-schema",
+    ],
+  },
 ] as const;
 
 /** Heading for docs that no group names. */

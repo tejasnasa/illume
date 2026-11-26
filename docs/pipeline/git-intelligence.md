@@ -1,341 +1,189 @@
-# Git Intelligence
+# Git intelligence and criticality
 
-The source code tells you what a file does. It does not tell you that the payments module has been
-edited by one person for three years, that nobody has touched the auth middleware since 2022, or that
-a file imported by fourteen others has no test anywhere.
+After the parse, Illume reads the repository's history to learn who owns each file, how often it changes, which files change together and which have tests. A separate stage fetches merged pull requests from GitHub. A scoring pass then combines the history with the graph's fan-in to label every file `critical`, `caution` or `safe`. This page covers [`git_analyzer.py`](../../server/app/services/git_analyzer.py), [`test_files.py`](../../server/app/services/test_files.py), [`cochange.py`](../../server/app/services/cochange.py), [`pr_fetcher.py`](../../server/app/services/pr_fetcher.py), [`criticality.py`](../../server/app/services/criticality.py) and [`staleness.py`](../../server/app/services/staleness.py).
 
-Illume mines the commit history for exactly that: who owns each file, which files have a single point
-of human failure, what changes constantly, and what is untested. Those signals are then folded into a
-per-file criticality score — the classification the 3D graph colours its nodes by.
+## What this produces
 
-This document covers the mining, the ownership records it produces, how those signals feed criticality,
-and the API that exposes them.
+| Output                                        | Written by                       | Read by                                                                       |
+| --------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------- |
+| `commits` rows (up to 500)                    | `analyze_git_history`            | the embedder (commit chunks), the activity feed, co-change, the agent         |
+| `files.change_frequency`, `git_last_modified` | `analyze_git_history`            | criticality, the explorer, the stats endpoint                                 |
+| `files.has_tests`                             | `_update_test_flags`             | criticality, the explorer                                                     |
+| `code_owners` rows                            | `_bulk_insert_code_owners`       | the ownership endpoints, the stats endpoint, the agent's `get_file_info` tool |
+| `file_cochange` rows                          | `build_cochange`                 | the co-change retrieval arm, the agent                                        |
+| `pull_requests` rows (up to 200)              | `fetch_pull_requests`            | the embedder (PR chunks), the activity feed                                   |
+| `files.criticality`, `criticality_reasons`    | `run_criticality_scoring`        | the graph colours, the reading order, the brief, the agent                    |
+| `chat_messages.stale_*`                       | `mark_stale_answers` (sync only) | the chat UI's "this answer may be out of date" notice                         |
 
-The code is in `server/app/services/git_analyzer.py`, `server/app/services/criticality.py`, and
-`server/app/services/pr_fetcher.py`.
+## Reading the history
 
-If you are reading for the first time,
-[The scoring model](#the-scoring-model) is the part worth understanding; the rest is mechanism. If you
-are debugging a score you believe is wrong, start with
-[The ordering constraint](#the-ordering-constraint).
+`analyze_git_history(db, redis_client, repo, clone_path)` runs one command:
 
-## Contents
-
-- [Mining history](#mining-history)
-- [What is produced](#what-is-produced)
-  - [Commits](#commits)
-  - [Per-file ownership](#per-file-ownership)
-  - [Test presence](#test-presence)
-  - [The 500-commit window is a real boundary](#the-500-commit-window-is-a-real-boundary)
-- [The scoring model](#the-scoring-model)
-  - [The ordering constraint](#the-ordering-constraint)
-- [Pull requests](#pull-requests)
-- [What this feeds](#what-this-feeds)
-- [The API](#the-api)
-- [Troubleshooting](#troubleshooting)
-- [Design decisions and trade-offs](#design-decisions-and-trade-offs)
-- [Related documentation](#related-documentation)
-
-## Mining history
-
-`analyze_git_history` runs one `git log` against the local clone:
-
-```
-git log --numstat -n 500 --format=%H\x1f%ae\x1f%an\x1f%s\x1f%ai
+```text
+git -C <clone> log --numstat --format=%H<US>%ae<US>%an<US>%s<US>%ai -n500
 ```
 
-Three things about that command are deliberate:
+`<US>` is `FIELD_SEPARATOR = "\x1f"`, the ASCII unit separator, which cannot appear in a commit subject, so the header fields split unambiguously. `GIT_LOG_MAX_COMMITS = 500` caps the walk; on a large repository this is the most recent 500 commits on the checked-out branch, so "ownership" means ownership of recent work. The command has a 120-second timeout and raises `RuntimeError` on failure or timeout, which fails the ingest.
 
-- **The cap is 500 commits.** A long history is analysed from its most recent 500, which bounds the
-  cost and focuses the analysis on the code as it currently is. This is a real boundary, not a sample
-  — see [The 500-commit window](#the-500-commit-window-is-a-real-boundary).
-- **A unit-separator delimiter** (`\x1f`) rather than a tab or a comma, because commit subjects
-  routinely contain both.
-- **`--numstat`** gives per-file added and deleted line counts in the same pass, so the history is
-  walked once rather than twice.
+`_parse_git_log` walks the output line by line. A line is a commit header when it contains the separator and its first field is 7–40 lowercase hex characters (`_looks_like_header`). Any other line containing a tab is a numstat row: `added<TAB>deleted<TAB>path`, where `-` (a binary file) counts as zero. Author emails are lower-cased. Dates are parsed with `%Y-%m-%d %H:%M:%S %z` and converted to UTC; an unparseable date falls back to the current time with a warning.
 
-Binary files report `-` in place of line counts and are counted as zero. Renames are normalised from
-git's `dir/{old => new}/file` form to a plain path.
+### Renames
 
-An empty history — a repository with no commits, or a shallow clone — returns early rather than
-raising.
+`--numstat` writes a rename as `dir/{old => new}/file.py`. `_normalise_rename_path` keeps only the new side, using `_RENAME_RE = ^(.*?)\{(.*?) => (.*?)\}(.*)$`. Both groups inside the braces may be empty, because git writes `dir/{ => sub}/file.py` when a file moves into a new directory; requiring a character on each side once left the braces in the path and silently dropped that file's ownership. Without `-M`/`--follow`, history before a rename is attributed to the old path, which no longer matches a file row, so a renamed file's statistics start at its rename.
 
-## What is produced
+### Aggregation
+
+`_aggregate_file_stats` builds, per path:
+
+| Field               | Meaning                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------- |
+| `change_frequency`  | commits in the window that touched the file                                           |
+| `git_last_modified` | the newest commit timestamp touching it                                               |
+| `primary_owner_*`   | the author with the most commits to it (ties broken by first seen)                    |
+| `contributors`      | every author, sorted by commit count, with `percentage` (1 decimal) and `last_commit` |
+| `is_knowledge_silo` | `True` when exactly one author ever touched it in the window                          |
+
+Identity is the lower-cased email. Two emails for one person count as two people; there is no `.mailmap` handling.
+
+### Writes and commits
+
+The analyzer commits four times, so it is not atomic:
+
+1. `_update_test_flags` sets `has_tests` on **every** file of the repository, including files the window never touched, and commits. It runs before the early return, so even an empty history gets test flags.
+2. If no commits were parsed, it publishes `git_analysis_complete` and returns.
+3. `_bulk_insert_commits` inserts with `ON CONFLICT (repository_id, hash) DO NOTHING` and commits. Each row stores `files_changed` and `changed_files_list`, the JSON list of paths that co-change reads later.
+4. `_bulk_update_files` writes `change_frequency` and `git_last_modified` for files that still exist (paths are matched with backslashes normalised) and commits. Paths that no longer exist are skipped.
+5. `_bulk_insert_code_owners` upserts one row per file on `file_id` and commits.
+
+**A stale `bus_factor`.** The upsert computes `bus_factor = len(contributors)` for a new row but its `ON CONFLICT DO UPDATE` sets only `primary_owner`, `contributors` and `is_knowledge_silo`. On a full ingest the file rows are new, so every owner row is new and correct. On an [incremental sync](sync.md), which keeps file rows, an existing owner row keeps its old `bus_factor` while its contributor list moves on. The code comment says the opposite of what the statement does.
+
+## Which files have tests
+
+[`test_files.py`](../../server/app/services/test_files.py) decides by name and place, with no coverage data:
+
+- **Name.** `subject_of_test` strips the common markers with three patterns: `test_foo` → `foo`; `foo.test`, `foo_spec`, `foo.specs` → `foo` (case-insensitive); `FooTest`, `FooTests`, `FooSpec`, `FooIT` → `Foo`. A test called `test_agent_planner.py` also counts for `agent/planner.py`, because a source file's candidate subjects are its stem and `<parent>_<stem>`.
+- **Place.** The test's folders, after dropping `TEST_DIRS` (`test`, `tests`, `__tests__`, `spec`, `specs`, `testing`, `unit`, `integration`, `functional`, `e2e`), must appear in order within the source file's folders (`_is_subsequence`). That accepts `server/tests/unit/services/test_criticality.py` for `server/app/services/criticality.py`, and `src/test/java/x/FooTest.java` for `src/main/java/x/Foo.java`, and rejects a same-named test in an unrelated package.
+- **Language family.** The test must be in the same family (`py`, `js` covering JS/TS/Vue/Svelte, or `jvm` covering Java/Kotlin/Scala/Groovy); otherwise extensions must match exactly.
+
+`is_test_path` is the companion predicate: a file is a test by name, or by sitting under one of the narrower `_TEST_ONLY_DIRS` (`test`, `tests`, `__tests__`, `spec`, `specs`, `e2e`). Test files themselves get `has_tests = False`. `_list_clone_files` walks the clone with `SKIP_DIRS` applied, so the walk never descends into `.git` or `node_modules`; this matters because the [clone cache](clone-cache.md) keeps `.git` growing across syncs.
+
+## Co-change
+
+### What co-change means
+
+Two files that keep changing in the same commits are usually coupled even when neither imports the other: a model and its migration, a component and its test, an API route and its client hook. [`cochange.py`](../../server/app/services/cochange.py) measures that from the stored commits and keeps the strongest pairs in `file_cochange`, which the [co-change retrieval arm](../retrieval/retrieval-arms.md#co-change) and the agent use.
+
+### How it is computed
+
+`build_cochange(db, repo_id)` maps each current file path to its id, streams `changed_files_list` from every stored commit of the repository (`yield_per=1000`), and counts:
+
+1. **Skip bulk commits.** A commit touching more than `MAX_FILES_PER_COMMIT = 30` files is a rename, a formatter run or a vendored import, and says nothing about coupling. It is ignored entirely.
+2. **Count.** For each remaining commit, the set of current file ids it touched (paths that no longer exist drop out) increments a per-file count and a count for every pair. Pairs are keyed smaller-UUID-first, which matches how Postgres orders `uuid`, so every row satisfies the table's `file_a_id < file_b_id` check.
+3. **Threshold.** A pair needs `together >= MIN_TOGETHER = 2`.
+4. **Score.** The Jaccard index: `together / (a_count + b_count - together)`, the share of commits touching either file that touched both.
+5. **Cap.** Each file keeps its `MAX_PARTNERS_PER_FILE = 50` strongest partners by Jaccard (ties by partner id). A pair survives if it is in either file's top 50, so a small utility can be a hub's top partner without the hub keeping it.
+
+It then deletes the repository's existing rows and inserts the new ones in batches of `_INSERT_BATCH = 5000`. **It does not commit**; the caller does. In the ingest the pipeline commits right after it, and in a sync it runs inside the deterministic step.
 
 ```mermaid
 flowchart LR
-    L["git log --numstat<br/>500 commits"] --> C["commits table<br/>ON CONFLICT DO NOTHING"]
-    L --> O["per-file ownership<br/>change_frequency, last_modified,<br/>primary owner, contributors, silo"]
-    L --> T["has_tests<br/>candidate-path convention check"]
-    C --> E["commit chunks<br/>for the RAG index"]
-    O -->|"feeds"| CR["criticality scoring"]
-    T -->|"feeds"| CR
-    O -->|"feeds"| B["the architecture brief"]
+  C["commits.changed_files_list"] --> F{"more than 30 files?"}
+  F -- "yes" --> X["ignored"]
+  F -- "no" --> P["count each file<br/>and each pair"]
+  P --> T{"together at least 2?"}
+  T -- "no" --> X
+  T -- "yes" --> J["jaccard =<br/>together / union"]
+  J --> K["keep top 50 partners<br/>of either file"]
+  K --> R["file_cochange rows"]
 ```
 
-### Commits
-
-The most recent 500 commits are stored with hash, author name and email, message, changed-file count,
-the file list, and the authored timestamp. Insertion is `ON CONFLICT DO NOTHING` on
-`(repository_id, hash)`, so re-analysing a repository never duplicates them.
-
-### Per-file ownership
-
-For every file touched inside the window, the analyzer computes:
-
-| Signal              | Meaning                                                                 |
-| ------------------- | ----------------------------------------------------------------------- |
-| `change_frequency`  | How often the file changed                                              |
-| `git_last_modified` | When it last changed                                                    |
-| `primary_owner`     | The author with the most commits touching it                            |
-| `contributors`      | Every author, with the percentage of changes they are responsible for    |
-| `is_knowledge_silo` | True when **exactly one** author has ever touched the file              |
-
-The knowledge-silo flag is the bus-factor signal: a file with one author is a single point of human
-failure. It is computed purely from the mined window, so a file touched by one person within the last
-500 commits is flagged even if someone else worked on it years earlier.
-
-> **`bus_factor` can go stale.** The ownership upsert updates the owner, the contributors and the silo
-> flag on re-analysis, but omits `bus_factor` from its update set. After a re-analysis, `contributors`
-> and `bus_factor` can disagree. Reading the contributors list is always correct; the count may not be.
-> See [data-model.md](../data-model.md#code_owners).
-
-### Test presence
-
-Test detection works by convention rather than by running anything. The analyzer generates candidate
-paths from templates — `test_<stem>.py`, `<stem>_test.py`, `<stem>.spec.ts`, and similar — and looks
-for them in the file's own directory, its `tests/` and `__tests__/` subdirectories, a `spec/`
-subdirectory, and the repository root's test directories.
-
-A file is marked `has_tests` when a candidate exists. This is a heuristic in both directions: a test
-file following an unconventional naming scheme is missed, and a same-named file that is not a test
-would count.
-
-### The 500-commit window is a real boundary
-
-The window is not a random sample — it is the most recent N commits, so it is systematically biased
-toward actively-changed code. That is the right bias for onboarding, since it is the code a newcomer
-will actually touch, but it means absence from the data means *"not recently touched"* and never
-*"does not exist"*.
-
-Four consequences follow:
-
-1. A file last touched 600 commits ago has no owner in the data, no change frequency, and a
-   `git_last_modified` that may be absent — which feeds straight into its criticality score.
-2. Test detection is name-based, so it finds conventionally named tests and misses the rest.
-3. `bus_factor` can be stale after a re-analysis.
-4. Ownership is line-count attribution, not authorship of intent. An author who reformatted a file
-   accumulates changes as readily as one who rewrote it.
-
-## The scoring model
-
-```mermaid
-flowchart TD
-    F[file] --> A{"fan-in >= 10?"}
-    A -->|yes| S3["+3"]
-    A -->|no| B{"fan-in >= 5?"}
-    B -->|yes| S1["+1"]
-    B -->|no| S0["+0"]
-    S3 --> C{sensitive path?}
-    S1 --> C
-    S0 --> C
-    C -->|yes| S2["+2"]
-    C -->|no| D
-    S2 --> D{"last modified over 180 days ago?"}
-    D -->|yes| S1b["+1"]
-    D -->|no| E
-    S1b --> E{"no test file, and the repo has tests?"}
-    E -->|yes| S1c["+1"]
-    E -->|no| T
-    S1c --> T{"total score"}
-    T -->|">= 4"| CRIT["critical"]
-    T -->|">= 2"| CAUT["caution"]
-    T -->|"anything else"| SAFE["safe to explore"]
-```
-
-`run_criticality_scoring` turns the mined signals plus dependency fan-in into a three-level
-classification stored on each file.
-
-| Signal                                         | Points |
-| ---------------------------------------------- | ------ |
-| Fan-in ≥ 10 (imported by ten or more files)    | +3     |
-| Fan-in ≥ 5                                     | +1     |
-| Path matches a sensitive pattern               | +2     |
-| Last modified more than 180 days ago           | +1     |
-| No test file **and** the repository has tests  | +1     |
+Because it reads the same 500-commit window, co-change describes recent coupling, and a file created in the last two commits cannot have a partner yet.
 
-**Sensitive path patterns** are matched by regular expression against the path: `config.`, `database.`,
-`middleware/`, `migrations/`, `auth.`, `security.`, `celery.`, and `main.`.
+## Merged pull requests
 
-The test-coverage point is **conditional on the repository having tests at all**. Without that
-condition, a repository with no tests would have every file penalised, and the signal would carry no
-information — everything would score the same. The repository-level flag is inferred from the files
-when it is not supplied.
+`fetch_pull_requests(repo, access_token, db, redis_client)` runs on its own thread, overlapped with the parse and git stages (see [concurrency](concurrency-and-failure.md#every-thread-with-its-pool)). It pages through `GET /repos/{owner}/{repo}/pulls?state=closed&sort=updated&direction=desc&per_page=100`, keeps the pull requests with a `merged_at`, and stops at `MAX_PRS = 200` merged results, an empty page, or a short page. Closed-but-unmerged pull requests are skipped without stopping, because a run of them can be followed by merged ones.
 
-| Score | Classification     |
-| ----- | ------------------ |
-| ≥ 4   | `critical`         |
-| ≥ 2   | `caution`          |
-| else  | `safe`             |
+Each row stores `number`, `title`, `description` (the body), `author`, `reviewers` (logins from `requested_reviewers`), `files_changed` and `merged_at`, inserted with `ON CONFLICT (repository_id, number) DO NOTHING`.
 
-### The ordering constraint
+| Constant          | Value | Meaning                           |
+| ----------------- | ----- | --------------------------------- |
+| `MAX_PRS`         | 200   | merged pull requests kept         |
+| `PER_PAGE`        | 100   | page size                         |
+| `REQUEST_TIMEOUT` | 20.0  | seconds per request               |
+| `MAX_RETRIES`     | 3     | attempts per page on a 429 or 403 |
 
-**Criticality must run after git history.** It reads `git_last_modified` and `has_tests`, and both are
-written only by the git analyzer. Scored first, every file is graded against `NULL` and `false` — which
-reads as "nothing is stale, nothing is untested" — so every file scores lower than it should, silently.
+Failure handling in `_get_with_retry`:
 
-The scanner deletes and re-inserts every file row, so this is not a theoretical hazard: a reordering
-resets both columns. The unit tests **cannot** catch it, because they inject those values directly into
-the scorer. See [ingestion.md](ingestion.md#two-orderings-that-are-load-bearing).
+- **429 or 403**: wait for `retry_after_seconds(response)` (from `Retry-After` or the rate-limit reset header, defaulting to `DEFAULT_RETRY_AFTER_SECONDS = 60` in [`github_http.py`](../../server/app/services/github_http.py)) and retry, up to three attempts. Every 403 is treated as a rate limit, including a genuine permission denial, so a token without access waits through the retries before failing.
+- **404**: "Repository not found or token lacks access".
+- **401**: the token is invalid or expired.
+- Anything else, or a network error: `GitHubClientError`.
 
-```mermaid
-flowchart LR
-    G["analyze_git_history<br/>writes git_last_modified, has_tests"] --> C["run_criticality_scoring<br/>reads both"]
-    C --> R["files.criticality"]
-    X["scored first<br/>(wrong)"] -.->|"reads NULL / false"| W["every file graded<br/>too low"]
-```
+Two limits of the data are worth knowing. `requested_reviewers` lists reviewers whose review is still pending, so after a merge it is usually empty, and the stored list is not "who reviewed". And the list endpoint does not include `changed_files` (only the single pull request endpoint does), so `files_changed` is `0` for every row.
 
-## Pull requests
+A failure here fails the whole ingest, but only when the pipeline joins the pull-request future at the end; see [failure and retry](concurrency-and-failure.md#failure-and-retry).
 
-`fetch_pull_requests` retrieves merged pull requests through the GitHub API:
+## Criticality
 
-- **Up to 200**, newest-updated first, in pages of 100.
-- Only **merged** PRs are kept — a closed-but-unmerged PR is skipped.
-- The walk stops on an empty or short page, or when the 200 cap is reached.
+`run_criticality_scoring(db, repo_id, repo_has_tests=None)` loads every file of the repository, scores each with `_score_file`, writes `criticality` and the human-readable `criticality_reasons` list, and commits once.
 
-Rate limiting is handled explicitly: a `429` or `403` reads `Retry-After`, falling back to the
-`X-RateLimit-Reset` timestamp minus the current time, with a minimum of one second and a default of
-sixty. A `404` or `401` raises a client error rather than retrying, because neither will improve.
+| Signal                                         | Points | Reason text                |
+| ---------------------------------------------- | ------ | -------------------------- |
+| `fan_in >= 10`                                 | +3     | `imported by N files`      |
+| `fan_in >= 5` (and below 10)                   | +1     | `imported by N files`      |
+| path matches `CRITICAL_PATH_PATTERNS`          | +2     | `core infrastructure file` |
+| `git_last_modified` more than 180 days ago     | +1     | `untouched for 6+ months`  |
+| no test, the repo has tests, not itself a test | +1     | `no test coverage`         |
 
-Insertion is `ON CONFLICT DO NOTHING` on `(repository_id, number)`.
+| Score | Label      |
+| ----- | ---------- |
+| 4+    | `critical` |
+| 2–3   | `caution`  |
+| 0–1   | `safe`     |
 
-Pull requests matter beyond display: they become embedded chunks, so the chat can answer questions
-about *why* a change was made — a question the source code cannot answer at all.
+`CRITICAL_PATH_PATTERNS` are regular expressions searched anywhere in the path: `config\.`, `database\.`, `middleware/`, `migrations/`, `auth\.`, `security\.`, `celery\.`, `main\.`. So `app/main.py`, `next.config.ts` and `domain.ts` (which contains `main.`) all match.
 
-## What this feeds
+The "no test coverage" rule only fires when `repo_has_tests` is true; otherwise every file in a repository with no tests would lose a point and the label would stop separating risk. When the argument is `None`, the function derives it from the rows.
 
-| Consumer               | Uses                                                     |
-| ---------------------- | -------------------------------------------------------- |
-| Criticality            | `git_last_modified`, `has_tests`, and path patterns      |
-| The architecture brief | File ownership summary, bus factors, knowledge silos     |
-| The chat index         | Commit and PR chunks                                     |
-| The UI                 | The ownership map, the silo list, and the repository stats |
+**Ordering is load-bearing.** Scoring reads `git_last_modified` and `has_tests`, which only the git analyzer writes, and `fan_in`, which only the fan-metric pass writes. Because the parse stage deletes and re-inserts every file, scoring before the git stage grades every file against `NULL` and `False`. The unit tests inject those values directly, so they cannot catch an ordering regression; see [the ingestion pipeline](ingestion.md#two-orderings-that-are-load-bearing).
 
-## The API
+The maximum score from fan-in and path alone is 5, so a heavily imported config file is `critical` regardless of tests. A file with fan-in below 5 outside the patterns can reach at most 2 (stale and untested), which is `caution`.
 
-| Endpoint                                           | Returns                                                 |
-| -------------------------------------------------- | ------------------------------------------------------- |
-| `GET /api/v1/repository/{repo_id}/ownership`       | Paginated per-file ownership with contributor breakdowns |
-| `GET /api/v1/repository/{repo_id}/ownership/silos` | Every file flagged as a knowledge silo                   |
-| `GET /api/v1/repository/{repo_id}/stats`           | Totals, language breakdown, and the top five contributors |
+## Stale answers
 
-The ownership map paginates at 50 per page with a maximum of 200, and accepts an optional exact
-`file_path` filter. Each entry carries the contributors with their percentages and last-commit dates.
+When a background sync lands changed files, [`mark_stale_answers`](../../server/app/services/staleness.py) flags every chat answer that cited one of them. Each assistant message stores the commit it answered against (`answered_commit_sha`) and the paths it cited (`cited_paths`, JSONB). Two SQL statements do the work:
 
-`stats` returns total files, total lines of code, a per-language breakdown, the distinct contributor
-count, the top five contributors by files owned, the knowledge-silo count, and the total dependency
-count.
+- `_MARK_CHANGED` uses the JSONB `?|` operator to find answers whose cited paths overlap the changed set, sets `stale_at` (keeping the first time), `stale_commit_sha` and the union of old and newly stale paths.
+- `_MARK_ALL` is used when the change set is unknown (a rebuild whose base commit has gone) and treats every cited path as changed.
 
-All three require a session and return `404` for a repository that is not the caller's. See
-[api.md](../api.md#ownership--apiv1repository).
+Both skip answers already given at the new head. Nothing is deleted or rewritten. `compare_url` builds the GitHub compare link the UI offers between the two commits. The sync runs this inside a savepoint so a failure cannot abort its transaction; see [sync](sync.md).
 
-## Troubleshooting
+## Where the data is served
 
-**Every file scores the same after a re-ingest.**
+| Endpoint                         | File                                                   | What it returns                                                      |
+| -------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| `GET /{repo_id}/ownership`       | [`ownership.py`](../../server/app/api/v1/ownership.py) | paginated per-file owners, ordered by path                           |
+| `GET /{repo_id}/ownership/silos` | [`ownership.py`](../../server/app/api/v1/ownership.py) | files whose `is_knowledge_silo` is true                              |
+| `GET /{repo_id}/activity?limit=` | [`activity.py`](../../server/app/api/v1/activity.py)   | recent merged pull requests and non-merge commits, default 6, max 30 |
+| `GET /{repo_id}/stats`           | [`stats.py`](../../server/app/api/v1/stats.py)         | totals, the criticality split and the top five owners                |
 
-Criticality ran before git history. Both `git_last_modified` and `has_tests` were still at their
-defaults, so every file scored against the same inputs. Check stage ordering, not the scoring rules.
+The full contracts are in the [HTTP API reference](../api.md).
 
-**A file has no owner.**
+## Design trade-offs and limits
 
-It was not touched within the most recent 500 commits. The window is the boundary — see below.
-
-**A file is flagged as a knowledge silo but clearly has more than one author.**
-
-The other author's work predates the 500-commit window. The flag is computed from the window only.
-
-**`bus_factor` disagrees with the contributor count.**
-
-A known staleness: the ownership upsert omits `bus_factor` from its update set, so a re-analysis
-refreshes `contributors` without refreshing the count.
-
-**A file with an obvious test is marked `has_tests = false`.**
-
-The test does not match one of the candidate path templates. Detection is purely name-based.
-
-**Pull requests are missing for a repository that has them.**
-
-Only merged PRs are stored, and only the newest 200. A repository whose merges are older, or which
-squashes without merge commits, will have fewer than expected.
-
-## Design decisions and trade-offs
-
-### Why cap at 500 commits?
-
-Because the cost of the analysis has to be bounded, and the history that matters for onboarding is the
-recent history. A repository with 40,000 commits would otherwise dominate ingest time, and the
-ownership signal from a 2014 contributor is not what a newcomer needs.
-
-The cost is stated in [The 500-commit window](#the-500-commit-window-is-a-real-boundary) below: a file
-last touched 600 commits ago has no owner, no change frequency, and possibly no last-modified date —
-which then feeds straight into its criticality score.
-
-### Why is the commit window a real boundary rather than a sample?
-
-Because taking the most recent commits is what keeps the analysis useful and affordable at once. The
-alternative — walking the entire history — is unbounded in cost and answers a question nobody asked:
-who wrote this in 2014.
-
-The consequences are listed under
-[The 500-commit window is a real boundary](#the-500-commit-window-is-a-real-boundary). The short
-version is that the bias is toward the code a newcomer will touch, and every edge case that falls out
-of it errs in the same direction: recent work is visible, older work is not.
-
-### Why is criticality a three-level classification rather than a number?
-
-Because the number is already stored, in `criticality_reasons`, and the product needs a decision rather
-than a measurement. The graph colours nodes by three states; the export lists anything that is not
-`safe`. A continuous score would have to be thresholded by every consumer independently, and they
-would disagree.
-
-The cost is that a file scoring 3 and one scoring 3.9 are treated identically, and the boundary
-between `caution` and `critical` is a policy choice (4) rather than an emergent property.
-
-### Why is test presence name-based rather than execution-based?
-
-Because there is no way to run an unknown repository's test suite from inside an ingestion. The
-languages differ, the runners differ, the dependencies are not installed, and the clone is deleted
-afterwards. And even if a suite ran, the question is not "do the tests pass" but "does this file have
-one".
-
-The cost is stated above: unconventional layouts and same-named non-test files both produce wrong
-answers, always in the direction of "no test".
-
-### Why store commits in the database at all?
-
-Because they become embedded chunks, and because `change_frequency` and `git_last_modified` are derived
-from them. The chat can answer "why was this changed?" only because the commit messages are in the
-index alongside the code.
-
-The cost is that the `commits` table is one of the larger ones, and 500 rows per repository is a floor
-rather than a ceiling for a large instance.
-
-### Why is the sensitive-path list a set of regexes rather than a directory allow-list?
-
-Because the signal is about *what kind of file it is*, not where it lives. `auth.py` in a nested module
-is as sensitive as `auth.py` at the root, and `migrations/` is sensitive regardless of what it contains.
-A path pattern express both.
-
-The cost is that the list is tuned to the conventions of the languages and frameworks this project has
-seen. A repository with an unconventional layout — no `auth.` prefix, no `migrations/` directory — gets
-no sensitive-path points at all.
+- **A 500-commit window.** It keeps the log bounded on large histories, and makes every ownership, staleness, co-change and silo signal describe recent work only. A file untouched in the window has no owner row.
+- **Commit count as ownership.** The primary owner is whoever made the most commits, not who wrote the most lines that survive. A bulk formatter commit counts as much as a feature.
+- **Email identity, no mailmap.** One person with two emails splits; a shared bot email merges many people.
+- **Renames lose history.** Statistics restart at the rename.
+- **Name-and-place test detection.** Fast and coverage-free, and wrong for tests named after behaviours rather than files, or for one test file covering many modules.
+- **Criticality is a heuristic.** Five fixed rules with hand-picked weights. Its job is to colour the graph and order the reading list, not to be a risk model.
+- **Pull request data is thin.** No changed-file counts and usually no reviewers, as described above.
+- **Non-atomic writes.** The analyzer commits four times and criticality once, so a crash between them leaves partial data until the next run rebuilds it.
 
 ## Related documentation
 
-- [ingestion.md](ingestion.md) — where these stages sit in the full analysis, and the
-  ordering constraint they participate in.
-- [sync.md](sync.md) — what a re-analysis does to these tables, and why the upserts
-  matter.
-- [data-model.md](../data-model.md) — the `commits` and `code_owners` tables in full.
-- [retrieval.md](retrieval.md) — how commit and PR text becomes embeddable chunks.
-- [graph.md](graph.md#how-data-becomes-visuals) — how criticality reaches the 3D view.
+- [The ingestion pipeline](ingestion.md): where these stages run and in what order.
+- [Parsing and dependency resolution](parsing-and-dependencies.md): where `fan_in` comes from.
+- [Auto-update sync](sync.md): how the same stages rerun incrementally and how stale answers are marked.
+- [Retrieval arms](../retrieval/retrieval-arms.md): how co-change is used to answer questions.
+- [The data model](../reference/data-model.md): the `commits`, `code_owners`, `file_cochange` and `pull_requests` tables.

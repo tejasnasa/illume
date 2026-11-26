@@ -1,551 +1,360 @@
-# Auto-Update (Sync)
+# Auto-update sync
 
-A repository was ingested a week ago. Since then forty commits landed — a new module, a deleted
-helper, two dependency bumps. Nobody wants to re-run the whole analysis, and nobody wants to click
-anything. Auto-update is the answer: a per-repository switch that wakes on a schedule, works out
-what changed, and reprocesses only that, while the repository stays `ready` and browsable the whole
-time.
+Auto-update keeps an ingested repository current without a manual re-ingest. A beat-scheduled sweep finds repositories that are due, claims each one with a conditional update, and dispatches a `sync_repository` task. The task takes a lease on the row, brings a working tree to the remote head, and then either does nothing (already current), applies only the changed files (an incremental sync) or rebuilds everything (a full sync), all while the repository stays usable. This page documents [`app/tasks/autoupdate.py`](../../server/app/tasks/autoupdate.py) and [`app/tasks/sync.py`](../../server/app/tasks/sync.py) down to the function level, including the places where the code's own comments claim more than it does.
 
-This document follows one update from the sweep that schedules it to the watermark it leaves behind.
-Sync is the part of the system with the most locking: it runs against a live repo another user is
-reading, alongside a worker that is also running first-time ingests, on a machine that cannot afford
-two parses at once.
+## Terms
 
-If you are reading for the first time, [The two update paths](#the-two-update-paths) is the map. If
-you are preparing to discuss it,
-[Design decisions and trade-offs](#design-decisions-and-trade-offs) collects the reasoning.
+- **Sweep**: `sweep_due_repositories`, a Celery task the beat process runs every `SWEEP_INTERVAL_MINUTES` (10). It reads the database and dispatches syncs; it does no git or analysis work itself.
+- **Claim**: the sweep's conditional `UPDATE` that moves a due row's `next_sync_at` forward. Only a sweep whose update changed the row dispatches a sync for it.
+- **Lease**: `sync_status = 'updating'` plus `sync_lease_expires_at = now + SYNC_LEASE_MINUTES` (60), taken by the sync task with its own conditional update. While a lease is live, no other sync may start on the row.
+- **Generation**: a random UUID the lease writes to `sync_generation`. It identifies one sync attempt, so the attempt can tell whether the row it is writing to is still the one it leased.
+- **Watermark**: a commit SHA recording what some of the data reflects. There are two: `ingested_commit_sha` (deterministic data) and `analysis_commit_sha` (LLM output and embeddings).
+- **Step A**: the deterministic half of a sync: file rows, symbols, history, co-change, edges, fan metrics, criticality and stack.
+- **Step B**: the LLM half: the architecture brief, new glossary entries, reading-order annotations and embeddings.
+- **Escalation**: abandoning the incremental path for a full rebuild, because the change is not a fast-forward or is too large.
 
-## Contents
+## The moving parts
 
-- [The two update paths](#the-two-update-paths)
-  - [Why two paths](#why-two-paths)
-- [The scheduler](#the-scheduler)
-  - [The claim predicate](#the-claim-predicate)
-  - [How a claim works](#how-a-claim-works)
-- [The incremental path](#the-incremental-path)
-  - [The lease](#the-lease)
-  - [The two watermarks](#the-two-watermarks)
-  - [How the head commit is found](#how-the-head-commit-is-found)
-  - [Step A — the deterministic pass](#step-a--the-deterministic-pass)
-  - [Step B — the incremental LLM pass](#step-b--the-incremental-llm-pass)
-- [The full-rebuild path](#the-full-rebuild-path)
-- [Side-by-side comparison](#side-by-side-comparison)
-- [The clone cache](#the-clone-cache)
-- [Success, failure and backoff](#success-failure-and-backoff)
-- [Invariants worth protecting](#invariants-worth-protecting)
-- [What a sync actually costs](#what-a-sync-actually-costs)
-- [Troubleshooting](#troubleshooting)
-- [Design decisions and trade-offs](#design-decisions-and-trade-offs)
-- [Related documentation](#related-documentation)
+```mermaid
+flowchart LR
+  BEAT["celery beat<br/>every 600 s"] --> SWEEP["sweep_due_repositories"]
+  SWEEP -- "SELECT due rows<br/>limit 50" --> DB[("repositories")]
+  SWEEP -- "CAS UPDATE next_sync_at" --> DB
+  SWEEP -- "sync_repository.delay<br/>repo id and owner token" --> Q[["sync queue"]]
+  ROUTE["POST /{repo_id}/sync"] -- "sync_status queued" --> DB
+  ROUTE -- "sync_repository.delay<br/>repo id only" --> Q
+  Q --> TASK["sync_repository<br/>worker"]
+  TASK -- "lease, watermarks,<br/>summary, failures" --> DB
+  TASK -- "ensure_clone" --> CACHE["clone cache<br/>or ephemeral clone"]
+  TASK --> STEPA["Step A<br/>deterministic"]
+  TASK --> STEPB["Step B<br/>LLM and embeddings"]
+  TASK -- "manual syncs only" --> PUSH["push notification"]
+```
 
-## The two update paths
+Both entry points enqueue on the `sync` queue (`task_routes` in [`celery.py`](../../server/app/core/celery.py)). In production one worker consumes both `celery` and `sync` with `--concurrency=1`, so a sync never runs at the same time as an ingest on the same box; see [deployment](../operations/deployment.md).
+
+## Turning it on
+
+Auto-update is per repository: `auto_update_enabled` (default off) and `auto_update_interval_hours` (default 6). `PATCH /api/v1/repository/{repo_id}/auto-update` sets them. The interval must be one of `ALLOWED_AUTO_UPDATE_INTERVALS = (1, 3, 6, 12, 24)` in [`repository.py`](../../server/app/api/v1/repository.py), and the route requires the owner to have saved their own AI key (`_require_user_key`), because a keyless free-tier account cannot pay for background LLM calls. Enabling sets `next_sync_at = now()` so the next sweep picks the repository up; disabling resets `consecutive_sync_failures` and `last_sync_error`.
+
+A repository created through the free tier is inserted with `auto_update_enabled = False`. A re-ingest carries the previous toggle and interval over to the recreated row.
+
+## The sweep
+
+`sweep_due_repositories()` is registered in `celery.conf.beat_schedule` at the bottom of `autoupdate.py` as `sweep-due-repositories`, running every `SWEEP_INTERVAL_MINUTES * 60.0` seconds. The same schedule holds `prune-agent-steps`, which deletes old agent step rows at 03:40 daily (see [the agent](../retrieval/agent.md)). Registering the entry in this module rather than in `celery.py` avoids a circular import; the module is loaded because `celery.py` lists it in `include`.
+
+Each tick:
+
+1. **Kill switch.** If `AUTO_UPDATE_ENABLED` is `False`, return 0.
+2. **One clock.** `now` is read once and reused, which also makes the tests deterministic under `freezegun`.
+3. **Select candidates.** Rows matching `_claim_predicate(now)`, oldest `next_sync_at` first with `NULL` first, limited to `SWEEP_BATCH_LIMIT = 50`.
+4. **Claim each.** For every candidate, an `UPDATE ... WHERE id = :id AND <the same predicate>` sets `next_sync_at = now + interval + jitter`. The jitter is `random.uniform(0, SWEEP_OFFSET_JITTER_SECONDS)` (60 s) from `_next_offset_seconds`, so repositories on the same interval drift apart instead of all syncing on one boundary. Only rows whose update reports `rowcount == 1` are kept; a row another sweep claimed first fails the predicate and is skipped.
+5. **Look up tokens.** `_lookup_owner_tokens` reads every claimed row's owner `github_access_token` in one query. The column is an `EncryptedString`, so this yields the decrypted token.
+6. **Dispatch.** `sync_repository.delay(str(repo.id), token)` per claimed row, then commit.
+
+`_claim_predicate(now)` is the single definition of "due":
+
+| Condition                                     | Why                                                            |
+| --------------------------------------------- | -------------------------------------------------------------- |
+| `status == 'ready'`                           | never touch a row that is mid-ingest                           |
+| `auto_update_enabled IS TRUE`                 | the user's toggle, or the automatic pause after three failures |
+| `next_sync_at IS NULL OR next_sync_at <= now` | due, or never scheduled                                        |
+| `sync_lease_expires_at IS NULL OR < now`      | no live lease; an expired lease is reclaimable                 |
+
+The sweep does not look at `sync_status` and does not check whether the owner has an AI key. Both are checked by the task, which simply returns when the owner has no key; the row was already pushed forward by one interval, so a keyless repository is reconsidered every interval and skipped every time.
+
+Two details to know:
+
+- **The commit happens after dispatch.** The claims are committed after every `delay()` call. A worker can therefore pick up a task before the claim is visible to it; this is harmless because the task re-reads the row and takes its own lease.
+- **The token travels through Redis.** The decrypted GitHub token is a positional task argument, so it sits in the broker message and in any worker log that prints task arguments. Encryption at rest does not cover it in transit. The manual route avoids this by dispatching without a token; the sweep could do the same, since the task already falls back to the stored token (`_resolve_token`). Repository creation and re-ingest pass the token to `ingest_repository` the same way. See [BYOK and encryption](../security/byok-and-encryption.md#threat-model).
+
+## Manual sync
+
+`POST /api/v1/repository/{repo_id}/sync` answers `202` with `{repo_id, sync_status, next_sync_at}` after these checks:
+
+| Check                                                         | Response                       |
+| ------------------------------------------------------------- | ------------------------------ |
+| repository not owned by the caller                            | 404                            |
+| owner has no saved AI key                                     | 402 (from `_require_user_key`) |
+| `AUTO_UPDATE_ENABLED` is off                                  | 409                            |
+| an unexpired `sync_lease_expires_at`                          | 409                            |
+| no `ingested_commit_sha` (ingested before watermarks existed) | 409                            |
+
+It then sets `sync_status = 'queued'` and pushes `next_sync_at` forward by one interval so a sweep ticking meanwhile cannot dispatch a duplicate, commits, and calls `sync_repository.delay(str(repo_id))` with **no token**. If the broker refuses the task, it resets `sync_status = 'idle'` and `next_sync_at = NULL` and answers `503`, so the settings panel is not left polling a sync that will never run. A manual sync works with the toggle off, because it is dispatched directly rather than left for the sweep.
+
+## The task, step by step
+
+`sync_repository(self, repo_id, access_token=None)` is bound, with `max_retries=0`: a failed sync is never retried by Celery. Retrying is the sweep's job, after the backoff the failure recorded.
 
 ```mermaid
 flowchart TD
-    subgraph Beat["Celery beat — separate process"]
-        Sweep["sweep_due_repositories<br/>every 10 minutes"]
-        Sweep --> Find["find repositories whose<br/>next_sync_at is due"]
-        Find --> Claim["claim each with a<br/>conditional UPDATE"]
-        Claim --> Dispatch["dispatch sync_repository<br/>per claim"]
-    end
-
-    subgraph WK["Celery worker — same process as ingests"]
-        Sync["sync_repository"]
-        Sync --> Lease["take a lease"]
-        Lease --> Head["refresh the clone,<br/>read the head commit"]
-        Head --> Check{"both watermarks<br/>already match head?"}
-        Check -->|yes| Noop["done, nothing to do"]
-        Check -->|no| Escalate{"fast-forward, and under<br/>the size thresholds?"}
-        Escalate -->|yes| StepA["Step A: deterministic changes"]
-        Escalate -->|no| Full["full rebuild —<br/>run_full_analysis"]
-        StepA --> StepB["Step B: incremental LLM artefacts"]
-    end
-
-    Dispatch --> Sync
+  START["sync_repository"] --> G1{"row exists?"}
+  G1 -- "no" --> RET["return None"]
+  G1 -- "yes" --> G2{"status ready?"}
+  G2 -- "no" --> RET
+  G2 -- "yes" --> G3{"ingested_commit_sha set?"}
+  G3 -- "no" --> RET
+  G3 -- "yes" --> G4{"owner has own AI key?"}
+  G4 -- "no" --> RET
+  G4 -- "yes" --> MAN["manual = _requested_by_user"]
+  MAN --> LEASE{"_take_lease"}
+  LEASE -- "lost" --> RET
+  LEASE -- "won" --> CHK["sync_status checking<br/>ensure_clone"]
+  CHK --> SC{"both watermarks<br/>equal head?"}
+  SC -- "yes" --> OK["_record_success<br/>zero changes"]
+  SC -- "no" --> LAG{"ingested_commit_sha<br/>behind head?"}
+  LAG -- "no" --> B["Step B only"]
+  LAG -- "yes" --> FF{"fast-forward?"}
+  FF -- "no" --> FULL["_run_full_sync"]
+  FF -- "yes" --> DELTA["compute_delta"]
+  DELTA --> ESC{"should_escalate?"}
+  ESC -- "yes" --> FULL
+  ESC -- "no" --> A["Step A<br/>stamp ingested_commit_sha<br/>mark stale answers"]
+  A --> B
+  B --> GEN{"generation unchanged?"}
+  GEN -- "no" --> ABORT["return summary<br/>no watermark"]
+  GEN -- "yes" --> STAMP["stamp analysis_commit_sha<br/>_record_success"]
+  FULL --> DONE["_record_success"]
+  RET --> REL["finally: _release_lease"]
+  OK --> REL
+  ABORT --> REL
+  STAMP --> REL
+  DONE --> REL
 ```
 
-Four rules in that diagram are load-bearing:
+### Guards
 
-- **Syncs and ingests share one worker process**, so a sync can never run concurrently with an
-  ingest — or with another sync.
-- **The lease is what allows a killed worker to recover.** Without an expiry, a deploy that
-  SIGKILLs a mid-sync process leaves the row locked forever.
-- **Both watermarks must match before the sync does nothing.** One matching is not enough, because
-  the two halves fail independently.
-- **Escalation is decided before Step A runs**, not partway through it.
+Before anything is written, the task returns `None` when the row is missing, when `status != 'ready'`, when there is no `ingested_commit_sha`, or when `LLMConfig.from_user(owner)` is `None` (the owner has no key of their own). The last guard is the free-tier backstop for swept syncs: there is no route to check the key, and without it a free repository would quietly run on the operator's key. The ingest task has no such gate, because its route already claimed a free ingestion and refusing would strand it.
 
-### Why two paths
+### Manual or scheduled
 
-A diff is usually small: a handful of files, a few hundred lines. Reprocessing the whole repository
-for that would be wasteful — but so would forcing every change through the incremental machinery,
-because some changes make the diff meaningless:
-
-- A **force-push or a rebase** rewrites history. The old commit is no longer an ancestor of the new
-  one, so "what changed between them" has no answer.
-- A **large change** — more than 500 files, or more than half the repository — is cheaper to rebuild
-  than to reconcile file by file.
-- A **cache problem** means there is no working tree to diff against in the first place.
-
-So the sync asks one question — *is this diff usable and small?* — and picks a path. The two paths
-share the same pipeline code; they differ only in how much of it they run.
-
-## The scheduler
-
-`beat_schedule` registers one entry, `sweep-due-repositories`, running `sweep_due_repositories` every
-600 seconds. The schedule is registered by assignment when `app.tasks.autoupdate` is imported, which
-is why that module is in the Celery app's `include` list.
-
-**Beat is a separate process from the worker.** A deploy restarts both, and the beat process keeps its
-schedule file on a bind mount so the next beat process resumes the previous cadence rather than
-restarting the clock.
-
-The tunables are module-level constants in `tasks/autoupdate.py` rather than `Settings` fields:
-
-| Constant                        | Value  | Meaning                                                        |
-| ------------------------------- | ------ | -------------------------------------------------------------- |
-| `AUTO_UPDATE_ENABLED`           | `True` | Deployment-wide kill switch; the sweep returns 0 when false     |
-| `SWEEP_INTERVAL_MINUTES`        | `10`   | How often beat runs the sweep                                   |
-| `SYNC_LEASE_MINUTES`            | `60`   | How long a sync's lease is valid for                            |
-| `SWEEP_BATCH_LIMIT`             | `50`   | Maximum repositories claimed per sweep                          |
-| `SWEEP_OFFSET_JITTER_SECONDS`   | `60.0` | Random extra delay added to the next due time                   |
-| `SYNC_FULL_MAX_FILES`           | `500`  | Above this many changed files, rebuild from scratch             |
-| `SYNC_FULL_MAX_RATIO`           | `0.5`  | Above this fraction of files changed, rebuild from scratch      |
-| `SYNC_MAX_CONSECUTIVE_FAILURES` | `3`    | After this many failures in a row, auto-update turns itself off |
-| `SYNC_BACKOFF_BASE_MINUTES`     | `5`    | Base for the exponential retry delay                            |
-
-### The claim predicate
-
-The sweep looks for repositories that are:
-
-```sql
-status = 'ready'
-AND auto_update_enabled IS TRUE
-AND (next_sync_at IS NULL OR next_sync_at <= now)
-AND (sync_lease_expires_at IS NULL OR sync_lease_expires_at < now)
-```
-
-That four-part predicate is defined once and reused verbatim in both the `SELECT` and the `UPDATE`,
-which is what makes the claim atomic.
-
-The lease clause is the one that recovers a lost worker. A deploy does `docker stop` followed by
-`docker rm`, so a worker killed mid-sync would otherwise leave `sync_status = 'updating'` forever
-with no way back.
-
-### How a claim works
-
-1. `SELECT` up to `SWEEP_BATCH_LIMIT` (50) candidates, ordered by `next_sync_at` ascending with
-   `NULLS FIRST` — never-synced repositories go first.
-2. For each, compute a new due time: `now + interval_hours`, plus a random jitter of up to 60
-   seconds. The jitter spreads out repositories that were all ingested at once, so they do not all
-   come due in the same sweep forever.
-3. Run the conditional `UPDATE` with the same predicate. **`rowcount == 1` means this process won the
-   claim.** `rowcount == 0` means something else got there first, and the sweep moves on.
-4. Dispatch `sync_repository` for each claimed repository.
-
-There is a second way a sync starts: `POST /api/v1/repository/{repo_id}/sync` dispatches
-`sync_repository` directly, without the sweep. Because the sweep only claims rows with
-`auto_update_enabled` set, a manual sync is the only route for a repository that has auto-update
-turned off.
-
-> **The sweep does not write `sync_generation`.** It only bumps `next_sync_at`. The generation UUID is
-> minted later, by the worker, when it takes its lease. If you are tracing a sync through the
-> database, the sweep's claim and the worker's lease are two separate writes.
-
-## The incremental path
+`_requested_by_user(args, kwargs, sync_status)` reads the row's `sync_status` **before** the lease overwrites it. A sync is manual when the row was `queued` (only the route sets that) or when the task was dispatched with fewer than two positional arguments and no keyword arguments (the route sends only the id; the sweep sends the id and a token). Only manual syncs send a push notification on completion or failure (`_notify` with `sync_event(manual=..., failed=...)` from [`push.py`](../../server/app/services/push.py)); a scheduled sync is silent either way, since the repository keeps its previous, still-valid analysis.
 
 ### The lease
 
-`_take_lease` performs another conditional `UPDATE`, requiring `status = 'ready'` and an unheld or
-expired lease. On success it writes:
+`_take_lease(db, repo, now)` generates a `uuid4` generation and runs:
 
-- `sync_status = 'updating'`
-- `sync_lease_expires_at = now + 60 minutes`
-- `sync_generation = <a fresh uuid4>`
-- `last_sync_error = NULL`
+```text
+UPDATE repositories
+SET sync_status = 'updating',
+    sync_lease_expires_at = now + 60 min,
+    sync_generation = :generation,
+    last_sync_error = NULL
+WHERE id = :id
+  AND status = 'ready'
+  AND (sync_lease_expires_at IS NULL OR sync_lease_expires_at < now)
+```
 
-If `rowcount` is 0 it rolls back and returns nothing, and the task exits — another worker holds the
-lease. Active sync states are `queued`, `checking`, and `updating`.
+A `rowcount` of 0 means another attempt holds a live lease; the task rolls back and returns `None`. The lease clause must match the sweep's exactly. An earlier version required `sync_lease_expires_at IS NULL` here, which wedged repositories after a crash: the sweep kept claiming the row (its lease had expired) and the task kept refusing it (the lease was not `NULL`), and nothing ever cleared it.
 
-**The generation UUID is the anti-clobber mechanism.** A re-ingest deletes and recreates the
-repository row under the same identifiers. If that happens mid-sync, the sync's writes would land on
-a row that no longer represents the analysis it was working from. Before the *analysis* watermark is
-written, the sync re-reads the generation and compares: if it changed, it rolls back and returns
-without stamping anything.
+**Why a lease expires.** The deploy workflow runs `docker stop`, `docker rm` and `docker run`. A worker killed mid-sync never reaches its `finally`, so without an expiry `sync_status` would stay `updating` forever. `SYNC_LEASE_MINUTES = 60` is set well above the slowest realistic sync, so a live sync is never stolen, and short enough that a killed one is reclaimed within the hour. The expiry is a wall-clock bound, not a heartbeat: a sync that genuinely runs longer than 60 minutes can be overlapped by a second one.
 
-The guard covers `analysis_commit_sha` only. `ingested_commit_sha` is written with no generation
-check — see [Invariants](#invariants-worth-protecting).
-
-The lease is released in a `finally`, and the release is itself conditional: it will not touch a row
-whose generation does not match, nor one no longer in an active state. Releasing is best-effort — it
-logs and rolls back on failure rather than raising, because a failed release must not mask the real
-error.
-
-### The two watermarks
-
-This is the core of incremental behaviour. A repository records **two** commits, because two kinds
-of derived data can be stale independently:
-
-| Column                 | Covers                                                                | Written when                 |
-| ---------------------- | --------------------------------------------------------------------- | ---------------------------- |
-| `ingested_commit_sha`  | Files, symbols, dependency edges, fan metrics, criticality, commits    | The end of Step A            |
-| `analysis_commit_sha`  | Glossary, reading order, architecture brief, embeddings               | After the LLM phase succeeds |
+**Status values.** `sync_status` is one of `idle`, `queued`, `checking`, `updating` and `failed`. The settings panel polls it every few seconds while it is non-idle.
 
 ```mermaid
-flowchart TD
-    Head["head commit from the remote"]
-
-    Head --> Q1{"ingested_commit_sha<br/>== head?"}
-    Q1 -->|no| A["run Step A<br/>write ingested_commit_sha"]
-    Q1 -->|yes| Askip["skip Step A<br/>deterministic data is current"]
-
-    Head --> Q2{"analysis_commit_sha<br/>== head?"}
-    Q2 -->|no| B["run Step B<br/>write analysis_commit_sha"]
-    Q2 -->|yes| Bskip["skip Step B<br/>LLM artefacts are current"]
-
-    A --> Rec["record success, set next_sync_at"]
-    Askip --> Rec
-    B --> Rec
-    Bskip --> Rec
+stateDiagram-v2
+  [*] --> idle
+  idle --> queued: manual sync requested
+  idle --> updating: lease taken
+  queued --> updating: lease taken
+  failed --> updating: lease taken after backoff
+  updating --> checking: ensure_clone
+  checking --> updating: Step A begins
+  checking --> idle: short-circuit success
+  updating --> idle: success
+  checking --> failed: exception
+  updating --> failed: exception
+  queued --> idle: release with no lease
+  updating --> idle: release after an abort
 ```
 
-**The short-circuit requires both to equal the head commit.** If the deterministic data is current
-but the LLM artefacts are not — the common case after an LLM provider outage — the next sync runs
-only Step B rather than redoing the parse.
+`ACTIVE_SYNC_STATUSES = ("queued", "checking", "updating")` are the in-flight values; `idle` and `failed` are settled.
 
-Pull requests are in neither list. The ingest task fetches them on its own thread during a first
-ingestion, and neither sync path re-fetches them, so PR data and PR embeddings go stale after the
-first ingest.
+### Releasing the lease
 
-### How the head commit is found
+`_release_lease(db, repo_id, generation)` runs in the task's `finally` on every exit, including the guard returns and the generation aborts, none of which settle the row themselves. Before it existed, those exits left `sync_status` non-idle and the settings panel polled forever. It sets `sync_status = 'idle'` and clears the expiry only when both guards hold:
 
-The sync calls `ensure_clone`, which refreshes the cached clone and then reads `HEAD`. A refresh
-means a real `git fetch origin <branch>`, a `git reset --hard`, and a `git clean -fdx` against the
-cached working tree. It is not a zero-cost check.
+- **Never overwrite a settled result.** The row must still be in an active status. `_record_success` and `_record_failure` have usually already written `idle` or `failed`.
+- **Only release what you own.** With a generation, the row's `sync_generation` must match it (or be `NULL`). Without one (this attempt never took the lease), only a row that is `queued` with no lease is touched; `checking` and `updating` belong to whoever does hold the lease. Without this guard, an attempt that lost the race would clear the winner's live lease and let a third sync start.
 
-> `repo_cache.py` contains a `_ls_remote_sha` helper that would ask the remote for a branch's SHA
-> without transferring objects, and `GIT_LS_REMOTE_TIMEOUT_SECONDS` exists to bound it. **Nothing
-> calls it.** The docstring in `tasks/sync.py` still describes the probe as running inside
-> `ensure_clone`, which is stale. Treat any "cheap probe" description of this path as inaccurate:
-> today, a sync that turns out to have nothing to do has still paid for a fetch.
+A failure inside the release is logged and swallowed so it cannot mask the exception already propagating.
 
-### Step A — the deterministic pass
+### Bringing the tree to the head
 
-Step A runs only when `ingested_commit_sha` differs from the head. Its order is fixed:
+`_do_sync` resolves the GitHub token (`_resolve_token`: the argument, else the owner's stored token) and the owner's `LLMConfig` once via `llm_config_for(owner)`, sets `sync_status = 'checking'`, picks the branch (`ingested_branch`, else `default_branch`, else `main`; a stored `detached` becomes `main`) and calls `ensure_clone(repo_id, github_url, token, branch)` from the [clone cache](clone-cache.md). That returns `(repo_root, actual_branch, new_sha)`.
 
+The module docstring and a comment here describe a cheap `git ls-remote` probe that lets an idle sync skip the clone. **That probe is not wired in.** `_ls_remote_sha` exists in [`repo_cache.py`](../../server/app/services/repo_cache.py) and nothing calls it, so every sync, including one that finds nothing to do, runs `git fetch`, `git reset --hard` and `git clean -fdx` on a cached clone, or a full clone when the cache has no entry.
+
+### The short-circuit
+
+If `ingested_commit_sha == new_sha` and `analysis_commit_sha == new_sha`, nothing has changed: `_record_success` writes a zero-change summary and the task returns. No row other than the repository's is touched and no LLM is called.
+
+### Two watermarks
+
+| Watermark             | Written                                                | Means                                                                        |
+| --------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `ingested_commit_sha` | at the end of Step A, or after a full sync's analysis  | files, symbols, edges, fan metrics, criticality, history reflect this commit |
+| `analysis_commit_sha` | after Step B succeeds and the generation still matches | brief, glossary, reading order and embeddings reflect this commit            |
+
+A sync that finishes Step A and then fails in Step B leaves the deterministic watermark at the head and the analysis watermark behind. The next sync sees `ingested_commit_sha == new_sha`, skips Step A, and runs only Step B. That is the reason for having two.
+
+The ingest task writes both: `ingested_commit_sha` when the clone lands and `analysis_commit_sha` once the pipeline finishes.
+
+### Choosing incremental or full
+
+When `ingested_commit_sha` lags the head:
+
+1. **Fast-forward check.** `is_fast_forward(old_sha, new_sha, repo_root)` in [`scanner.py`](../../server/app/services/scanner.py) first verifies both SHAs exist with `git cat-file -e <sha>^{commit}` (with `check=True`), then runs `git merge-base --is-ancestor old new`. Exit code 0 means a fast-forward. Anything else (force push, rebase, branch switch) escalates to a full sync, with `changed_paths` from `_changed_paths(repo_root, old_sha, new_sha)`, a `git diff --name-only --no-renames` that returns `None` when git cannot answer.
+2. **Delta.** `compute_delta(repo_root, old, new)` runs `git diff --name-status -M old new` (60 s timeout) and returns `[(status, path)]`. A rename `R100 old new` produces two entries, `("D", old)` and `("R", new)`, so the vacated row is deleted rather than lingering as a file that exists twice. A copy `C` is a single upsert.
+3. **Size check.** `should_escalate(diff, total_files, max_files=500, max_ratio=0.5)` escalates when more than `SYNC_FULL_MAX_FILES = 500` paths changed, or when changed paths exceed `SYNC_FULL_MAX_RATIO = 0.5` of the working tree's source files (`len(walk_source_files(repo_root))`). The numerator counts every diff entry, including non-source files and both halves of a rename.
+
+**A missing old commit fails instead of escalating.** If `old_sha` is not in the working tree's object store, which happens after a force push when the clone is fresh (an ephemeral clone, or a cache entry that was evicted or deleted by the last ingest), `git cat-file -e` exits non-zero and `check=True` raises `CalledProcessError`. That is recorded as a sync failure, not as a non-fast-forward, and three of them in a row pause auto-update. The fix in that case is a manual re-ingest.
+
+### Step A: the deterministic delta
+
+`_run_step_a(db, repo, repo_root, diff)` runs, in this fixed order:
+
+| Order | Call                                         | Effect                                                                                                               |
+| ----- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1     | `apply_file_delta(db, repo.id, root, paths)` | per path: delete the row; if the file exists, is scannable and parses, insert a fresh row (new UUID) and its symbols |
+| 2     | `analyze_git_history(db, None, repo, root)`  | new commits, change frequency, ownership, `has_tests` for every file                                                 |
+| 3     | `build_cochange(db, repo.id)`                | rebuild the whole co-change table from stored commits                                                                |
+| 4     | `delete_repo_edges(db, repo.id)`             | delete every dependency edge of the repository                                                                       |
+| 5     | `resolve_dependencies(db, repo.id, root)`    | rebuild every edge from the current import symbols                                                                   |
+| 6     | `compute_fan_metrics(db, repo.id)`           | recount fan-in and fan-out                                                                                           |
+| 7     | `run_criticality_scoring(db, repo.id)`       | rescore every file                                                                                                   |
+| 8     | `detect_stack`, `detect_entry_points`        | update the stack and entry points on the row                                                                         |
+
+`apply_file_delta` treats a path that no longer exists, is not scannable (a `.png`, or anything under `SKIP_DIRS`), or fails to parse as a deletion, so a file that became unparseable does not linger as a symbol-less row. An upsert deletes the old row first, which cascades its symbols, its code-owner row, its outgoing and incoming edges, its co-change pairs and its file-scoped embeddings, and then inserts a new row with a new id. That is why steps 2 to 7 recompute repository-wide rather than per file: the replaced files' derived data is gone and must be rebuilt, and unchanged files that imported them have lost their edges.
+
+The order matters for the same reason as in the ingest: criticality needs the history columns and fan-in written first; co-change needs the new file rows and commit rows; the resolver's insert-only contract needs the delete before it. The last line of `_run_step_a`, `repo.ingested_commit_sha = repo.ingested_commit_sha or repo.ingested_commit_sha`, assigns the column to itself and does nothing; the caller writes the watermark.
+
+After Step A, `_do_sync` sets `ingested_commit_sha = new_sha`, commits, and calls `_mark_stale_answers` with the changed paths, inside a savepoint, so a marking failure rolls back only the marking (see [stale answers](git-intelligence.md#stale-answers)).
+
+**Step A is not one transaction.** The function's docstring, the module docstring and earlier documentation all say it is, so that "a reader sees either the old graph or the new one, never a torn one". The services it calls commit on their own: `analyze_git_history` commits four times (the first of which also commits the file delta), `resolve_dependencies` commits after every 1,000 edges, and `compute_fan_metrics` and `run_criticality_scoring` each commit. Concretely, between the resolver's first flush and its last, the live graph endpoint serves a repository whose edges are partly rebuilt, and fan-in and criticality still reflect the previous commit until their own steps finish. The window is short on a small change and grows with repository size. A failure part-way leaves the committed parts in place, behind a watermark that still points at the old commit, so the next sync redoes the work.
+
+### Step B: the LLM delta
+
+Step B runs outside any long transaction so a slow model does not hold locks across network calls. It runs with the owner's `LLMConfig`:
+
+1. `_ingest_artifact_frame` regenerates the architecture brief with `generate_brief` (reading `README.md`, `readme.md` or `Readme.md` from the tree).
+2. `build_glossary(db, repo, mode="incremental", llm=...)` defines only symbols that have no glossary entry yet (including those whose entries cascaded away with a replaced file), ranked by current fan-in, and returns how many it added.
+3. `build_reading_order(db, repo, mode="incremental", llm=...)` recomputes the order and annotates only files that lack an annotation.
+4. `embed_repository_symbols(..., embedding_mode="incremental", changed_file_ids=...)` drops chunks for the changed files and reconciles the rest by content hash, so unchanged chunks are not re-embedded.
+
+The details of each are in [LLM generation](generation.md) and [the index and embeddings](../retrieval/index-and-embeddings.md). Step B runs without overlapping its stages on threads (unlike the ingest), and the embedding stage passes `measure_memory=False`.
+
+Then the task re-reads the generation with `_fresh_generation` (a scalar query, because the status writers update the table with Core statements that leave the ORM instance stale, and the session has `expire_on_commit=False`). If the row is gone or the generation changed, it rolls back and returns the summary without stamping `analysis_commit_sha`. Otherwise it stamps the watermark, commits, and calls `_record_success`.
+
+### The full sync
+
+`_run_full_sync` handles escalations:
+
+1. Delete every `File` row of the repository and **commit**. The cascade clears symbols, edges, owners, co-change pairs and file-scoped embeddings.
+2. Call `run_full_analysis(db, repo, repo_root, None, _publish, manage_status=False, overlap_llm=False, llm_config=...)`, the same function the ingest uses, with no Redis client and a `_publish` that only logs.
+3. Stamp `ingested_commit_sha`, commit, and mark stale answers.
+4. Check the generation and stamp `analysis_commit_sha`, as in Step B.
+5. In `finally`, call `cleanup_clone(repo_root)` only when `CLONE_CACHE_ENABLED` is false.
+6. `_record_success` with a summary of zero upserts and zero deletes.
+
+Because step 1 commits and the re-parse commits every 500 files, **a full sync empties the repository's graph, glossary ranking inputs and embeddings and refills them over several minutes, while `status` stays `ready`**. During that window the graph endpoint serves an empty or partial graph and chat retrieves from a partial index. This is the price of keeping the product usable; it is not the "old graph or new graph" guarantee the comments describe. The summary's zero counts also mean the settings panel cannot tell a full rebuild from a no-op.
+
+### Generations and the reingest race
+
+A re-ingest deletes the `Repository` row and recreates it **with the same `id` and `repo_number`** (see [ingestion](ingestion.md#re-ingesting)). The re-ingest route only requires `status` to be `ready` or `failed`, and a sync keeps the row `ready`, so a re-ingest can start while a sync is running. The sync's later writes then land on the recreated row, because they are keyed by the same id.
+
+The generation is the only defence, and it guards exactly one write: the `analysis_commit_sha` stamp. The recreated row has `sync_generation = NULL`, so the check fails and the sync aborts before stamping. What it does not prevent:
+
+- An in-flight Step A or full sync writing file, edge and history rows into the repository while the new ingest's parse stage is deleting and inserting the same rows. The ingest's `ON CONFLICT DO NOTHING` file insert keeps duplicates out; the result can still mix the two runs until the next full analysis.
+- `_record_failure` writing a failure, a backoff and possibly `auto_update_enabled = False` onto the new row if the sync then fails.
+- `_release_lease` setting the new row's `sync_status` to `idle`, which its `sync_generation IS NULL` branch permits. That one is harmless.
+
+On the production deployment the single worker process serialises tasks, so a re-ingest task queued while a sync is running only starts after the sync finishes; the race needs two worker processes.
+
+### Why a sync keeps status ready
+
+Every status write in the sync path goes through `_set_sync_status`, which updates only `sync_status`. The ingest's stage functions all take `manage_status`, and the sync passes `False`, which makes `_update_status` in [`cloner.py`](../../server/app/services/cloner.py) and the scanner skip both the `status` write and the `status_update` frame. The graph endpoint answers `409` unless `status == 'ready'`, the navbar and the repository page key off it, and the client mounts its live progress view on `status_update` frames, so flipping `status` mid-sync would take the repository offline for the length of the sync.
+
+**A sync publishes nothing to the live log.** It passes `redis_client=None` to every service. `publish_log` in [`_publish.py`](../../server/app/services/_publish.py) then fails on `None.publish` and swallows the error, so the frames exist only in the worker log. The full-sync path also passes a logger-only `_publish`. That is why a background update shows no live progress in the UI; wiring the sync to the channel is the prerequisite for showing it.
+
+## Recording the outcome
+
+`_record_success(db, repo, summary, now)` sets `sync_status = 'idle'`, clears the lease and generation, resets `consecutive_sync_failures` and `last_sync_error`, sets `last_synced_at`, sets `next_sync_at = now + interval` (6 hours when unset) and stores the summary in `last_sync_summary`:
+
+```json
+{
+  "files_upserted": 3,
+  "files_deleted": 1,
+  "files_changed": 4,
+  "new_commit_sha": "<sha>",
+  "glossary_added": 2,
+  "embeddings_added": 17,
+  "status": "ok"
+}
 ```
-apply_file_delta        upsert added/modified, delete removed, cascade their children
-analyze_git_history     re-mine commits for the changed set
-delete_repo_edges       clear the repository's edges
-resolve_dependencies    rebuild them
-compute_fan_metrics     recompute fan-in/out
-run_criticality_scoring must follow git history
-detect_stack            refresh stack and entry points
-```
 
-Two details about the cost are worth being precise about, because the intuitive reading is wrong in
-both cases:
+`summarise` in [`scanner.py`](../../server/app/services/scanner.py) builds it.
 
-- **Only the embedding API calls scale with the diff.** The graph work does not. `delete_repo_edges`
-  and `resolve_dependencies` re-resolve the **whole** repository, `compute_fan_metrics` and
-  `run_criticality_scoring` recompute over every file, and `analyze_git_history` re-mines up to 500
-  commits. What a small change saves is the parse of unchanged files and the embedding of unchanged
-  chunks.
-- **The edge rebuild is whole-repository, not incremental.** Rebuilding only the changed files' edges
-  would leave stale edges pointing at deleted files and miss new edges into unchanged files.
+On an exception inside `_do_sync`, the task rolls back first, builds `"<ExceptionType>: <message>"` with credentials masked by `redact_credentials`, and calls `_record_failure`:
 
-And one structural fact that is easy to assume away: **Step A is not a single transaction.** Each
-stage commits internally — `analyze_git_history`, `resolve_dependencies`, `compute_fan_metrics` and
-`run_criticality_scoring` each call `commit()` as they finish. A reader can therefore observe the new
-file delta against the old edges, fan metrics, or criticality values while Step A is still running.
+| Field                       | Value                                                                    |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `sync_status`               | `failed`                                                                 |
+| `sync_lease_expires_at`     | `NULL`                                                                   |
+| `consecutive_sync_failures` | previous + 1                                                             |
+| `last_sync_error`           | the redacted message                                                     |
+| `next_sync_at`              | `now + SYNC_BACKOFF_BASE_MINUTES * 2^(n-1)` minutes: 5, then 10, then 20 |
+| `auto_update_enabled`       | `False` once `n >= SYNC_MAX_CONSECUTIVE_FAILURES` (3)                    |
 
-### Step B — the incremental LLM pass
+The failure is then re-raised so the worker logs it; with `max_retries=0` nothing retries it. The docstring says the backoff is "capped by the lease window"; there is no cap in the code, though in practice the third failure pauses auto-update before the backoff grows. After a pause the user re-enables the toggle, which resets the counter.
 
-Step B regenerates only the artefacts affected by the change. In order, it runs the brief first, then
-the incremental glossary, then the reading order.
+If recording the failure itself raises, that exception is raised from the original one.
 
-Generating the brief first has a visible consequence: the brief is given a preview of the glossary,
-and at that point the preview reflects the **previous** sync's glossary rather than the one this pass
-is about to write.
+## Constants
 
-The individual passes behave like this:
+All in [`autoupdate.py`](../../server/app/tasks/autoupdate.py). They are module-level rather than `Settings` fields because every `Settings` field is required and `.env` is not committed, so a new field is another way for a fresh checkout to fail; a code change plus a deploy is the intended way to tune them. `sync.py` imports them lazily through `_sync_tunables` to avoid a circular import (`autoupdate.py` imports `sync_repository`).
 
-- **Glossary** runs in `incremental` mode: it keeps existing entries and spends its remaining budget
-  (up to 200 entries) on symbols that do not have one.
-- **Embeddings** run incrementally: rows for changed files are deleted and rebuilt, and unchanged
-  chunks are reconciled by comparing a SHA-256 hash of their text, so identical text is not
-  re-embedded.
-- **Reading order and brief** are regenerated for the repository.
+| Constant                        | Value | Meaning                                                        |
+| ------------------------------- | ----- | -------------------------------------------------------------- |
+| `AUTO_UPDATE_ENABLED`           | True  | deployment-wide kill switch for the sweep and the manual route |
+| `SWEEP_INTERVAL_MINUTES`        | 10    | beat cadence                                                   |
+| `SYNC_LEASE_MINUTES`            | 60    | lease length                                                   |
+| `SWEEP_BATCH_LIMIT`             | 50    | most rows claimed per tick                                     |
+| `SWEEP_OFFSET_JITTER_SECONDS`   | 60.0  | random spread added to each `next_sync_at`                     |
+| `SYNC_FULL_MAX_FILES`           | 500   | changed paths above which a sync escalates                     |
+| `SYNC_FULL_MAX_RATIO`           | 0.5   | changed share of the tree above which a sync escalates         |
+| `SYNC_MAX_CONSECUTIVE_FAILURES` | 3     | failures before auto-update pauses itself                      |
+| `SYNC_BACKOFF_BASE_MINUTES`     | 5     | first backoff, doubling per failure                            |
 
-Hash reconciliation covers **symbol, file, and document (README) chunks**. Commit and pull-request
-chunks are not reconciled — and since PRs are not re-fetched, they do not change on a sync anyway.
+## Observing a sync
 
-## The full-rebuild path
+- **Worker log.** `sync_repository: ...` lines for every guard and abort, `sync(full): <event> -- <message>` for each pipeline frame on a full sync, `Sweep dispatched N sync task(s)` from the sweep, and `stage_timer` lines from the stages that time themselves.
+- **The row.** `sync_status`, `last_synced_at`, `next_sync_at`, `last_sync_error`, `consecutive_sync_failures`, `last_sync_summary`, `ingested_commit_sha` and `analysis_commit_sha`.
+- **The UI.** The repository settings panel ([`AutoUpdateSection.tsx`](../../client/src/components/AutoUpdateSection.tsx)) shows the toggle, the interval, the last result and the paused state.
 
-A sync escalates when incremental work would be more expensive or simply incorrect:
+The [runbook](../operations/runbook.md) has the recovery steps for a stuck lease, a paused repository and a repository whose watermarks disagree.
 
-- **Non-fast-forward.** If the old commit is not an ancestor of the new one — a force-push, a branch
-  switch, or a rebase — the diff is meaningless.
-- **Too many changes.** More than `SYNC_FULL_MAX_FILES` (500) files, or more than
-  `SYNC_FULL_MAX_RATIO` (50%) of the repository.
-- **Cache problems.** A pinned commit, a disabled cache, an unwritable cache root, a failed refresh,
-  or a repository over 512 MiB all bypass the cache and clone fresh.
+## Testing
 
-The full path deletes every `File` row and calls the same `run_full_analysis` the ingest task uses.
-Because it is the shared pipeline, it runs with `overlap_llm=False`: the LLM stages run sequentially
-there rather than overlapped.
+The sync path is covered by the backend suite against real Postgres: lease contention, the release guards, the short-circuit, escalation, the two-watermark recovery and the sweep predicate. The tests drive a local `file://` repository so no network is needed (`_build_clone_url` returns `file://` URLs unchanged). See [backend tests](../testing/backend.md).
 
-## Side-by-side comparison
+## Design trade-offs and limits
 
-| | Incremental | Full rebuild |
-| --- | --- | --- |
-| **Trigger** | A usable, small diff | Force-push, rebase, branch switch, or over the size thresholds |
-| **Parse** | Only added and modified files | Every file |
-| **Edges, fan metrics, criticality** | Recomputed over the whole repository | Recomputed over the whole repository |
-| **Glossary** | `mode="incremental"` — tops up to 200 | `mode="full"` — deletes and rewrites |
-| **Embeddings** | Changed files, reconciled by hash | All rows deleted and rebuilt |
-| **LLM stages** | Overlapped | Sequential (`overlap_llm=False`) |
-| **What it saves** | The parse of unchanged files, and their embedding calls | Nothing — it is the ingest path |
-
-The honest summary: the incremental path saves the *parse* and the *embedding spend*. It does not
-save the graph work, which is always whole-repository.
-
-## The clone cache
-
-Keeping a clone on disk between syncs turns "clone the repository" into "fetch and reset", which for
-a large repository is the difference between seconds and minutes.
-
-The cache root is `tempfile.gettempdir() / "illume" / "clone_cache"`, with no environment override,
-so inside the Linux container it resolves to `/tmp/illume/clone_cache` — exactly where the production
-deploy bind-mounts it. Without that mount, every deploy destroys the cache.
-
-**The cache is a performance optimisation and never a correctness dependency.** Every failure mode
-falls back to today's ephemeral `tempfile.mkdtemp` clone:
-
-- cache disabled
-- a specific commit requested (the cache tracks one branch per repository)
-- the cache root is not writable
-- a fetch or reset fails or times out
-- the repository exceeds 512 MiB
-
-One case is *not* on that list, though it looks as if it should be. If the cached directory is
-missing or is not a git repository, `ensure_clone` does not fall back to an ephemeral clone — it
-clones fresh **into the cache**, so the next sync gets the benefit.
-
-Eviction is least-recently-used, driven by a marker file per repository, and never evicts the
-repository currently being worked on. Removal retries read-only files, because Windows keeps
-`.git/objects` locked.
-
-Token hygiene matters here in a way it does not for an ephemeral clone: the cached repository
-persists, so the remote URL — which embeds the access token — is rewritten on every refresh, and git
-is run with prompts disabled and global/system config suppressed so no credential helper can
-interfere.
-
-## Success, failure and backoff
-
-### On success
-
-`_record_success` resets everything: `sync_status = 'idle'`, the lease cleared, `sync_generation`
-nulled, the consecutive-failure counter back to zero, `last_sync_error` cleared, `last_synced_at`
-stamped, `next_sync_at` set to now plus the configured interval, and `last_sync_summary` saved with
-the counts the settings panel displays.
-
-### On failure
-
-`sync_repository` is declared `max_retries=0` — it does **not** use Celery's retry mechanism. It has
-its own, because the retry needs to be spaced over minutes and to stop eventually:
-
-- `consecutive_sync_failures` increments.
-- Backoff is `5 × 2^(n-1)` minutes: 5, 10, 20, 40, and so on.
-- **After 3 consecutive failures, auto-update turns itself off** for that repository, and
-  `last_sync_error` explains why. A repository whose analysis is broken stops consuming resources and
-  stops filling the log, and the settings panel tells the owner what happened.
-
-> The `_record_failure` docstring says the backoff is "capped by the lease window". The code applies
-> no cap. The docstring is wrong; the code is the behaviour.
-
-### Guard clauses
-
-Before doing any work, the task returns early — with no writes at all — when: the repository is
-missing, its `status` is not `ready`, it has no `ingested_commit_sha` to diff against, its owner has
-no LLM credential, or the lease cannot be taken.
-
-## Invariants worth protecting
-
-Four properties the rest of the system relies on. Each has been broken at least once.
-
-1. **A sync never changes `status`.** The graph endpoint, the navigation and the progress view all
-   key off `status = 'ready'`. Leaving it alone is what keeps the product usable during an update.
-   The sync's own state lives in `sync_status`, which only the settings panel reads.
-
-2. **The lease must have an expiry.** Remove `sync_lease_expires_at` and a SIGKILLed worker locks its
-   repository forever, with no path back short of a manual database edit.
-
-3. **Both watermarks gate the short-circuit.** Checking only one re-runs work that is already done,
-   or worse, skips work that is not.
-
-4. **The generation guard covers the analysis watermark.** `analysis_commit_sha` is written only if
-   the generation still matches the lease. `ingested_commit_sha` currently has **no** such guard, so a
-   superseded sync can stamp the deterministic watermark with a commit the rebuilt row never
-   reflected — after which the next sync believes Step A is unnecessary.
-
-## What a sync actually costs
-
-| Work | Scales with |
-| --- | --- |
-| `git fetch` + `reset` + `clean` | Repository size, on **every** sync, including one that changes nothing |
-| Parse | Changed files |
-| `git log --numstat` | Up to 500 commits, always |
-| Edge rebuild, fan metrics, criticality | Every file, always |
-| Embedding API calls | Changed chunks only |
-| LLM generation | Changed artefacts only, and only if `analysis_commit_sha` lags |
-
-The dominant fixed cost is the clone refresh, and the dominant variable cost is the LLM phase — which
-is why the two watermarks exist.
-
-### No live progress
-
-A background update produces no frames on the live-log channel:
-
-- The **whole-rebuild path** passes `redis_client=None` and a logger-only publish stub. The
-  pipeline's own stage frames reach that stub, so they appear in the worker log as `sync(full): …`.
-- The **sub-service frames** — scanner, git analyzer, embedder — call `publish_log(None, …)`, which
-  raises inside the helper, is swallowed, and logs only a generic `Redis publish failed (channel=…)`
-  warning. The event and message are lost.
-- The **incremental path** has no stub at all.
-
-So the frames do not all reach the worker log either, and none reach Redis. The progress UI is built
-for the initial ingest path; a user watching a background update sees the settings panel's status
-line, which polls `sync_status` rather than reading the stream.
-
-## Troubleshooting
-
-**Auto-update stopped by itself.**
-
-Read `last_sync_error`. Three consecutive failures disable it by design. Fix the underlying cause,
-then re-enable.
-
-**A repository shows `updating` and never moves.**
-
-The lease is 60 minutes; the sweep reclaims it after that. If it happens repeatedly, the sync is
-being killed mid-run — check the worker log for an OOM kill or a deploy restart.
-
-**Syncs never run at all.**
-
-Check, in order: `AUTO_UPDATE_ENABLED` is true; the beat process is actually running (it is a
-separate process, and a missing schedule-file mount resets its cadence); the repository's
-`auto_update_enabled` is true in the database; and its `status` is `ready`.
-
-**A sync runs but changes nothing.**
-
-Correct behaviour when both watermarks already equal the head commit. Look at `ingested_commit_sha`
-and `analysis_commit_sha` — if one lags, the next sync will run only that half.
-
-**Syncs are slower than expected on repositories that rarely change.**
-
-Expected today: an idle sync still performs a real fetch, because the head commit is read by
-refreshing the cached clone. See [How the head commit is found](#how-the-head-commit-is-found).
-
-**The graph looks inconsistent during a sync.**
-
-Step A commits stage by stage, so a read can catch the new file list against the old edges or
-criticality values. See [Step A](#step-a--the-deterministic-pass).
-
-**A repository re-analyses from scratch every time rather than incrementally.**
-
-The change is exceeding one of the escalation thresholds, or the history is not fast-forward. Look at
-`last_sync_summary` and compare the head SHAs; a force-push to the tracked branch causes this every
-time.
-
-**Disk usage grows without bound.**
-
-The cache should evict at 2 GiB. Confirm `CLONE_CACHE_ENABLED` and check that the process can write
-its marker files — eviction depends on them, and if they cannot be written the cache cannot tell what
-is stale.
-
-## Design decisions and trade-offs
-
-### Why two watermarks instead of one?
-
-Because the two halves fail independently. An LLM outage leaves the deterministic data current and
-the generated prose stale. With a single watermark, every subsequent sync would re-parse the entire
-repository to fix a glossary. Two watermarks let the next sync run only the missing half.
-
-The cost is the extra state, and the care needed to write each at the right moment — which is exactly
-where `ingested_commit_sha`'s missing generation guard comes from.
-
-### Why does a sync keep `status = 'ready'`?
-
-Because changing it would take the product offline for the duration of every background update — the
-opposite of the feature's purpose. The graph endpoint, the nav and the progress view all key off
-`ready`, so leaving it alone is what makes an update invisible to a reader.
-
-The cost is the one described under Step A: because the status never changes, a client reading during
-a sync sees the tables as they are at that instant, not a snapshot of a completed update. Reads are
-individually consistent; they are not a snapshot.
-
-### Why does the sweep only bump `next_sync_at`?
-
-Because the sweep's job is to decide *who* runs, not to run anything. Writing `sync_generation` at
-claim time would mean the generation is minted before a worker has committed to the work — and a
-dispatch that never arrives would leave a generation that no lease owns.
-
-Keeping the two writes separate means the lease is the only place a generation comes from, and the
-lease is always taken by the process that is about to do the work.
-
-### Why a 60-second jitter on the next due time?
-
-Because repositories are usually ingested in bursts — a demo, a team onboarding, a batch import — so
-without jitter they all come due in the same sweep forever. The jitter decorrelates them at negligible
-cost.
-
-### Why does a failed sync disable itself instead of retrying forever?
-
-Because the alternative is a broken repository consuming a slot every backoff interval indefinitely,
-filling the log and the queue with a failure nobody is reading. Three consecutive failures is enough
-to conclude the problem is not transient, and turning the switch off is a signal a human can act on.
-
-The cost is that a repository genuinely broken by a transient outage stays off until someone
-re-enables it. That is the right side of the trade: silence is recoverable, a loop is not.
-
-### Why escalate to a full rebuild rather than reconcile a large diff?
-
-Because file-by-file reconciliation has a fixed cost per file — a delete, an upsert, a cascade, an
-edge rebuild — and past a few hundred files the bookkeeping exceeds the cost of throwing the
-deterministic data away and rebuilding it. The 500-file and 50% thresholds are the point where that
-crossover is measured to sit.
-
-A non-fast-forward is the harder case: it is not about cost at all. Rebase and force-push rewrite the
-commits the old SHA referred to, so the diff between old and new is not a description of what changed
-in the code.
-
-### Why does the worker run with `--concurrency=1`?
-
-Because each ingestion peaks at several hundred megabytes, and the overlapped stages inside one task
-are threads, not processes — a single task already uses the concurrency it needs. Running two at once
-multiplies the memory floor rather than halving the wall-clock.
-
-The `prefork` pool takes its default concurrency from the **container's** reported CPU count, not the
-VM's vCPU count, so deploying without the flag silently runs several. The `sync` queue exists so a
-second pool could be split off later, not because it runs now.
-
-### Why does the cache fall back instead of failing?
-
-Because the cache is an optimisation and nothing else. Every failure mode — unwritable root, oversize
-repository, disabled by config, a fetch that times out — has a correct slow path, and taking it costs
-minutes rather than correctness. A cache that could fail a sync would be a liability.
-
-The interesting case is the cached directory that is missing or is not a git repository: that is not
-treated as a failure but as a cold start, so the fresh clone is written *into* the cache. Falling
-back to an ephemeral clone there would mean never warming the cache again.
+- **Status stays `ready`.** Users keep the product during an update, at the cost of seeing a partly rebuilt graph during Step A and an emptied one during a full sync.
+- **Repository-wide recompute.** Steps 2 to 7 of Step A rebuild every edge, fan count and score, not just the changed files'. It is simple and correct, and it means a one-line change on a large repository costs a full resolve.
+- **A wall-clock lease.** No heartbeat, so a sync longer than 60 minutes can be overlapped, and a killed sync blocks its repository for up to an hour.
+- **No idle short-cut before the clone.** The `ls-remote` probe exists but is unused, so idle syncs still fetch.
+- **Force pushes on a fresh clone fail.** The fast-forward check raises when the old commit is missing locally, which counts toward the auto-pause rather than escalating.
+- **Tokens in the broker.** The sweep passes the decrypted GitHub token as a task argument.
+- **One generation check.** It protects the analysis watermark from a concurrent re-ingest, not the data written before it.
+- **Incremental LLM output drifts.** The glossary entries of replaced files are redefined, but the glossary is never re-ranked and existing reading-order annotations are kept even when their file changed. A re-ingest regenerates both.
 
 ## Related documentation
 
-- [ingestion.md](ingestion.md) — the full analysis, whose stages the rebuild path reuses unchanged.
-- [generation.md](generation.md) — the LLM services, and what `mode="incremental"` changes about the
-  glossary and the brief.
-- [retrieval.md](retrieval.md) — the embedding index this path reconciles, and how the hash
-  comparison decides what to re-embed.
-- [deployment.md](../deployment.md) — the three containers, the bind mounts that make the clone cache
-  survive a deploy, and why the worker runs at concurrency 1.
-- [data-model.md](../data-model.md) — the `repositories` columns this path writes: the lease, the
-  watermarks, and the failure counters.
+- [The ingestion pipeline](ingestion.md): the full pipeline the full sync reuses.
+- [The clone cache](clone-cache.md): `ensure_clone`, eviction and token handling.
+- [Concurrency and failure](concurrency-and-failure.md): the failure model of the ingest for comparison.
+- [Git intelligence](git-intelligence.md#stale-answers): how stale answers are marked.
+- [LLM generation](generation.md): incremental glossary and reading order.
+- [The index and embeddings](../retrieval/index-and-embeddings.md): incremental embedding by content hash.
+- [The runbook](../operations/runbook.md): recovering a stuck or paused repository.

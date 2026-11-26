@@ -1,148 +1,186 @@
-# Illume Documentation
+# Illume documentation
 
-This directory is the written tour of Illume: what the system does, how each part works, why it
-was built the way it was, and what to do when something breaks. It is written for someone who has never opened the repository before, and it assumes no familiarity with the internal vocabulary. Every term is either explained where it first appears, or collected in the glossary at the end of this page.
+Illume is a codebase-onboarding tool. It clones a GitHub repository, parses it with tree-sitter, builds a file and symbol dependency graph, mines git history for ownership and risk, and uses language models to write a glossary, a reading order and an architecture brief. A chat answers questions from the code with citations, and an MCP server gives AI coding tools the same abilities. This is the documentation for everything in the repository: how each part works, why it is built that way, how to run and change it, and what it does not do.
 
-If you only read one document, read [architecture.md](architecture.md). It gives you the shape of
-the whole system in about fifteen minutes, and every other document here hangs off it.
+## How to read these documents
 
-## How to read this
+The pages follow the [Diátaxis](https://diataxis.fr/) split: **tutorials** get you started, **how-to guides** walk through one change, **reference** pages list every route, table, variable and constant, and **explanation** pages say how a subsystem works and why. Every page opens with a short summary and a list of the terms it uses. Every page closes with its design trade-offs and limits, then links to related pages.
 
-Pick the path that matches what you are trying to do.
+Pick a path by what you came for:
 
-| If you want to…                                                | Start here                                                       |
-| -------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Understand what Illume is and how the pieces fit together       | [architecture.md](architecture.md)                               |
-| Get it running on your machine                                  | [../README.md](../README.md)                                     |
-| Understand the full analysis pipeline                           | [pipeline/ingestion.md](pipeline/ingestion.md)                   |
-| Understand how a repository stays up to date on its own         | [pipeline/sync.md](pipeline/sync.md)                             |
-| Understand how the LLM artefacts are produced                   | [pipeline/generation.md](pipeline/generation.md)                 |
-| Understand the RAG chat and how retrieval works                 | [pipeline/retrieval.md](pipeline/retrieval.md)                   |
-| Understand the dependency graph and the 3D view                  | [pipeline/graph.md](pipeline/graph.md)                           |
-| Understand ownership, knowledge silos, and criticality           | [pipeline/git-intelligence.md](pipeline/git-intelligence.md)     |
-| Call the HTTP API or wire up a client                           | [api.md](api.md) · [websockets.md](websockets.md)                |
-| Work on the Next.js application                                 | [frontend.md](frontend.md)                                       |
-| Work on the React Native application                            | [mobile.md](mobile.md)                                           |
-| Change the database schema                                      | [data-model.md](data-model.md)                                   |
-| Deploy or operate a running instance                            | [deployment.md](deployment.md)                                   |
-| Run, write, or debug the test suites                            | [testing.md](testing.md)                                         |
-| Review the design decisions and their trade-offs                | [architecture.md](architecture.md#design-decisions-and-trade-offs)              |
-
-Each pipeline document ends with a **Troubleshooting** section describing the failure signatures
-for that stage and what they mean, so a symptom can be traced without reading the whole system.
+| You are                             | Read, in order                                                                                                                                                                                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| new to the project                  | [Architecture](architecture.md), [repository layout](getting-started/repository-layout.md), [local setup](getting-started/local-setup.md), [your first ingest](getting-started/first-ingest.md)                                                                   |
+| evaluating the engineering          | [Architecture](architecture.md), [ingestion](pipeline/ingestion.md), [concurrency and failure](pipeline/concurrency-and-failure.md), [retrieval arms](retrieval/retrieval-arms.md), [the agent](retrieval/agent.md), [results: full_v1](evals/results-full-v1.md) |
+| changing the ingest                 | [Ingestion](pipeline/ingestion.md), [concurrency and failure](pipeline/concurrency-and-failure.md), [add a pipeline stage](guides/add-a-pipeline-stage.md), [auto-update](pipeline/sync.md)                                                                       |
+| changing chat or retrieval          | [The index](retrieval/index-and-embeddings.md), [retrieval arms](retrieval/retrieval-arms.md), [chat](retrieval/chat.md), [add a retrieval channel or arm](guides/add-a-retrieval-arm.md), [the eval harness](evals/harness.md)                                   |
+| connecting an AI tool               | [The MCP server](mcp/server.md), [authentication](security/auth.md#mcp-tokens)                                                                                                                                                                                    |
+| working on the web or mobile client | [The web client](frontend/overview.md), [rendering the graph](graph/rendering.md), [the mobile app](mobile/overview.md)                                                                                                                                           |
+| operating production                | [Deployment](operations/deployment.md), [CI and CD](operations/ci-cd.md), [runbook](operations/runbook.md), [environment variables](reference/environment.md)                                                                                                     |
+| writing tests                       | [Testing overview](testing/overview.md), [backend tests](testing/backend.md), [frontend and end-to-end tests](testing/frontend-and-e2e.md)                                                                                                                        |
 
 ## The documents
 
-### Foundations
+### Start here
 
-- **[architecture.md](architecture.md)** — The system in one document: the two applications, the
-  request and job flows, the async/sync split, the data lifecycle through the pipeline, and the
-  design decisions behind it all, including the trade-offs that were deliberately accepted.
-
-- **[data-model.md](data-model.md)** — The database schema: every table, its columns,
-  relationships, and constraints, plus how migrations are written and the invariants the schema
-  relies on.
+- [Architecture](architecture.md): the whole system on one page, and the decisions behind it.
+- [Local setup](getting-started/local-setup.md): from a fresh clone to a running stack.
+- [Your first ingest](getting-started/first-ingest.md): what happens when you add a repository, and what you get.
+- [Repository layout](getting-started/repository-layout.md): where everything lives.
 
 ### The pipeline
 
-The analysis pipeline is the heart of the product. These six documents follow it end to end.
+- [The ingestion pipeline](pipeline/ingestion.md): every stage, the statuses, the orderings that matter.
+- [Parsing and dependency resolution](pipeline/parsing-and-dependencies.md): tree-sitter, imports, barrels and fan-in.
+- [Git intelligence and criticality](pipeline/git-intelligence.md): ownership, co-change, pull requests and risk scoring.
+- [LLM generation](pipeline/generation.md): the glossary, the reading order and the architecture brief.
+- [Ingestion concurrency and failure handling](pipeline/concurrency-and-failure.md): threads, sessions, the stage timer, and what happens on an exception.
+- [The clone cache](pipeline/clone-cache.md): persistent clones, eviction and fallbacks.
+- [Auto-update sync](pipeline/sync.md): sweeps, leases, watermarks and incremental rebuilds.
 
-- **[pipeline/ingestion.md](pipeline/ingestion.md)** — The full analysis run: cloning, parsing,
-  dependency resolution, git history mining, criticality scoring, and the LLM phase. Covers how
-  stages are overlapped, why certain stages must run in a particular order, how failures are
-  retried, and how progress reaches the browser.
+### Search and chat
 
-- **[pipeline/git-intelligence.md](pipeline/git-intelligence.md)** — The git-history stages of the
-  run above: ownership mining, knowledge silos, test detection, and the criticality score built from
-  them and from dependency fan-in.
+- [The index and embeddings](retrieval/index-and-embeddings.md): what is indexed, as what text, and what is left out.
+- [Retrieval arms](retrieval/retrieval-arms.md): query transforms, seven channels, fusion, rerankers, diversity and the presets.
+- [Chat and citations](retrieval/chat.md): the two chat endpoints, citations, conversations, stale answers and the free tier.
+- [The agent](retrieval/agent.md): the tool-using agent, its budgets, planner mode, events and persistence.
+- [The auto router](retrieval/router.md): how `auto` picks a preset per question.
 
-- **[pipeline/sync.md](pipeline/sync.md)** — Automatic background updates. How a due repository is
-  claimed, how a change is detected cheaply, how only the changed files are reprocessed, and how
-  the two commit watermarks let a partially failed update resume instead of restarting.
+### The graph
 
-- **[pipeline/generation.md](pipeline/generation.md)** — The LLM-written artefacts: the glossary,
-  the annotated reading order, and the architecture brief. Covers the provider abstraction, how a
-  user's own API key is threaded through, and how the system degrades when a model call fails.
-
-- **[pipeline/retrieval.md](pipeline/retrieval.md)** — The RAG chat. How source is turned into
-  embeddable chunks, how a question is answered from them, how the result set is diversified, and
-  where the design currently falls short.
-
-- **[pipeline/graph.md](pipeline/graph.md)** — The dependency graph that powers the reading order
-  and the 3D visualisation: how edges are derived and collapsed, how re-export files are resolved,
-  and how the client renders it.
+- [The dependency graph](graph/dependency-graph.md): how edges are stored and how both graph payloads are built.
+- [Rendering the graph](graph/rendering.md): the 3D graph page and the pixel-art graphs elsewhere.
 
 ### Interfaces
 
-- **[api.md](api.md)** — The HTTP API: every endpoint grouped by router, the authentication each
-  one requires, the identifier conventions, and the error semantics.
+- [API reference](api.md): every HTTP route, the WebSocket and the MCP endpoint.
+- [The ingest progress WebSocket](interfaces/websockets.md): every frame and the client's progress board.
+- [The `.illume` export](interfaces/illume-export.md): the plain-text export, section by section.
+- [The MCP server](mcp/server.md): transport, tokens, tools, resources, prompts and rate limits.
 
-- **[websockets.md](websockets.md)** — The live progress stream: the channel naming, the frame
-  format, and the stage/phase contract a client renders from.
+### Clients
 
-- **[exports.md](exports.md)** — The compact text export of a repository analysis, its section
-  format, and what it is for.
+- [The web client](frontend/overview.md): routes, authentication, data fetching and components.
+- [The docs site](frontend/docs-site.md): how these files become `/docs`, and how to write a page.
+- [The mobile app](mobile/overview.md): the Expo app, its session, networking and screens.
+- [The mobile graph renderer](mobile/graph-renderer.md): three.js on `expo-gl`, layout and gestures.
 
-- **[frontend.md](frontend.md)** — The Next.js application: routing, the server/client component
-  split, the three data-fetching strategies and why all three exist, and the WebGL rendering
-  constraints.
+### Security
 
-- **[mobile.md](mobile.md)** — The React Native / Expo application: routing and the param hook that
-  trips everyone, the bearer-token session lifecycle on both platforms, the query cache and its
-  invalidation rules, a screen-by-screen tour, the ingest stream, the chat, the 3D graph renderer
-  built on `expo-gl`, the token system, testing, and the EAS build path.
+- [Authentication and authorization](security/auth.md): JWTs, cookies, bearer tokens, OAuth, MCP tokens and the known issues.
+- [Bring your own key, the free tier and encryption at rest](security/byok-and-encryption.md): who pays for each call and how keys are stored.
 
-### Supporting systems
+### Evaluation
 
-- **[auth.md](auth.md)** — Authentication and authorisation: the JWT cookie, the middleware gate,
-  password handling, GitHub OAuth, and how per-user data isolation is enforced.
+- [The eval harness](evals/harness.md): the corpus, mined questions, gold sets, arms, budgets and manifests.
+- [Judging and statistics](evals/judging-and-statistics.md): the judged metrics, the batch judge and the statistical methods.
+- [Results: full_v1](evals/results-full-v1.md): what the first full run measured, with its caveats.
 
-- **[deployment.md](deployment.md)** — Building and running Illume in production: the container
-  image, the three production processes, the CI/CD workflows, and the state that must survive a
-  deploy.
+### Testing and operations
 
-- **[testing.md](testing.md)** — The three test suites, what each layer is for, how to run them,
-  and the conventions to follow when adding a test.
+- [Testing overview](testing/overview.md): the suites, which one a change belongs in, and coverage.
+- [Backend tests](testing/backend.md): fixtures, fakes, the security suite and migration tests.
+- [Frontend and end-to-end tests](testing/frontend-and-e2e.md): Vitest, Playwright and the production smoke suite.
+- [CI and CD](operations/ci-cd.md): the workflows, the coverage ratchet and the deploy.
+- [Deployment](operations/deployment.md): the image, the three containers and the state that must survive.
+- [Runbook](operations/runbook.md): symptoms, causes and fixes in production.
 
-## Conventions in this documentation
+### Reference
 
-A few conventions keep the documents consistent and trustworthy:
+- [Commands and scripts](reference/cli.md): every Makefile target, script and eval command.
+- [Environment variables](reference/environment.md): every variable, where it is read and what happens when it is wrong.
+- [Constants](reference/constants.md): every tunable number and its file.
+- [Data model](reference/data-model.md): every table, relationship and migration.
 
-- **Claims are tied to code.** Where a behaviour matters, the document names the module or function
-  that implements it, so it can be checked rather than believed.
-- **Limitations are stated plainly.** Where a feature is incomplete, approximated, or known to be
-  wrong, the document says so instead of describing the intended behaviour. A document that only
-  describes the happy path is not useful for debugging.
-- **Numbers carry their context.** Limits, thresholds, and caps are given with the module that
-  defines them, because most of them are constants that can change.
-- **Diagrams are Mermaid.** Flow and structure diagrams use Mermaid fenced blocks, so GitHub and
-  most editors render them as real diagrams. Directory trees stay as plain text, because a rendered
-  graph reads worse than an indented listing for a file tree.
-- **Configuration lives with the behaviour it controls.** Environment variables and tunable constants
-  are documented in the document that explains what they do — the sync intervals in
-  [pipeline/sync.md](pipeline/sync.md), the generation credentials in
-  [pipeline/generation.md](pipeline/generation.md), the production env file in
-  [deployment.md](deployment.md) — rather than in a central reference that would duplicate all of them
-  and go stale on its own.
+### Guides
+
+- [Add a pipeline stage](guides/add-a-pipeline-stage.md)
+- [Add a retrieval channel or arm](guides/add-a-retrieval-arm.md)
+- [Add an endpoint](guides/add-an-endpoint.md)
+- [Add an agent or MCP tool](guides/add-an-mcp-tool.md)
+- [Change the database schema](guides/change-the-schema.md)
+
+## The system in one picture
+
+```mermaid
+flowchart LR
+    GH["GitHub repository"] --> ING["Ingest<br/>clone, parse, history, score"]
+    ING --> GEN["Generate<br/>glossary, reading order, brief"]
+    ING --> IDX["Index<br/>embeddings and full text"]
+    GEN --> DB[("Postgres")]
+    IDX --> DB
+    ING --> DB
+    DB --> PAGES["Pages and 3D graph"]
+    DB --> CHAT["Chat<br/>presets and agent"]
+    DB --> MCP["MCP tools"]
+    GH -.->|"auto-update"| ING
+```
 
 ## Glossary
 
-Terms used throughout these documents. Several of them mean something more specific inside Illume
-than they do in general use.
+Terms used across several pages. Each page also defines its own terms where they first appear.
 
-| Term                       | Meaning in Illume                                                                                                                                          |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Ingest**                 | A full analysis of a repository from scratch. Triggered when a repository is added, or by an explicit re-ingest.                                             |
-| **Sync**                   | An incremental update of an already-ingested repository, run automatically on a schedule. Reuses the ingest pipeline but processes only what changed.        |
-| **Snapshot**               | The pair of branch and commit SHA that an analysis reflects. A repository has two: one for deterministic data, one for LLM artefacts.                       |
-| **Watermark**              | A stored commit SHA recording how current a piece of derived data is. Used to decide whether a sync needs to do anything.                                   |
-| **Stage**                  | One named unit of work inside the pipeline (clone, parse, embed, …). Stages emit progress frames and are timed individually.                                |
-| **Phase**                  | The lifecycle marker on a progress frame: `started`, `progress`, `done`, or `failed`. The client renders node states from this rather than from event names.  |
-| **Symbol**                 | A function, class, or method extracted from source by the parser. The unit the glossary, embeddings, and symbol-level graph are built on.                  |
-| **Criticality**            | A three-level classification (critical / caution / safe) assigned to each file from fan-in, path sensitivity, staleness, and test presence.                |
-| **Fan-in / fan-out**       | How many other files depend on this one (fan-in) and how many it depends on (fan-out). Persisted at ingest.                                                 |
-| **Barrel**                 | A file that only re-exports from others (`index.ts`, `__init__.py`). It has no symbols of its own, so graph edges are resolved through it to a real target. |
-| **Reading order**          | The generated, topologically sorted sequence of files a newcomer should read, with a short annotation on each.                                              |
-| **BYOK**                   | Bring Your Own Key. The model where a user supplies their own LLM provider credentials instead of spending the operator's.                                 |
-| **Free tier**              | The operator-funded allowance a user gets before BYOK is required: one ingestion and a small number of chat questions.                                      |
-| **Embedding**              | A vector representation of a text chunk, stored in Postgres via pgvector and searched by cosine distance for RAG retrieval.                                 |
+| Term                     | Meaning                                                                                                                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agent**                | the `deep_agent` presets: a model that answers by calling tools in a loop instead of retrieving once. See [the agent](retrieval/agent.md)                               |
+| **Arm**                  | one answering configuration measured by the eval harness. The product's presets are arms; ablations change one thing. See [the eval harness](evals/harness.md)          |
+| **Artefact**             | anything the pipeline writes for a repository: files, symbols, edges, scores, glossary, reading order, brief, embeddings                                                |
+| **Barrel**               | a file that only re-exports other files, such as `index.ts` or `__init__.py`. Detected by structure, not by name. See [the dependency graph](graph/dependency-graph.md) |
+| **Base commit (B)**      | in the eval harness, the commit a repository is frozen at; nothing newer is visible to retrieval                                                                        |
+| **Beat**                 | Celery's scheduler process, which queues the auto-update sweep and the nightly prune                                                                                    |
+| **Brief**                | the architecture brief: a model-written narrative of how the repository fits together, plus its critical files                                                          |
+| **Bus factor**           | the number of people who have committed to a file in the analysed history. A bus factor of one makes the file a knowledge silo                                          |
+| **BYOK**                 | bring your own key: a user's own model-provider key, encrypted at rest, which pays for that user's generation and chat                                                  |
+| **Channel**              | one independent way of finding candidates for a question, such as `dense`, `lexical`, `symbol`, `grep`, `history`, `graph` or `cochange`                                |
+| **Chunk**                | one labelled piece of text in the search index, built from a symbol, file, commit, pull request or README section                                                       |
+| **Citation key**         | the stable identifier of a chunk, which the model writes in its answer and the client turns into a citation card                                                        |
+| **Clone cache**          | the persistent per-repository clones that let a sync fetch only what changed                                                                                            |
+| **Co-change**            | two files that tend to change in the same commits                                                                                                                       |
+| **Criticality**          | a file's risk label, `critical`, `caution` or `safe`, from fan-in, core-infrastructure path patterns, staleness and test coverage, with reasons                         |
+| **Decision model (Jev)** | a model reached through OpenRouter that answers narrow choice, score and probability questions in batches: routing, the Jev reranker and some agent decisions           |
+| **Embedding**            | a 1536-number vector from `text-embedding-3-small` that places a chunk so similar text lands close together                                                             |
+| **Fan-in, fan-out**      | how many files import a file, and how many files it imports                                                                                                             |
+| **Frame**                | one JSON progress message an ingest publishes, with `event`, `message`, `stage` and `phase`                                                                             |
+| **Free tier**            | three ingestions and ten chat messages per user on the operator's key, for users with no key of their own                                                               |
+| **Fusion (RRF)**         | merging several ranked lists by rank, not by score, with reciprocal rank fusion                                                                                         |
+| **Gold item**            | an eval question with a known answer: the files a correct answer names and a reference answer                                                                           |
+| **Ingest**               | the one background task that clones and analyses a repository and writes every artefact                                                                                 |
+| **Judge**                | the model that scores eval answers for correctness, faithfulness and relevancy. Not yet validated against hand labels                                                   |
+| **Knowledge silo**       | a file with a bus factor of one                                                                                                                                         |
+| **Lease**                | the expiry time a sync writes before it starts, so a killed sync cannot hold a repository forever                                                                       |
+| **`LLMConfig`**          | the frozen value that says which provider, key and model pay for a call; passed explicitly to every service and thread                                                  |
+| **MCP**                  | the Model Context Protocol. Illume's server at `/mcp` lets AI coding tools search and read a user's repositories                                                        |
+| **Overlapped stage**     | an ingest stage that runs on a thread at the same time as another, receiving only scalars and opening its own session                                                   |
+| **Phase**                | where a stage is: `started`, `progress`, `done` or `failed`                                                                                                             |
+| **Preset**               | a named retrieval configuration chat can run: `classic`, `hybrid`, `hybrid_rerank`, `structural`, `deep_agent`, `deep_agent_workers`, or `auto`                         |
+| **Reading order**        | the files of a repository sorted so a file's dependencies come before it, in tiers, each with a short note on why to read it                                            |
+| **Re-ingest**            | deleting a repository's row and everything under it, recreating it with the same id and number, and ingesting again                                                     |
+| **Reranker**             | a model that reorders the fused candidates by reading each against the question: Cohere, Jev or the user's own model                                                    |
+| **`repo_number`**        | the small integer in web URLs such as `/repo/3`; the API mostly uses the UUID `id`                                                                                      |
+| **Run slot**             | a per-user allowance in Redis that bounds how many agent runs a user has at once                                                                                        |
+| **Snapshot**             | the branch and commit an ingest or sync analysed. Every page and answer describes the snapshot                                                                          |
+| **Stage**                | one named unit of ingest work, such as `parse` or `criticality`, and the name its timer and frames use                                                                  |
+| **Stale answer**         | a chat answer written against an older snapshot than the repository now has                                                                                             |
+| **Sweep**                | the beat-scheduled task that finds repositories due for an update and queues a sync for each                                                                            |
+| **Symbol**               | a function, class, method or import that the parser extracted from a file                                                                                               |
+| **Sync**                 | the background task that brings an ingested repository up to its remote head, rebuilding only what changed                                                              |
+| **Watermark**            | a commit SHA recording what some data reflects: `ingested_commit_sha` for the deterministic data and `analysis_commit_sha` for the model output                         |
+
+## Conventions in these documents
+
+- Code links are relative paths to files in this repository, with symbol names in backticks. On the site they open on GitHub.
+- Numbers come with the file that defines them. If a number here and a number in the code disagree, the code is right; please fix the page.
+- Diagrams are Mermaid and render on GitHub and on the site. [The docs site](frontend/docs-site.md) explains how to write a page and the checks every page must pass.
+- Limits are stated plainly. If something is not done or not verified, the page says so.
+
+## Design trade-offs and limits
+
+- **Docs live beside the code.** The files are read at build time, so a documentation change needs a rebuild of the web client to appear on the site, and pushing to `main` also redeploys the backend.
+- **Checked links, unchecked facts.** A test fails on a broken link or anchor, but nothing checks that a sentence still matches the code. The numbers carry their source files so that drift can be found.
+- **One snapshot of the eval results.** The results page describes one run; a new run needs a new page.
+
+## Related documentation
+
+- [Architecture](architecture.md): start here.
+- [The docs site](frontend/docs-site.md): how these pages are published.
+- [The project README](../README.md): the front page, with a feature tour and quick start.
