@@ -26,3 +26,18 @@ export function resolveGithubRef(
   if (branch && branch.length > 0) return branch;
   return FALLBACK_GITHUB_REF;
 }
+
+/**
+ * Reduces a GitHub repository URL to a comparable `owner/name` key.
+ *
+ * GitHub treats owner and repository names case-insensitively, and a URL may
+ * carry a `.git` suffix or a trailing slash, so all three are normalised away.
+ *
+ * @param url A repository URL such as `https://github.com/Owner/Repo.git`.
+ * @returns The lowercased `owner/name`, or null for anything else.
+ */
+export function repoSlug(url: string): string | null {
+  const match = /github\.com\/([^/\s]+)\/([^/\s?#]+)/i.exec(url);
+  if (!match) return null;
+  return `${match[1]}/${match[2].replace(/\.git$/i, "")}`.toLowerCase();
+}

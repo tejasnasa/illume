@@ -20,15 +20,16 @@ describe("login page", () => {
     render(<Login />);
 
     expect(
-      screen.getByRole("heading", { name: /welcome to illume/i }),
+      screen.getByRole("heading", { name: /welcome back/i }),
     ).toBeInTheDocument();
   });
 
-  it("states what the GitHub permission is used for", () => {
+  it("links the logo back to the home page", () => {
     render(<Login />);
 
-    for (const label of ["Read-only", "Never stored", "Private repos"]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
+    expect(screen.getByRole("link", { name: "Illume home" })).toHaveAttribute(
+      "href",
+      "/",
+    );
   });
 });

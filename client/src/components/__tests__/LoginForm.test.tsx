@@ -38,7 +38,7 @@ describe("content", () => {
   it("renders the heading", () => {
     render(<LoginForm />);
 
-    expect(screen.getByRole("heading", { name: "Welcome to Illume" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Welcome back/ })).toBeInTheDocument();
   });
 
   it("offers a single GitHub action", () => {
@@ -58,18 +58,11 @@ describe("content", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  it("states the three guarantees", () => {
+  it("says that continuing creates an account", () => {
+    // There is no separate sign-up form, so the panel has to say so.
     render(<LoginForm />);
 
-    expect(screen.getByText("Read-only")).toBeInTheDocument();
-    expect(screen.getByText("Never stored")).toBeInTheDocument();
-    expect(screen.getByText("Private repos")).toBeInTheDocument();
-  });
-
-  it("links the logo back to the home page", () => {
-    render(<LoginForm />);
-
-    expect(screen.getByRole("link")).toHaveAttribute("href", "/");
+    expect(screen.getByText(/creates your account/i)).toBeInTheDocument();
   });
 });
 
@@ -97,7 +90,9 @@ describe("the GitHub action", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: /Continue with GitHub/i }));
 
-    expect(screen.getByRole("button", { name: /Continue with GitHub/i })).toBeDisabled();
+    const button = screen.getByRole("button", { name: /Opening GitHub/i });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("aria-busy", "true");
   });
 
   it("is enabled before the click", () => {

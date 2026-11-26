@@ -1,28 +1,21 @@
 /**
- * Site footer for the signed-in application shell.
+ * Site footer shared by the signed-in pages, the contact page and the landing page.
  * @module AppFooter
  */
-import {
-  GithubLogoIcon,
-  LinkedinLogoIcon,
-  StarFourIcon,
-  XLogoIcon,
-} from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 
-/** Social profiles, rendered in order. */
+/** Social profiles, rendered in order after the internal links. */
 const SOCIALS = [
-  { href: "https://github.com/tejasnasa", label: "GitHub", Icon: GithubLogoIcon },
-  {
-    href: "https://www.linkedin.com/in/tejasnasa/",
-    label: "LinkedIn",
-    Icon: LinkedinLogoIcon,
-  },
-  { href: "https://x.com/tejasnasa/", label: "X", Icon: XLogoIcon },
+  { href: "https://github.com/tejasnasa", label: "GitHub" },
+  { href: "https://www.linkedin.com/in/tejasnasa/", label: "LinkedIn" },
+  { href: "https://x.com/tejasnasa/", label: "X" },
 ];
 
+const linkClass =
+  "text-(--faint-foreground) transition-colors hover:text-(--foreground)";
+
 /**
- * Renders the footer shown beneath the signed-in pages.
+ * Renders the one-line footer: credit on the left, links on the right.
  *
  * `mt-auto` is what pins it: each authenticated layout is a full-height flex column, so
  * the footer is pushed to the bottom of the viewport when the page's own content is
@@ -37,52 +30,27 @@ const SOCIALS = [
  */
 export default function AppFooter() {
   return (
-    <footer className="relative z-10 mt-auto border-t border-(--border) pt-3 pb-6 px-6">
-      <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <div className="relative h-10 w-10 flex items-center justify-center">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-8 w-8 rounded-full bg-(--chart-1)/30 blur-xl" />
-            </div>
-            <StarFourIcon
-              className="relative text-(--chart-1)"
-              weight="fill"
-              size={20}
-            />
-          </div>
-          <span className="text-sm text-(--muted-foreground)">
-            Illume &middot; Built by Tejas Nasa
-          </span>
-        </div>
-
-        <div className="flex items-center gap-5">
-          <Link
-            href="/docs"
-            className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
-          >
+    <footer className="relative z-10 mt-auto border-t border-(--border) bg-(--background)">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5 font-pixel text-xs tracking-[0.08em] text-(--faint-foreground) uppercase sm:px-6">
+        <span>© {new Date().getFullYear()} Illume · Built by Tejas Nasa</span>
+        <div className="flex flex-wrap items-center gap-5">
+          <Link href="/docs" className={linkClass}>
             Docs
           </Link>
-          <Link
-            href="/contact"
-            className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
-          >
+          <Link href="/contact" className={linkClass}>
             Contact
           </Link>
-
-          <div className="flex items-center gap-4 text-2xl text-(--muted-foreground)">
-            {SOCIALS.map(({ href, label, Icon }) => (
-              <a
-                key={label}
-                href={href}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={label}
-                className="hover:text-(--foreground) transition-colors"
-              >
-                <Icon />
-              </a>
-            ))}
-          </div>
+          {SOCIALS.map(({ href, label }) => (
+            <a
+              key={label}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={linkClass}
+            >
+              {label}
+            </a>
+          ))}
         </div>
       </div>
     </footer>

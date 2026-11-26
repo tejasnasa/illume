@@ -1,6 +1,7 @@
 /**
- * The public site's top bar, shared by the landing page and the docs: logo, section
- * links, Docs, Contact and the Login button.
+ * The public site's top bar, shared by the landing page, the docs and the
+ * signed-out contact page: wordmark, centred section links, the GitHub star
+ * button and Login.
  *
  * Fixed and 4rem tall: every page that renders it pads its content down by at least
  * that much. The section links are `/#…` rather than `#…`, and go through
@@ -8,15 +9,19 @@
  * landing page itself they only scroll.
  * @module SiteNavbar
  */
-import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
+import { GithubLogoIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
+import GitHubStars from "./GitHubStars";
+import { Wordmark } from "./ui/Logo";
 
 const LINKS = [
   { href: "/#features", label: "Features" },
-  { href: "/#how-it-works", label: "How It Works" },
+  { href: "/#how-it-works", label: "How it works" },
   { href: "/docs", label: "Docs" },
   { href: "/contact", label: "Contact" },
 ] as const;
+
+const REPO = "tejasnasa/illume";
 
 /**
  * Renders the public top bar.
@@ -25,38 +30,45 @@ const LINKS = [
  */
 export default function SiteNavbar() {
   return (
-    <nav className="fixed top-0 inset-x-0 z-50 backdrop-blur-xl border-b border-(--border)">
-      <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link
-          href={"/"}
-          className="relative h-12 flex items-center justify-center m-2 gap-2"
-        >
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-10 w-40 rounded-full bg-(--chart-1)/30 blur-xl" />
-          </div>
-          <StarFourIcon
-            className="relative text-(--chart-1)"
-            weight="fill"
-            size={24}
-          />
-          <span className="text-xl font-semibold">Illume</span>
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-0 top-0 z-50 border-b border-(--border) bg-(--background)/85 backdrop-blur-md"
+    >
+      <div className="mx-auto grid h-16 max-w-7xl grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 sm:px-6">
+        <Link href="/" aria-label="Illume home" className="justify-self-start">
+          <Wordmark />
         </Link>
 
-        <div className="flex items-center gap-1">
+        <div className="hidden items-center gap-1 font-pixel text-sm tracking-[0.06em] uppercase md:flex">
           {LINKS.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
-              className="hidden sm:block px-4 py-2 text-sm text-(--muted-foreground) hover:text-(--foreground) rounded-lg hover:bg-(--secondary) transition-all duration-200"
+              className="px-3.5 py-2.5 text-(--muted-foreground) transition-colors duration-200 hover:text-(--foreground)"
             >
               {label}
             </Link>
           ))}
+        </div>
+
+        <div className="col-start-3 flex items-center gap-2.5 justify-self-end">
+          <a
+            href={`https://github.com/${REPO}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Star Illume on GitHub"
+            className="ghost hidden h-10 items-stretch overflow-hidden rounded-sm border border-(--border-strong) font-pixel text-sm text-zinc-300 sm:flex"
+          >
+            <span className="flex items-center px-3">
+              <GithubLogoIcon size={16} weight="fill" />
+            </span>
+            <GitHubStars repo={REPO} />
+          </a>
           <Link
             href="/login"
-            className="ml-2 flex items-center gap-2 px-4 py-2 text-sm rounded-full border bg-(--primary) border-(--border)  hover:border-white transition-all duration-200"
+            className="cta flex h-10 items-center rounded-sm bg-(--primary) px-4.5 font-pixel text-sm tracking-[0.06em] text-(--primary-foreground) uppercase"
           >
-            <span className="sm:inline">Login</span>
+            Login
           </Link>
         </div>
       </div>

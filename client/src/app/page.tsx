@@ -1,599 +1,541 @@
 /**
- * Marketing landing page with features, pipeline, and previews.
+ * Marketing landing page: hero, stats, features, walkthrough, FAQ and footer.
  * @module HomePage
  */
-"use client";
-
-import dashboard from "@/assets/dashboard.png";
-import explorer from "@/assets/explorer.png";
-import graph from "@/assets/graph.png";
-import BackgroundGraph from "@/components/BackgroundGraph";
+import PixelGraph from "@/components/PixelGraph";
 import SiteNavbar from "@/components/SiteNavbar";
-import graphData from "@/data/data2.json";
 import {
-  ArrowDownIcon,
-  ArrowRightIcon,
-  BrainIcon,
-  ChatTeardropTextIcon,
-  GitBranchIcon,
-  GithubLogoIcon,
-  LinkedinLogoIcon,
-  ListChecksIcon,
-  MagnifyingGlassIcon,
-  MapTrifoldIcon,
-  SparkleIcon,
-  StarFourIcon,
-  TreeStructureIcon,
-  UsersFourIcon,
-  WarningDiamondIcon,
-  XLogoIcon,
-} from "@phosphor-icons/react/dist/ssr";
-import { motion, type Variants } from "motion/react";
-import Image from "next/image";
+  AskDemo,
+  BriefDemo,
+  GlossaryDemo,
+  McpDemo,
+  ReadingOrderDemo,
+} from "@/components/landing/FeatureDemos";
+import HowItWorks from "@/components/landing/HowItWorks";
+import { EndCta, Faq, Tour } from "@/components/landing/LandingExtras";
+import Logo from "@/components/ui/Logo";
+import SystemStatus from "@/components/SystemStatus";
 import Link from "next/link";
 
-/**
- * Shared fade-up motion variant with index-based staggering.
- */
-const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 32 },
-  visible: (i: number) => ({
-    opacity: 1,
-    y: 0,
-    transition: {
-      delay: i * 0.1,
-      duration: 0.6,
-      ease: [0.25, 0.46, 0.45, 0.94],
-    },
-  }),
-};
+const STATS: {
+  n: string;
+  label: [string, string];
+  desc: string;
+  tone?: string;
+}[] = [
+  {
+    n: "01",
+    label: ["URL to", "start"],
+    desc: "Paste a GitHub link. Nothing to install or configure.",
+  },
+  {
+    n: "13",
+    label: ["Languages", "parsed"],
+    desc: "Python, TypeScript, Go, Rust, Java, Kotlin and more.",
+  },
+  {
+    n: "06",
+    label: ["Guides per", "repo"],
+    desc: "Graph, brief, reading order, glossary, owners and chat.",
+    tone: "text-(--accent)",
+  },
+  {
+    n: "07",
+    label: ["Ways to", "search"],
+    desc: "Meaning, keyword, symbol, grep, imports, co-change, history.",
+  },
+  {
+    n: "00",
+    label: ["Write access", "needed"],
+    desc: "Read-only. Illume never changes your code.",
+    tone: "text-(--chart-1)",
+  },
+];
 
-/**
- * Parent stagger preset for hero entrance sequencing.
- */
-const stagger = {
-  visible: { transition: { staggerChildren: 0.08 } },
-};
+const OWNERS: [string, number, string][] = [
+  ["Aarav Kapoor", 72, "#f6339a"],
+  ["Sofia Martins", 41, "#00b8db"],
+  ["Jonah Reyes", 23, "#0092b8"],
+  ["Priya Desai", 9, "#3f3f46"],
+];
 
-/**
- * Feature cards shown in the landing features grid.
- */
-const FEATURES = [
+const COMMITS: [string, string][] = [
+  ["a3f9c1", "fix: resolve imports with extensions"],
+  ["7be210", "feat: docs navbar"],
+  ["c41d0e", "refactor: split file graph"],
+  ["19af77", "feat: push on sync"],
+  ["e02b5c", "fix: lease expiry"],
+  ["5d8e3a", "feat: MCP ask tool"],
+];
+
+const FOOTER_COLUMNS: {
+  title: string;
+  links: { label: string; href: string; external?: boolean }[];
+}[] = [
   {
-    icon: MapTrifoldIcon,
-    title: "Architecture Brief",
-    description:
-      "Auto-generated executive summaries — detects tech stacks, maps entry points, and traces data flows through your codebase.",
-    color: "oklch(0.6270 0.2148 292.72)",
+    title: "Product",
+    links: [
+      { label: "Features", href: "#features" },
+      { label: "How it works", href: "#how-it-works" },
+      { label: "The tour", href: "#tour" },
+      { label: "FAQ", href: "#faq" },
+    ],
   },
   {
-    icon: ListChecksIcon,
-    title: "Guided Reading Order",
-    description:
-      "Topologically sorted learning paths. Know exactly where to start and what to read next with LLM-annotated explanations.",
-    color: "var(--chart-1)",
+    title: "Resources",
+    links: [
+      { label: "Docs", href: "/docs" },
+      {
+        label: "GitHub",
+        href: "https://github.com/tejasnasa/illume",
+        external: true,
+      },
+      {
+        label: "YouTube",
+        href: "https://www.youtube.com/watch?v=ZKjFKBAj89g",
+        external: true,
+      },
+    ],
   },
   {
-    icon: MagnifyingGlassIcon,
-    title: "Codebase Glossary",
-    description:
-      "Every function, class, and domain term explained in plain English. Searchable, browsable, and linked to source code.",
-    color: "oklch(0.7225 0.1768 149.58)",
-  },
-  {
-    icon: UsersFourIcon,
-    title: "Code Ownership Map",
-    description:
-      "Who wrote what, who owns what, who to ask. Knowledge silo detection with bus-factor analysis from git history.",
-    color: "var(--destructive)",
-  },
-  {
-    icon: WarningDiamondIcon,
-    title: "Critical File Guardrails",
-    description:
-      "Traffic-light tagging: 🔴 Critical 🟡 Caution 🟢 Safe. Know what you can touch and what needs review.",
-    color: "oklch(0.7954 0.1758 85.87)",
-  },
-  {
-    icon: ChatTeardropTextIcon,
-    title: "Ask the Codebase",
-    description:
-      "RAG-powered Q&A over code, commits, and pull requests. Ask 'why' — get answers citing the exact PR that made the change.",
-    color: "var(--sidebar-primary)",
+    title: "Account",
+    links: [
+      { label: "Get the mobile app", href: "/mobile" },
+      { label: "Login", href: "/login" },
+      { label: "Contact", href: "/contact" },
+    ],
   },
 ];
 
 /**
- * Ingestion pipeline steps shown in the how-it-works section.
+ * A section's eyebrow, two-line heading and side blurb.
+ *
+ * @param eyebrow Small label above the heading.
+ * @param title First heading line.
+ * @param accent Second heading line, in the gradient.
+ * @param blurb Supporting sentence beside the heading.
+ * @returns The section header.
  */
-const PIPELINE_STEPS = [
-  {
-    icon: GitBranchIcon,
-    label: "Clone & Analyze",
-    desc: "Full git clone with history. Extract commits, PRs, and ownership data.",
-  },
-  {
-    icon: TreeStructureIcon,
-    label: "Parse AST",
-    desc: "Tree-sitter extracts functions, classes, imports, and dependency edges.",
-  },
-  {
-    icon: BrainIcon,
-    label: "Embed & Generate",
-    desc: "OpenAI embeddings for RAG. LLM generates glossary, brief, and reading order.",
-  },
-  {
-    icon: SparkleIcon,
-    label: "Onboarding Ready",
-    desc: "Interactive guide with architecture brief, ownership map, and 3D graph.",
-  },
-];
+function SectionHead({
+  eyebrow,
+  title,
+  accent,
+  blurb,
+}: {
+  eyebrow: string;
+  title: string;
+  accent: string;
+  blurb: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-6">
+      <div className="flex min-w-0 flex-[1_1_560px] flex-col gap-4.5">
+        <p className="m-0 font-pixel text-sm tracking-[0.14em] text-(--chart-2) uppercase">
+          {eyebrow}
+        </p>
+        <h2 className="m-0 font-pixel text-[clamp(2.2rem,4.6vw,4.2rem)] leading-[1.02] tracking-[-0.02em]">
+          {title}
+          <br />
+          <span className="gradient-text">{accent}</span>
+        </h2>
+      </div>
+      <p className="m-0 flex-[0_1_400px] text-[17px] leading-relaxed text-zinc-400">
+        {blurb}
+      </p>
+    </div>
+  );
+}
 
 /**
- * Renders the full landing page: hero, features, pipeline, previews, footer.
+ * A bento feature card: numbered label, title, blurb and a demo.
+ *
+ * @param tag The `NN / WORD` label.
+ * @param title The feature name.
+ * @param body One-sentence description.
+ * @param className Grid placement.
+ * @param large Uses the larger title and the pink label.
+ * @param children The card's demo.
+ * @returns The card.
+ */
+function FeatureCard({
+  tag,
+  title,
+  body,
+  className = "",
+  large = false,
+  children,
+}: {
+  tag: string;
+  title: string;
+  body: string;
+  className?: string;
+  large?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <article
+      className={`panel flex min-w-0 flex-col gap-4.5 overflow-hidden p-7 ${className}`}
+    >
+      <div className="flex flex-col gap-2">
+        <p
+          className={`m-0 font-pixel text-[13px] tracking-[0.12em] ${large ? "text-(--accent)" : "text-(--chart-2)"}`}
+        >
+          {tag}
+        </p>
+        <h3
+          className={`m-0 font-pixel ${large ? "text-[30px]" : "text-[26px]"}`}
+        >
+          {title}
+        </h3>
+        <p className="m-0 max-w-130 text-[15px] leading-normal text-zinc-400">
+          {body}
+        </p>
+      </div>
+      {children}
+    </article>
+  );
+}
+
+/**
+ * Renders the full landing page.
+ *
+ * A server component: the hero, copy and static cards render on the server,
+ * and only the scripted demos and the two graphs hydrate.
  *
  * @returns Marketing homepage.
  */
 export default function Home() {
   return (
-    <main className="relative">
-      <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
-        <motion.div
-          animate={{ x: [0, 40, -20, 0], y: [0, -30, 15, 0] }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-40 -left-40 w-150 h-150 rounded-full bg-(--primary) opacity-[0.11] blur-[120px]"
-        />
-        <motion.div
-          animate={{ x: [0, -25, 35, 0], y: [0, 40, -20, 0] }}
-          transition={{
-            duration: 15,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 2,
-          }}
-          className="absolute top-1/3 -right-40 w-125 h-125 rounded-full bg-(--chart-1) opacity-[0.07] blur-[120px]"
-        />
-        <motion.div
-          animate={{ x: [0, 30, -15, 0], y: [0, -25, 30, 0] }}
-          transition={{
-            duration: 18,
-            repeat: Infinity,
-            ease: "easeInOut",
-            delay: 4,
-          }}
-          className="absolute -bottom-40 left-1/3 w-100 h-100 rounded-full bg-(--chart-2) opacity-[0.07] blur-[120px]"
-        />
-      </div>
-
+    <div className="relative isolate">
       <SiteNavbar />
 
-      <section className="relative max-w-6xl mx-auto min-h-screen flex items-center py-20 px-6 lg:px-0 overflow-hidden">
-        <div className="w-full flex flex-col lg:flex-row items-center">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 1, delay: 0.2 }}
-            className="relative mb-16 lg:mb-0 h-40 sm:h-80 lg:h-192 w-full lg:w-4/10"
-          >
-            {/* Layout tuning lives here; see BackgroundGraph's props for what
-                each value does. The camera is fitted, so the graph fills this
-                frame at any linkDistance; cooldownTicks decides how long the
-                layout keeps moving, not when the hero appears. */}
-            <BackgroundGraph
-              variant="contained"
-              graph={graphData}
-              nodeColor="rgb(0, 184, 219)"
-              linkDistance={450}
-              chargeStrength={-280}
-              nodeRelSize={6}
-              fitPadding={1}
-              cooldownTicks={80}
-              d3AlphaDecay={0.05}
-            />
-          </motion.div>
+      <div className="relative overflow-hidden">
+        <PixelGraph source="hero" followCursor />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_46%_40%_at_50%_47%,#09090be6_0%,#09090bb3_45%,#09090b00_100%)]"
+        />
 
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={stagger}
-            className="flex flex-col text-center lg:text-right w-full lg:w-6/10"
-          >
-            <motion.h1 variants={fadeUp} custom={1}>
-              <span className="block text-[clamp(2.8rem,6vw,4.65rem)] font-bold tracking-tighter text-(--foreground) leading-[1.1]">
+        <div className="relative flex min-h-dvh flex-col pt-16">
+          <section className="flex grow flex-col items-center justify-center gap-7.5 px-5 pt-14 pb-12 text-center">
+            <p className="m-0 font-pixel text-sm tracking-[0.14em] text-(--muted-foreground) uppercase">
+              &gt; illume ingest github.com/your/repo
+              <span className="caret text-(--accent)">_</span>
+            </p>
+            <h1 className="m-0 flex flex-col items-center gap-1.5 font-pixel leading-none">
+              <span className="text-[clamp(1.7rem,7.6vw,7.6rem)] tracking-[-0.02em] whitespace-nowrap">
                 Onboard engineers
               </span>
-              <span className="block text-[clamp(2.8rem,6vw,4.65rem)] font-bold tracking-tighter leading-[1.1] mt-1 gradient-text">
+              <span className="gradient-text text-[clamp(1.7rem,7.6vw,7.6rem)] tracking-[-0.02em] whitespace-nowrap">
                 in days, not weeks
               </span>
-            </motion.h1>
-
-            <motion.p
-              variants={fadeUp}
-              custom={2}
-              className="mt-6 text-md sm:text-lg text-(--muted-foreground) max-w-xl leading-relaxed mx-auto lg:mx-0 lg:ml-auto"
-            >
-              Illume ingests a GitHub repository and generates an{" "}
-              <span className="text-(--foreground) font-medium">
-                interactive onboarding guide
-              </span>{" "}
-              — architecture briefs, reading orders, glossaries, and ownership
-              maps.{" "}
-              <span className="text-(--primary) font-medium">
-                All automated.
-              </span>
-            </motion.p>
-
-            <motion.div
-              variants={fadeUp}
-              custom={3}
-              className="flex flex-col sm:flex-row gap-4 mt-10 justify-center lg:justify-end"
-            >
+            </h1>
+            <p className="m-0 max-w-160 text-[19px] leading-relaxed text-zinc-400">
+              Point Illume at a GitHub repository. It maps every file into a
+              living dependency graph, writes the{" "}
+              <span className="text-(--foreground)">architecture brief</span>,
+              the <span className="text-(--foreground)">reading order</span> and
+              the <span className="text-(--foreground)">glossary</span>, then
+              answers questions with sources you can check.
+            </p>
+            <div className="flex flex-wrap justify-center gap-3.5">
               <Link
                 href="/login"
-                className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-(--primary) text-(--primary-foreground) font-medium text-md hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300"
+                className="cta inline-flex items-center gap-3 rounded-sm bg-(--primary) px-7 py-4 font-pixel text-[17px] tracking-[0.04em] text-(--primary-foreground)"
               >
-                Get Started
-                <ArrowRightIcon
-                  size={16}
-                  weight="bold"
-                  className="group-hover:translate-x-0.5 transition-transform"
-                />
+                Get started <span aria-hidden="true">→</span>
               </Link>
               <a
-                href="#preview"
-                className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--border) text-(--muted-foreground) font-medium text-md hover:border-(--primary) hover:text-(--foreground) transition-all duration-300"
+                href="#tour"
+                className="ghost inline-flex items-center gap-3 rounded-sm border border-(--border-strong) bg-(--background)/60 px-7 py-4 font-pixel text-[17px] tracking-[0.04em] text-zinc-300"
               >
-                See It In Action
-                <ArrowDownIcon size={16} weight="bold" />
+                See it in action <span aria-hidden="true">↓</span>
               </a>
-            </motion.div>
+            </div>
+          </section>
+        </div>
+      </div>
 
-            <motion.div
-              variants={fadeUp}
-              custom={4}
-              className="mt-14 flex items-center justify-center lg:justify-end gap-8 text-md text-(--muted-foreground)"
+      <div className="bg-(--background)/80">
+        <dl className="m-0 flex flex-wrap">
+          {STATS.map(({ n, label, desc, tone }) => (
+            <div
+              key={n + label[0]}
+              className="flex flex-[1_1_200px] flex-col gap-2 border-(--border) px-7 py-9 not-last:border-r"
             >
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-3xl font-bold text-(--foreground)">9</span>
-                <span className="text-sm">Features</span>
+              <div className="flex items-baseline gap-3">
+                <dd
+                  className={`m-0 font-pixel text-[44px] leading-none ${tone ?? ""}`}
+                >
+                  {n}
+                </dd>
+                <dt className="text-xs tracking-[0.12em] text-zinc-300 uppercase">
+                  {label[0]}
+                  <br />
+                  {label[1]}
+                </dt>
               </div>
-              <div className="w-px h-8 bg-(--border)" />
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-3xl font-bold text-(--foreground)">6</span>
-                <span className="text-sm">AI Pipelines</span>
+              <span className="text-[13px] leading-snug text-(--muted-foreground)">
+                {desc}
+              </span>
+            </div>
+          ))}
+        </dl>
+      </div>
+
+      <section id="features" className="scroll-mt-16">
+        <div className="mx-auto flex max-w-7xl flex-col gap-14 px-6 py-22.5">
+          <SectionHead
+            eyebrow="Features"
+            title="Everything week one asks,"
+            accent="answered on day one"
+            blurb="One ingest turns a repository into a map, a guide and a teammate who has read every file, commit and pull request."
+          />
+
+          <div className="grid grid-cols-12 gap-4">
+            <FeatureCard
+              large
+              tag="01 / ASK"
+              title="Ask the codebase"
+              body="Plain-English questions, answered from the code, commits, pull requests and docs, with every source attached so you can check it."
+              className="col-span-12 lg:col-span-7 lg:row-span-2"
+            >
+              <AskDemo />
+            </FeatureCard>
+
+            <FeatureCard
+              tag="02 / MAP"
+              title="3D dependency graph"
+              body="Every file and import, in a graph you can fly through. Click a file to see what it touches."
+              className="col-span-12 lg:col-span-5"
+            >
+              <div
+                aria-hidden="true"
+                className="relative h-55 overflow-hidden rounded-sm border border-white/8 bg-(--background)"
+              >
+                <PixelGraph
+                  source="sample"
+                  spin
+                  cell={3}
+                  hubLabels={false}
+                  focusLabel={false}
+                  spreadY={0.42}
+                  lightRadius={0.34}
+                />
               </div>
-              <div className="w-px h-8 bg-(--border)" />
-              <div className="flex flex-col items-center gap-1">
-                <span className="text-3xl font-bold text-(--foreground)">
-                  3D
+            </FeatureCard>
+
+            <FeatureCard
+              tag="03 / PATH"
+              title="Reading order"
+              body="The order to read the code in, from foundations up, with a note on why each file matters."
+              className="col-span-12 lg:col-span-5"
+            >
+              <ReadingOrderDemo />
+            </FeatureCard>
+
+            <FeatureCard
+              tag="04 / BRIEF"
+              title="Architecture brief"
+              body="The stack, the entry points and how data flows, written up before you open a file."
+              className="col-span-12 lg:col-span-4"
+            >
+              <BriefDemo />
+            </FeatureCard>
+
+            <FeatureCard
+              tag="05 / WORDS"
+              title="Codebase glossary"
+              body="Every domain term and symbol in plain English, linked back to the code."
+              className="col-span-12 lg:col-span-4"
+            >
+              <GlossaryDemo />
+            </FeatureCard>
+
+            <FeatureCard
+              tag="06 / PEOPLE"
+              title="Who to ask"
+              body="Ownership for every file, mined from the last 500 commits."
+              className="col-span-12 lg:col-span-4"
+            >
+              <div className="flex grow flex-col gap-3 rounded-sm border border-white/8 bg-(--background) p-4.5">
+                <span className="font-pixel text-xs text-(--muted-foreground)">
+                  services/rag.py
                 </span>
-                <span className="text-sm">Graph View</span>
+                {OWNERS.map(([name, pct, color], i) => (
+                  <div key={name} className="flex items-center gap-2.5">
+                    <span className="w-26 shrink-0 truncate text-[13px] text-zinc-200">
+                      {name}
+                    </span>
+                    <span className="h-2.5 grow bg-(--secondary)">
+                      <span
+                        className="bar-fill block h-2.5"
+                        style={{
+                          width: `${pct}%`,
+                          background: color,
+                          animationDelay: `${i * 0.3}s`,
+                        }}
+                      />
+                    </span>
+                    <span className="w-8 text-right font-pixel text-xs text-(--muted-foreground)">
+                      {pct}%
+                    </span>
+                  </div>
+                ))}
               </div>
-            </motion.div>
-          </motion.div>
-        </div>
-      </section>
+            </FeatureCard>
 
-      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
-
-      <section id="features" className="py-28 px-6 max-w-7xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.5 }}
-          className="text-center"
-        >
-          <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
-            Features
-          </span>
-          <h2 className="text-3xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
-            Everything a new hire needs
-          </h2>
-          <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
-            From architecture overview to code ownership — generated
-            automatically from your repository.
-          </p>
-        </motion.div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-16">
-          {FEATURES.map((f, i) => (
-            <motion.div
-              key={f.title}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-60px" }}
-              transition={{ delay: i * 0.08, duration: 0.5 }}
-              whileHover={{ rotateX: 4, rotateY: -4, scale: 1.02 }}
-              style={{ transformPerspective: 800 }}
+            <FeatureCard
+              tag="07 / FRESH"
+              title="Keeps up with main"
+              body="Turn on auto-update and the graph, guide and answers follow every merge, checked every 1 to 24 hours."
+              className="col-span-12 lg:col-span-6"
             >
-              <div className="group relative h-full rounded-2xl border border-(--border) bg-(--card)/40 backdrop-blur-sm p-7 hover:border-(--primary)/40 hover:-translate-y-1 transition-all duration-300">
-                <div
-                  className="w-11 h-11 rounded-xl flex items-center justify-center mb-5"
-                  style={{
-                    // color-mix keeps icon tiles tinted from each feature's color.
-                    backgroundColor: `color-mix(in oklch, ${f.color} 12%, transparent)`,
-                    border: `1px solid color-mix(in oklch, ${f.color} 20%, transparent)`,
-                  }}
-                >
-                  <f.icon
-                    size={22}
-                    weight="duotone"
-                    style={{ color: f.color }}
-                  />
+              <div className="flex flex-col gap-4 overflow-hidden rounded-sm border border-white/8 bg-(--background) py-4.5">
+                <div aria-hidden="true" className="overflow-hidden">
+                  <div className="marquee">
+                    {[...COMMITS, ...COMMITS].map(([sha, msg], i) => (
+                      <span
+                        key={i}
+                        className="flex shrink-0 items-center gap-2 border border-(--border) px-3 py-1.75 font-pixel text-xs whitespace-nowrap"
+                      >
+                        <span
+                          className="h-1.5 w-1.5"
+                          style={{
+                            background: i % 3 === 0 ? "#f6339a" : "#00b8db",
+                          }}
+                        />
+                        <span className="text-(--muted-foreground)">{sha}</span>
+                        {msg}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-
-                <h3 className="font-semibold text-(--foreground) mb-2 text-xl">
-                  {f.title}
-                </h3>
-                <p className="text-sm text-(--muted-foreground) leading-relaxed">
-                  {f.description}
-                </p>
+                <div className="flex items-center gap-2.5 px-4.5 font-pixel text-[13px] text-zinc-300">
+                  <span className="blink h-2 w-2 bg-(--chart-1)" />
+                  Up to date with main · next check in 6h
+                </div>
               </div>
-            </motion.div>
-          ))}
-        </div>
-      </section>
+            </FeatureCard>
 
-      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
-
-      <section id="how-it-works" className="py-28 px-6 max-w-7xl mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.5 }}
-          className="text-center"
-        >
-          <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
-            How It Works
-          </span>
-          <h2 className="text-3xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
-            From GitHub URL to onboarding guide
-          </h2>
-          <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
-            Submit a repository. Get a living document in minutes.
-          </p>
-        </motion.div>
-
-        <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
-          {PIPELINE_STEPS.map((step, i) => (
-            <motion.div
-              key={step.label}
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ delay: i * 0.12, duration: 0.5 }}
-              className="relative flex flex-col items-center text-center"
+            <FeatureCard
+              tag="08 / EDITOR"
+              title="In your editor, over MCP"
+              body="Connect Claude Code, Cursor or any MCP client, so the agent in your editor knows the codebase too."
+              className="col-span-12 lg:col-span-6"
             >
-              <div className="relative mb-5">
-                <div className="w-17 h-17 rounded-2xl border border-(--border) bg-(--card) flex items-center justify-center group hover:border-(--primary)/50 transition-colors duration-300">
-                  <step.icon
-                    size={28}
-                    weight="duotone"
-                    className="text-(--primary)"
-                  />
-                </div>
-                <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-(--primary) text-(--primary-foreground) text-xs font-bold flex items-center justify-center">
-                  {i + 1}
-                </div>
-              </div>
-
-              <h4 className="text-lg font-semibold text-(--foreground) mb-1.5">
-                {step.label}
-              </h4>
-              <p className="text-sm text-(--muted-foreground) leading-relaxed max-w-55">
-                {step.desc}
-              </p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
-
-      <section className="py-28 px-6 max-w-7xl mx-auto" id="preview">
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.5 }}
-          className="text-center"
-        >
-          <span className="inline-block text-xs font-semibold tracking-[0.2em] uppercase text-(--primary) mb-4">
-            Preview
-          </span>
-          <h2 className="text-3xl sm:text-5xl font-bold text-(--foreground) tracking-tight">
-            See it in action
-          </h2>
-          <p className="mt-4 text-lg text-(--muted-foreground) max-w-xl mx-auto">
-            Interactive onboarding guides generated from real repositories.
-          </p>
-        </motion.div>
-
-        <div className="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="lg:col-span-2 rounded-2xl border border-(--border) bg-(--card)/40 overflow-hidden"
-          >
-            <div className="px-6 py-4 border-b border-(--border) flex items-center gap-2">
-              <div className="flex gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-500/60" />
-                <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
-                <span className="w-3 h-3 rounded-full bg-green-500/60" />
-              </div>
-              <span className="ml-3 text-xs text-(--muted-foreground)">
-                Dashboard
-              </span>
-            </div>
-            <div className="aspect-21/9 bg-(--secondary)/40 flex items-center justify-center">
-              <Image
-                src={dashboard}
-                alt="Dashboard Screenshot"
-                className="object-cover"
-              />
-            </div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1, duration: 0.5 }}
-            className="rounded-2xl border border-(--border) bg-(--card)/40 overflow-hidden"
-          >
-            <div className="px-4 py-3 border-b border-(--border) flex items-center gap-2">
-              <div className="flex gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-500/60" />
-                <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
-                <span className="w-3 h-3 rounded-full bg-green-500/60" />
-              </div>
-              <span className="ml-3 text-xs text-(--muted-foreground)">
-                3D Dependency Graph
-              </span>
-            </div>
-            <div className="aspect-video bg-(--secondary)/40 flex items-center justify-center">
-              <Image
-                src={graph}
-                alt="3D Dependency Graph Screenshot"
-                className="object-cover"
-              />
-            </div>
-          </motion.div>
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="rounded-2xl border border-(--border) bg-(--card)/40 overflow-hidden"
-          >
-            <div className="px-4 py-3 border-b border-(--border) flex items-center gap-2">
-              <div className="flex gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-500/60" />
-                <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
-                <span className="w-3 h-3 rounded-full bg-green-500/60" />
-              </div>
-              <span className="ml-3 text-xs text-(--muted-foreground)">
-                Explorer Interface
-              </span>
-            </div>
-            <div className="aspect-video bg-(--secondary)/40 flex items-center justify-center">
-              <Image
-                src={explorer}
-                alt="RAG Chat Interface Screenshot"
-                className="object-cover"
-              />
-            </div>
-          </motion.div>
-        </div>
-      </section>
-
-      <div className="max-w-3xl mx-auto h-px bg-linear-to-r from-transparent via-(--primary)/30 to-transparent" />
-
-      <section className="py-24 px-12">
-        <motion.div
-          initial={{ opacity: 0, y: 32 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="max-w-3xl mx-auto text-center"
-        >
-          <div className="p-8 sm:p-10 relative overflow-hidden">
-            <div className="relative">
-              <h2 className="text-3xl sm:text-4xl font-bold text-(--foreground) tracking-tight my-4">
-                Ready to <span className="gradient-text">illuminate</span> your
-                codebase?
-              </h2>
-              <p className="text-(--muted-foreground) text-md mb-10 max-w-lg mx-auto">
-                Submit a repository and get a complete onboarding guide
-                generated in minutes.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link
-                  href="/login"
-                  className="group inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full bg-(--primary) text-(--primary-foreground) font-medium text-sm hover:brightness-110 hover:-translate-y-0.5 transition-all duration-300"
-                >
-                  Start Analyzing
-                  <ArrowRightIcon
-                    size={16}
-                    weight="bold"
-                    className="group-hover:translate-x-0.5 transition-transform"
-                  />
-                </Link>
-                <a
-                  href="https://github.com/tejasnasa/illume"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-full border border-(--border) text-(--muted-foreground) font-medium text-sm hover:border-(--primary) hover:text-(--foreground) transition-all duration-300"
-                >
-                  <GithubLogoIcon size={16} weight="bold" />
-                  Star on GitHub
-                </a>
-              </div>
-            </div>
+              <McpDemo />
+            </FeatureCard>
           </div>
-        </motion.div>
+        </div>
       </section>
 
-      <footer className="border-t border-(--border) pt-3 pb-6 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="relative h-12 w-12 flex items-center justify-center">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="h-10 w-10 rounded-full bg-(--chart-1)/30 blur-xl" />
-              </div>
-              <StarFourIcon
-                className="relative text-(--chart-1)"
-                weight="fill"
-                size={24}
-              />
+      <section id="how-it-works" className="scroll-mt-16">
+        <div className="mx-auto flex max-w-7xl flex-col gap-12 px-6 py-22.5">
+          <SectionHead
+            eyebrow="How it works"
+            title="From git clone"
+            accent="to “I get it”"
+            blurb="One link in. A map, a guide and a teammate who has read everything out, in four steps."
+          />
+          <HowItWorks />
+        </div>
+      </section>
+
+      <section id="tour" className="scroll-mt-16">
+        <div className="mx-auto flex max-w-7xl flex-col gap-10 px-6 py-22.5">
+          <SectionHead
+            eyebrow="The tour"
+            title="Five minutes,"
+            accent="one whole repo"
+            blurb="Watch Illume take a real codebase from a link to a guide, start to finish. Jump to the part you care about."
+          />
+          <Tour />
+        </div>
+      </section>
+
+      <section id="faq" className="scroll-mt-16">
+        <div className="mx-auto max-w-7xl px-6 py-22.5">
+          <Faq />
+        </div>
+      </section>
+
+      <section id="start" className="relative scroll-mt-16 overflow-hidden">
+        <EndCta />
+      </section>
+
+      <footer className="relative border-t border-(--border) bg-(--background)/80">
+        <div className="mx-auto flex max-w-7xl flex-col gap-12 px-6 pt-12 pb-8">
+          <div className="grid grid-cols-2 gap-8 md:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+            <div className="col-span-2 flex min-w-0 flex-col gap-4 md:col-span-1">
+              <Link
+                href="/"
+                aria-label="Illume home"
+                className="flex items-center gap-2.5"
+              >
+                <Logo size={34} />
+                <span className="font-pixel text-2xl">illume</span>
+              </Link>
+              <p className="m-0 max-w-80 text-[15px] leading-relaxed text-(--muted-foreground)">
+                Onboard engineers in days, not weeks.
+              </p>
+              <SystemStatus />
             </div>
-            <span className="text-sm text-(--muted-foreground)">
-              Illume &middot; Built by Tejas Nasa
-            </span>
+            {FOOTER_COLUMNS.map((col) => (
+              <nav
+                key={col.title}
+                aria-label={col.title}
+                className="flex min-w-0 flex-col gap-3"
+              >
+                <p className="eyebrow m-0 mb-1">{col.title}</p>
+                {col.links.map((link) =>
+                  link.external ? (
+                    <a
+                      key={link.label}
+                      href={link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[15px] text-zinc-300 hover:text-(--accent)"
+                    >
+                      {link.label}
+                    </a>
+                  ) : (
+                    <Link
+                      key={link.label}
+                      href={link.href}
+                      className="text-[15px] text-zinc-300 hover:text-(--accent)"
+                    >
+                      {link.label}
+                    </Link>
+                  ),
+                )}
+              </nav>
+            ))}
           </div>
-          <div className="flex items-center gap-5">
-            <Link
-              href="/docs"
-              className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
-            >
-              Docs
-            </Link>
-            <Link
-              href="/contact"
-              className="text-sm text-(--muted-foreground) hover:text-(--foreground) transition-colors"
-            >
-              Contact
-            </Link>
-            <div className="flex items-center gap-4 text-2xl text-(--muted-foreground)">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/8 pt-6 font-pixel text-xs tracking-[0.08em] text-(--subtle-foreground) uppercase">
+            <span>© {new Date().getFullYear()} Illume</span>
+            <span className="flex flex-wrap items-center gap-4">
+              Built by <span className="text-(--foreground)">Tejas Nasa</span>
               <a
                 href="https://github.com/tejasnasa"
                 target="_blank"
-                className="hover:text-(--foreground) transition-colors"
+                rel="noopener noreferrer"
+                className="text-zinc-300 hover:text-(--accent)"
               >
-                <GithubLogoIcon />
+                GitHub ↗
               </a>
               <a
-                href="https://www.linkedin.com/in/tejasnasa/"
+                href="https://tejasnasa.me"
                 target="_blank"
-                className="hover:text-(--foreground) transition-colors"
+                rel="noopener noreferrer"
+                className="text-zinc-300 hover:text-(--accent)"
               >
-                <LinkedinLogoIcon weight="fill" />
+                tejasnasa.me ↗
               </a>
-              <a
-                href="https://x.com/tejasnasa/"
-                target="_blank"
-                className="hover:text-(--foreground) transition-colors"
-              >
-                <XLogoIcon />
-              </a>
-            </div>
+            </span>
           </div>
         </div>
       </footer>
-    </main>
+    </div>
   );
 }

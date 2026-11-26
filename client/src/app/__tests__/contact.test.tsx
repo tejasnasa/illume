@@ -112,7 +112,7 @@ describe("signed-in visitor", () => {
 
     await renderPage();
 
-    expect(screen.getByLabelText(/what is this about/i)).toHaveValue("");
+    for (const radio of screen.getAllByRole("radio")) expect(radio).not.toBeChecked();
     expect(screen.getByLabelText(/^message/i)).toHaveValue("");
   });
 });
@@ -123,7 +123,7 @@ describe("page shell", () => {
 
     await renderPage();
 
-    expect(screen.getByRole("link", { name: /illume/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Illume home" })).toHaveAttribute(
       "href",
       "/",
     );

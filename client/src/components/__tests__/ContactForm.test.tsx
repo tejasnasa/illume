@@ -35,128 +35,76 @@ async function fillValidForm() {
 }
 
 /**
- * Picks a category from the custom listbox.
- *
- * Two clicks rather than `selectOptions`: the control is a button and a list of options,
- * not a `<select>`, so there is no element for the browser to set a value on directly.
+ * Picks a category card. Each card is a label around a visually hidden radio,
+ * so clicking the radio by its accessible name is what a pointer on the card does.
  */
 async function chooseCategory(
   user: ReturnType<typeof userEvent.setup>,
-  label: string,
+  title: string,
 ) {
-  await user.click(
-    screen.getByRole("combobox", { name: /what is this about/i }),
-  );
-  await user.click(screen.getByRole("option", { name: label }));
+  await user.click(screen.getByRole("radio", { name: new RegExp(`^${title}`) }));
 }
 
 describe("the category control", () => {
-  it("is a listbox, not a native select", () => {
-    // A native `<select>` cannot be themed: the list it opens is drawn by the operating
-    // system, so on this dark-only interface it renders as a light panel that no CSS
-    // reaches. The control is therefore a combobox over a drawn listbox.
+  it("is a group of radio cards under one legend", () => {
     render(<ContactForm />);
 
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    const group = screen.getByRole("group", { name: /what is this about/i });
+    expect(group.tagName).toBe("FIELDSET");
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
     expect(document.querySelector("select")).toBeNull();
   });
 
-  it("keeps the list closed until it is opened", () => {
+  it("offers every category, each with a line on what it is for", () => {
     render(<ContactForm />);
 
-    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("option")).not.toBeInTheDocument();
-  });
-
-  it("offers every category once opened", async () => {
-    const user = userEvent.setup();
-    render(<ContactForm />);
-
-    await user.click(
-      screen.getByRole("combobox", { name: /what is this about/i }),
-    );
-
-    for (const label of [
-      "Bug report",
-      "Feature request",
-      "Question",
-      "Other",
+    for (const [title, blurb] of [
+      ["Bug report", "Something broke or looks wrong"],
+      ["Feature idea", "Something Illume should do"],
+      ["Question", "How something works"],
+      ["Something else", "Feedback, hello, anything"],
     ]) {
-      expect(screen.getByRole("option", { name: label })).toBeInTheDocument();
+      expect(screen.getByRole("radio", { name: new RegExp(`^${title}`) })).toBeInTheDocument();
+      expect(screen.getByText(blurb)).toBeInTheDocument();
     }
   });
 
-  it("shows the placeholder until a choice is made", () => {
+  it("starts with nothing chosen", () => {
     render(<ContactForm />);
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Select a category");
+    for (const radio of screen.getAllByRole("radio")) expect(radio).not.toBeChecked();
   });
 
-  it("shows the chosen label on the trigger and closes the list", async () => {
+  it("checks the chosen card and only that one", async () => {
     const user = userEvent.setup();
     render(<ContactForm />);
 
-    await chooseCategory(user, "Question");
+    await chooseCategory(user, "Feature idea");
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Question");
-    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-  });
-
-  it("marks the selected option as selected", async () => {
-    const user = userEvent.setup();
-    render(<ContactForm />);
-
-    await chooseCategory(user, "Feature request");
-    await user.click(
-      screen.getByRole("combobox", { name: /what is this about/i }),
-    );
-
-    expect(
-      screen.getByRole("option", { name: "Feature request" }),
-    ).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("option", { name: "Other" })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    );
-  });
-
-  it("closes on Escape without choosing", async () => {
-    const user = userEvent.setup();
-    render(<ContactForm />);
-
-    await user.click(
-      screen.getByRole("combobox", { name: /what is this about/i }),
-    );
-    await user.keyboard("{Escape}");
-
-    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toHaveTextContent("Select a category");
+    expect(screen.getByRole("radio", { name: /^Feature idea/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^Question/ })).not.toBeChecked();
   });
 
   it("chooses with the keyboard, not only the mouse", async () => {
-    // The native select gave this for free; leaving it behind means rebuilding it. A
-    // dropdown that only responds to a pointer is unusable without one.
     const user = userEvent.setup();
     render(<ContactForm />);
 
-    await user.click(
-      screen.getByRole("combobox", { name: /what is this about/i }),
-    );
-    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    await chooseCategory(user, "Bug report");
+    await user.keyboard("{ArrowRight}");
 
-    expect(screen.getByRole("combobox")).toHaveTextContent("Feature request");
+    expect(screen.getByRole("radio", { name: /^Feature idea/ })).toBeChecked();
   });
 
-  it("closes when a click lands outside it", async () => {
+  it("fits the message hint to the chosen category", async () => {
     const user = userEvent.setup();
     render(<ContactForm />);
 
-    await user.click(
-      screen.getByRole("combobox", { name: /what is this about/i }),
-    );
-    await user.click(screen.getByRole("button", { name: /send message/i }));
+    await chooseCategory(user, "Feature idea");
 
-    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/^message/i)).toHaveAttribute(
+      "placeholder",
+      expect.stringMatching(/the problem it would solve/i),
+    );
   });
 });
 
@@ -247,11 +195,10 @@ describe("submission", () => {
       ),
     );
     expect(body.category).toBe("bug");
-    await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        /we'll reply by email/i,
-      ),
-    );
+    const sent = await screen.findByRole("status");
+    expect(sent).toHaveTextContent(/message sent/i);
+    // The form has gone, so focus moves to the heading that replaced it.
+    expect(screen.getByRole("heading", { name: /on its way/i })).toHaveFocus();
   });
 
   it("clears the message but keeps the sender's identity afterwards", async () => {
@@ -264,15 +211,12 @@ describe("submission", () => {
 
     const user = await fillValidForm();
     await user.click(screen.getByRole("button", { name: /send message/i }));
+    await user.click(await screen.findByRole("button", { name: /send another/i }));
 
-    await waitFor(() =>
-      expect(screen.getByLabelText(/message/i)).toHaveValue(""),
-    );
+    expect(screen.getByLabelText(/^message/i)).toHaveValue("");
     expect(screen.getByLabelText(/^name/i)).toHaveValue("Ada Lovelace");
     expect(screen.getByLabelText(/^email/i)).toHaveValue("ada@example.com");
-    // The category is read off the trigger's label, since the control holds no value
-    // attribute of its own.
-    expect(screen.getByRole("combobox")).toHaveTextContent("Bug report");
+    expect(screen.getByRole("radio", { name: /^Bug report/ })).toBeChecked();
   });
 
   it("shows the backend's own reason when delivery fails", async () => {

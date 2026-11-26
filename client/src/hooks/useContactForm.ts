@@ -97,6 +97,8 @@ export default function useContactForm(defaults?: Defaults) {
     category: (form.watch("category") as string | undefined) ?? "",
     firstError,
     successMessage,
+    /** Clears the success notice, for writing another message. */
+    dismissSuccess: () => setSuccessMessage(null),
     isSubmitting: form.formState.isSubmitting,
     onSubmit,
   };
