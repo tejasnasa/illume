@@ -10,7 +10,6 @@ import { timeAgo } from "@/utils/timeAgo";
 import {
   DotsThreeIcon,
   PencilSimpleIcon,
-  PlusIcon,
   TrashIcon,
   XIcon,
 } from "@phosphor-icons/react";
@@ -88,7 +87,7 @@ function Row({
             if (event.key === "Enter") commit();
             if (event.key === "Escape") setRenaming(false);
           }}
-          className="w-full rounded-md border border-(--primary)/40 bg-(--background) px-2 py-1.5 text-sm text-(--foreground) focus:outline-none"
+          className="w-full rounded-sm border border-(--accent) bg-(--background) px-2 py-1.5 text-sm text-(--foreground) focus:outline-none"
         />
       </li>
     );
@@ -99,7 +98,7 @@ function Row({
       <li
         role="alertdialog"
         aria-label={`Delete ${item.title}`}
-        className="mx-2 rounded-md border border-(--destructive)/30 bg-(--destructive)/5 p-2 text-xs"
+        className="mx-2 rounded-sm border border-(--destructive)/30 bg-(--destructive)/5 p-2 text-xs"
       >
         <p className="mb-2 text-(--foreground)">
           Delete this conversation and its messages?
@@ -111,14 +110,14 @@ function Row({
               setConfirming(false);
               void onDelete();
             }}
-            className="rounded-md bg-(--destructive) px-2.5 py-1 text-(--primary-foreground) cursor-pointer"
+            className="rounded-sm bg-(--destructive) px-2.5 py-1 text-(--primary-foreground) cursor-pointer"
           >
             Delete
           </button>
           <button
             type="button"
             onClick={() => setConfirming(false)}
-            className="rounded-md border border-(--border) px-2.5 py-1 text-(--foreground) cursor-pointer"
+            className="rounded-sm border border-(--border) px-2.5 py-1 text-(--foreground) cursor-pointer"
           >
             Cancel
           </button>
@@ -129,20 +128,20 @@ function Row({
 
   return (
     <li
-      className={`group relative mx-2 flex items-center rounded-md ${active ? "bg-(--primary)/10" : "hover:bg-(--secondary)/50"}`}
+      className={`group relative mx-2 flex items-center rounded-sm border-l-2 ${active ? "border-(--accent) bg-(--secondary)" : "border-transparent hover:bg-(--secondary)"}`}
     >
       <button
         type="button"
         aria-current={active ? "true" : undefined}
         onClick={onSelect}
-        className="min-w-0 flex-1 cursor-pointer px-3 py-2 text-left"
+        className="min-w-0 flex-1 cursor-pointer px-3 py-2.5 text-left"
       >
         <span
-          className={`block truncate text-sm ${active ? "font-medium text-(--foreground)" : "text-(--foreground)/90"}`}
+          className={`block truncate text-sm ${active ? "text-(--foreground)" : "text-zinc-400 group-hover:text-(--foreground)"}`}
         >
           {item.title}
         </span>
-        <span className="block text-[11px] text-(--muted-foreground)">
+        <span className="block font-pixel text-[11px] tracking-[0.04em] text-(--faint-foreground) uppercase">
           {timeAgo(item.updated_at)}
         </span>
       </button>
@@ -153,14 +152,14 @@ function Row({
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((value) => !value)}
-          className="rounded-md p-1.5 text-(--muted-foreground) hover:bg-(--secondary) cursor-pointer"
+          className="rounded-sm p-1.5 text-(--muted-foreground) hover:bg-(--muted) cursor-pointer"
         >
           <DotsThreeIcon size={18} weight="bold" />
         </button>
         {menuOpen && (
           <div
             role="menu"
-            className="absolute right-0 z-30 mt-1 w-36 rounded-lg border border-(--border) bg-(--card) p-1 shadow-xl"
+            className="rise absolute right-0 z-30 mt-1 w-36 rounded-sm border border-(--border) bg-(--card) p-1 shadow-[0_16px_40px_#00000080]"
           >
             <button
               type="button"
@@ -170,7 +169,7 @@ function Row({
                 setDraft(item.title);
                 setRenaming(true);
               }}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-(--foreground) hover:bg-(--secondary)/60 cursor-pointer"
+              className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-xs text-(--foreground) hover:bg-(--secondary)/60 cursor-pointer"
             >
               <PencilSimpleIcon size={14} />
               Rename
@@ -182,7 +181,7 @@ function Row({
                 setMenuOpen(false);
                 setConfirming(true);
               }}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-(--destructive) hover:bg-(--destructive)/10 cursor-pointer"
+              className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-xs text-(--destructive) hover:bg-(--destructive)/10 cursor-pointer"
             >
               <TrashIcon size={14} />
               Delete
@@ -221,18 +220,18 @@ export default function ConversationSidebar({
     <nav
       aria-label="Conversations"
       data-testid="conversation-sidebar"
-      className={`flex h-full flex-col border-(--border) bg-(--card)/60 backdrop-blur-xl ${drawer ? "w-64 border-r shadow-2xl" : "w-full rounded-2xl border shadow-[0_8px_32px_0_rgb(0_0_0/0.3)]"}`}
+      className={`flex h-full flex-col border-r border-(--border) bg-(--background) ${drawer ? "w-64 shadow-2xl" : "w-full"}`}
     >
-      <div className="flex items-center gap-2 p-3">
+      <div className="flex items-center gap-2 p-4">
         <button
           type="button"
           onClick={() => {
             onNew();
             if (drawer) onClose();
           }}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-(--border) px-3 py-2 text-sm text-(--foreground) hover:border-(--primary)/40 hover:bg-(--secondary)/40 cursor-pointer"
+          className="cta flex flex-1 items-center justify-center gap-2 rounded-sm bg-(--primary) px-3 py-2.75 font-pixel text-[13px] tracking-[0.06em] text-(--primary-foreground) uppercase hover:cursor-pointer"
         >
-          <PlusIcon size={14} weight="bold" />
+          <span aria-hidden="true">+</span>
           New chat
         </button>
         {drawer && (
@@ -240,7 +239,7 @@ export default function ConversationSidebar({
             type="button"
             aria-label="Close conversations"
             onClick={onClose}
-            className="rounded-md p-2 text-(--muted-foreground) hover:bg-(--secondary)/50 cursor-pointer"
+            className="rounded-sm p-2 text-(--muted-foreground) hover:bg-(--secondary) cursor-pointer"
           >
             <XIcon size={16} />
           </button>

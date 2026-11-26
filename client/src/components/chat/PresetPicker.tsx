@@ -15,7 +15,6 @@ import {
   type PresetChoice,
 } from "@/lib/agent/presets";
 import {
-  CaretUpIcon,
   CheckIcon,
   SlidersHorizontalIcon,
 } from "@phosphor-icons/react";
@@ -79,16 +78,18 @@ export default function PresetPicker({
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-(--muted-foreground) hover:bg-(--secondary)/50 hover:text-(--foreground) disabled:opacity-50 disabled:cursor-default cursor-pointer"
+        className="ghost inline-flex items-center gap-2 rounded-sm border border-(--input) px-2.5 py-1.75 font-pixel text-xs tracking-[0.04em] text-zinc-300 disabled:opacity-50 disabled:cursor-default cursor-pointer"
       >
         <span data-testid="preset-label">{choiceLabel(choice, custom)}</span>
-        <CaretUpIcon size={11} weight="bold" />
+        <span aria-hidden="true" className="text-(--subtle-foreground)">
+          {open ? "▾" : "▴"}
+        </span>
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-40 mb-2 w-72 rounded-xl border border-(--border) bg-(--card) p-1.5 shadow-xl backdrop-blur-xl"
+          className="rise absolute bottom-full left-0 z-40 mb-2 w-72 rounded-sm border border-(--border) bg-(--card) p-1.5 shadow-[0_16px_40px_#00000080]"
         >
           {PICKER_PRESETS.map((preset) => {
             const availability = presetAvailability(preset, caps);
@@ -107,21 +108,21 @@ export default function PresetPicker({
                   onChoice(preset);
                   setOpen(false);
                 }}
-                className="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-(--secondary)/60 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+                className="flex w-full items-start gap-2 rounded-sm px-2.5 py-2.5 text-left hover:bg-(--secondary) disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
               >
                 <CheckIcon
                   size={13}
                   weight="bold"
-                  className={`mt-0.5 shrink-0 ${selected ? "text-(--chart-1)" : "invisible"}`}
+                  className={`mt-0.5 shrink-0 ${selected ? "text-(--accent)" : "invisible"}`}
                 />
                 <span className="min-w-0">
-                  <span className="block text-xs font-medium text-(--foreground)">
+                  <span className="block font-pixel text-[13px] text-(--foreground)">
                     {info ? info.label : AUTO_MENU_LABEL}
                   </span>
                   {availability.reason && (
                     <span className="sr-only">{availability.reason}</span>
                   )}
-                  <span className="block text-[11px] leading-snug text-(--muted-foreground)">
+                  <span className="block text-xs leading-snug text-(--subtle-foreground)">
                     {info ? info.blurb : AUTO_BLURB}
                   </span>
                 </span>
@@ -136,7 +137,7 @@ export default function PresetPicker({
               setOpen(false);
               onOpenDrawer();
             }}
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-(--foreground) hover:bg-(--secondary)/60 cursor-pointer"
+            className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left font-pixel text-xs tracking-[0.04em] text-(--foreground) uppercase hover:bg-(--secondary) cursor-pointer"
           >
             <SlidersHorizontalIcon size={13} />
             Advanced settings

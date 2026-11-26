@@ -90,7 +90,7 @@ function useEnter(index = 0) {
 function ArgView({ arg }: { arg: ShortArg }) {
   if (arg.kind === "pattern") {
     return (
-      <code className="min-w-0 truncate rounded bg-(--secondary)/70 px-1.5 py-0.5 font-mono text-[11px] text-(--foreground)">
+      <code className="min-w-0 truncate rounded bg-(--secondary)/70 px-1.5 py-0.5 font-pixel text-[11px] text-(--foreground)">
         {arg.value}
       </code>
     );
@@ -98,7 +98,7 @@ function ArgView({ arg }: { arg: ShortArg }) {
   if (arg.kind === "path") {
     return (
       <span
-        className="inline-flex min-w-0 items-center gap-1 rounded-full border border-(--border) bg-(--secondary)/40 px-2 py-0.5 font-mono text-[11px]"
+        className="inline-flex min-w-0 items-center gap-1 rounded-xs border border-(--border) bg-(--secondary)/40 px-2 py-0.5 font-pixel text-[11px]"
         title={arg.extra ? `${arg.value} ${arg.extra}` : arg.value}
       >
         <span className="min-w-0 truncate">{arg.value}</span>
@@ -166,13 +166,13 @@ function ToolOutput({ text }: { text: string }) {
         <div key={i} className="min-w-0">
           {part.key && (
             <p
-              className="mb-0.5 truncate font-mono text-[10px] text-(--chart-1)"
+              className="mb-0.5 truncate font-pixel text-[10px] text-(--chart-1)"
               title={part.key}
             >
               {shortKeyLabel(part.key)}
             </p>
           )}
-          <pre className="m-0 whitespace-pre-wrap break-words font-mono text-[10.5px] leading-relaxed text-(--muted-foreground)">
+          <pre className="m-0 whitespace-pre-wrap break-words font-pixel text-[10.5px] leading-relaxed text-(--muted-foreground)">
             {part.text}
           </pre>
         </div>
@@ -196,13 +196,17 @@ function ToolRowView({ row, index }: { row: ToolRow; index: number }) {
   const state =
     row.status === "running" ? (
       <span
-        className="inline-block h-1.5 w-1.5 rounded-full bg-(--chart-1) animate-pulse"
+        className="blink inline-block h-1.5 w-1.5 bg-(--accent)"
         aria-label="running"
       />
     ) : row.status === "error" ? (
-      <XCircleIcon size={13} weight="fill" className="text-red-400" />
+      <span aria-label="failed" className="font-pixel text-red-400">
+        ✕
+      </span>
     ) : (
-      <CheckCircleIcon size={13} weight="fill" className="text-(--success)" />
+      <span aria-label="done" className="font-pixel text-(--success)">
+        ✓
+      </span>
     );
 
   return (
@@ -212,10 +216,10 @@ function ToolRowView({ row, index }: { row: ToolRow; index: number }) {
         disabled={!expandable}
         aria-expanded={expandable ? open : undefined}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-(--secondary)/30 disabled:cursor-default disabled:hover:bg-transparent cursor-pointer"
+        className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left hover:bg-white/4 disabled:cursor-default disabled:hover:bg-transparent cursor-pointer"
       >
-        <Icon size={14} className="shrink-0 text-(--muted-foreground)" weight="bold" />
-        <span className="shrink-0 text-xs font-medium text-(--foreground)">
+        <Icon size={12} className="shrink-0 text-(--subtle-foreground)" weight="bold" />
+        <span className="shrink-0 font-pixel text-xs tracking-[0.04em] text-(--foreground)">
           {toolLabel(row.tool)}
         </span>
         <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
@@ -223,7 +227,7 @@ function ToolRowView({ row, index }: { row: ToolRow; index: number }) {
             <ArgView key={i} arg={arg} />
           ))}
         </span>
-        <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[11px] text-(--muted-foreground)">
+        <span className="flex shrink-0 items-center gap-2.5 font-pixel text-[11px] whitespace-nowrap text-(--subtle-foreground)">
           {row.resultCount != null && row.status === "ok" && row.tool !== "finish" && (
             <span>{row.resultCount} found</span>
           )}
@@ -246,9 +250,9 @@ function ToolRowView({ row, index }: { row: ToolRow; index: number }) {
             transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
-            <div className="mx-2 mb-1 ml-8 space-y-1.5 rounded-md bg-(--background)/40 p-2 text-[11px]">
+            <div className="mx-2 mt-0.5 mb-1.5 ml-7.5 space-y-1.5 rounded-sm border border-white/6 bg-(--background)/80 px-2.5 py-2 font-pixel text-[11px] leading-[1.7] text-zinc-300">
               {range && row.paths[0] && (
-                <p className="font-mono text-(--muted-foreground)">
+                <p className="font-pixel text-(--muted-foreground)">
                   {row.paths[0]} · {range}
                 </p>
               )}
@@ -260,7 +264,7 @@ function ToolRowView({ row, index }: { row: ToolRow; index: number }) {
                   {row.paths.length > 0 && row.tool !== "read_file" && (
                     <ul className="space-y-0.5" aria-label="Matched files">
                       {row.paths.slice(0, 12).map((path) => (
-                        <li key={path} className="truncate font-mono text-(--foreground)/85">
+                        <li key={path} className="truncate font-pixel text-(--foreground)/85">
                           {path}
                         </li>
                       ))}
@@ -329,7 +333,7 @@ function NoteRow({
     <motion.li
       {...enter}
       data-row={kind}
-      className="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs"
+      className="flex items-start gap-2 rounded-sm px-2 py-1.5 text-xs"
     >
       <Icon size={14} weight="bold" className={`mt-0.5 shrink-0 ${tone}`} />
       <div className="min-w-0 flex-1">{children}</div>
@@ -401,7 +405,7 @@ function RetrievalRowView({ row, index }: { row: RetrievalRow; index: number }) 
         disabled={!expandable}
         aria-expanded={expandable ? open : undefined}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-(--secondary)/30 disabled:cursor-default disabled:hover:bg-transparent cursor-pointer"
+        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-(--secondary)/30 disabled:cursor-default disabled:hover:bg-transparent cursor-pointer"
       >
         <DatabaseIcon size={14} weight="bold" className="shrink-0 text-(--muted-foreground)" />
         <span className="font-medium text-(--foreground)">Searched the codebase</span>
@@ -413,7 +417,7 @@ function RetrievalRowView({ row, index }: { row: RetrievalRow; index: number }) 
       </button>
       <Fold open={open}>
         <div
-          className="mx-2 mb-1 ml-8 space-y-3 rounded-md bg-(--background)/40 p-2.5 text-[11px]"
+          className="mx-2 mb-1 ml-8 space-y-3 rounded-sm bg-(--background)/40 p-2.5 text-[11px]"
           data-testid="retrieval-details"
         >
           {row.queries.length > 0 && (
@@ -426,7 +430,7 @@ function RetrievalRowView({ row, index }: { row: RetrievalRow; index: number }) 
                       {QUERY_KINDS[query.kind] ?? query.kind}
                     </span>
                     <span
-                      className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-(--foreground)/90 ${query.kind === "hyde" ? "font-mono text-[10.5px]" : ""}`}
+                      className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-(--foreground)/90 ${query.kind === "hyde" ? "font-pixel text-[10.5px]" : ""}`}
                     >
                       {query.text}
                     </span>
@@ -442,13 +446,13 @@ function RetrievalRowView({ row, index }: { row: RetrievalRow; index: number }) 
                 {channels.map(([channel, count]) => (
                   <li
                     key={channel}
-                    className="rounded-full border border-(--border) bg-(--secondary)/40 px-2 py-0.5"
+                    className="rounded-xs border border-(--border) bg-(--secondary)/40 px-2 py-0.5"
                   >
                     {channel} <span className="text-(--muted-foreground)">{count}</span>
                   </li>
                 ))}
                 {row.reranker && row.reranker !== "none" && (
-                  <li className="rounded-full border border-(--border) px-2 py-0.5 text-(--muted-foreground)">
+                  <li className="rounded-xs border border-(--border) px-2 py-0.5 text-(--muted-foreground)">
                     reranked by {row.reranker}
                   </li>
                 )}
@@ -460,7 +464,7 @@ function RetrievalRowView({ row, index }: { row: RetrievalRow; index: number }) 
               <h5 className="mb-1 font-medium text-(--muted-foreground)">Kept</h5>
               <ol className="space-y-0.5">
                 {row.keys.slice(0, RETRIEVED_SHOWN).map((key) => (
-                  <li key={key} className="truncate font-mono text-(--foreground)/85" title={key}>
+                  <li key={key} className="truncate font-pixel text-(--foreground)/85" title={key}>
                     {shortKeyLabel(key)}
                   </li>
                 ))}
@@ -566,7 +570,7 @@ function ThinkingRowView({
       {...enter}
       data-row={reasoning ? "reasoning" : "thinking"}
       data-open={open}
-      className="rounded-md px-2 py-1.5 text-xs"
+      className="rounded-sm px-2 py-1.5 text-xs"
     >
       <button
         type="button"
@@ -682,7 +686,7 @@ function LaneView({ lane, rows, index }: { lane: Lane; rows: ActivityRow[]; inde
 
   const mark = running ? (
     <span
-      className="inline-block h-1.5 w-1.5 rounded-full animate-pulse"
+      className="inline-block h-1.5 w-1.5 rounded-xs animate-pulse"
       style={{ backgroundColor: color }}
       aria-label="running"
     />
@@ -704,7 +708,7 @@ function LaneView({ lane, rows, index }: { lane: Lane; rows: ActivityRow[]; inde
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-left hover:bg-(--secondary)/30 cursor-pointer"
+        className="flex w-full items-center gap-2 rounded-sm border-l-2 px-2 py-1.5 text-left hover:bg-(--secondary)/30 cursor-pointer"
         style={{ borderLeftColor: color }}
       >
         <RobotIcon size={14} weight="bold" className="shrink-0" style={{ color }} />
@@ -714,7 +718,7 @@ function LaneView({ lane, rows, index }: { lane: Lane; rows: ActivityRow[]; inde
         <span className="min-w-0 flex-1 truncate text-xs text-(--foreground)/90" title={lane.question}>
           {lane.question || lane.id}
         </span>
-        <span className="flex shrink-0 items-center gap-2 whitespace-nowrap text-[11px] text-(--muted-foreground)">
+        <span className="flex shrink-0 items-center gap-2.5 font-pixel text-[11px] whitespace-nowrap text-(--subtle-foreground)">
           {detail && (
             <span className="hidden max-w-[16rem] truncate @[30rem]:inline" title={detail}>
               {detail}
@@ -727,7 +731,7 @@ function LaneView({ lane, rows, index }: { lane: Lane; rows: ActivityRow[]; inde
       <Fold open={open}>
         <div
           ref={box}
-          className="mx-2 mb-1 ml-4 max-h-72 overflow-y-auto custom-scrollbar rounded-md border-l-2 bg-(--background)/40 py-1 pl-1 pr-1"
+          className="mx-2 mb-1 ml-4 max-h-72 overflow-y-auto custom-scrollbar rounded-sm border-l-2 bg-(--background)/40 py-1 pl-1 pr-1"
           style={{ borderLeftColor: `${color}66` }}
           data-testid="lane-steps"
         >
@@ -752,7 +756,7 @@ function Dots() {
       {[0, 1, 2].map((i) => (
         <motion.span
           key={i}
-          className="h-1.5 w-1.5 rounded-full bg-(--chart-1)"
+          className="h-1.5 w-1.5 rounded-xs bg-(--chart-1)"
           animate={reduced ? undefined : { opacity: [0.25, 1, 0.25], scale: [0.8, 1.1, 0.8] }}
           transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
         />

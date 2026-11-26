@@ -114,7 +114,7 @@ export default function AdvancedDrawer({
           <motion.aside
             role="dialog"
             aria-label="Advanced chat settings"
-            className="fixed inset-y-0 right-0 z-70 flex w-full max-w-sm flex-col border-l border-(--border) bg-(--card)/95 backdrop-blur-xl"
+            className="fixed inset-y-0 right-0 z-70 flex w-full max-w-sm flex-col border-l border-(--border) bg-(--card)/95"
             initial={reduced ? { opacity: 0 } : { x: "100%" }}
             animate={reduced ? { opacity: 1 } : { x: 0 }}
             exit={reduced ? { opacity: 0 } : { x: "100%" }}
@@ -131,7 +131,7 @@ export default function AdvancedDrawer({
                 type="button"
                 onClick={onClose}
                 aria-label="Close advanced settings"
-                className="rounded-md p-1.5 text-(--muted-foreground) hover:bg-(--secondary)/60 cursor-pointer"
+                className="rounded-sm p-1.5 text-(--muted-foreground) hover:bg-(--secondary)/60 cursor-pointer"
               >
                 <XIcon size={16} />
               </button>
@@ -139,7 +139,7 @@ export default function AdvancedDrawer({
 
             <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4 custom-scrollbar">
               {!own && (
-                <p className="rounded-md border border-(--border) bg-(--secondary)/30 p-2 text-[11px] text-(--muted-foreground)">
+                <p className="rounded-sm border border-(--border) bg-(--secondary)/30 p-2 text-[11px] text-(--muted-foreground)">
                   On the free tier a run can only be made cheaper. Add your own
                   API key in settings to add channels.
                 </p>
@@ -171,7 +171,7 @@ export default function AdvancedDrawer({
                     return (
                       <label
                         key={channel}
-                        className={`flex items-center gap-2 rounded-md border border-(--border) px-2 py-1.5 text-xs ${locked ? "opacity-40" : "cursor-pointer hover:bg-(--secondary)/40"}`}
+                        className={`flex items-center gap-2 rounded-sm border border-(--border) px-2 py-1.5 text-xs ${locked ? "opacity-40" : "cursor-pointer hover:bg-(--secondary)/40"}`}
                       >
                         <input
                           type="checkbox"
@@ -259,7 +259,7 @@ export default function AdvancedDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-md bg-(--primary) px-3 py-1.5 text-xs font-medium text-(--primary-foreground) cursor-pointer"
+                className="rounded-sm bg-(--primary) px-3 py-1.5 text-xs font-medium text-(--primary-foreground) cursor-pointer"
               >
                 Done
               </button>

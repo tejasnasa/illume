@@ -110,7 +110,7 @@ describe("ChatPage empty state", () => {
     const { requests } = installFetch({ onStream: () => stream.response });
     renderPage();
 
-    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /What would you like to know about acme/ })).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Suggested questions" });
     expect(list.querySelectorAll("button")).toHaveLength(3);
 
@@ -410,7 +410,7 @@ describe("ChatPage graph", () => {
     setViewport(false);
     installFetch({});
     renderPage();
-    await screen.findByText(/What would you like to know about acme/);
+    await screen.findByRole("heading", { name: /What would you like to know about acme/ });
     // Give any lazy import the chance it would need to land.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
@@ -556,7 +556,7 @@ describe("ChatPage conversations", () => {
     await user.click(screen.getByRole("button", { name: "New chat" }));
 
     expect(window.location.search).toBe("");
-    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /What would you like to know about acme/ })).toBeInTheDocument();
     expect(screen.queryByText("What is func_0?")).not.toBeInTheDocument();
   });
 
@@ -572,7 +572,7 @@ describe("ChatPage conversations", () => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
 
-    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /What would you like to know about acme/ })).toBeInTheDocument();
   });
 
   it("sends only the open conversation turns and its id", async () => {
@@ -659,7 +659,7 @@ describe("ChatPage conversations", () => {
     window.history.replaceState(null, "", "/repo/1/chat?c=gone");
     renderPage({ initialConversationId: "gone" });
 
-    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /What would you like to know about acme/ })).toBeInTheDocument();
     expect(window.location.search).toBe("");
   });
 
@@ -702,7 +702,7 @@ describe("ChatPage conversations", () => {
     );
     expect(window.location.search).toBe("");
     expect(screen.queryByText("Auth flow")).not.toBeInTheDocument();
-    expect(await screen.findByText(/What would you like to know about acme/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /What would you like to know about acme/ })).toBeInTheDocument();
   });
 
   it("keeps the list in a drawer on narrow screens", async () => {

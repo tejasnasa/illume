@@ -6,6 +6,7 @@ import GetMyData from "@/api/auth";
 import { GetGuide } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import ChatPage from "@/components/chat/ChatPage";
+import { MAX_QUESTION_CHARS } from "@/lib/agent/limits";
 import type { Capabilities } from "@/lib/agent/presets";
 import { buildSuggestions } from "@/lib/agent/suggestions";
 import { redirect } from "next/navigation";
@@ -15,7 +16,8 @@ import { redirect } from "next/navigation";
  * and the starter questions, then hands over to the client chat.
  *
  * @param params - Route params promise resolving to the repository number.
- * @param searchParams - Query promise; `c` names the conversation to open.
+ * @param searchParams - Query promise; `c` names the conversation to open
+ *   and `q` a question to start the composer with.
  * @returns The chat page, or a redirect home while the repository is indexing.
  */
 export default async function ChatRoute({
@@ -23,11 +25,12 @@ export default async function ChatRoute({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ c?: string | string[] }>;
+  searchParams: Promise<{ c?: string | string[]; q?: string | string[] }>;
 }) {
   const { id } = await params;
-  const { c } = await searchParams;
+  const { c, q } = await searchParams;
   const initialConversationId = typeof c === "string" && c ? c : null;
+  const initialQuestion = typeof q === "string" ? q.slice(0, MAX_QUESTION_CHARS) : "";
   const repo = await GetRepository(Number(id));
 
   if (repo.status !== "ready") redirect(`/repo/${id}`);
@@ -74,6 +77,7 @@ export default async function ChatRoute({
       caps={caps}
       freeChatRemaining={freeChatRemaining}
       initialConversationId={initialConversationId}
+      initialQuestion={initialQuestion}
     />
   );
 }

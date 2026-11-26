@@ -91,7 +91,7 @@ export default function StaleNotice({
           type="button"
           aria-expanded={open}
           onClick={toggle}
-          className="inline-flex items-center gap-1.5 rounded-full border border-yellow-400/30 bg-yellow-400/5 px-2.5 py-1 font-medium text-yellow-300 hover:bg-yellow-400/10 cursor-pointer"
+          className="inline-flex items-center gap-1.5 rounded-sm border border-yellow-400/30 bg-yellow-400/5 px-2.5 py-1 font-medium text-yellow-300 hover:bg-yellow-400/10 cursor-pointer"
         >
           <ClockCounterClockwiseIcon size={13} weight="bold" />
           May be out of date
@@ -105,7 +105,7 @@ export default function StaleNotice({
           <button
             type="button"
             onClick={onReask}
-            className="rounded-full border border-(--border) px-2.5 py-1 font-medium text-(--foreground) hover:bg-(--secondary)/50 cursor-pointer"
+            className="rounded-sm border border-(--border) px-2.5 py-1 font-medium text-(--foreground) hover:bg-(--secondary)/50 cursor-pointer"
           >
             Re-ask
           </button>
@@ -114,14 +114,14 @@ export default function StaleNotice({
 
       {open && (
         <div
-          className="mt-2 space-y-2 rounded-lg border border-(--border) bg-(--secondary)/20 p-3"
+          className="mt-2 space-y-2 rounded-sm border border-white/8 bg-(--background)/80 p-3"
           data-testid="stale-panel"
         >
           <p className="text-(--muted-foreground)">
             Files this answer cited have changed since it was given.
           </p>
 
-          <ul className="space-y-0.5 font-mono text-[11px] text-(--foreground)">
+          <ul className="space-y-0.5 font-pixel text-[11px] text-(--foreground)">
             {(load.status === "ready"
               ? load.changes.stale_paths
               : stale.paths
@@ -155,7 +155,7 @@ export default function StaleNotice({
                 <ul className="space-y-1.5" data-testid="stale-commits">
                   {load.changes.commits.map((commit) => (
                     <li key={commit.hash} className="leading-snug">
-                      <span className="font-mono text-(--muted-foreground)">
+                      <span className="font-pixel text-(--muted-foreground)">
                         {commit.hash.slice(0, 7)}
                       </span>{" "}
                       <span className="text-(--foreground)">
@@ -178,7 +178,7 @@ export default function StaleNotice({
                   href={load.changes.compare_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-(--primary) underline-offset-2 hover:underline"
+                  className="inline-flex items-center gap-1 text-(--accent) underline-offset-2 hover:underline"
                 >
                   Compare on GitHub
                   <ArrowSquareOutIcon size={12} />

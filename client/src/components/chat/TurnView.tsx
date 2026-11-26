@@ -7,7 +7,6 @@
 import type { Turn } from "@/hooks/useConversation";
 import type { RunState } from "@/lib/agent/reducer";
 import { runCounts } from "@/lib/agent/tools";
-import { TrashIcon, WarningIcon } from "@phosphor-icons/react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import ActivityBlock from "./ActivityBlock";
@@ -59,7 +58,7 @@ export function RunStats({ run }: { run: RunState }) {
 
   return (
     <p
-      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-(--muted-foreground)"
+      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 font-pixel text-[11px] tracking-[0.06em] text-(--faint-foreground) uppercase"
       data-testid="run-stats"
     >
       {parts.map((part, i) => (
@@ -107,25 +106,25 @@ export default function TurnView({
       initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="group/turn relative flex flex-col gap-3"
+      className="group/turn relative flex flex-col gap-3.5"
       data-testid="turn"
     >
-      <div className="flex max-w-[85%] items-center gap-1.5 self-end">
+      <div className="flex max-w-[80%] items-center gap-1.5 self-end">
         <button
           type="button"
           onClick={() => onDelete(turn.id)}
           aria-label="Delete message"
           title="Delete message"
-          className="shrink-0 rounded-lg p-1.5 text-(--muted-foreground) opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover/turn:opacity-100 cursor-pointer"
+          className="shrink-0 rounded-sm px-1.5 py-1 font-pixel text-xs text-(--faint-foreground) opacity-0 hover:cursor-pointer hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 group-hover/turn:opacity-100"
         >
-          <TrashIcon size={14} />
+          <span aria-hidden="true">✕</span>
         </button>
-        <div className="min-w-0 rounded-2xl rounded-tr-sm border border-(--border) bg-(--card)/60 px-4 py-2.5 text-sm text-(--foreground) shadow-md backdrop-blur-md whitespace-pre-wrap wrap-break-word">
+        <div className="min-w-0 rounded-sm bg-[#1c1c21] px-4 py-3 text-[15px] leading-normal text-(--foreground) whitespace-pre-wrap wrap-break-word">
           {turn.question}
         </div>
       </div>
 
-      <div className="relative w-full space-y-3 rounded-2xl rounded-tl-sm border border-(--border) bg-(--card)/60 p-4 shadow-sm backdrop-blur-md sm:p-5">
+      <div className="relative flex w-full flex-col gap-3.5">
         <ActivityBlock run={run} />
 
         <AnswerView run={run} repo={repo} onPulse={onPulse} />
@@ -133,17 +132,17 @@ export default function TurnView({
         {run.status === "error" && run.error && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-950/10 p-3 text-sm text-red-400"
+            className="flex items-start gap-2.5 rounded-sm border border-red-500/25 bg-red-500/5 p-3 text-sm text-red-300"
           >
-            <WarningIcon size={16} weight="fill" className="mt-0.5 shrink-0" />
-            <p>
+            <span aria-hidden="true" className="font-pixel text-red-400">!</span>
+            <p className="m-0">
               {run.error.message}
               {isQuota && (
                 <>
                   {" "}
                   <Link
                     href="/settings"
-                    className="text-(--primary) underline-offset-2 hover:underline"
+                    className="text-(--accent) underline-offset-2 hover:underline"
                   >
                     Add your own API key
                   </Link>{" "}
@@ -155,7 +154,7 @@ export default function TurnView({
         )}
 
         {run.status === "cancelled" && (
-          <p className="text-xs text-(--muted-foreground)" role="status">
+          <p className="m-0 font-pixel text-xs tracking-[0.06em] text-(--subtle-foreground) uppercase" role="status">
             Stopped before the answer finished.
           </p>
         )}
@@ -163,9 +162,9 @@ export default function TurnView({
         {run.status === "connection_lost" && (
           <div
             role="alert"
-            className="flex items-center gap-2 rounded-lg border border-yellow-400/30 bg-yellow-400/5 p-3 text-xs text-yellow-300"
+            className="flex items-center gap-2.5 rounded-sm border border-yellow-400/25 bg-yellow-400/5 p-3 text-xs text-yellow-300"
           >
-            <WarningIcon size={14} weight="fill" />
+            <span aria-hidden="true" className="font-pixel">!</span>
             <span>Connection lost before the answer finished. Ask again to retry.</span>
           </div>
         )}
@@ -180,7 +179,7 @@ export default function TurnView({
         )}
 
         {run.status === "done" && run.answer && (
-          <div className="border-t border-(--border)/50 pt-2">
+          <div className="border-t border-white/8 pt-2.5">
             <RunStats run={run} />
           </div>
         )}

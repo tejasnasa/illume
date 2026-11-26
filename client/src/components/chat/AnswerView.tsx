@@ -27,7 +27,7 @@ import CitationCard from "../ui/CitationCard";
 
 /** The typography an answer is set in; streamed text in the activity uses it too. */
 export const PROSE =
-  "prose prose-sm prose-invert max-w-none text-(--foreground) prose-headings:text-(--foreground) prose-headings:font-semibold prose-strong:text-(--foreground) prose-code:rounded prose-code:bg-(--secondary)/70 prose-code:px-1 prose-code:py-0.5 prose-code:font-mono prose-code:text-[0.85em] prose-code:font-normal prose-code:text-(--foreground) prose-code:before:content-none prose-code:after:content-none prose-pre:border prose-pre:border-(--border) prose-pre:bg-(--background)/70 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[0.95em] prose-li:marker:text-(--muted-foreground)";
+  "prose prose-sm prose-invert max-w-none text-(--foreground) prose-headings:text-(--foreground) prose-strong:text-(--foreground) prose-p:text-[15px] prose-p:leading-[1.75] prose-p:text-zinc-300 prose-li:text-zinc-300 prose-headings:font-pixel prose-headings:font-normal prose-code:font-pixel prose-code:text-[0.92em] prose-code:font-normal prose-code:text-(--chart-1) prose-code:before:content-none prose-code:after:content-none prose-pre:border prose-pre:border-(--border) prose-pre:bg-(--background)/70 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[0.95em] prose-li:marker:text-(--muted-foreground)";
 
 /** A blinking caret after the last character of text that is still being written. */
 export const CARET =
@@ -130,19 +130,19 @@ function SourcePreview({
         width: PREVIEW_WIDTH,
         transform: placement.above ? "translateY(-100%)" : undefined,
       }}
-      className="pointer-events-none fixed z-50 overflow-hidden rounded-xl border border-(--border) bg-(--popover)/95 text-left shadow-2xl backdrop-blur-md"
+      className="pointer-events-none fixed z-50 overflow-hidden rounded-sm border border-(--border) bg-(--popover)/95 text-left shadow-2xl"
       data-testid="source-preview"
     >
       <div className="border-b border-(--border) px-3 py-2">
         <p className="truncate text-xs font-semibold text-(--foreground)">
           {previewTitle(citation, citationKey)}
         </p>
-        <p className="mt-0.5 truncate font-mono text-[10px] text-(--muted-foreground)">
+        <p className="mt-0.5 truncate font-pixel text-[10px] text-(--muted-foreground)">
           {previewSubtitle(citation, citationKey)}
         </p>
       </div>
       {text && (
-        <pre className="m-0 max-h-56 overflow-hidden whitespace-pre-wrap break-words bg-transparent px-3 py-2 font-mono text-[10.5px] leading-relaxed text-(--muted-foreground)">
+        <pre className="m-0 max-h-56 overflow-hidden whitespace-pre-wrap break-words bg-transparent px-3 py-2 font-pixel text-[10.5px] leading-relaxed text-(--muted-foreground)">
           {text}
         </pre>
       )}
@@ -205,9 +205,9 @@ export function CitationChip({
         onFocus={(event) => show(event.currentTarget)}
         onBlur={hide}
         aria-label={`Source ${citationKey}`}
-        className={`rounded-md border px-1.5 py-px font-mono text-[0.72em] no-underline transition-colors ${
+        className={`rounded-sm border px-1.5 py-px font-pixel text-[0.72em] no-underline transition-colors ${
           citation
-            ? "border-(--chart-2)/40 bg-(--chart-2)/10 text-(--chart-1) hover:bg-(--chart-2)/20 cursor-pointer"
+            ? "border-(--accent)/40 text-(--accent) hover:bg-(--accent)/10 cursor-pointer"
             : "border-dashed border-(--border) text-(--muted-foreground) cursor-default"
         }`}
       >
@@ -313,7 +313,7 @@ export default function AnswerView({
             type="button"
             onClick={() => setOpened(null)}
             aria-label="Close source"
-            className="absolute -right-2 -top-2 rounded-full border border-(--border) bg-(--card) p-1 text-(--muted-foreground) hover:text-(--foreground) cursor-pointer"
+            className="absolute -right-2 -top-2 rounded-xs border border-(--border) bg-(--card) p-1 text-(--muted-foreground) hover:text-(--foreground) cursor-pointer"
           >
             <XIcon size={10} weight="bold" />
           </button>
@@ -383,7 +383,7 @@ export default function AnswerView({
                   {parts.retrievedKeys.slice(0, 40).map((key) => (
                     <li
                       key={key}
-                      className="rounded-md border border-(--border) px-1.5 py-0.5 font-mono text-[10px] text-(--muted-foreground)"
+                      className="rounded-sm border border-(--border) px-1.5 py-0.5 font-pixel text-[10px] text-(--muted-foreground)"
                     >
                       {shortKeyLabel(key)}
                     </li>

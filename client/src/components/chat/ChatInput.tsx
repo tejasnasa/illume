@@ -4,7 +4,6 @@
  */
 "use client";
 
-import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
 import { MAX_QUESTION_CHARS } from "@/lib/agent/limits";
 import { useLayoutEffect, useRef } from "react";
 
@@ -60,7 +59,7 @@ export default function ChatInput({
   }, [value]);
 
   return (
-    <div className="w-full rounded-2xl border border-(--border) bg-(--card)/60 p-2 shadow-[0_8px_32px_0_rgb(0_0_0/0.3)] backdrop-blur-xl focus-within:border-(--primary)/40">
+    <div className="flex w-full flex-col gap-2.5 rounded-md border border-(--input) bg-(--card) pt-3 pr-3 pb-2.5 pl-4 shadow-[0_16px_40px_#00000080] focus-within:border-(--accent)">
       <textarea
         ref={ref}
         value={value}
@@ -80,15 +79,15 @@ export default function ChatInput({
             if (canSend) onSend();
           }
         }}
-        className="block max-h-50 w-full resize-none bg-transparent px-3 py-2 text-sm text-(--foreground) placeholder:text-(--muted-foreground)/60 focus:outline-none disabled:cursor-not-allowed"
+        className="block max-h-50 w-full resize-none bg-transparent text-[15px] leading-normal text-(--foreground) placeholder:text-(--faint-foreground) focus:outline-none disabled:cursor-not-allowed"
       />
-      <div className="flex items-center justify-between px-1 pt-1">
+      <div className="flex items-center justify-between gap-2.5">
         {picker}
         {value.length >= COUNTER_FROM && (
           <span
             data-testid="char-count"
             aria-live="polite"
-            className={`ml-auto mr-2 text-[11px] ${value.length >= MAX_QUESTION_CHARS ? "text-(--destructive)" : "text-(--muted-foreground)"}`}
+            className={`mr-2 ml-auto font-pixel text-[11px] ${value.length >= MAX_QUESTION_CHARS ? "text-(--destructive)" : "text-(--muted-foreground)"}`}
           >
             {value.length} / {MAX_QUESTION_CHARS}
             {value.length >= MAX_QUESTION_CHARS ? " (limit reached)" : ""}
@@ -99,9 +98,9 @@ export default function ChatInput({
             type="button"
             onClick={onStop}
             aria-label="Stop"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-(--foreground) text-(--background) transition-transform hover:scale-105 cursor-pointer"
+            className="ghost rounded-sm border border-(--input) px-3.5 py-2 font-pixel text-[13px] tracking-[0.04em] text-zinc-300 uppercase hover:cursor-pointer"
           >
-            <StopIcon size={14} weight="fill" />
+            <span aria-hidden="true">■ Stop</span>
           </button>
         ) : (
           <button
@@ -109,9 +108,9 @@ export default function ChatInput({
             onClick={onSend}
             disabled={!canSend}
             aria-label="Send"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-(--primary) text-(--primary-foreground) transition-all hover:scale-105 disabled:bg-(--primary)/30 disabled:hover:scale-100 disabled:cursor-default cursor-pointer"
+            className="cta rounded-sm bg-(--primary) px-3.5 py-2 font-pixel text-[13px] tracking-[0.04em] text-(--primary-foreground) uppercase hover:cursor-pointer disabled:cursor-default disabled:opacity-40"
           >
-            <ArrowUpIcon size={15} weight="bold" />
+            <span aria-hidden="true">Send ↵</span>
           </button>
         )}
       </div>

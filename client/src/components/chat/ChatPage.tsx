@@ -22,7 +22,6 @@ import {
   type PresetId,
 } from "@/lib/agent/presets";
 import { useRepoGraph } from "@/components/RepoGraphContext";
-import { ArrowDownIcon, ListIcon, SparkleIcon } from "@phosphor-icons/react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -51,6 +50,8 @@ export interface ChatPageProps {
   freeChatRemaining: number | null;
   /** The conversation named by the address (`?c=`), or null for a new chat. */
   initialConversationId?: string | null;
+  /** A question to start the composer with (`?q=`), as other pages link here. */
+  initialQuestion?: string;
 }
 
 /** Query parameter holding the open conversation. */
@@ -97,6 +98,7 @@ export default function ChatPage({
   caps,
   freeChatRemaining,
   initialConversationId = null,
+  initialQuestion = "",
 }: ChatPageProps) {
   const reduced = useReducedMotion();
   const wide = useMediaQuery("(min-width: 768px)");
@@ -114,7 +116,7 @@ export default function ChatPage({
   const { turns, busy, focusState, loaded } = conversation;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialQuestion);
   const [choice, setChoice] = useState<PresetChoice>(() => defaultPreset(caps));
   const [settings, setSettings] = useState<DrawerSettings | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -319,7 +321,7 @@ export default function ChatPage({
       placeholder={
         quotaExhausted
           ? "Free chat allowance used up."
-          : "Ask about the codebase…"
+          : `Ask anything about ${repoName}`
       }
       picker={picker}
     />
@@ -327,13 +329,13 @@ export default function ChatPage({
 
   return (
     <div
-      className="fixed inset-x-0 bottom-0 top-16 overflow-hidden"
+      className="fixed inset-x-0 top-26.5 bottom-0 overflow-hidden bg-[radial-gradient(ellipse_at_50%_40%,#0092b814,transparent_60%),#060608] md:top-16.25"
       data-testid="chat-page"
     >
       {/* Breakpoints, not the media-query hook, pick between the panel and the
           drawer: the hook reads false until hydration, which would flash the
           narrow layout on a wide screen. */}
-      <div className="absolute inset-y-0 left-0 z-30 hidden w-64 p-3 md:block">
+      <div className="absolute inset-y-0 left-0 z-30 hidden w-65 md:block">
         <ConversationSidebar
           items={list.items}
           loaded={list.loaded}
@@ -352,9 +354,9 @@ export default function ChatPage({
           type="button"
           aria-label="Open conversations"
           onClick={() => setSidebarOpen(true)}
-          className="absolute left-3 top-3 z-20 flex items-center gap-1.5 rounded-full border border-(--border) bg-(--card)/60 px-3 py-1.5 text-xs text-(--foreground) shadow-lg backdrop-blur-md cursor-pointer"
+          className="ghost absolute top-3 left-3 z-20 flex items-center gap-1.5 rounded-sm border border-(--border) bg-(--card) px-3 py-1.5 font-pixel text-xs tracking-[0.06em] text-zinc-300 uppercase cursor-pointer"
         >
-          <ListIcon size={14} />
+          <span aria-hidden="true">≡</span>
           Chats
         </button>
         <ConversationSidebar
@@ -370,9 +372,9 @@ export default function ChatPage({
           onDelete={deleteConversation}
         />
       </div>
-      <div className="absolute inset-y-0 right-0 left-0 md:left-64">
+      <div className="absolute inset-y-0 right-0 left-0 md:left-65">
         {showGraph && (
-          <div className="absolute inset-0 -top-16" data-testid="graph-layer">
+          <div className="absolute inset-0 opacity-85" data-testid="graph-layer">
             <LiveGraph
               graph={graph}
               highlight={focusState.highlight}
@@ -384,7 +386,7 @@ export default function ChatPage({
         )}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-linear-to-b from-(--background)/50 via-transparent to-(--background)/80"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,#060608_0%,#060608cc_22%,#06060866_50%,#060608cc_78%,#060608_100%)]"
         />
 
         <div
@@ -395,7 +397,7 @@ export default function ChatPage({
         >
           <div
             ref={columnRef}
-            className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pb-52 pt-4"
+            className="mx-auto flex w-full max-w-190 flex-col gap-7 px-4 pt-14 pb-56 md:px-6 md:pt-8"
           >
             {turns.map((turn) => (
               <TurnView
@@ -419,21 +421,21 @@ export default function ChatPage({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}
-              className="absolute bottom-32 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-(--border) bg-(--card)/90 px-3 py-1.5 text-xs text-(--foreground) shadow-lg backdrop-blur-md cursor-pointer"
+              className="ghost absolute bottom-36 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-sm border border-(--border) bg-(--card) px-3 py-1.5 font-pixel text-xs tracking-[0.06em] text-zinc-300 uppercase shadow-lg cursor-pointer"
             >
-              <ArrowDownIcon size={12} weight="bold" />
+              <span aria-hidden="true">↓</span>
               Jump to latest
             </motion.button>
           )}
         </AnimatePresence>
 
         <div
-          className={`pointer-events-none absolute inset-0 z-10 flex flex-col items-center px-4 pb-4 ${empty ? "justify-center" : "justify-end"}`}
+          className={`pointer-events-none absolute inset-0 z-10 flex flex-col items-center px-4 pb-6 md:px-6 ${empty ? "justify-center" : "justify-end bg-[linear-gradient(transparent_calc(100%-220px),#060608_calc(100%-110px))]"}`}
         >
           <motion.div
             layout={!reduced}
             transition={{ type: "spring", stiffness: 160, damping: 24 }}
-            className="pointer-events-auto flex w-full max-w-3xl flex-col gap-3"
+            className="pointer-events-auto flex w-full max-w-190 flex-col gap-2.5"
           >
             {/* Until the history arrives the thread is assumed empty, so the
               composer holds the centre the route skeleton put it in rather
@@ -449,32 +451,47 @@ export default function ChatPage({
                   transition={{ duration: 0.25 }}
                   className="mb-2 text-center"
                 >
-                  <SparkleIcon
-                    size={22}
-                    weight="duotone"
-                    className="mx-auto mb-3 text-(--chart-1)"
-                  />
-                  <h1 className="text-2xl font-semibold tracking-tight">
-                    What would you like to know about {repoName}?
+                  <p
+                    aria-hidden="true"
+                    className="m-0 mb-3 font-pixel text-[13px] tracking-[0.08em] text-(--subtle-foreground)"
+                  >
+                    <span className="text-(--accent)">&gt;</span> illume ask
+                    <span className="caret">_</span>
+                  </p>
+                  <h1 className="m-0 text-3xl font-medium tracking-tight">
+                    What would you like to know about{" "}
+                    <span className="font-pixel text-(--accent)">{repoName}</span>?
                   </h1>
                 </motion.div>
               )}
             </AnimatePresence>
 
             {quotaExhausted && (
-              <div className="flex items-center gap-1.5 rounded border border-(--primary)/20 bg-(--primary)/5 px-3 py-2 text-xs text-(--muted-foreground)">
-                <SparkleIcon size={12} weight="duotone" />
+              <div className="flex items-center gap-2 rounded-sm border border-(--accent)/25 bg-(--accent)/5 px-3 py-2 text-xs text-(--muted-foreground)">
+                <span aria-hidden="true" className="font-pixel text-(--accent)">
+                  !
+                </span>
                 <span>
                   You&apos;ve used up the free chat questions.{" "}
                   <Link
                     href="/settings"
-                    className="text-(--primary) underline-offset-2 hover:underline"
+                    className="text-(--accent) underline-offset-2 hover:underline"
                   >
                     Add your own API key
                   </Link>{" "}
                   to keep chatting.
                 </span>
               </div>
+            )}
+
+            {(branch || commitSha) && !empty && (
+              <p className="m-0 font-pixel text-[11px] tracking-[0.08em] text-(--faint-foreground) uppercase">
+                Answers come from{" "}
+                <span className="normal-case">
+                  {branch ?? "detached"}
+                  {commitSha && ` @ ${commitSha.slice(0, 7)}`}
+                </span>
+              </p>
             )}
 
             {composer}
@@ -496,7 +513,7 @@ export default function ChatPage({
                         type="button"
                         disabled={quotaExhausted}
                         onClick={() => send(question)}
-                        className="h-full w-full rounded-xl border border-(--border) bg-(--card)/40 p-3 text-left text-xs text-(--muted-foreground) backdrop-blur-md transition-colors hover:border-(--primary)/40 hover:text-(--foreground) disabled:opacity-50 cursor-pointer"
+                        className="ghost h-full w-full rounded-sm border border-(--border) bg-(--card) p-3 text-left text-[13px] leading-snug text-(--muted-foreground) disabled:opacity-50 cursor-pointer"
                       >
                         {question}
                       </button>
@@ -507,7 +524,7 @@ export default function ChatPage({
             </AnimatePresence>
 
             {remaining !== null && !quotaExhausted && (
-              <p className="text-center text-[11px] text-(--muted-foreground)">
+              <p className="m-0 text-center font-pixel text-[11px] tracking-[0.06em] text-(--subtle-foreground) uppercase">
                 {remaining} free {remaining === 1 ? "question" : "questions"}{" "}
                 left
               </p>
