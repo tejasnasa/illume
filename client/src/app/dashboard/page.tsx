@@ -4,95 +4,79 @@
  */
 import GetMyData from "@/api/auth";
 import { getRepositories } from "@/api/repository";
+import AddRepoDialog from "@/components/AddRepoDialog";
 import DashboardRefresh from "@/components/DashboardRefresh";
 import FreeTierBanner from "@/components/FreeTierBanner";
 import Navbar from "@/components/Navbar";
-import RepoPickerModal from "@/components/RepoPickerModal";
-import Button from "@/components/ui/Button";
-import Modal from "@/components/ui/Modal";
-import RepoCard from "@/components/ui/RepoCard";
-import { shouldShowFreeTierBanner } from "@/utils/freeTier";
-import { DatabaseIcon, PlusIcon } from "@phosphor-icons/react/dist/ssr";
+import RepoCollection from "@/components/RepoCollection";
+import User from "@/types/user";
+import { statusView } from "@/utils/repoStatus";
 
 /**
- * Server-rendered dashboard with repo grid and index-repository modal.
+ * The cost line shown on the picker's version step for keyless users.
  *
- * @returns Dashboard layout with navbar, refresh handler, and repo cards.
+ * @param user The signed-in user.
+ * @returns The note, or undefined when the user has their own key.
+ */
+function ingestNote(user: User): string | undefined {
+  if (user.has_ai_key) return undefined;
+  return `Uses 1 of your ${user.free_ingestions_limit} free repositories`;
+}
+
+/**
+ * Server-rendered dashboard: header, free-tier strip and the repository
+ * collection.
+ *
+ * @returns Dashboard layout with navbar, refresh handler, and repositories.
  */
 export default async function Dashboard() {
-  const repositories = await getRepositories();
-  const myData = await GetMyData();
+  const [repositories, myData] = await Promise.all([
+    getRepositories(),
+    GetMyData(),
+  ]);
 
-  // Drives the empty state's span: it shares a row with the banner when the
-  // banner renders, and takes the row alone when it does not.
-  const showBanner = shouldShowFreeTierBanner(myData);
+  const ingesting = repositories.filter(
+    (r) => statusView(r.status).kind === "ingesting",
+  ).length;
+  const count = `${repositories.length} ${repositories.length === 1 ? "repository" : "repositories"}`;
 
   return (
-    <div>
-      <Navbar userData={myData} />
+    <div className="flex min-h-dvh flex-col">
+      <Navbar userData={myData} page="Dashboard" />
       <DashboardRefresh repositories={repositories} />
 
-      <main className="max-w-7xl mx-auto px-6 py-24">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
-          <div>
-            <h1 className="text-8xl font-extrabold tracking-tight">
-              Dashboard
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pt-14 pb-24 sm:px-6">
+        <header className="flex flex-wrap items-end justify-between gap-6">
+          <div className="flex flex-col gap-3">
+            <p
+              aria-hidden="true"
+              className="m-0 font-pixel text-[13px] tracking-[0.08em] text-(--subtle-foreground)"
+            >
+              <span className="text-(--accent)">&gt;</span> illume ls
+              <span className="caret">_</span>
+            </p>
+            <h1 className="m-0 text-4xl font-medium tracking-tight sm:text-5xl">
+              Your <span className="font-pixel text-(--accent)">repositories</span>
             </h1>
-            <p className="text-(--muted-foreground) text-lg">
-              Manage and explore your indexed codebases.
+            <p className="m-0 font-pixel text-xs tracking-[0.08em] text-(--muted-foreground) uppercase">
+              {count}
+              {ingesting > 0 && (
+                <>
+                  {" "}
+                  · <span className="text-(--accent)">{ingesting} ingesting</span>
+                </>
+              )}
             </p>
           </div>
-
-          <Modal
-            className="w-2xl"
-            trigger={
-              <Button size="lg">
-                <PlusIcon weight="bold" size={20} />
-                Add New Repository
-              </Button>
-            }
-          >
-            <div className="flex flex-col">
-              <h2 className="text-3xl font-bold mb-1 flex items-center gap-2">
-                <DatabaseIcon className="text-(--primary)" />
-                Index Repository
-              </h2>
-              <p className="text-sm text-(--muted-foreground) mb-6">
-                Connect and scan targeted versions of your GitHub codebases.
-              </p>
-              <RepoPickerModal />
-            </div>
-          </Modal>
+          <AddRepoDialog
+            note={ingestNote(myData)}
+            added={repositories.map((repo) => repo.github_url)}
+          />
         </header>
 
-        <section className="relative">
-          <div className="absolute -top-8 left-0 text-xs font-bold uppercase tracking-[0.2em] text-(--muted-foreground)/50">
-            Your Indexed Libraries
-          </div>
+        <FreeTierBanner user={myData} />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <FreeTierBanner user={myData} />
-            {repositories.map((repo) => (
-              <RepoCard key={repo.id} repo={repo} />
-            ))}
-
-            {repositories.length === 0 && (
-              <div
-                className={`min-h-56 flex flex-col items-center justify-center gap-3 px-6 py-10 text-center border-2 border-dashed border-(--border) rounded-sm bg-(--secondary)/5 ${
-                  showBanner ? "lg:col-span-2" : "col-span-full"
-                }`}
-              >
-                <DatabaseIcon
-                  size={40}
-                  className="text-(--muted-foreground)/20"
-                />
-                <p className="text-(--muted-foreground)">
-                  No repositories found. Add your first one to get started!
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
+        <RepoCollection repositories={repositories} />
       </main>
     </div>
   );

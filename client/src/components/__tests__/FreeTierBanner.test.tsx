@@ -82,7 +82,7 @@ describe("copy", () => {
 
     expect(screen.getByText(/You're on the free tier/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Add your own API key/i }),
+      screen.getByRole("link", { name: /Add a key/i }),
     ).toHaveAttribute("href", "/settings");
   });
 
@@ -98,7 +98,7 @@ describe("copy", () => {
 
     expect(screen.getByText(/1 of 3 free ingestions used/i)).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /Add your own API key/i }),
+      screen.getByRole("link", { name: /Add a key/i }),
     ).toHaveAttribute("href", "/settings");
   });
 
@@ -112,10 +112,10 @@ describe("copy", () => {
       />,
     );
 
-    expect(screen.getByText(/Free Ingestions Used/i)).toBeInTheDocument();
+    expect(screen.getByText(/All 3 free ingestions used/i)).toBeInTheDocument();
     expect(
       screen.getByRole("link", {
-        name: /Add your own API key to continue/i,
+        name: /Add a key/i,
       }),
     ).toHaveAttribute("href", "/settings");
   });

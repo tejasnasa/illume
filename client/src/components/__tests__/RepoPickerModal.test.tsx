@@ -48,8 +48,8 @@ function repo(n: number, overrides: Record<string, unknown> = {}) {
  *
  * happy-dom ships one whose `observe` is a no-op, so the scroll sentinel never reports
  * as visible and the pagination path is unreachable. This records each callback so a
- * test can fire one deliberately. The component rebuilds the observer whenever its
- * dependencies change, so `triggerIntersection` fires the most recent one.
+ * test can fire one deliberately. The component builds a fresh observer each time a
+ * sentinel mounts, so `triggerIntersection` fires the most recent live one.
  */
 type ObserverCallback = (entries: Array<{ isIntersecting: boolean }>) => void;
 
@@ -63,13 +63,16 @@ class FakeIntersectionObserver {
    * would never deliver.
    */
   active = false;
+  /** The element handed to `observe`; a browser stops reporting on it once it detaches. */
+  target: Element | null = null;
 
   constructor(callback: ObserverCallback) {
     this.callback = callback;
     instances.push(this);
   }
-  observe() {
+  observe(target: Element) {
     this.active = true;
+    this.target = target;
     observeCalls += 1;
   }
   unobserve() {
@@ -107,7 +110,9 @@ let observeCalls = 0;
  * trigger a request the component would never make.
  */
 function fireIntersection(): boolean {
-  const live = instances.filter((observer) => observer.active);
+  // A sentinel that has left the document can never scroll into view, so an observer
+  // still pointed at one is not live either.
+  const live = instances.filter((observer) => observer.active && observer.target?.isConnected);
   const latest = live.at(-1);
   if (!latest) return false;
   latest.fire();
@@ -117,8 +122,8 @@ function fireIntersection(): boolean {
 /**
  * Fires the sentinel once an observer is actually watching it.
  *
- * The component rebuilds its observer on every `loadingRepos` change, so between a page
- * rendering and the effect re-running there is a window with no live observer at
+ * The sentinel is withdrawn while a page is loading, so between a request starting and
+ * the next page rendering there is a window with no live observer at
  * all. Firing during that window is a silent no-op: `fireIntersection` returns false, the
  * `waitFor` after it never sees the next page, and the failure reads as a product bug when
  * it is a race in the harness. Waiting for a live observer first is what makes these
@@ -212,7 +217,7 @@ describe("the tabs", () => {
     stubRepos();
     render(<RepoPickerModal />);
 
-    expect(screen.getByRole("button", { name: /My Repositories/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /My Repositories/ })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("repo-1")).toBeInTheDocument());
   });
 
@@ -220,7 +225,7 @@ describe("the tabs", () => {
     stubRepos();
     render(<RepoPickerModal />);
 
-    expect(screen.getByRole("button", { name: /External URL/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /External URL/ })).toBeInTheDocument();
   });
 
   it("swaps the panel when the external tab is chosen", async () => {
@@ -229,7 +234,7 @@ describe("the tabs", () => {
     render(<RepoPickerModal />);
     await loaded();
 
-    await user.click(screen.getByRole("button", { name: /External URL/ }));
+    await user.click(screen.getByRole("tab", { name: /External URL/ }));
 
     expect(screen.getByLabelText("GitHub Repository URL")).toBeInTheDocument();
     expect(screen.queryByText("repo-1")).not.toBeInTheDocument();
@@ -243,8 +248,8 @@ describe("the tabs", () => {
     render(<RepoPickerModal />);
     await loaded();
 
-    await user.click(screen.getByRole("button", { name: /External URL/ }));
-    await user.click(screen.getByRole("button", { name: /My Repositories/ }));
+    await user.click(screen.getByRole("tab", { name: /External URL/ }));
+    await user.click(screen.getByRole("tab", { name: /My Repositories/ }));
 
     await waitFor(() => expect(screen.getByText("repo-1")).toBeInTheDocument());
     expect(queries).toHaveLength(2);
@@ -398,7 +403,7 @@ describe("search", () => {
     render(<RepoPickerModal />);
     await loaded();
 
-    await user.click(screen.getByRole("button", { name: /External URL/ }));
+    await user.click(screen.getByRole("tab", { name: /External URL/ }));
 
     expect(screen.queryByPlaceholderText(/Search your GitHub repositories/)).not.toBeInTheDocument();
   });
@@ -475,10 +480,10 @@ describe("pagination", () => {
   });
 
   it("stops asking once a short page arrives", async () => {
-    // A page with fewer than 30 rows is the last one: `hasMoreRepos` goes false, the
-    // sentinel stops being rendered, and the effect that would rebuild the observer
-    // returns early. So nothing is watching the sentinel any more, and a second
-    // intersection signal is impossible rather than merely ignored.
+    // A page with fewer than 30 rows is the last one: `hasMoreRepos` goes false and the
+    // sentinel stops being rendered, which disconnects its observer. So nothing is
+    // watching any more, and a second intersection signal is impossible rather than
+    // merely ignored.
     const queries = stubPages();
     render(<RepoPickerModal />);
     await waitFor(() => expect(screen.getByText("repo-30")).toBeInTheDocument());
@@ -507,6 +512,24 @@ describe("pagination", () => {
     await triggerIntersection();
     await waitFor(() => expect(queries.at(-1)?.get("page")).toBe("3"));
   });
+
+  it("keeps paging after a trip to the version step and back", async () => {
+    // The list unmounts while a version is picked and mounts a fresh sentinel on the
+    // way back. That new element is the one that has to be watched; an observer left
+    // on the detached one would never fire, and the list would stop at page one.
+    const queries = stubRepos(() => firstPage);
+    stubGitGraph();
+    const user = userEvent.setup();
+    render(<RepoPickerModal />);
+    await waitFor(() => expect(screen.getByText("repo-30")).toBeInTheDocument());
+
+    await user.click(screen.getByText("repo-1"));
+    await user.click(await screen.findByRole("button", { name: "Back to repository list" }));
+    await waitFor(() => expect(screen.getByText("repo-30")).toBeInTheDocument());
+
+    await triggerIntersection();
+    await waitFor(() => expect(queries.at(-1)?.get("page")).toBe("2"));
+  });
 });
 
 describe("choosing a listed repository", () => {
@@ -520,7 +543,7 @@ describe("choosing a listed repository", () => {
     await user.click(screen.getByText("repo-1"));
 
     expect(
-      await screen.findByRole("heading", { name: /Configure Version for example\/repo-1/ }),
+      await screen.findByRole("heading", { name: /Choose a version of example\/repo-1/ }),
     ).toBeInTheDocument();
   });
 
@@ -539,7 +562,7 @@ describe("choosing a listed repository", () => {
     render(<RepoPickerModal />);
     await loaded();
 
-    await user.click(screen.getByRole("button", { name: /External URL/ }));
+    await user.click(screen.getByRole("tab", { name: /External URL/ }));
 
     expect(graphRequests).not.toHaveBeenCalled();
   });
@@ -551,7 +574,7 @@ describe("choosing a listed repository", () => {
     render(<RepoPickerModal />);
     await waitFor(() => expect(screen.getByText("repo-1")).toBeInTheDocument());
     await user.click(screen.getByText("repo-1"));
-    await screen.findByRole("heading", { name: /Configure Version/ });
+    await screen.findByRole("heading", { name: /Choose a version/ });
 
     await user.click(screen.getByRole("button", { name: /Back to repository list/ }));
 
@@ -563,7 +586,7 @@ describe("the external URL form", () => {
   /** Types a URL and submits the external form. */
   async function submitUrl(url: string) {
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /External URL/ }));
+    await user.click(screen.getByRole("tab", { name: /External URL/ }));
     await user.type(screen.getByLabelText("GitHub Repository URL"), url);
     await user.click(screen.getByRole("button", { name: "Continue" }));
   }
@@ -578,7 +601,7 @@ describe("the external URL form", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Configure Version for example\/cool-project/,
+        name: /Choose a version of example\/cool-project/,
       }),
     ).toBeInTheDocument();
   });
@@ -593,7 +616,7 @@ describe("the external URL form", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Configure Version for example\/cool-project/,
+        name: /Choose a version of example\/cool-project/,
       }),
     ).toBeInTheDocument();
   });
@@ -610,7 +633,7 @@ describe("the external URL form", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /Configure Version for example\/cool-project$/,
+        name: /Choose a version of example\/cool-project$/,
       }),
     ).toBeInTheDocument();
   });
@@ -673,7 +696,7 @@ describe("the external URL form", () => {
     await submitUrl("not a url");
 
     expect(graphRequests).not.toHaveBeenCalled();
-    expect(screen.queryByRole("heading", { name: /Configure Version/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Choose a version/ })).not.toBeInTheDocument();
   });
 });
 
@@ -686,7 +709,7 @@ describe("ingesting", () => {
     render(<RepoPickerModal />);
     await waitFor(() => expect(screen.getByText("repo-1")).toBeInTheDocument());
     await user.click(screen.getByText("repo-1"));
-    await screen.findByRole("heading", { name: /Configure Version/ });
+    await screen.findByRole("heading", { name: /Choose a version/ });
     return user;
   }
 
@@ -729,7 +752,7 @@ describe("ingesting", () => {
     render(<RepoPickerModal onClose={onClose} />);
     await waitFor(() => expect(screen.getByText("repo-1")).toBeInTheDocument());
     await user.click(screen.getByText("repo-1"));
-    await screen.findByRole("heading", { name: /Configure Version/ });
+    await screen.findByRole("heading", { name: /Choose a version/ });
 
     await user.click(ingestButton());
 
@@ -753,10 +776,10 @@ describe("ingesting", () => {
     const user = userEvent.setup();
     render(<RepoPickerModal />);
     await loaded();
-    await user.click(screen.getByRole("button", { name: /External URL/ }));
+    await user.click(screen.getByRole("tab", { name: /External URL/ }));
     await user.type(screen.getByLabelText("GitHub Repository URL"), "https://github.com/example/typed");
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: /Configure Version/ });
+    await screen.findByRole("heading", { name: /Choose a version/ });
 
     await user.click(screen.getByRole("button", { name: /Ingest / }));
 

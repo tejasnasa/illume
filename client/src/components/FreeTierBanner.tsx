@@ -10,7 +10,6 @@
  */
 "use client";
 
-import { MoonStarsIcon } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import User from "@/types/user";
 import { shouldShowFreeTierBanner } from "@/utils/freeTier";
@@ -37,24 +36,24 @@ function resolveMessage(user: User) {
     return {
       title:
         user.free_ingestions_used === 0
-          ? "You're on the free tier"
-          : `${user.free_ingestions_used} of ${user.free_ingestions_limit} free ingestions used`,
-      ctaLabel: "Add your own API key",
+          ? `You're on the free tier: ${user.free_ingestions_limit} ingestions on us. Add your own API key to keep going without limits.`
+          : `${user.free_ingestions_used} of ${user.free_ingestions_limit} free ingestions used. Add your own API key to keep going without limits.`,
+      ctaLabel: "Add a key",
       ctaHref: "/settings",
       tone: "primary",
     } as const;
   }
 
   return {
-    title: "Free Ingestions Used",
-    ctaLabel: "Add your own API key to continue",
+    title: `All ${user.free_ingestions_limit} free ingestions used. Add your own API key to ingest another repository.`,
+    ctaLabel: "Add a key",
     ctaHref: "/settings",
     tone: "muted",
   } as const;
 }
 
 /**
- * Renders the dashboard free-tier banner when the user is on the keyless
+ * Renders the dashboard's free-tier strip when the user is on the keyless
  * plan and has any allowance left. Returns `null` otherwise -- the banner
  * is opt-in, not a panel that hides empty.
  *
@@ -66,25 +65,35 @@ export default function FreeTierBanner({ user }: Props) {
   if (!shouldShowFreeTierBanner(user)) return null;
 
   const { title, ctaLabel, ctaHref, tone } = resolveMessage(user);
-
-  const palette =
-    tone === "primary"
-      ? "border-(--primary)/30 bg-(--primary)/5 text-(--primary)"
-      : "border-(--primary)/20 bg-(--secondary)/30 text-(--muted-foreground)";
+  const used = Math.min(user.free_ingestions_used, user.free_ingestions_limit);
 
   return (
     <div
       role="status"
       data-testid="free-tier-banner"
-      className={`group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5 ${palette} flex flex-col items-center justify-around `}
+      className={`flex flex-wrap items-center gap-4 rounded-md border border-(--border) px-4 py-3.5 ${
+        tone === "primary"
+          ? "bg-[linear-gradient(90deg,#a3004c14,transparent_60%),var(--card)]"
+          : "bg-(--card)"
+      }`}
     >
-      <MoonStarsIcon size={120} weight="duotone" className="mt-0.5 shrink-0" />
-      <p className="font-semibold text-(--foreground) text-xl mb-2">{title}</p>
+      <span className="font-pixel text-xs tracking-[0.12em] text-(--accent) uppercase">
+        Free tier
+      </span>
+      <span aria-hidden="true" className="flex gap-1">
+        {Array.from({ length: user.free_ingestions_limit }, (_, i) => (
+          <span
+            key={i}
+            className={`h-2 w-4.5 ${i < used ? "bg-(--accent)" : "bg-(--muted)"}`}
+          />
+        ))}
+      </span>
+      <p className="m-0 grow text-sm text-zinc-300">{title}</p>
       <Link
         href={ctaHref}
-        className="shrink-0 self-center text-xs font-semibold text-(--primary) underline-offset-2 hover:bg-(--card) transition border border-(--border) py-3 px-4 rounded-sm"
+        className="font-pixel text-[13px] tracking-[0.06em] text-(--foreground) uppercase hover:text-(--accent)"
       >
-        {ctaLabel}
+        {ctaLabel} →
       </Link>
     </div>
   );

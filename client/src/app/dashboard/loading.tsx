@@ -2,18 +2,38 @@
  * Skeleton fallback for the dashboard route.
  *
  * Includes a `<NavbarSkeleton />` so the header dimensions match the real
- * page exactly -- no jump when the route resolves. The skeleton does not
- * render an <img>, so the strict-mode Playwright concern that excluded a
- * real <Navbar /> here no longer applies.
+ * page exactly -- no jump when the route resolves.
  * @module DashboardLoading
  */
 import NavbarSkeleton from "@/components/NavbarSkeleton";
 import Skeleton from "@/components/ui/Skeleton";
-import {
-  ArrowRightIcon,
-  GithubLogoIcon,
-  SparkleIcon,
-} from "@phosphor-icons/react/dist/ssr";
+
+/**
+ * One placeholder card, shaped like a repository card.
+ *
+ * @returns The card skeleton.
+ */
+function CardSkeleton() {
+  return (
+    <div className="panel flex flex-col overflow-hidden">
+      <div className="h-32 animate-pulse border-b border-white/8 bg-[#060608]" />
+      <div className="flex flex-col gap-3 p-4.5">
+        <Skeleton className="h-5 w-40 rounded-sm" />
+        <Skeleton className="h-3 w-28 rounded-sm" />
+        <Skeleton className="h-3 w-full rounded-sm" />
+        <Skeleton className="h-3 w-4/5 rounded-sm" />
+        <div className="mt-2 flex gap-1.5">
+          <Skeleton className="h-6 w-16 rounded-[3px]" />
+          <Skeleton className="h-6 w-14 rounded-[3px]" />
+        </div>
+        <div className="flex justify-between border-t border-white/8 pt-3">
+          <Skeleton className="h-3 w-24 rounded-sm" />
+          <Skeleton className="h-3 w-12 rounded-sm" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Renders placeholder repo cards while dashboard data loads.
@@ -22,225 +42,39 @@ import {
  */
 export default function LoadingDashboard() {
   return (
-    <div className="text-(--muted-foreground)">
+    <div className="flex min-h-dvh flex-col">
       <NavbarSkeleton />
-      <main className="max-w-7xl mx-auto px-6 py-24">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
-          <div>
-            <h1 className="text-8xl font-extrabold tracking-tight animate-pulse text-(--muted-foreground)/70">
-              Dashboard
-            </h1>
-            <p className="text-lg animate-pulse text-(--muted-foreground)/70">
-              Manage and explore your indexed codebases.
+      <main
+        aria-busy="true"
+        className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pt-14 pb-24 sm:px-6"
+      >
+        <header className="flex flex-wrap items-end justify-between gap-6">
+          <div className="flex flex-col gap-3">
+            <p
+              aria-hidden="true"
+              className="m-0 font-pixel text-[13px] tracking-[0.08em] text-(--subtle-foreground)"
+            >
+              <span className="text-(--accent)">&gt;</span> illume ls
+              <span className="caret">_</span>
             </p>
+            <h1 className="m-0 text-4xl font-medium tracking-tight sm:text-5xl">
+              Your <span className="font-pixel text-(--accent)">repositories</span>
+            </h1>
+            <Skeleton className="h-3 w-32 rounded-sm" />
           </div>
-
-          <Skeleton className="h-12 w-56 rounded-sm" />
+          <Skeleton className="h-11 w-44 rounded-sm" />
         </header>
 
-        <section className="relative">
-          <div className="absolute -top-8 left-0 text-xs font-bold uppercase tracking-[0.2em] text-(--muted-foreground)/50  animate-pulse">
-            Your Indexed Libraries
-          </div>
+        <div className="flex flex-wrap gap-3">
+          <Skeleton className="h-10 w-72 rounded-sm" />
+          <Skeleton className="h-10 w-64 rounded-sm" />
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* card */}
-            <div className="group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5">
-              <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-                <div
-                  className="p-2 rounded-sm text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors animate-pulse"
-                  title="Open GitHub"
-                >
-                  <GithubLogoIcon size={20} />
-                </div>
-                <div className="p-2 text-(--muted-foreground) group-hover:translate-x-1 transition-all animate-pulse">
-                  <ArrowRightIcon size={20} weight="bold" />
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 mb-6 animate-pulse">
-                <div className="p-3 rounded-xl bg-(--secondary)  group-hover:bg-(--primary)/10 transition-colors">
-                  <SparkleIcon size={28} weight="fill" />
-                </div>
-                <div className="min-w-0">
-                  <Skeleton className="h-5 w-32 rounded-sm mb-2 pr-12 pl-6" />
-                  <div className="flex items-center gap-2 mt-1">
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-25 flex items-center justify-center border-2 border-dashed border-(--border) rounded-xl mb-4 bg-(--secondary)/5">
-                <Skeleton className="h-3 w-20 rounded-full" />
-              </div>
-
-              <div className="flex items-center gap-4 w-full">
-                <div className="flex flex-col w-full">
-                  <div className="flex gap-1 mt-1 overflow-x-hidden w-full">
-                    <Skeleton className="h-2.25 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* card */}
-            <div className="group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5">
-              <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-                <div
-                  className="p-2 rounded-sm text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors animate-pulse"
-                  title="Open GitHub"
-                >
-                  <GithubLogoIcon size={20} />
-                </div>
-                <div className="p-2 text-(--muted-foreground) group-hover:translate-x-1 transition-all animate-pulse">
-                  <ArrowRightIcon size={20} weight="bold" />
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 mb-6 animate-pulse">
-                <div className="p-3 rounded-xl bg-(--secondary)  group-hover:bg-(--primary)/10 transition-colors">
-                  <SparkleIcon size={28} weight="fill" />
-                </div>
-                <div className="min-w-0">
-                  <Skeleton className="h-5 w-32 rounded-sm mb-2 pr-12 pl-6" />
-                  <div className="flex items-center gap-2 mt-1">
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-25 flex items-center justify-center border-2 border-dashed border-(--border) rounded-xl mb-4 bg-(--secondary)/5">
-                <Skeleton className="h-3 w-20 rounded-full" />
-              </div>
-
-              <div className="flex items-center gap-4 w-full">
-                <div className="flex flex-col w-full">
-                  <div className="flex gap-1 mt-1 overflow-x-hidden w-full">
-                    <Skeleton className="h-2.25 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* card */}
-            <div className="group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5">
-              <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-                <div
-                  className="p-2 rounded-sm text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors animate-pulse"
-                  title="Open GitHub"
-                >
-                  <GithubLogoIcon size={20} />
-                </div>
-                <div className="p-2 text-(--muted-foreground) group-hover:translate-x-1 transition-all animate-pulse">
-                  <ArrowRightIcon size={20} weight="bold" />
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 mb-6 animate-pulse">
-                <div className="p-3 rounded-xl bg-(--secondary)  group-hover:bg-(--primary)/10 transition-colors">
-                  <SparkleIcon size={28} weight="fill" />
-                </div>
-                <div className="min-w-0">
-                  <Skeleton className="h-5 w-32 rounded-sm mb-2 pr-12 pl-6" />
-                  <div className="flex items-center gap-2 mt-1">
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-25 flex items-center justify-center border-2 border-dashed border-(--border) rounded-xl mb-4 bg-(--secondary)/5">
-                <Skeleton className="h-3 w-20 rounded-full" />
-              </div>
-
-              <div className="flex items-center gap-4 w-full">
-                <div className="flex flex-col w-full">
-                  <div className="flex gap-1 mt-1 overflow-x-hidden w-full">
-                    <Skeleton className="h-2.25 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* card */}
-            <div className="group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5">
-              <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-                <div
-                  className="p-2 rounded-sm text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors animate-pulse"
-                  title="Open GitHub"
-                >
-                  <GithubLogoIcon size={20} />
-                </div>
-                <div className="p-2 text-(--muted-foreground) group-hover:translate-x-1 transition-all animate-pulse">
-                  <ArrowRightIcon size={20} weight="bold" />
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 mb-6 animate-pulse">
-                <div className="p-3 rounded-xl bg-(--secondary)  group-hover:bg-(--primary)/10 transition-colors">
-                  <SparkleIcon size={28} weight="fill" />
-                </div>
-                <div className="min-w-0">
-                  <Skeleton className="h-5 w-32 rounded-sm mb-2 pr-12 pl-6" />
-                  <div className="flex items-center gap-2 mt-1">
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-25 flex items-center justify-center border-2 border-dashed border-(--border) rounded-xl mb-4 bg-(--secondary)/5">
-                <Skeleton className="h-3 w-20 rounded-full" />
-              </div>
-
-              <div className="flex items-center gap-4 w-full">
-                <div className="flex flex-col w-full">
-                  <div className="flex gap-1 mt-1 overflow-x-hidden w-full">
-                    <Skeleton className="h-2.25 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/* card */}
-            <div className="group relative glass-card rounded-sm p-6 block hover:border-(--primary)/50 transition-all duration-300 hover:shadow-xl hover:shadow-(--primary)/5">
-              <div className="absolute top-4 right-4 flex items-center gap-1 z-10">
-                <div
-                  className="p-2 rounded-sm text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors animate-pulse"
-                  title="Open GitHub"
-                >
-                  <GithubLogoIcon size={20} />
-                </div>
-                <div className="p-2 text-(--muted-foreground) group-hover:translate-x-1 transition-all animate-pulse">
-                  <ArrowRightIcon size={20} weight="bold" />
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 mb-6 animate-pulse">
-                <div className="p-3 rounded-xl bg-(--secondary)  group-hover:bg-(--primary)/10 transition-colors">
-                  <SparkleIcon size={28} weight="fill" />
-                </div>
-                <div className="min-w-0">
-                  <Skeleton className="h-5 w-32 rounded-sm mb-2 pr-12 pl-6" />
-                  <div className="flex items-center gap-2 mt-1">
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                    <Skeleton className="h-2.5 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="h-25 flex items-center justify-center border-2 border-dashed border-(--border) rounded-xl mb-4 bg-(--secondary)/5">
-                <Skeleton className="h-3 w-20 rounded-full" />
-              </div>
-
-              <div className="flex items-center gap-4 w-full">
-                <div className="flex flex-col w-full">
-                  <div className="flex gap-1 mt-1 overflow-x-hidden w-full">
-                    <Skeleton className="h-2.25 w-20 rounded-full" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <CardSkeleton key={i} />
+          ))}
+        </div>
       </main>
     </div>
   );

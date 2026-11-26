@@ -1,37 +1,30 @@
-import { StarFourIcon } from "@phosphor-icons/react/dist/ssr";
+/**
+ * Placeholder for the signed-in top bar while a route streams.
+ * @module NavbarSkeleton
+ */
 import Link from "next/link";
+import { Wordmark } from "./ui/Logo";
 
 /**
- * Header placeholder matching the real Navbar's dimensions and shape.
+ * Header placeholder matching the real Navbar's height and layout.
  *
- * Renders a star-icon block on the left and an avatar circle on the right at
- * the exact heights/widths/margins the real Navbar uses, so the loading state
- * doesn't shift when the real component lands. The star and avatar are flat
- * blocks (no icons, no <img>) -- the route is unauthenticated at the loading
- * boundary and the real Navbar is server-rendered, so reproducing either
- * here would either duplicate state or trigger a `next/image` call that
- * can't run in this environment.
+ * The wordmark is real (it needs no data); the account button is a flat block
+ * the same size as the real one, so the bar does not shift when the page lands.
  *
  * @returns The rendered header skeleton.
  */
 export default function NavbarSkeleton() {
   return (
-    <header className="flex justify-between">
-      <Link
-        href={"/"}
-        className="relative h-16 w-16 flex items-center justify-center m-2"
-      >
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="h-10 w-10 rounded-full bg-(--chart-1)/30 blur-xl" />
-        </div>
-        <StarFourIcon
-          className="relative text-(--chart-1)"
-          weight="fill"
-          size={24}
-        />
-      </Link>
-
-      <div className="h-12 w-12 rounded-full m-6 bg-(--muted)/50 border border-(--border) animate-pulse" />
-    </header>
+    <nav
+      aria-label="Main"
+      className="sticky top-0 z-40 border-b border-(--border) bg-(--background)/85 backdrop-blur-md"
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <Link href="/dashboard" aria-label="Dashboard">
+          <Wordmark />
+        </Link>
+        <div className="h-9.5 w-40 animate-pulse rounded-sm border border-(--border) bg-(--card)" />
+      </div>
+    </nav>
   );
 }

@@ -1,41 +1,110 @@
 /**
- * Two-step modal for picking a repo and its ingest version.
+ * Two-step picker for a repository and the version of it to ingest.
  * @module RepoPickerModal
  */
 "use client";
 
 import { getMyGitHubRepos } from "@/api/github";
 import apiError from "@/lib/apiError";
+import { repoSlug } from "@/lib/github";
 import { GitHubRepo } from "@/types/github";
-import {
-  ArrowLeftIcon,
-  GithubLogoIcon,
-  GlobeIcon,
-  MagnifyingGlassIcon,
-  SpinnerIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import { timeAgo } from "@/utils/timeAgo";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import GitGraph from "./GitGraph";
-import Button from "./ui/Button";
 import Input from "./ui/Input";
 
-/** Props for the repository picker modal. */
+/** Props for the repository picker. */
 interface RepoPickerModalProps {
+  /** Closes the surrounding dialog; also called once an ingest has started. */
   onClose?: () => void;
+  /** A line shown beside the ingest action, such as what the ingest costs. */
+  note?: string;
+  /** URLs of the repositories already added; those rows are marked and disabled. */
+  added?: string[];
 }
 
 type Mode = "picker" | "graph";
 type Tab = "my-repos" | "external";
 
+const TABS: { id: Tab; label: string }[] = [
+  { id: "my-repos", label: "My Repositories" },
+  { id: "external", label: "External URL" },
+];
+
+const STEPS = ["Repository", "Version", "Read"] as const;
+
 /**
- * Lets users choose a GitHub repo, then a branch/commit to ingest.
+ * The step indicator across the top of the picker.
  *
- * @param onClose - Optional callback after successful ingestion starts.
+ * @param current Zero-based index of the step on screen.
+ * @returns The ordered step list.
+ */
+function StepHeader({ current }: { current: number }) {
+  return (
+    <ol className="m-0 flex list-none items-center gap-2.5 p-0 font-pixel text-[11px] tracking-[0.1em] uppercase">
+      {STEPS.map((step, i) => {
+        const state = i < current ? "done" : i === current ? "on" : "todo";
+        return (
+          <li
+            key={step}
+            aria-current={state === "on" ? "step" : undefined}
+            className="flex items-center gap-2.5"
+          >
+            {i > 0 && (
+              <span
+                aria-hidden="true"
+                className="h-px w-5 bg-(--border-strong)"
+              />
+            )}
+            <span
+              className={
+                state === "on"
+                  ? "text-(--accent)"
+                  : state === "done"
+                    ? "text-zinc-300"
+                    : "text-(--faint-foreground)"
+              }
+            >
+              {i + 1} {step}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+/**
+ * Lets users choose a GitHub repository, then a branch or commit to ingest.
+ *
+ * @param onClose - Closes the dialog; called after ingestion starts too.
+ * @param note - Optional cost line shown on the version step.
  * @returns Picker UI or version graph depending on the current mode.
  */
-export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
+export default function RepoPickerModal({
+  onClose,
+  note,
+  added,
+}: RepoPickerModalProps) {
   const router = useRouter();
+  const addedSlugs = useMemo(
+    () =>
+      new Set(
+        (added ?? [])
+          .map(repoSlug)
+          .filter((slug): slug is string => slug !== null),
+      ),
+    [added],
+  );
   const [mode, setMode] = useState<Mode>("picker");
   const [activeTab, setActiveTab] = useState<Tab>("my-repos");
 
@@ -139,39 +208,42 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     }
   };
 
-  const observerRef = useRef<HTMLDivElement | null>(null);
+  /** Fetches the page after the last one loaded, unless a request is in flight. */
+  const loadMoreRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    loadMoreRef.current = () => {
+      if (loadingRef.current) return;
+      fetchRepos(loadedPageRef.current + 1, debouncedSearch);
+    };
+  });
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
   /**
-   * Appends the next page when the scroll sentinel becomes visible.
+   * Watches the scroll sentinel, appending the next page when it comes into view.
    *
-   * The sentinel is only rendered once a page is on screen, and this effect refuses to
-   * attach while a request is in flight. Both guards matter on first paint: the modal
-   * mounts with no results and `loadingRepos` still false, so an observer attached at
-   * that moment fires as soon as it is delivered, asks for page two while page one is
-   * still outstanding, and `fetchRepos` aborts page one to make room for it. The list
-   * then opens on the second page and the first is never fetched.
+   * A callback ref rather than an effect, so the observer follows the element itself.
+   * The list unmounts while a version is being picked and mounts a fresh sentinel on
+   * the way back; an effect keyed on the list's state would not re-run for that and
+   * would keep watching the detached node, leaving the list stuck on what it had.
+   *
+   * The sentinel only exists once a page is on screen and no request is in flight.
+   * That matters on first paint: the modal mounts with no results, and an observer
+   * attached then would ask for page two while page one was still outstanding, and
+   * `fetchRepos` would abort page one to make room for it.
    */
-  useEffect(() => {
-    if (!hasMoreRepos || loadingRepos || activeTab !== "my-repos") return;
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting || loadingRef.current) return;
-        fetchRepos(loadedPageRef.current + 1, debouncedSearch);
+        if (entries[0]?.isIntersecting) loadMoreRef.current();
       },
       { threshold: 0.1 },
     );
-
-    const current = observerRef.current;
-    if (current) {
-      observer.observe(current);
-    }
-
-    return () => {
-      if (current) {
-        observer.unobserve(current);
-      }
-    };
-  }, [hasMoreRepos, loadingRepos, debouncedSearch, activeTab]);
+    observer.observe(node);
+    observerRef.current = observer;
+  }, []);
 
   /**
    * Records the clicked repo and advances to version selection.
@@ -195,9 +267,9 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     e.preventDefault();
     setExternalError("");
 
-    const match = externalUrl.match(
-      /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/,
-    );
+    const match = externalUrl
+      .trim()
+      .match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/);
     if (!match) {
       setExternalError(
         "Please enter a valid GitHub repository URL (e.g. https://github.com/user/repo)",
@@ -208,7 +280,7 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     const [, owner, name] = match;
     setSelectedRepoOwner(owner);
     setSelectedRepoName(name.replace(/\.git$/, ""));
-    setSelectedRepoUrl(externalUrl);
+    setSelectedRepoUrl(externalUrl.trim());
     setMode("graph");
   };
 
@@ -249,169 +321,253 @@ export default function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     });
   };
 
+  const header = (
+    <div className="flex items-center justify-between gap-4 border-b border-white/8 px-5 py-4">
+      <StepHeader current={mode === "picker" ? 0 : 1} />
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="font-pixel text-base text-(--subtle-foreground) hover:cursor-pointer hover:text-(--foreground)"
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  );
+
   if (mode === "graph") {
     return (
-      <div className="w-full flex flex-col gap-4 max-w-2xl mx-auto py-2">
-        <button
-          onClick={() => setMode("picker")}
-          className="self-start flex items-center gap-1.5 text-xs text-(--muted-foreground) hover:text-(--foreground) transition-colors mb-2"
-        >
-          <ArrowLeftIcon size={14} />
-          Back to repository list
-        </button>
-
-        <div className="mb-2">
-          <h2 className="text-xl font-bold text-(--foreground)">
-            Configure Version for {selectedRepoOwner}/{selectedRepoName}
-          </h2>
-          <p className="text-xs text-(--muted-foreground)">
-            Select a branch or commit from the git history to ingest a targeted
-            snapshot.
-          </p>
-        </div>
-
-        {ingestError && (
-          <div className="p-3 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
-            {ingestError}
+      <div className="flex h-full min-h-0 flex-col">
+        {header}
+        <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
+          <div className="flex flex-col gap-1.5 px-5 pt-5 pb-4">
+            <h2 className="m-0 font-pixel text-2xl font-normal tracking-[-0.01em] break-words">
+              Choose a version of{" "}
+              <span className="gradient-text">
+                {selectedRepoOwner}/{selectedRepoName}
+              </span>
+            </h2>
+            <p className="m-0 text-sm text-(--muted-foreground)">
+              Read the tip of a branch, or pin any older commit as a snapshot.
+              The default branch is picked for you.
+            </p>
           </div>
-        )}
 
-        <GitGraph
-          owner={selectedRepoOwner}
-          repo={selectedRepoName}
-          onSelect={handleVersionSelect}
-          isSubmitting={isPending}
-        />
+          {ingestError && (
+            <div
+              role="alert"
+              className="mx-5 mb-4 rounded-sm border border-red-500/25 bg-red-500/5 p-3 text-xs text-red-300"
+            >
+              {ingestError}
+            </div>
+          )}
+
+          <GitGraph
+            owner={selectedRepoOwner}
+            repo={selectedRepoName}
+            onSelect={handleVersionSelect}
+            isSubmitting={isPending}
+            onBack={() => setMode("picker")}
+            note={note}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="w-full mx-auto flex flex-col min-h-[450px]">
-      <div className="flex border-b border-(--border) mb-4">
-        <button
-          onClick={() => setActiveTab("my-repos")}
-          className={`flex-1 py-3 text-center text-xs font-semibold uppercase tracking-wider border-b-2 transition-all flex items-center justify-center gap-2 ${
-            activeTab === "my-repos"
-              ? "border-(--primary) text-(--foreground)"
-              : "border-transparent text-(--muted-foreground) hover:text-(--foreground)"
-          }`}
-        >
-          <GithubLogoIcon size={16} />
-          My Repositories
-        </button>
-        <button
-          onClick={() => setActiveTab("external")}
-          className={`flex-1 py-3 text-center text-xs font-semibold uppercase tracking-wider border-b-2 transition-all flex items-center justify-center gap-2 ${
-            activeTab === "external"
-              ? "border-(--primary) text-(--foreground)"
-              : "border-transparent text-(--muted-foreground) hover:text-(--foreground)"
-          }`}
-        >
-          <GlobeIcon size={16} />
-          External URL
-        </button>
+    <div className="flex h-full min-h-0 flex-col">
+      {header}
+      <div className="flex flex-col gap-1.5 px-5 pt-5">
+        <h2 className="m-0 font-pixel text-2xl font-normal tracking-[-0.01em]">
+          Add a <span className="gradient-text">repository</span>
+        </h2>
+        <p className="m-0 text-sm text-(--muted-foreground)">
+          Pick one of yours, or paste any public GitHub URL.
+        </p>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        {activeTab === "my-repos" ? (
-          <div className="flex-1 flex flex-col">
-            {/* Search filter input */}
-            <div className="relative mb-4 pr-3">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-(--muted-foreground)">
-                <MagnifyingGlassIcon size={16} />
-              </span>
-              <Input
-                type="text"
-                placeholder="Search your GitHub repositories..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 w-full bg-(--secondary)/10 text-sm py-2"
-              />
-            </div>
+      <div
+        role="tablist"
+        aria-label="Repository source"
+        className="mt-4 flex gap-6 border-b border-white/8 px-5"
+      >
+        {TABS.map(({ id, label }) => {
+          const on = activeTab === id;
+          return (
+            <button
+              key={id}
+              id={`picker-tab-${id}`}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              aria-controls={`picker-panel-${id}`}
+              onClick={() => setActiveTab(id)}
+              className={`-mb-px border-b-2 py-3 font-pixel text-xs tracking-[0.1em] uppercase hover:cursor-pointer ${
+                on
+                  ? "border-(--accent) text-(--foreground)"
+                  : "border-transparent text-(--subtle-foreground) hover:text-(--foreground)"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
-            <div className="flex-1 overflow-y-auto max-h-[320px] custom-scrollbar space-y-2 pr-0.5">
-              {repos.map((repo) => (
-                <div
-                  key={repo.full_name}
-                  onClick={() => handleSelectMyRepo(repo)}
-                  className="p-3 rounded-sm border border-(--border) hover:border-(--primary)/50 bg-(--secondary)/5 hover:bg-(--secondary)/10 cursor-pointer transition-all duration-300 flex items-center justify-between"
-                >
-                  <div className="min-w-0 pr-4">
-                    <h4 className="text-sm font-semibold truncate text-(--foreground)">
-                      {repo.name}
-                    </h4>
-                    <p className="text-xs text-(--muted-foreground) truncate mt-0.5">
-                      {repo.description || "No description provided."}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {repo.language && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-(--secondary) font-mono text-(--muted-foreground)">
-                        {repo.language}
+      {activeTab === "my-repos" ? (
+        <div
+          id="picker-panel-my-repos"
+          role="tabpanel"
+          aria-labelledby="picker-tab-my-repos"
+          className="flex min-h-0 flex-1 flex-col gap-3 p-5"
+        >
+          <label className="relative">
+            <span
+              aria-hidden="true"
+              className="absolute top-1/2 left-3.5 -translate-y-1/2 font-pixel text-sm text-(--faint-foreground)"
+            >
+              ⌕
+            </span>
+            <Input
+              type="text"
+              placeholder="Search your GitHub repositories..."
+              aria-label="Search your GitHub repositories"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9"
+            />
+          </label>
+
+          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-1.5 overflow-y-auto p-0 [scrollbar-width:thin]">
+            {repos.map((repo) => {
+              const [owner] = repo.full_name.split("/");
+              // Still selectable: another branch or commit of it is a separate snapshot.
+              const isAdded = addedSlugs.has(repo.full_name.toLowerCase());
+              return (
+                <li key={repo.full_name}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectMyRepo(repo)}
+                    className="ghost group flex w-full items-center justify-between gap-4 rounded-sm border border-(--border) bg-(--background) px-3.5 py-3 text-left hover:cursor-pointer hover:bg-(--secondary)"
+                  >
+                    <span className="flex min-w-0 flex-col gap-1">
+                      <span className="truncate font-pixel text-sm">
+                        <span className="text-(--subtle-foreground)">
+                          {owner}/
+                        </span>
+                        <span>{repo.name}</span>
                       </span>
-                    )}
-                    {repo.private && (
-                      <span className="text-[9px] font-bold text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                        Private
+                      <span className="truncate text-[13px] text-(--muted-foreground)">
+                        {repo.description || "No description provided."}
                       </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-2 font-pixel text-[10px] tracking-[0.08em] uppercase">
+                      {repo.private && (
+                        <span className="border border-(--warning)/40 px-1.5 py-0.5 text-(--warning)">
+                          Private
+                        </span>
+                      )}
+                      {repo.language && (
+                        <span className="border border-(--border) px-1.5 py-0.5 text-zinc-300">
+                          {repo.language}
+                        </span>
+                      )}
+                      {isAdded ? (
+                        <span className="text-(--success)">Added ✓</span>
+                      ) : (
+                        repo.updated_at && (
+                          <span className="hidden text-(--faint-foreground) sm:inline">
+                            Pushed {timeAgo(new Date(repo.updated_at))}
+                          </span>
+                        )
+                      )}
+                      <span
+                        aria-hidden="true"
+                        className="text-sm text-(--faint-foreground) group-hover:text-(--accent)"
+                      >
+                        →
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
 
-              {loadingRepos && (
-                <div className="py-8 flex justify-center text-(--muted-foreground) text-xs items-center gap-2">
-                  <SpinnerIcon
-                    className="animate-spin text-(--primary)"
-                    size={16}
-                  />
-                  <span>Loading repositories...</span>
-                </div>
-              )}
+            {loadingRepos && (
+              <li className="blink py-8 text-center font-pixel text-xs tracking-[0.12em] text-(--muted-foreground) uppercase">
+                Loading repositories...
+              </li>
+            )}
 
-              {hasMoreRepos && !loadingRepos && repos.length > 0 && (
-                <div ref={observerRef} className="h-4" />
-              )}
+            {hasMoreRepos && !loadingRepos && repos.length > 0 && (
+              <li aria-hidden="true">
+                <div ref={sentinelRef} className="h-4" />
+              </li>
+            )}
 
-              {!loadingRepos && repos.length === 0 && (
-                <div className="py-12 text-center text-xs text-(--muted-foreground) italic">
-                  {reposError || "No GitHub repositories found."}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <form
-            onSubmit={handleExternalSubmit}
-            className="flex-1 flex flex-col gap-4 py-4 justify-between"
-          >
-            <div className="space-y-2">
-              <label
-                htmlFor="url"
-                className="text-xs font-semibold text-(--muted-foreground)"
+            {!loadingRepos && repos.length === 0 && (
+              <li
+                role={reposError ? "alert" : undefined}
+                className={`py-12 text-center text-sm ${reposError ? "text-red-300" : "text-(--muted-foreground)"}`}
               >
-                GitHub Repository URL
-              </label>
-              <Input
-                id="url"
-                type="text"
-                placeholder="https://github.com/owner/repository"
-                value={externalUrl}
-                onChange={(e) => setExternalUrl(e.target.value)}
-                className="w-full bg-(--secondary)/10"
-              />
-              {externalError && (
-                <p className="text-xs text-(--destructive)">{externalError}</p>
-              )}
-            </div>
+                {reposError || "No GitHub repositories found."}
+              </li>
+            )}
+          </ul>
+        </div>
+      ) : (
+        <form
+          id="picker-panel-external"
+          role="tabpanel"
+          aria-labelledby="picker-tab-external"
+          onSubmit={handleExternalSubmit}
+          className="flex flex-1 flex-col justify-between gap-6 p-5"
+        >
+          <div className="flex flex-col gap-2">
+            <label
+              htmlFor="url"
+              className="font-pixel text-[11px] tracking-[0.1em] text-(--muted-foreground) uppercase"
+            >
+              GitHub Repository URL
+            </label>
+            <Input
+              id="url"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              placeholder="https://github.com/owner/repository"
+              value={externalUrl}
+              onChange={(e) => setExternalUrl(e.target.value)}
+              aria-invalid={externalError ? true : undefined}
+              aria-describedby={externalError ? "url-error" : "url-note"}
+              className="w-full"
+            />
+            {externalError ? (
+              <p id="url-error" className="m-0 text-xs text-(--destructive)">
+                {externalError}
+              </p>
+            ) : (
+              <p
+                id="url-note"
+                className="m-0 font-pixel text-[11px] tracking-[0.06em] text-(--subtle-foreground) uppercase"
+              >
+                Public repositories only. For a private one, use the My
+                Repositories tab.
+              </p>
+            )}
+          </div>
 
-            <Button type="submit" size="md" className="w-full">
-              Continue
-            </Button>
-          </form>
-        )}
-      </div>
+          <button
+            type="submit"
+            className="cta self-end rounded-sm bg-(--primary) px-5 py-2.75 font-pixel text-[13px] tracking-[0.06em] text-(--primary-foreground) uppercase hover:cursor-pointer"
+          >
+            Continue <span aria-hidden="true">→</span>
+          </button>
+        </form>
+      )}
     </div>
   );
 }

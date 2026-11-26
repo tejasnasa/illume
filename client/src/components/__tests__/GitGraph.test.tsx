@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -103,35 +103,30 @@ describe("loading", () => {
   });
 });
 
-describe("branch selection", () => {
-  it("offers the default branch", async () => {
+describe("branches", () => {
+  /** The lane legend above the timeline. */
+  const legend = () => screen.getByRole("list", { name: "Branches" });
+
+  it("lists every branch in the legend, once each", async () => {
+    // All branches share one timeline, so the legend is the only place each
+    // branch is named exactly once; the fixture's single commit is on both.
     stub();
     renderGraph();
 
-    await waitFor(() => expect(screen.getByText("main")).toBeInTheDocument());
+    await waitFor(() => expect(legend()).toBeInTheDocument());
+    expect(within(legend()).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "main",
+      "develop",
+    ]);
   });
 
   it("badges a commit with every branch it appears on", async () => {
-    // Branch names are not listed separately -- there is no branch selector. They appear
-    // only as badges on the commits that carry them, which is why the fixture's single
-    // commit is on both branches.
     stub();
     renderGraph();
 
-    await waitFor(() => expect(screen.getByText("develop")).toBeInTheDocument());
-    expect(screen.getByText("main")).toBeInTheDocument();
-  });
-
-  it("does not render the branch list the hook loads", async () => {
-    // `useGitGraph` fetches branches (for the default marker) and the component never
-    // renders that array -- the timeline is built from commits. Recorded so the unused
-    // value is visible.
-    stub();
-    renderGraph();
-
-    await waitFor(() => expect(screen.getByText("develop")).toBeInTheDocument());
-    // The only "develop" is the badge on the commit, not a branch row.
-    expect(screen.getAllByText("develop")).toHaveLength(1);
+    const row = await screen.findByRole("button", { name: /feat: a recent thing/ });
+    expect(within(row).getByText("main")).toBeInTheDocument();
+    expect(within(row).getByText("develop")).toBeInTheDocument();
   });
 
   it("does not commit a selection on render", async () => {
@@ -141,7 +136,7 @@ describe("branch selection", () => {
     stub();
     renderGraph({ onSelect });
 
-    await waitFor(() => expect(screen.getByText("main")).toBeInTheDocument());
+    await waitFor(() => expect(legend()).toBeInTheDocument());
     expect(onSelect).not.toHaveBeenCalled();
   });
 });
