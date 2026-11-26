@@ -6,13 +6,6 @@
 
 import { createMcpToken, revokeMcpToken } from "@/actions/mcpTokens";
 import type { McpToken, McpTokenExpiry } from "@/types/mcp";
-import {
-  CheckIcon,
-  CopyIcon,
-  KeyIcon,
-  PlusIcon,
-  TrashIcon,
-} from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
@@ -243,46 +236,34 @@ export default function McpSettings({
   }
 
   return (
-    <div className="rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10 p-2">
-      <div className="px-5 py-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-(--primary)">
-          MCP access
-        </p>
-      </div>
-
-      <div className="px-5 py-4 space-y-4">
-        <p className="text-xs text-(--muted-foreground)">
-          Tokens let an AI tool such as Claude Code or Cursor read your
-          repositories and ask Illume questions.
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-col rounded-md border border-(--border) bg-(--card)">
+        <p className="eyebrow m-0 border-b border-white/8 px-4.5 py-3.5">
+          Tokens · {tokens.length}
         </p>
 
         {fresh && (
           <div
             role="status"
-            className="rounded-sm border border-(--primary)/30 p-4 space-y-2"
+            className="rise mx-4.5 mt-3.5 flex flex-col gap-2.5 rounded-sm border border-(--accent)/40 bg-(--accent)/5 p-3.5"
           >
-            <p className="text-sm">
+            <p className="m-0 font-pixel text-[11px] tracking-[0.08em] text-(--accent) uppercase">
               Copy your token now, you won&apos;t see this again.
             </p>
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
                 readOnly
                 aria-label="New token"
                 value={fresh}
                 onFocus={(event) => event.currentTarget.select()}
-                className="flex-1 min-w-0 font-mono"
+                className="min-w-0 flex-1 font-pixel"
               />
               <Button
                 type="button"
                 size="sm"
-                className="gap-1.5"
+                className="h-11"
                 onClick={() => copy(fresh, "token")}
               >
-                {copied === "token" ? (
-                  <CheckIcon size={15} />
-                ) : (
-                  <CopyIcon size={15} />
-                )}
                 {copied === "token" ? "Copied" : "Copy token"}
               </Button>
             </div>
@@ -290,6 +271,7 @@ export default function McpSettings({
               <Button
                 type="button"
                 size="xs"
+                variant="ghost"
                 onClick={() => {
                   setFresh(null);
                   setCopied(null);
@@ -302,30 +284,26 @@ export default function McpSettings({
         )}
 
         {tokens.length === 0 ? (
-          <p className="text-sm text-(--muted-foreground)">
+          <p className="m-0 px-4.5 py-4 text-sm text-(--muted-foreground)">
             {loadFailed
               ? "Your tokens could not be loaded. Reload the page to try again."
               : "No tokens yet. Create one below."}
           </p>
         ) : (
-          <ul className="divide-y divide-(--primary)/10">
+          <ul className="m-0 flex list-none flex-col p-2">
             {tokens.map((token) => (
               <li
                 key={token.id}
-                className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+                className="flex flex-col justify-between gap-2 rounded-sm p-2.5 hover:bg-zinc-900 sm:flex-row sm:items-center"
               >
-                <div className="min-w-0 space-y-0.5">
-                  <p className="text-sm flex items-center gap-1 break-all">
-                    <KeyIcon
-                      size={16}
-                      className="shrink-0 text-(--muted-foreground)"
-                    />
-                    {token.name}
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <p className="m-0 text-sm break-all">
+                    {token.name}{" "}
+                    <span className="font-pixel text-xs text-zinc-500">
+                      ilm_{token.prefix}…
+                    </span>
                   </p>
-                  <p className="text-xs font-mono text-(--muted-foreground) break-all">
-                    ilm_{token.prefix}…
-                  </p>
-                  <p className="text-xs text-(--muted-foreground)">
+                  <p className="m-0 font-pixel text-[11px] tracking-[0.05em] text-zinc-500 uppercase">
                     Created {formatDate(token.created_at)} · Last used{" "}
                     {token.last_used_at
                       ? formatDate(token.last_used_at)
@@ -336,11 +314,14 @@ export default function McpSettings({
                 </div>
 
                 {confirming === token.id ? (
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <span className="text-xs">Revoke this token?</span>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <span className="text-xs text-zinc-300">
+                      Revoke this token?
+                    </span>
                     <Button
                       type="button"
                       size="xs"
+                      variant="danger"
                       loading={revoking === token.id}
                       onClick={() => handleRevoke(token.id)}
                     >
@@ -349,7 +330,7 @@ export default function McpSettings({
                     <Button
                       type="button"
                       size="xs"
-                      className="bg-(--muted) text-(--foreground)"
+                      variant="ghost"
                       onClick={() => setConfirming(null)}
                     >
                       Cancel
@@ -359,14 +340,14 @@ export default function McpSettings({
                   <Button
                     type="button"
                     size="xs"
-                    className="gap-1 shrink-0 self-start sm:self-auto"
+                    variant="ghost"
+                    className="shrink-0 self-start sm:self-auto"
                     aria-label={`Revoke ${token.name}`}
                     onClick={() => {
                       setRevokeError(null);
                       setConfirming(token.id);
                     }}
                   >
-                    <TrashIcon size={13} />
                     Revoke
                   </Button>
                 )}
@@ -374,15 +355,22 @@ export default function McpSettings({
             ))}
           </ul>
         )}
-        {revokeError && <p className="text-xs text-red-400">{revokeError}</p>}
+        {revokeError && (
+          <p role="alert" className="m-0 px-4.5 pb-3 text-xs text-red-400">
+            {revokeError}
+          </p>
+        )}
 
         <form
           onSubmit={handleCreate}
           noValidate
-          className="flex flex-col sm:flex-row sm:items-end gap-3"
+          className="flex flex-col gap-3 border-t border-white/8 px-4.5 py-4 sm:flex-row sm:items-end"
         >
-          <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <label htmlFor="mcp-token-name" className="text-sm">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <label
+              htmlFor="mcp-token-name"
+              className="font-pixel text-[11px] tracking-[0.12em] text-(--muted-foreground) uppercase"
+            >
               Token name
             </label>
             <Input
@@ -405,22 +393,23 @@ export default function McpSettings({
               options={EXPIRY_OPTIONS}
             />
           </div>
-          <Button
-            type="submit"
-            size="md"
-            loading={creating}
-            className="gap-1.5"
-          >
-            <PlusIcon size={15} />
-            New token
+          <Button type="submit" size="md" loading={creating} className="h-11">
+            <span aria-hidden="true">+</span> New token
           </Button>
         </form>
-        {createError && <p className="text-xs text-red-400">{createError}</p>}
+        {createError && (
+          <p role="alert" className="m-0 px-4.5 pb-4 text-xs text-red-400">
+            {createError}
+          </p>
+        )}
       </div>
 
-      <div className="px-5 py-4 space-y-3">
-        <p className="text-sm">Connect a client</p>
-        <div role="tablist" className="flex flex-wrap gap-1">
+      <div className="flex flex-col overflow-hidden rounded-md border border-(--border) bg-(--card)">
+        <div
+          role="tablist"
+          aria-label="Client"
+          className="flex flex-wrap border-b border-white/8 px-2"
+        >
           {TABS.map(({ id, label }) => (
             <button
               key={id}
@@ -433,39 +422,37 @@ export default function McpSettings({
                   current === "snippet" ? null : current,
                 );
               }}
-              className={`px-3 py-1.5 text-xs rounded-sm border cursor-pointer transition-colors ${
+              className={`cursor-pointer px-3 py-3 font-pixel text-xs tracking-[0.06em] transition-colors ${
                 tab === id
-                  ? "border-(--primary)/40 bg-(--muted)/60"
-                  : "border-(--border) text-(--muted-foreground)"
+                  ? "text-(--foreground) shadow-[inset_0_-2px_0_var(--accent)]"
+                  : "text-zinc-500 hover:text-zinc-300"
               }`}
             >
               {label}
             </button>
           ))}
         </div>
-        <p className="text-xs text-(--muted-foreground)">{TAB_HINTS[tab]}</p>
-        <div className="relative">
+        <p className="m-0 px-4.5 pt-3.5 text-[13px] text-(--muted-foreground)">
+          {TAB_HINTS[tab]}
+        </p>
+        <div className="relative m-4.5 mt-3">
           <pre
             data-testid="mcp-snippet"
-            className="rounded-sm border border-(--border) bg-(--muted)/50 p-3 pr-24 text-xs font-mono overflow-x-auto whitespace-pre"
+            className="custom-scrollbar m-0 overflow-x-auto rounded-sm border border-white/8 bg-[#060608] p-4 pr-32 font-pixel text-xs leading-[1.7] whitespace-pre text-zinc-300"
           >
             {snippet}
           </pre>
           <Button
             type="button"
             size="xs"
-            className="absolute top-2 right-2 gap-1"
+            variant="ghost"
+            className="absolute top-2 right-2 bg-(--card)"
             onClick={() => copy(snippet, "snippet")}
           >
-            {copied === "snippet" ? (
-              <CheckIcon size={12} />
-            ) : (
-              <CopyIcon size={12} />
-            )}
             {copied === "snippet" ? "Copied" : "Copy snippet"}
           </Button>
         </div>
-        <p className="text-xs text-(--muted-foreground)">
+        <p className="m-0 border-t border-white/6 px-4.5 py-3.5 text-xs leading-relaxed text-zinc-500">
           The AI tool will read text from your repositories, including commit
           messages and PR descriptions written by others, so treat its
           suggestions to run commands with the usual care. A token reads private

@@ -7,7 +7,6 @@
 import saveAgentSettingsAction from "@/actions/saveAgentSettings";
 import User from "@/types/user";
 import { agentSettingsSchema } from "@/types/validators";
-import { CheckCircleIcon, GaugeIcon } from "@phosphor-icons/react/dist/ssr";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Button from "./ui/Button";
@@ -15,6 +14,14 @@ import Input from "./ui/Input";
 
 /** Used for the placeholder when the server has not sent its default. */
 const FALLBACK_CONTEXT_WINDOW = 250_000;
+
+/** Common context windows, offered as one-click choices. */
+const PRESETS = [
+  { label: "128K", tokens: 128_000 },
+  { label: "200K", tokens: 200_000 },
+  { label: "400K", tokens: 400_000 },
+  { label: "1M", tokens: 1_000_000 },
+] as const;
 
 /**
  * Props for the AgentSettings component.
@@ -73,64 +80,80 @@ export default function AgentSettings({ user }: Props) {
 
   return (
     <form
-      className="rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10 p-2"
+      className="flex flex-col gap-4 rounded-md border border-(--border) bg-(--card) p-5"
       onSubmit={handleSubmit}
       noValidate
     >
-      <div className="px-5 py-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-(--primary)">
-          Agent
-        </p>
+      <label
+        htmlFor="context-window"
+        className="font-pixel text-[11px] tracking-[0.12em] text-(--muted-foreground) uppercase"
+      >
+        Context window · tokens
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {PRESETS.map((preset) => {
+          const pressed = value === String(preset.tokens);
+          return (
+            <button
+              key={preset.tokens}
+              type="button"
+              aria-pressed={pressed}
+              onClick={() => {
+                setValue(String(preset.tokens));
+                setSaved(false);
+                setError(null);
+              }}
+              className={`rounded-sm border px-3.5 py-2.25 font-pixel text-[13px] transition-colors duration-150 hover:cursor-pointer ${
+                pressed
+                  ? "border-(--accent) bg-(--accent)/8 text-(--foreground)"
+                  : "border-white/10 text-zinc-400 hover:text-(--foreground)"
+              }`}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
+        <Input
+          id="context-window"
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder={fallback.toLocaleString("en-US")}
+          aria-invalid={Boolean(error)}
+          aria-describedby="context-window-help"
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            setSaved(false);
+          }}
+          className="w-36"
+        />
       </div>
+      <p
+        id="context-window-help"
+        className="m-0 text-[13px] leading-relaxed text-(--muted-foreground)"
+      >
+        The most input tokens one model call may carry. Set it to your
+        model&apos;s context window or lower. When an investigation fills it,
+        older tool results are shortened, and the agent answers from what it
+        has found if that is not enough. Leave blank for{" "}
+        {fallback.toLocaleString("en-US")}.
+      </p>
+      {error && (
+        <p role="alert" className="m-0 text-xs text-red-400">
+          {error}
+        </p>
+      )}
 
-      <div className="px-5 py-4 space-y-4">
-        <div className="flex flex-col my-4 gap-1">
-          <label
-            htmlFor="context-window"
-            className="text-sm flex items-center gap-1"
-          >
-            <GaugeIcon size={16} className=" text-(--muted-foreground)" />
-            Context window
-          </label>
-          <Input
-            id="context-window"
-            type="text"
-            inputMode="numeric"
-            autoComplete="off"
-            placeholder={fallback.toLocaleString("en-US")}
-            aria-invalid={Boolean(error)}
-            aria-describedby="context-window-help"
-            value={value}
-            onChange={(event) => {
-              setValue(event.target.value);
-              setSaved(false);
-            }}
-          />
-          <p
-            id="context-window-help"
-            className="text-xs text-(--muted-foreground) mt-1"
-          >
-            The most input tokens one model call may carry. Set it to your
-            model&apos;s context window or lower. When an investigation fills
-            it, older tool results are shortened, and the agent answers from
-            what it has found if that is not enough. Leave blank for{" "}
-            {fallback.toLocaleString("en-US")}.
-          </p>
-          {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-        </div>
-
-        <div className="flex items-center justify-end gap-2 pt-2">
-          {saved && (
-            <span className="inline-flex items-center gap-1.5 text-xs text-(--chart-1)">
-              <CheckCircleIcon size={14} weight="fill" />
-              Saved
-            </span>
-          )}
-          <Button type="submit" size="sm" loading={saving} className="gap-1.5">
-            <CheckCircleIcon weight="duotone" size={15} />
-            Save
-          </Button>
-        </div>
+      <div className="flex items-center justify-end gap-3 border-t border-white/6 pt-4">
+        {saved && (
+          <span className="font-pixel text-xs tracking-[0.06em] text-(--success) uppercase">
+            Saved
+          </span>
+        )}
+        <Button type="submit" size="sm" loading={saving}>
+          Save
+        </Button>
       </div>
     </form>
   );

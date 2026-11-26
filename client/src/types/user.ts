@@ -21,6 +21,8 @@ export default interface User {
   email: string;
   avatar_url: string | null;
   github_id: string | null;
+  /** When the account was created, as an ISO timestamp. */
+  created_at?: string | null;
   ai_provider: string | null;
   ai_model: string | null;
   has_ai_key: boolean;

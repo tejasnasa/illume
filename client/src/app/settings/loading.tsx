@@ -1,22 +1,23 @@
 /**
  * Skeleton fallback for the settings route.
  *
- * Includes a `<NavbarSkeleton />` that matches the real `<Navbar />` shape
- * exactly -- same star icon and avatar dimensions, same margins -- so the
- * loading state does not shift when the real page lands. The skeleton is
- * pure divs (no <img>, no real icons) so the strict-mode Playwright concern
- * that previously excluded a real <Navbar /> here does not apply.
+ * Includes a `<NavbarSkeleton />` that matches the real `<Navbar />` shape,
+ * so the loading state does not shift when the real page lands. The skeleton
+ * is pure divs (no <img>, no real icons) so the strict-mode Playwright
+ * concern that previously excluded a real <Navbar /> here does not apply.
  * @module SettingsLoading
  */
 import NavbarSkeleton from "@/components/NavbarSkeleton";
 import Skeleton from "@/components/ui/Skeleton";
 
+/** Placeholder heights of the section cards, top to bottom. */
+const SECTIONS = [96, 300, 130, 170, 420];
+
 /**
- * Renders placeholder settings rows while the real page resolves.
+ * Renders placeholder settings sections while the real page resolves.
  *
- * Layout mirrors `app/settings/page.tsx`: same outer container, same heading,
- * and the same `mx-auto max-w-3xl` section that wraps the AiSettings card so
- * the skeleton does not jump when the real page lands.
+ * Layout mirrors `app/settings/page.tsx`: the same container, the same
+ * header block and the same two-column sections.
  *
  * @returns Skeleton settings layout mirroring the real page structure.
  */
@@ -24,47 +25,28 @@ export default function LoadingSettings() {
   return (
     <div>
       <NavbarSkeleton />
-      <main className="max-w-7xl mx-auto px-6 py-24 flex items-start flex-wrap">
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-16">
-          <div>
-            <h1 className="text-8xl font-extrabold tracking-tight animate-pulse text-(--muted-foreground)/70">
-              Settings
-            </h1>
-          </div>
-        </header>
-
-        <section className="space-y-6 mx-auto max-w-3xl w-full">
-          <div className="rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10 p-2">
-            <div className="px-5 py-3">
-              <Skeleton className="h-3 w-24 rounded-full" />
+      <div
+        aria-busy="true"
+        className="mx-auto flex w-full max-w-260 flex-col px-4 pt-11 pb-16 sm:px-6"
+      >
+        <div className="flex flex-col gap-3 pb-8">
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="h-14 w-80 max-w-full" />
+        </div>
+        {SECTIONS.map((height, i) => (
+          <div
+            key={i}
+            className="grid grid-cols-1 gap-4 border-t border-(--border) py-8 md:grid-cols-[240px_minmax(0,1fr)] md:gap-8"
+          >
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-3 w-48" />
+              <Skeleton className="h-3 w-40" />
             </div>
-
-            <div className="px-5 py-4 space-y-4">
-              <Skeleton className="h-3 w-full max-w-md rounded-full" />
-
-              <div className="flex flex-col my-4 gap-1">
-                <Skeleton className="h-3 w-16 rounded-full" />
-                <Skeleton className="h-11 w-full rounded-sm" />
-              </div>
-
-              <div className="flex flex-col my-4 gap-1">
-                <Skeleton className="h-3 w-16 rounded-full" />
-                <Skeleton className="h-11 w-full rounded-sm" />
-                <Skeleton className="h-3 w-3/4 rounded-full" />
-              </div>
-
-              <div className="flex flex-col my-4 gap-1">
-                <Skeleton className="h-3 w-16 rounded-full" />
-                <Skeleton className="h-11 w-full rounded-sm" />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <Skeleton className="h-9 w-32 rounded-sm" />
-              </div>
-            </div>
+            <Skeleton className="w-full rounded-md" style={{ height }} />
           </div>
-        </section>
-      </main>
+        ))}
+      </div>
     </div>
   );
 }

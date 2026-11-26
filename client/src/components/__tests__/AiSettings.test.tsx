@@ -64,18 +64,9 @@ beforeEach(() => {
 
 type UserEvent = ReturnType<typeof userEvent.setup>;
 
-/**
- * Picks `label` through the provider dropdown. No preset is preselected, so a
- * fresh form's trigger reads "Select a provider"; after a selection it reads
- * the active preset instead, which is what `current` is for.
- */
-async function chooseProvider(
-  user: UserEvent,
-  label: RegExp,
-  current: RegExp = /select a provider/i,
-) {
-  await user.click(screen.getByRole("button", { name: current }));
-  await user.click(screen.getByRole("button", { name: label }));
+/** Picks `label` from the provider radio group. */
+async function chooseProvider(user: UserEvent, label: RegExp) {
+  await user.click(screen.getByRole("radio", { name: label }));
 }
 
 afterEach(() => {
@@ -83,27 +74,12 @@ afterEach(() => {
 });
 
 describe("layout", () => {
-  it("renders the AI Provider section heading", () => {
+  it("renders every provider as one choice in a radio group", () => {
     render(<AiSettings user={makeUser()} />);
 
-    expect(screen.getByText(/AI Provider/i)).toBeInTheDocument();
-  });
-
-  it("renders the provider trigger as a full-width block-level element", () => {
-    render(<AiSettings user={makeUser()} />);
-
-    // The wrapper around the dropdown trigger must be `block` (not
-    // `inline-block`) so the trigger fills its parent column.
-    const trigger = screen.getByRole("button", { name: /select a provider/i });
-    const wrapper = trigger.parentElement;
-    expect(wrapper).not.toBeNull();
-    expect(wrapper!.className).toContain("block");
-    expect(wrapper!.className).not.toContain("inline-block");
-    expect(wrapper!.className).toContain("w-full");
-    // The button itself must also be full-width -- otherwise it collapses to
-    // its content (the inline-flex trigger span) and the picker still looks
-    // small even when the wrapper is correct.
-    expect(trigger.className).toContain("w-full");
+    const group = screen.getByRole("radiogroup", { name: /Provider/i });
+    expect(group).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
   });
 
   it("shows the unconnected state when has_ai_key is false", () => {
@@ -145,7 +121,10 @@ describe("layout", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /Groq/i })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Groq/i })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 
   it("seeds the model input from ai_model", () => {
@@ -167,9 +146,9 @@ describe("layout", () => {
     // showed up later as a rejected probe.
     render(<AiSettings user={makeUser()} />);
 
-    expect(
-      screen.getByRole("button", { name: /select a provider/i }),
-    ).toBeInTheDocument();
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).toHaveAttribute("aria-checked", "false");
+    }
   });
 });
 
@@ -192,13 +171,13 @@ describe("provider picker", () => {
       "gpt-5.6",
     );
 
-    await chooseProvider(user, /^Groq$/i, /OpenAI/i);
+    await chooseProvider(user, /^Groq$/i);
     expect(screen.getByLabelText(/Model/i)).toHaveAttribute(
       "placeholder",
       "llama-3.3-70b",
     );
 
-    await chooseProvider(user, /^DeepSeek$/i, /Groq/i);
+    await chooseProvider(user, /^DeepSeek$/i);
     expect(screen.getByLabelText(/Model/i)).toHaveAttribute(
       "placeholder",
       "deepseek-flash",
@@ -360,7 +339,7 @@ describe("save", () => {
 describe("remove", () => {
   async function confirmRemove(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole("button", { name: /Remove key/i }));
-    await user.click(screen.getByRole("button", { name: /^REMOVE$/ }));
+    await user.click(screen.getByRole("button", { name: /^Remove$/ }));
   }
 
   it("asks for confirmation and does nothing when cancelled", async () => {

@@ -24,10 +24,11 @@ vi.mock("@/components/McpSettings", () => ({
   default: () => <div data-testid="mcp-card" />,
 }));
 
-const api = vi.hoisted(() => ({ user: vi.fn(), tokens: vi.fn() }));
+const api = vi.hoisted(() => ({ user: vi.fn(), tokens: vi.fn(), repos: vi.fn() }));
 
 vi.mock("@/api/auth", () => ({ default: api.user }));
 vi.mock("@/actions/mcpTokens", () => ({ listMcpTokens: api.tokens }));
+vi.mock("@/api/repository", () => ({ getRepositories: api.repos }));
 
 function makeUser(mcpEnabled: boolean): User {
   return {
@@ -51,6 +52,8 @@ beforeEach(() => {
   api.user.mockReset();
   api.tokens.mockReset();
   api.tokens.mockResolvedValue([]);
+  api.repos.mockReset();
+  api.repos.mockResolvedValue([]);
 });
 
 describe("settings page MCP card", () => {
@@ -70,5 +73,35 @@ describe("settings page MCP card", () => {
 
     expect(screen.queryByTestId("mcp-card")).not.toBeInTheDocument();
     expect(api.tokens).not.toHaveBeenCalled();
+  });
+});
+
+describe("settings page account and danger zone", () => {
+  it("says when the account was created", async () => {
+    api.user.mockResolvedValue({ ...makeUser(false), created_at: "2026-03-14T09:00:00Z" });
+
+    render(await Settings());
+
+    expect(screen.getByText("Member since Mar 2026")).toBeInTheDocument();
+  });
+
+  it("counts what deleting the account would remove", async () => {
+    api.user.mockResolvedValue(makeUser(true));
+    api.repos.mockResolvedValue([{ id: "r1" }, { id: "r2" }]);
+    api.tokens.mockResolvedValue([{ id: "t1" }]);
+
+    render(await Settings());
+
+    expect(screen.getByRole("button", { name: "Delete account" })).toBeInTheDocument();
+    expect(screen.getByText("2 repositories · 1 token")).toBeInTheDocument();
+  });
+
+  it("still offers deletion when the repositories cannot be counted", async () => {
+    api.user.mockResolvedValue(makeUser(false));
+    api.repos.mockRejectedValue(new Error("down"));
+
+    render(await Settings());
+
+    expect(screen.getByRole("button", { name: "Delete account" })).toBeInTheDocument();
   });
 });
