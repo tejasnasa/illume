@@ -32,7 +32,8 @@ pytestmark = pytest.mark.smoke
 # The MCP endpoint at ``/mcp`` is a ``Mount``, not an ``APIRoute``, so it is not counted.
 # 45 -> 50 with the conversation list, create, rename, delete and messages routes under
 # ``/api/v1/repository/{repo_id}/conversations``.
-EXPECTED_API_ROUTE_COUNT = 50
+# 50 -> 51 with the per-file detail route.
+EXPECTED_API_ROUTE_COUNT = 51
 
 EXPECTED_TAGS = {
     "agent",

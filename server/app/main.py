@@ -18,6 +18,7 @@ from app.api.v1 import (
     chat,
     contact,
     conversations,
+    file_detail,
     github_proxy,
     glossary,
     graph,
@@ -68,6 +69,7 @@ app.include_router(ownership.router)
 app.include_router(guide.router)
 app.include_router(stats.router)
 app.include_router(activity.router)
+app.include_router(file_detail.router)
 app.include_router(github_proxy.router)
 app.include_router(contact.router)
 app.include_router(push.router)

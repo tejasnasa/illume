@@ -82,6 +82,7 @@ REPO_ROUTES: list[RepoRoute] = [
     RepoRoute("GET", "/api/v1/repository/{ref}/ownership/silos"),
     RepoRoute("GET", "/api/v1/repository/{ref}/stats"),
     RepoRoute("GET", "/api/v1/repository/{ref}/activity"),
+    RepoRoute("GET", "/api/v1/repository/{ref}/file?path=src/module_0.py"),
     RepoRoute("POST", "/api/v1/repository/{ref}/chat", body={"question": "What does this do?"}),
     RepoRoute("GET", "/api/v1/repository/{ref}/chat/history"),
     RepoRoute("GET", "/api/v1/repository/{ref}/chat/{message_id}/changes"),
