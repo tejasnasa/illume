@@ -6,35 +6,155 @@
 
 import Graph from "@/types/graph";
 import Guide from "@/types/guide";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  GraphIcon,
-  MagnifyingGlassIcon,
-  WarningDiamondIcon,
-  XIcon,
-} from "@phosphor-icons/react/dist/ssr";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import GraphCard from "./ui/GraphCard";
+import GraphCard, { InspectedNode, Neighbour } from "./ui/GraphCard";
 
+// `dynamic` erases the component's node/link generics; restore them so the
+// accessors below are checked against this graph's own node shape.
 const ForceGraph3D = dynamic(() => import("react-force-graph-3d"), {
   ssr: false,
-});
+}) as unknown as typeof import("react-force-graph-3d").default;
+
+type GraphNode = Graph["nodes"][number] & { complexity?: number };
+type GraphLink = Graph["links"][number];
+
+/** The library's default `nodeRelSize`; node radius is `cbrt(val) * this`. */
+const NODE_REL_SIZE = 4;
+
+/** The smallest a selection or search bracket is drawn, in screen pixels. */
+const BRACKET_MIN_PX = 28;
+
+/** How long the tour lingers on each file while playing. */
+const TOUR_STEP_MS = 4000;
+
+const COLORS = {
+  critical: "#ef4444",
+  caution: "#facc15",
+  safe: "#22c55e",
+  selected: "#0078ff",
+  match: "#a855f7",
+  bracket: "#f6339a",
+} as const;
+
+const LEGEND = [
+  { label: "Critical", color: COLORS.critical },
+  { label: "Caution", color: COLORS.caution },
+  { label: "Safe", color: COLORS.safe },
+  { label: "Selected", color: COLORS.selected },
+  { label: "Search match", color: COLORS.match },
+];
+
+/**
+ * Node size from lines of code, floored at 10 so an empty file stays visible.
+ *
+ * @param node - A graph node.
+ * @returns The library's `nodeVal`.
+ */
+export function nodeValue(node: { loc?: number }): number {
+  return Math.sqrt(node.loc || 10) * 0.5;
+}
+
+/**
+ * Reads a link endpoint's id. The library replaces the string ids in the
+ * payload with node objects once the simulation starts, so both shapes occur.
+ *
+ * @param end - The link's `source` or `target`.
+ * @returns The endpoint node's id.
+ */
+function endId(end: unknown): string {
+  if (end && typeof end === "object" && "id" in end) {
+    return String((end as { id: unknown }).id);
+  }
+  return String(end);
+}
+
+const bracketTextures = new Map<string, THREE.CanvasTexture>();
+
+/**
+ * The pixel corner-bracket texture drawn around the selected node and around
+ * search matches, built once per colour and shared. Nearest-neighbour
+ * filtering keeps its edges hard at any zoom, matching the rest of the pixel
+ * interface.
+ *
+ * @param color - The brackets' colour.
+ * @returns The shared texture for that colour.
+ */
+function getBracketTexture(color: string): THREE.CanvasTexture {
+  const cached = bracketTextures.get(color);
+  if (cached) return cached;
+  const size = 64;
+  const arm = 18;
+  const th = 5;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = color;
+    const far = size - th;
+    const reach = size - arm;
+    ctx.fillRect(0, 0, arm, th);
+    ctx.fillRect(0, 0, th, arm);
+    ctx.fillRect(reach, 0, arm, th);
+    ctx.fillRect(far, 0, th, arm);
+    ctx.fillRect(0, far, arm, th);
+    ctx.fillRect(0, reach, th, arm);
+    ctx.fillRect(reach, far, arm, th);
+    ctx.fillRect(far, reach, th, arm);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  bracketTextures.set(color, texture);
+  return texture;
+}
+
+/**
+ * A corner-bracket sprite sized to frame a node. It ignores depth, so it
+ * stays visible through any node in front.
+ *
+ * @param node - The node to frame.
+ * @param color - The brackets' colour.
+ * @returns The sprite and its resting scale.
+ */
+function bracketSprite(node: { loc?: number }, color: string) {
+  const radius = Math.cbrt(nodeValue(node)) * NODE_REL_SIZE;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: getBracketTexture(color),
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+    }),
+  );
+  const base = (radius + 5) * 2;
+  sprite.scale.setScalar(base);
+  sprite.renderOrder = 1000;
+  return { sprite, base };
+}
 
 /**
  * Renders the explorable dependency graph and its detail card.
  *
+ * The simulation, sizing, link styling and particles are the library's
+ * defaults as tuned for this view; the camera never moves on its own, so
+ * selecting a node (by click, by the tour or from the inspector) only
+ * recolours it, brightens its links and frames it in pink corner brackets.
+ * Search matches are framed the same way in purple, so both read as one
+ * kind of mark. The brackets ignore depth, so they stay visible through any
+ * node in front.
+ *
  * @param graphData - Nodes and links for the force-graph canvas.
  * @param currentLevel - Active granularity ("file" or "symbol").
- * @param repoId - Repository ID used for level-change navigation.
+ * @param repoId - Repository number used for level-change navigation.
  * @param github_url - Repository URL for source links in the detail card.
  * @param commitSha - Repository's ingested commit, pinned in source links.
  * @param branch - Repository's ingested branch, used when the commit is missing.
  * @param guide - Guide with reading order and per-file annotations.
- * @returns Full-viewport graph view with legend, search, and tour controls.
+ * @returns Full-viewport graph view with search, tour, legend and inspector.
  */
 export default function GraphClient({
   graphData,
@@ -54,10 +174,22 @@ export default function GraphClient({
   branch?: string | null;
 }) {
   const router = useRouter();
-  const [selectedNode, setSelectedNode] = useState<any>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [pageIndex, setPageIndex] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  /** Every bracket on screen, with its resting world size and whether it pulses. */
+  const bracketsRef = useRef(
+    new Map<THREE.Sprite, { base: number; pulse: boolean }>(),
+  );
+  const animFrameRef = useRef<number>(0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const graphRef = useRef<any>(null);
+
+  const isFile = currentLevel === "file";
+  const query = searchQuery.trim().toLowerCase();
 
   /**
    * Checks whether a node matches the current search text.
@@ -65,29 +197,61 @@ export default function GraphClient({
    * @param node - Graph node with label/path fields.
    * @returns True when the label or path contains the query.
    */
-  const isMatch = (node: any) => {
-    if (!searchQuery.trim()) return false;
-    const query = searchQuery.toLowerCase();
-    const labelMatch = node.label?.toLowerCase().includes(query);
-    const pathMatch = node.path?.toLowerCase().includes(query);
-    return !!(labelMatch || pathMatch);
-  };
+  const isMatch = (node: GraphNode) =>
+    !!query &&
+    (!!node.label?.toLowerCase().includes(query) ||
+      !!node.path?.toLowerCase().includes(query));
 
-  const nodeMap = Object.fromEntries(graphData.nodes.map((n) => [n.path, n]));
-  const ringAnimations = useRef(new Map<any, { rings: any[] }>()).current;
-  const animFrameRef = useRef<number>(0);
-  const graphRef = useRef<any>(null);
+  const matchCount = query
+    ? graphData.nodes.filter((n) => isMatch(n)).length
+    : 0;
 
-  /** Pulsates search-match halo rings until unmounted. */
+  const { byId, byPath } = useMemo(
+    () => ({
+      byId: new Map(graphData.nodes.map((n) => [n.id, n as GraphNode])),
+      byPath: new Map(graphData.nodes.map((n) => [n.path, n as GraphNode])),
+    }),
+    [graphData],
+  );
+
+  /**
+   * Sizes every bracket each frame and pulses the selected one, until unmounted.
+   *
+   * A bracket is never drawn smaller than `BRACKET_MIN_PX` on screen: its scale
+   * is the larger of the node's own size and that many pixels' worth of world
+   * units at its distance from the camera. Zooming out therefore leaves the
+   * brackets the same size on screen, while zooming in still lets them grow
+   * to frame a large node.
+   */
   useEffect(() => {
+    const at = new THREE.Vector3();
     const animate = () => {
-      const now = performance.now();
-      ringAnimations.forEach(({ rings }) => {
-        rings.forEach((ring: any) => {
-          const t = (now / 1500 + ring.userData.phase) % 1;
-          ring.scale.setScalar(1 + t * 2.5);
-          ring.material.opacity = (1 - t) * 0.6;
-        });
+      const brackets = bracketsRef.current;
+      const graph = graphRef.current;
+      const camera = graph?.camera?.() as THREE.PerspectiveCamera | undefined;
+      const height = graph?.renderer?.()?.domElement?.clientHeight as
+        number | undefined;
+      // A stepped breath rather than a smooth one, like the rest of the UI.
+      const step = Math.round(Math.sin(performance.now() / 333));
+      brackets.forEach(({ base, pulse }, sprite) => {
+        // A rebuilt node object leaves its old bracket detached; forget it.
+        if (!sprite.parent?.parent) {
+          brackets.delete(sprite);
+          return;
+        }
+        let size = base;
+        if (camera && height) {
+          const distance = camera.position.distanceTo(
+            sprite.getWorldPosition(at),
+          );
+          const perPixel =
+            (2 *
+              distance *
+              Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) /
+            height;
+          size = Math.max(base, BRACKET_MIN_PX * perPixel);
+        }
+        sprite.scale.setScalar(pulse ? size * (1 + step * 0.06) : size);
       });
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -95,36 +259,77 @@ export default function GraphClient({
     return () => cancelAnimationFrame(animFrameRef.current);
   }, []);
 
-  /** Clears stale halos when the query changes so matches re-register. */
+  /** Rebuilds the node objects when the query changes, so the match brackets follow it. */
   useEffect(() => {
-    ringAnimations.clear();
-    graphRef.current?.refresh();
+    graphRef.current?.refresh?.();
   }, [searchQuery]);
 
-  const readingOrder = guide?.reading_order ?? [];
+  const readingOrder = useMemo(() => guide?.reading_order ?? [], [guide]);
 
   /** Guide reading order resolved to graph nodes, in position order. */
-  const orderedNodes = [...readingOrder]
-    .sort((a, b) => a.position - b.position)
-    .map((entry) => nodeMap[entry.file_path])
-    .filter(Boolean);
+  const orderedNodes = useMemo(
+    () =>
+      [...readingOrder]
+        .sort((a, b) => a.position - b.position)
+        .map((entry) => byPath.get(entry.file_path))
+        .filter((n): n is GraphNode => !!n),
+    [readingOrder, byPath],
+  );
+
+  /** Reading-order entries keyed by file path. */
+  const readingOrderMap = useMemo(
+    () => new Map(readingOrder.map((entry) => [entry.file_path, entry])),
+    [readingOrder],
+  );
 
   /**
-   * Selects the tour node at the given reading-order index.
+   * Selects a node and syncs the tour position to it.
+   *
+   * @param node - The node to select, or null to clear.
+   */
+  const select = (node: GraphNode | null) => {
+    setSelectedNode(node);
+    if (!node) {
+      setPageIndex(null);
+      setPlaying(false);
+      return;
+    }
+    const idx = orderedNodes.findIndex((n) => n.path === node.path);
+    setPageIndex(idx === -1 ? null : idx);
+  };
+
+  /**
+   * Selects the tour node at the given reading-order index, wrapping round.
    *
    * @param index - Position in the ordered node list.
    */
   const navigateToPage = (index: number) => {
-    const node = orderedNodes[index];
-    if (!node) return;
-    setPageIndex(index);
-    setSelectedNode(node);
+    if (orderedNodes.length === 0) return;
+    const wrapped =
+      ((index % orderedNodes.length) + orderedNodes.length) %
+      orderedNodes.length;
+    setPageIndex(wrapped);
+    setSelectedNode(orderedNodes[wrapped]);
   };
 
-  /** Reading-order entries keyed by file path. */
-  const readingOrderMap = Object.fromEntries(
-    readingOrder.map((entry) => [entry.file_path, entry]),
-  );
+  /** Advances the tour on a timer while it is playing. */
+  useEffect(() => {
+    if (!playing || orderedNodes.length === 0) return;
+    const timer = window.setInterval(() => {
+      setPageIndex((current) => {
+        const next = current === null ? 0 : (current + 1) % orderedNodes.length;
+        setSelectedNode(orderedNodes[next]);
+        return next;
+      });
+    }, TOUR_STEP_MS);
+    return () => window.clearInterval(timer);
+  }, [playing, orderedNodes]);
+
+  /** Starts or pauses the tour, starting from the first file if none is open. */
+  const togglePlay = () => {
+    if (!playing && pageIndex === null) navigateToPage(0);
+    setPlaying((p) => !p);
+  };
 
   /**
    * Switches graph granularity via a route change with a loading veil.
@@ -132,8 +337,8 @@ export default function GraphClient({
    * @param level - Target granularity ("file" or "symbol").
    */
   const handleLevelChange = (level: string) => {
-    setSelectedNode(null);
-    setPageIndex(null);
+    if (level === currentLevel) return;
+    select(null);
     setIsLoading(true);
     router.push(`/repo/${repoId}/graph?level=${level}`);
   };
@@ -143,227 +348,122 @@ export default function GraphClient({
     setIsLoading(false);
   }, [graphData]);
 
+  /** Neighbours of the selected node, split by direction. */
+  const neighbours = useMemo(() => {
+    const importers: Neighbour[] = [];
+    const imports: Neighbour[] = [];
+    if (!selectedNode) return { importers, imports };
+    const seenIn = new Set<string>();
+    const seenOut = new Set<string>();
+    for (const link of graphData.links as GraphLink[]) {
+      if (link.type === "sibling") continue;
+      const s = endId(link.source);
+      const t = endId(link.target);
+      if (s === t) continue;
+      const text = (n: GraphNode) =>
+        isFile ? n.path : `${n.label} · ${n.path}`;
+      if (t === selectedNode.id && !seenIn.has(s)) {
+        const n = byId.get(s);
+        if (n) {
+          seenIn.add(s);
+          importers.push({ id: s, text: text(n) });
+        }
+      } else if (s === selectedNode.id && !seenOut.has(t)) {
+        const n = byId.get(t);
+        if (n) {
+          seenOut.add(t);
+          imports.push({ id: t, text: text(n) });
+        }
+      }
+    }
+    return { importers, imports };
+  }, [selectedNode, graphData, byId, isFile]);
+
   if (!graphData) {
     return (
-      <div className="absolute inset-0 z-0 flex flex-col items-center justify-center p-6 text-center">
-        <WarningDiamondIcon size={48} className="text-(--destructive) mb-4" />
-        <p className="text-lg font-medium text-(--destructive)">
+      <div className="flex h-[calc(100dvh-65px)] items-center justify-center p-6 text-center">
+        <p className="font-pixel text-(--destructive) uppercase">
           Failed to load graph data
         </p>
       </div>
     );
   }
 
+  const tourEntry =
+    pageIndex !== null
+      ? readingOrderMap.get(orderedNodes[pageIndex]?.path)
+      : undefined;
+  const selectedEntry = selectedNode
+    ? readingOrderMap.get(selectedNode.path)
+    : undefined;
+
+  const isIncident = (link: GraphLink) =>
+    !!selectedNode &&
+    (endId(link.source) === selectedNode.id ||
+      endId(link.target) === selectedNode.id);
+
+  const panelClass =
+    "panel flex flex-col gap-3 bg-(--card)/90 p-3.5 backdrop-blur-sm";
+  const levelButton = (level: string, label: string) => (
+    <button
+      type="button"
+      onClick={() => handleLevelChange(level)}
+      aria-pressed={currentLevel === level}
+      className={`flex-1 p-2 font-pixel text-xs tracking-[0.08em] uppercase transition-colors hover:cursor-pointer ${
+        currentLevel === level
+          ? "bg-(--muted) text-(--foreground)"
+          : "text-(--subtle-foreground) hover:text-(--foreground)"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <main className="backdrop-blur-xs bg-black/80 relative w-full h-[calc(100vh-64px)] flex flex-col items-center justify-center overflow-hidden">
-      {isLoading && (
-        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-8 h-8 rounded-full border-2 border-(--primary) border-t-transparent animate-spin mb-3" />
-        </div>
-      )}
+    <main className="relative h-[calc(100dvh-106px)] min-h-[560px] w-full overflow-hidden bg-[radial-gradient(ellipse_at_55%_45%,#0092b81a,transparent_60%),#060608] md:h-[calc(100dvh-65px)]">
+      <h1 className="sr-only">Dependency graph</h1>
 
-      <div className="absolute bottom-4 left-4 z-20 p-2 rounded-sm flex flex-col gap-2">
-        <div className="flex items-center gap-3 mb-2 text-(--primary)">
-          <GraphIcon size={28} weight="duotone" />
-          <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
-            Dependency Graph
-          </h1>
-        </div>
-      </div>
-
-      <section
-        className={`absolute top-4 right-4 z-10 glass-card p-4 rounded-sm text-xs space-y-2 w-48 transition-all duration-300 ${selectedNode ? "opacity-0 pointer-events-none translate-x-10" : "opacity-100"}`}
-      >
-        <h4 className="font-semibold text-(--foreground) mb-2 text-sm">
-          Legend
-        </h4>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span> Critical
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span>{" "}
-          Caution
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-green-500"></span> Safe
-        </div>
-        {searchQuery !== "" && (
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#a855f7]"></span>{" "}
-            Match
-          </div>
-        )}
-        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-(--border)">
-          Size ∝ LOC
-        </div>
-      </section>
-
-      <section className="p-1 rounded-sm items-center justify-between flex flex-col absolute top-4 left-4 z-10">
-        <div className="glass-card p-1 flex items-center justify-between w-70">
-          <button
-            onClick={() => handleLevelChange("file")}
-            className={`px-5 py-2 rounded-xs text-sm transition-colors w-[49%] ${
-              currentLevel === "file"
-                ? "bg-(--primary) text-white"
-                : "hover:bg-(--primary)/10 text-(--muted-foreground)"
-            }`}
-          >
-            File Level
-          </button>
-          <button
-            onClick={() => handleLevelChange("symbol")}
-            className={`px-5 py-2 rounded-xs text-sm transition-colors w-[49%] ${
-              currentLevel === "symbol"
-                ? "bg-(--primary) text-white"
-                : "hover:bg-(--primary)/10 text-(--muted-foreground)"
-            }`}
-          >
-            Symbol Level
-          </button>
-        </div>
-
-        {/* Hidden rather than disabled when there is no guide: the tour has nothing
-            to walk, and a row reading "Reading Order: — / 0" is not actionable. */}
-        {currentLevel === "file" && orderedNodes.length > 0 && (
-          <div className="flex items-center gap-2 p-2">
-            <div className="font-medium uppercase text-(--foreground)/90">
-              Reading Order:
-            </div>
-            <button
-              onClick={() => navigateToPage((pageIndex ?? 0) - 1)}
-              disabled={pageIndex === null || pageIndex === 0}
-              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
-            >
-              <ArrowLeftIcon size={14} />
-            </button>
-            <span className="text-sm text-(--muted-foreground) tabular-nums">
-              {pageIndex === null ? "—" : pageIndex + 1} / {orderedNodes.length}
-            </span>
-            <button
-              onClick={() => navigateToPage((pageIndex ?? -1) + 1)}
-              disabled={
-                pageIndex !== null && pageIndex === orderedNodes.length - 1
-              }
-              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
-            >
-              <ArrowRightIcon size={14} />
-            </button>
-          </div>
-        )}
-      </section>
-
-      {selectedNode && (
-        <GraphCard
-          selectedNode={selectedNode}
-          setSelectedNode={setSelectedNode}
-          currentLevel={currentLevel}
-          github_url={github_url}
-          commitSha={commitSha}
-          branch={branch}
-          annotation={readingOrderMap[selectedNode?.path]?.annotation ?? null}
-        />
-      )}
-
-      <div className="absolute bottom-4 right-4 z-10 p-2">
-        <form
-          onSubmit={(e) => e.preventDefault()}
-          className="relative w-80 group"
-        >
-          <MagnifyingGlassIcon
-            size={18}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-(--muted-foreground) group-focus-within:text-(--primary) transition-colors"
-          />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search nodes..."
-            className="w-full backdrop-blur-xl border border-(--border) rounded-sm pl-11 pr-12 py-2.5 text-sm outline-none focus:border-(--primary)/50 focus:ring-2 focus:ring-(--primary)/20 transition-all text-(--foreground)"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors"
-            >
-              <XIcon size={14} weight="bold" />
-            </button>
-          )}
-        </form>
-      </div>
-
-      <section className="w-full h-full cursor-move">
+      <section className="absolute inset-0 cursor-move">
         <ForceGraph3D
-          graphData={graphData as any}
-          nodeLabel={(node: any) =>
+          ref={graphRef}
+          graphData={graphData}
+          nodeLabel={(node: GraphNode) =>
             `${node.label} (${node.criticality || "safe"})`
           }
-          nodeVal={(node: any) => Math.sqrt(node.loc || 10) * 0.5}
-          nodeColor={(node: any) => {
-            if (isMatch(node)) return "#a855f7";
-            if (node.id === selectedNode?.id) return "#0078ff";
-            if (node.criticality === "critical") return "#ef4444";
-            if (node.criticality === "caution") return "#facc15";
-            return "#22c55e";
+          nodeVal={nodeValue}
+          nodeColor={(node: GraphNode) => {
+            if (isMatch(node)) return COLORS.match;
+            if (node.id === selectedNode?.id) return COLORS.selected;
+            if (node.criticality === "critical") return COLORS.critical;
+            if (node.criticality === "caution") return COLORS.caution;
+            return COLORS.safe;
           }}
-          linkWidth={(link: any) => {
-            if (!selectedNode) return 1;
-            return link.source?.id === selectedNode?.id ||
-              link.target?.id === selectedNode?.id
-              ? 2
-              : 1;
-          }}
-          linkColor={(link: any) => {
-            if (!selectedNode) return "rgba(255,255,255,0.3)";
-            return link.source?.id === selectedNode?.id ||
-              link.target?.id === selectedNode?.id
-              ? "rgba(0,120,255,0.7)"
-              : "rgba(255,255,255,0.3)";
-          }}
+          linkWidth={(link: GraphLink) => (isIncident(link) ? 2 : 1)}
+          linkColor={(link: GraphLink) =>
+            isIncident(link) ? "rgba(0,120,255,0.7)" : "rgba(255,255,255,0.3)"
+          }
           backgroundColor="#00000000"
           linkDirectionalParticles={1}
           linkDirectionalParticleSpeed={0.005}
           nodeOpacity={0.9}
           nodeResolution={12}
           linkOpacity={1}
-          onNodeClick={(node) => {
-            setSelectedNode(node);
-            const idx = orderedNodes.findIndex(
-              (n) => n.path === (node as any).path,
-            );
-            setPageIndex(idx === -1 ? null : idx);
-          }}
-          onBackgroundClick={() => {
-            setSelectedNode(null);
-            setPageIndex(null);
-          }}
-          nodeThreeObject={(node: any) => {
+          onNodeClick={(node: GraphNode) => select(node)}
+          onBackgroundClick={() => select(null)}
+          nodeThreeObject={(node: GraphNode) => {
             const group = new THREE.Group();
-            const r = 15;
 
-            if (isMatch(node)) {
-              // Attach expanding halo rings; phases stagger the pulse loop above.
-              const rings: any[] = [];
-              for (let i = 0; i < 6; i++) {
-                const geometry = new THREE.RingGeometry(r, r + 2, 32);
-                const ring = new THREE.Mesh(
-                  geometry,
-                  new THREE.MeshBasicMaterial({
-                    color: "#a855f7",
-                    transparent: true,
-                    opacity: 0,
-                    side: THREE.DoubleSide,
-                    depthWrite: false,
-                  }),
-                );
+            // The selection's own pulsing brackets take precedence over a match's.
+            if (isMatch(node) && node.id !== selectedNode?.id) {
+              const { sprite, base } = bracketSprite(node, COLORS.match);
+              group.add(sprite);
+              bracketsRef.current.set(sprite, { base, pulse: false });
+            }
 
-                ring.onBeforeRender = (renderer, scene, camera) => {
-                  ring.quaternion.copy(camera.quaternion);
-                };
-                ring.userData.phase = i / 5;
-                rings.push(ring);
-                group.add(ring);
-              }
-              ringAnimations.set(node.id, { rings });
+            if (node.id === selectedNode?.id) {
+              const { sprite, base } = bracketSprite(node, COLORS.bracket);
+              group.add(sprite);
+              bracketsRef.current.set(sprite, { base, pulse: true });
             }
 
             return group;
@@ -371,6 +471,137 @@ export default function GraphClient({
           nodeThreeObjectExtend={true}
         />
       </section>
+
+      {isLoading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60">
+          <span className="blink font-pixel text-xs tracking-[0.12em] text-(--muted-foreground) uppercase">
+            Loading graph
+          </span>
+        </div>
+      )}
+
+      <div className="absolute top-5 left-5 z-10 flex w-[min(300px,calc(100%-40px))] flex-col gap-3">
+        <div className={panelClass}>
+          <label className="relative block">
+            <span
+              aria-hidden="true"
+              className="absolute top-1/2 left-3 -translate-y-1/2 font-pixel text-sm text-(--faint-foreground)"
+            >
+              ⌕
+            </span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={isFile ? "Search files" : "Search symbols"}
+              aria-label={isFile ? "Search files" : "Search symbols"}
+              className="w-full rounded-sm border border-(--border) bg-(--background) py-2.5 pr-3 pl-8.5 text-sm outline-none focus:border-(--accent)"
+            />
+          </label>
+          {query && (
+            <span
+              role="status"
+              className="font-pixel text-[11px] tracking-[0.08em] text-(--match) uppercase"
+            >
+              {matchCount === 1 ? "1 match" : `${matchCount} matches`}
+            </span>
+          )}
+          <div
+            role="group"
+            aria-label="Level"
+            className="flex divide-x divide-(--border) overflow-hidden rounded-sm border border-(--border)"
+          >
+            {levelButton("file", "Files")}
+            {levelButton("symbol", "Symbols")}
+          </div>
+          <span className="font-pixel text-[11px] tracking-[0.08em] text-(--subtle-foreground) uppercase">
+            {graphData.nodes.length.toLocaleString("en-US")}{" "}
+            {isFile ? "files" : "symbols"} ·{" "}
+            {graphData.links.length.toLocaleString("en-US")} edges
+          </span>
+        </div>
+
+        {/* Hidden rather than disabled when there is no guide: the tour has
+            nothing to walk, and an empty counter is not actionable. */}
+        {isFile && orderedNodes.length > 0 && (
+          <div className={panelClass}>
+            <p className="eyebrow m-0 flex items-center justify-between gap-2">
+              <span>Reading order tour</span>
+              <span className="text-(--accent) tabular-nums">
+                {pageIndex === null ? "—" : pageIndex + 1} /{" "}
+                {orderedNodes.length}
+              </span>
+            </p>
+            <span className="line-clamp-3 text-[13px] leading-normal text-zinc-400">
+              {tourEntry?.annotation ??
+                "Step through the files in the order a newcomer should read them."}
+            </span>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => navigateToPage((pageIndex ?? 0) - 1)}
+                aria-label="Previous file"
+                className="ghost rounded-sm border border-(--input) px-3 py-2 font-pixel text-zinc-300 hover:cursor-pointer"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                onClick={togglePlay}
+                aria-pressed={playing}
+                className="cta flex-1 rounded-sm bg-(--primary) px-3 py-2 font-pixel text-xs tracking-[0.08em] text-(--primary-foreground) uppercase hover:cursor-pointer"
+              >
+                {playing ? "❚❚ Pause" : "▶ Play tour"}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateToPage((pageIndex ?? -1) + 1)}
+                aria-label="Next file"
+                className="ghost rounded-sm border border-(--input) px-3 py-2 font-pixel text-zinc-300 hover:cursor-pointer"
+              >
+                ▶
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel absolute bottom-5 left-5 z-10 hidden flex-wrap items-center gap-x-4 gap-y-2 bg-(--card)/90 px-3.5 py-3 sm:flex">
+        {LEGEND.map(({ label, color }) => (
+          <span
+            key={label}
+            className="flex items-center gap-1.5 font-pixel text-[11px] tracking-[0.08em] text-(--muted-foreground) uppercase"
+          >
+            <span className="h-2 w-2" style={{ background: color }} />
+            {label}
+          </span>
+        ))}
+      </div>
+
+      <span className="absolute right-6 bottom-5.5 z-10 hidden font-pixel text-[11px] tracking-[0.1em] text-(--faint-foreground) uppercase lg:block">
+        Drag to rotate · Scroll to zoom · Click a {isFile ? "file" : "symbol"}
+      </span>
+
+      {selectedNode && (
+        <GraphCard
+          key={selectedNode.id}
+          selectedNode={selectedNode as InspectedNode}
+          onClose={() => select(null)}
+          onSelectNode={(id) => {
+            const node = byId.get(id);
+            if (node) select(node);
+          }}
+          importers={neighbours.importers}
+          imports={neighbours.imports}
+          currentLevel={currentLevel}
+          repoNumber={repoId}
+          github_url={github_url}
+          commitSha={commitSha}
+          branch={branch}
+          annotation={isFile ? (selectedEntry?.annotation ?? null) : null}
+          tourPosition={selectedEntry ? selectedEntry.position : null}
+        />
+      )}
     </main>
   );
 }

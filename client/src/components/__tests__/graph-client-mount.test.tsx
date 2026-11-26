@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import GraphClient from "@/components/GraphClient";
@@ -199,7 +199,9 @@ describe("selecting a node", () => {
 
     act(() => onClick!({ id: "1", label: "a.py", path: "src/a.py" }));
 
-    expect(screen.getByText(/src\/a\.py/)).toBeInTheDocument();
+    const inspector = screen.getByRole("complementary", { name: "Selected file" });
+    expect(within(inspector).getByRole("heading", { name: "a.py" })).toBeInTheDocument();
+    expect(within(inspector).getByText("src/")).toBeInTheDocument();
   });
 
   it("survives a node the reading order does not mention", async () => {
@@ -220,7 +222,12 @@ describe("selecting a node", () => {
     expect(() =>
       act(() => onClick!({ id: "3", label: "c.py", path: "src/c.py" })),
     ).not.toThrow();
-    expect(screen.getByText(/src\/c\.py/)).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("complementary", { name: "Selected file" })).getByRole(
+        "heading",
+        { name: "c.py" },
+      ),
+    ).toBeInTheDocument();
   });
 });
 
@@ -235,7 +242,7 @@ describe("the guide", () => {
 
     await settle();
 
-    expect(screen.getByText(/Dependency Graph/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Dependency graph/i })).toBeInTheDocument();
   });
 
   it("hides the reading-order tour when there is nothing to walk", async () => {
