@@ -75,6 +75,7 @@ REPO_ROUTES: list[RepoRoute] = [
     RepoRoute("POST", "/api/v1/repository/{ref}/sync", success=202),
     RepoRoute("GET", "/api/v1/repository/{ref}/export/illume"),
     RepoRoute("GET", "/api/v1/repository/{ref}/graph"),
+    RepoRoute("GET", "/api/v1/repository/{ref}/graph/thumbnail"),
     RepoRoute("GET", "/api/v1/repository/{ref}/glossary"),
     RepoRoute("GET", "/api/v1/repository/{ref}/glossary/search?q=a"),
     RepoRoute("GET", "/api/v1/repository/{ref}/guide"),

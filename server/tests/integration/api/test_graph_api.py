@@ -182,3 +182,50 @@ class TestGuards:
         client.cookies.clear()
 
         assert (await client.get(graph_url(repo))).status_code == 401
+
+
+class TestThumbnail:
+    """The condensed graph a repository card draws."""
+
+    @staticmethod
+    def url(repo) -> str:
+        return f"/api/v1/repository/{repo.id}/graph/thumbnail"
+
+    async def test_returns_the_files_and_the_chain_between_them(self, client, ingested):
+        _, repo, files = ingested
+
+        body = (await client.get(self.url(repo))).json()
+
+        assert {n["path"] for n in body["nodes"]} == {f.path for f in files}
+        ids = {f.path: str(f.id) for f in files}
+        assert sorted((link["source"], link["target"]) for link in body["links"]) == sorted(
+            [
+                (ids["src/module_0.py"], ids["src/module_1.py"]),
+                (ids["src/module_1.py"], ids["src/module_2.py"]),
+            ]
+        )
+
+    async def test_keeps_only_the_busiest_files(self, client, db_session, monkeypatch):
+        from app.api.v1 import graph as graph_module
+
+        monkeypatch.setattr(graph_module, "THUMBNAIL_MAX_FILES", 2)
+        user = await make_user(db_session)
+        repo, _ = await make_ingested_repo(db_session, user, file_count=4)
+        await authenticate(client, user)
+
+        body = (await client.get(self.url(repo))).json()
+
+        # The two ends of the chain have one neighbour each; the middle two have two.
+        assert {n["path"] for n in body["nodes"]} == {"src/module_1.py", "src/module_2.py"}
+        kept = {n["id"] for n in body["nodes"]}
+        assert all(link["source"] in kept and link["target"] in kept for link in body["links"])
+
+    async def test_is_empty_while_the_repository_is_not_ready(self, client, db_session):
+        user = await make_user(db_session)
+        repo = await make_repo(db_session, user, status="parsing")
+        await authenticate(client, user)
+
+        response = await client.get(self.url(repo))
+
+        assert response.status_code == 200
+        assert response.json() == {"nodes": [], "links": []}
