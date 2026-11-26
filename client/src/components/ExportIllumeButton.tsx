@@ -5,7 +5,6 @@
 "use client";
 
 import { exportIllumeAction } from "@/actions/exportIllume";
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 import Button from "./ui/Button";
 
@@ -17,10 +16,12 @@ import Button from "./ui/Button";
  */
 export default function ExportIllumeButton({ repo_id }: { repo_id: string }) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   /** Fetches export text and saves it via a temporary anchor download. */
   const handleExport = async () => {
     setLoading(true);
+    setError(null);
     try {
       const content = await exportIllumeAction(repo_id);
 
@@ -40,22 +41,23 @@ export default function ExportIllumeButton({ repo_id }: { repo_id: string }) {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (err) {
-      console.error(err);
-      alert(err);
+      setError(err instanceof Error ? err.message : "Export failed. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Button
-      onClick={handleExport}
-      size="sm"
-      loading={loading}
-      className="gap-1.5 shrink-0"
-    >
-      {!loading && <DownloadSimpleIcon weight="duotone" size={15} />}
-      Export
-    </Button>
+    <span className="flex flex-col items-end gap-1.5">
+      <Button onClick={handleExport} size="sm" variant="ghost" loading={loading} className="shrink-0">
+        {!loading && <span aria-hidden="true">↓</span>}
+        Export
+      </Button>
+      {error && (
+        <span role="alert" className="text-xs text-red-300">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }

@@ -47,7 +47,7 @@ export async function generateMetadata(
  * page, which draws its own), transitions, and a background-sync poller.
  *
  * The poller is the layout's responsibility because it must outlive the
- * settings modal: when the modal closes the page should still keep repainting
+ * settings page: when the user moves on to another page it should still keep repainting
  * while the sync finishes. `DashboardRefresh` does not cover this case because
  * the sync keeps `status='ready'`.
  *

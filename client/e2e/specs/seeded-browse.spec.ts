@@ -187,7 +187,7 @@ test.describe("the glossary", () => {
     await box.press("Enter");
 
     await expect(
-      page.getByText(/No glossary entries found matching your query/i),
+      page.getByText(/No terms match/i),
     ).toBeVisible();
   });
 });

@@ -67,7 +67,7 @@ export interface Stats {
   total_contributors: number;
   top_contributors: {
     name: string;
-    files_owned: string;
+    files_owned: number;
   }[];
   knowledge_silo_count: number;
   total_dependencies: number;

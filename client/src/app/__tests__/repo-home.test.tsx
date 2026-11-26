@@ -2,7 +2,12 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import RepositoryPage from "@/app/repo/[id]/page";
-import { AmbientBackground, RepoGraphProvider, isChatPath } from "@/components/RepoGraphContext";
+import {
+  AmbientBackground,
+  RepoGraphProvider,
+  isChatPath,
+  isVeiledPath,
+} from "@/components/RepoGraphContext";
 
 const pathname = vi.hoisted(() => ({ value: "/repo/7" }));
 
@@ -102,8 +107,8 @@ vi.mock("@/components/BackgroundGraph", () => ({
 describe("repository home page", () => {
   it("keeps the overview and no longer renders the chat", async () => {
     render(await RepositoryPage({ params: Promise.resolve({ id: "7" }) }));
-    expect(screen.getByText("AI Architecture Overview")).toBeInTheDocument();
-    expect(screen.getByText("Tech Stack Detected")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Architecture brief" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Tech stack" })).toBeInTheDocument();
     expect(screen.queryByText(/Chat with Codebase/)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/Ask about the codebase/)).not.toBeInTheDocument();
   });
@@ -121,6 +126,14 @@ describe("ambient background", () => {
     expect(isChatPath("/repo/7/chat/")).toBe(true);
     expect(isChatPath("/repo/7")).toBe(false);
     expect(isChatPath("/repo/7/glossary")).toBe(false);
+  });
+
+  it("veils the background on the graph and settings routes only", () => {
+    expect(isVeiledPath("/repo/7/graph")).toBe(true);
+    expect(isVeiledPath("/repo/7/settings/")).toBe(true);
+    expect(isVeiledPath("/repo/7")).toBe(false);
+    expect(isVeiledPath("/repo/7/explorer")).toBe(false);
+    expect(isVeiledPath("/settings")).toBe(false);
   });
 
   it("renders on other repo pages", () => {
@@ -150,13 +163,15 @@ describe("ambient background", () => {
     expect(screen.getByText("98.8K")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Lines by language: python 76%, typescript 24%/ })).toBeInTheDocument();
 
-    const first = screen.getByRole("link", { name: "app/main.py" });
-    expect(first).toHaveAttribute("href", "https://github.com/acme/app/blob/abc1234/app/main.py");
+    // Each step opens the file in the explorer rather than leaving for GitHub.
+    const first = screen.getByRole("link", { name: /app\/main\.py/ });
+    expect(first).toHaveAttribute("href", "/repo/7/explorer?file=app%2Fmain.py");
     expect(screen.getByText("Where data lives.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Full reading tour/ })).toHaveAttribute("href", "/repo/7/graph");
 
-    expect(screen.queryByText("Handle With Care")).not.toBeInTheDocument();
-    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Riskiest to change" })).toBeInTheDocument();
+    expect(screen.getByText("app/auth.py")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent activity" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add token refresh" })).toHaveAttribute(
       "href",
       "https://github.com/acme/app/pull/42",
@@ -172,8 +187,8 @@ describe("ambient background", () => {
       throw new Error("down");
     };
     render(await RepositoryPage({ params: Promise.resolve({ id: "7" }) }));
-    expect(screen.queryByText("Recent Activity")).not.toBeInTheDocument();
-    expect(screen.getByText("Start Here")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Recent activity" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Start here" })).toBeInTheDocument();
   });
 
   it("leaves the stats panel out when they fail to load", async () => {
@@ -181,7 +196,7 @@ describe("ambient background", () => {
       throw new Error("down");
     };
     render(await RepositoryPage({ params: Promise.resolve({ id: "7" }) }));
-    expect(screen.queryByText("At a Glance")).not.toBeInTheDocument();
-    expect(screen.getByText("Start Here")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "At a glance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Start here" })).toBeInTheDocument();
   });
 });

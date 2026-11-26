@@ -2,46 +2,43 @@
  * Loading placeholder for the repository navigation header.
  * @module RepoNavSkel
  */
-import { GearFineIcon, StarFourIcon } from "@phosphor-icons/react/dist/ssr";
+import Logo from "./Logo";
+import PixelGear from "./PixelGear";
 import Skeleton from "./Skeleton";
 
+const LABELS = ["Overview", "Chat", "Graph", "Explorer", "Glossary"];
+
 /**
- * Renders a skeleton header shown while repository nav data loads.
+ * Renders a header the same height and layout as the real repository bar.
  * @returns The rendered skeleton header element.
  */
 export default function RepoNavSkel() {
   return (
-    <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10 print:hidden">
-      <section className="flex items-center">
-        <div className="relative h-12 w-12 flex items-center justify-center m-2">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-10 w-10 rounded-full bg-(--chart-1)/30 blur-xl" />
+    <nav
+      aria-label="Repository"
+      className="sticky top-0 z-40 border-b border-(--border) bg-(--background)/85 backdrop-blur-md print:hidden"
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="flex items-center gap-3.5">
+          <Logo />
+          <span aria-hidden="true" className="text-zinc-700">
+            /
+          </span>
+          <Skeleton className="h-4 w-40" />
+        </div>
+        <div className="flex items-center gap-3.5">
+          <div className="hidden items-center font-pixel text-[13px] tracking-[0.06em] text-(--faint-foreground) uppercase md:flex">
+            {LABELS.map((label) => (
+              <span key={label} className="px-3">
+                {label}
+              </span>
+            ))}
           </div>
-          <StarFourIcon
-            className="relative text-(--chart-1)"
-            weight="fill"
-            size={24}
-          />
+          <span className="flex rounded-sm border border-(--border) p-2 text-(--faint-foreground)">
+            <PixelGear />
+          </span>
         </div>
-        <Skeleton className="h-5 w-32 mx-2" />
-      </section>
-
-      <section className="flex items-center">
-        <div className="m-2 mx-4 font-semibold">Home</div>
-        <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
-          Glossary
-        </div>
-        <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
-          Explorer
-        </div>
-        <div className="m-2 mx-4 text-(--muted-foreground) animate-pulse">
-          Graph
-        </div>
-        <GearFineIcon
-          size={24}
-          className="m-2 mx-4 mr-6 text-(--muted-foreground) hover:cursor-pointer animate-pulse"
-        />
-      </section>
-    </header>
+      </div>
+    </nav>
   );
 }

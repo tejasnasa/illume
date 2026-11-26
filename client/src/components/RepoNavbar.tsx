@@ -1,148 +1,167 @@
 /**
- * Repository header with section links and settings access.
+ * Repository header: a breadcrumb back to the dashboard, the repository's
+ * section links on the right, and the settings gear.
  * @module RepoNavbar
  */
 "use client";
 
-import {
-  CircleDashedIcon,
-  GearFineIcon,
-  StarFourIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import Repository from "@/types/repository";
+import { splitRepoName } from "@/utils/repoName";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import Repository from "@/types/repository";
-import RepoSettings from "./RepoSettings";
-import Modal from "./ui/Modal";
+import Logo from "./ui/Logo";
+import PixelGear from "./ui/PixelGear";
+
+/** The repository sections, in the order the bar shows them. */
+const SECTIONS = [
+  { slug: "", label: "Overview" },
+  { slug: "chat", label: "Chat" },
+  { slug: "graph", label: "Graph" },
+  { slug: "explorer", label: "Explorer" },
+  { slug: "glossary", label: "Glossary" },
+] as const;
 
 /**
- * Shows repo identity, status, and navigation to its sections.
+ * Shows the repository's identity and navigation to its sections.
  *
- * @param name - Display name of the repository.
- * @param num_id - Numeric ID used in section routes.
- * @param id - UUID used for settings actions.
- * @param status - Ingestion status; non-ready repos show placeholder links.
- * @param github_url - Repository URL forwarded to settings.
- * @param sync_status - Background-sync status; an active value shows a small spinner next to the badge.
- * @returns Sticky header with active-link highlighting and settings modal.
+ * Until the repository is ready the section links are inert placeholders --
+ * every section needs a finished analysis -- and the breadcrumb says the
+ * repository is still being read.
+ *
+ * @param repo - The repository the page belongs to.
+ * @returns Sticky header with the active section underlined.
  */
 export default function RepoNavbar({ repo }: { repo: Repository }) {
   const path = usePathname();
-  const { name, status, repo_number, sync_status } = repo;
+  const { status, repo_number, sync_status } = repo;
+  const base = `/repo/${repo_number}`;
+  const ready = status === "ready";
+  const { owner, name } = splitRepoName(repo.github_url, repo.name);
+  const onSettings = path === `${base}/settings`;
   const isSyncing =
     sync_status === "queued" ||
     sync_status === "checking" ||
     sync_status === "updating";
 
+  const crumb = !ready ? "Ingesting" : onSettings ? "Settings" : null;
+  const linkClass = "shrink-0 pt-5.25 pb-4.75 transition-colors duration-200";
+
   return (
-    <header className="flex backdrop-blur-xs items-center justify-between sticky top-0 z-10 print:hidden">
-      <section className="flex min-w-0 shrink-0 items-center">
-        <Link
-          href={"/dashboard"}
-          className="relative h-12 w-12 flex items-center justify-center m-2"
-        >
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="h-10 w-10 rounded-full bg-(--chart-1)/30 blur-xl" />
-          </div>
-          <StarFourIcon
-            className="relative text-(--chart-1)"
-            weight="fill"
-            size={24}
-          />
-        </Link>
-        <h1 className="mx-2 hidden truncate text-xl font-medium sm:block">{name}</h1>
-        <div className="hidden bg-green-500 text-(--background) rounded-full px-3 py-1 text-xs font-medium items-center gap-1.5 sm:inline-flex">
+    <nav
+      aria-label="Repository"
+      className="sticky top-0 z-40 border-b border-(--border) bg-(--background)/85 backdrop-blur-md print:hidden"
+    >
+      <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <Link
+            href="/dashboard"
+            aria-label="Back to dashboard"
+            className="shrink-0"
+          >
+            <Logo />
+          </Link>
+          <span aria-hidden="true" className="text-zinc-700">
+            /
+          </span>
+          <Link
+            href={base}
+            className="truncate font-pixel text-base text-zinc-300 hover:text-(--foreground)"
+          >
+            {owner && (
+              <span className="text-(--subtle-foreground)">{owner}/</span>
+            )}
+            {name}
+          </Link>
           {isSyncing && (
-            <CircleDashedIcon
-              size={11}
-              className="animate-spin"
-              weight="bold"
-            />
+            <span
+              title="Updating in the background"
+              className="flex shrink-0 items-center gap-1.5 font-pixel text-[11px] tracking-[0.08em] text-(--chart-1) uppercase"
+            >
+              <span
+                aria-hidden="true"
+                className="blink h-1.5 w-1.5 bg-(--chart-1)"
+              />
+              <span className="hidden sm:inline">Syncing</span>
+            </span>
           )}
-          {status}
+          {crumb && (
+            <>
+              <span aria-hidden="true" className="text-zinc-700">
+                /
+              </span>
+              <span className="shrink-0 font-pixel text-base">{crumb}</span>
+            </>
+          )}
         </div>
-      </section>
 
-      {status === "ready" && (
-        <section className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
+        <div className="flex min-w-0 items-center gap-3.5">
+          <div className="hidden min-w-0 items-center gap-6 overflow-x-auto font-pixel text-[13px] tracking-[0.06em] uppercase [scrollbar-width:none] md:flex">
+            {SECTIONS.map(({ slug, label }) => {
+              const href = slug ? `${base}/${slug}` : base;
+              if (!ready) {
+                return (
+                  <span
+                    key={label}
+                    aria-disabled="true"
+                    className={`${linkClass} text-(--faint-foreground)`}
+                  >
+                    {label}
+                  </span>
+                );
+              }
+              const current = path === href;
+              return (
+                <Link
+                  key={label}
+                  href={href}
+                  aria-current={current ? "page" : undefined}
+                  className={`${linkClass} ${
+                    current
+                      ? "text-(--foreground) shadow-[inset_0_-2px_0_var(--accent)]"
+                      : "text-(--muted-foreground) hover:text-(--foreground)"
+                  }`}
+                >
+                  {label}
+                </Link>
+              );
+            })}
+          </div>
           <Link
-            href={`/repo/${repo_number}`}
-            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
+            href={`${base}/settings`}
+            aria-label="Repository settings"
+            aria-current={onSettings ? "page" : undefined}
+            className={`ghost flex shrink-0 rounded-sm border p-2 ${
+              onSettings
+                ? "border-(--accent) text-(--foreground)"
+                : "border-(--border) text-(--muted-foreground)"
+            }`}
           >
-            Home
+            <PixelGear />
           </Link>
-          <Link
-            href={`/repo/${repo_number}/chat`}
-            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/chat` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-          >
-            Chat
-          </Link>
-          {/* <Link
-          href={`/repo/${repo_number}/onboarding-guide`}
-          className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/onboarding-guide` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-        >
-          Onboarding Guide
-        </Link> */}
-          <Link
-            href={`/repo/${repo_number}/glossary`}
-            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/glossary` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-          >
-            Glossary
-          </Link>
-          <Link
-            href={`/repo/${repo_number}/explorer`}
-            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/explorer` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-          >
-            Explorer
-          </Link>
-          <Link
-            href={`/repo/${repo_number}/graph`}
-            className={`m-2 mx-2 shrink-0 text-sm md:mx-4 md:text-base ${path === `/repo/${repo_number}/graph` ? "text-(--foreground) font-semibold" : "text-(--muted-foreground)"}`}
-          >
-            Graph
-          </Link>
-          <Modal
-            label="Repository settings"
-            trigger={
-              <GearFineIcon
-                size={24}
-                className="m-2 mx-2 mr-4 shrink-0 text-(--muted-foreground) hover:cursor-pointer md:mx-4 md:mr-6"
-              />
-            }
-          >
-            <RepoSettings repo={repo} />
-          </Modal>
-        </section>
+        </div>
+      </div>
+      {ready && (
+        <div className="flex h-10 gap-5 overflow-x-auto border-t border-(--border) px-4 font-pixel text-xs tracking-[0.06em] uppercase [scrollbar-width:none] md:hidden">
+          {SECTIONS.map(({ slug, label }) => {
+            const href = slug ? `${base}/${slug}` : base;
+            const current = path === href;
+            return (
+              <Link
+                key={label}
+                href={href}
+                aria-current={current ? "page" : undefined}
+                className={`flex shrink-0 items-center ${
+                  current
+                    ? "text-(--foreground) shadow-[inset_0_-2px_0_var(--accent)]"
+                    : "text-(--muted-foreground)"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </div>
       )}
-
-      {status !== "ready" && (
-        <section className="flex min-w-0 items-center overflow-x-auto [scrollbar-width:none]">
-          <div className="m-2 mx-2 shrink-0 text-sm font-semibold md:mx-4 md:text-base">Home</div>
-          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
-            Chat
-          </div>
-          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
-            Glossary
-          </div>
-          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
-            Explorer
-          </div>
-          <div className="m-2 mx-2 shrink-0 text-sm text-(--muted-foreground) animate-pulse md:mx-4 md:text-base">
-            Graph
-          </div>
-          <Modal
-            label="Repository settings"
-            trigger={
-              <GearFineIcon
-                size={24}
-                className="m-2 mx-2 mr-4 shrink-0 text-(--muted-foreground) hover:cursor-pointer md:mx-4 md:mr-6"
-              />
-            }
-          >
-            <RepoSettings repo={repo} />
-          </Modal>
-        </section>
-      )}
-    </header>
+    </nav>
   );
 }

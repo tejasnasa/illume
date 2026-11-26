@@ -2,181 +2,299 @@
  * Floating inspector card for a selected dependency-graph node.
  * @module GraphCard
  */
+"use client";
+
 import { resolveGithubRef } from "@/lib/github";
-import {
-  CodeIcon,
-  FileCodeIcon,
-  GithubLogoIcon,
-  XIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
+import { useState } from "react";
+
+/** How many importers the card lists before folding the rest away. */
+export const IMPORTERS_PREVIEW = 2;
+
+/** How many imports the card lists before summarising the remainder. */
+const IMPORTS_LIMIT = 8;
+
+/** A neighbouring node in the inspector's lists: its id and the text shown. */
+export type Neighbour = { id: string; text: string };
+
+/** A node as the inspector reads it; symbol nodes omit the file-only fields. */
+export type InspectedNode = {
+  id: string;
+  label: string;
+  path: string;
+  kind?: string;
+  loc?: number;
+  language?: string;
+  criticality?: string;
+  fan_in?: number;
+  fan_out?: number;
+  complexity?: number;
+};
+
+const RISK_STYLE: Record<string, string> = {
+  critical: "border-red-500/50 text-red-400",
+  caution: "border-yellow-400/50 text-yellow-300",
+  safe: "border-green-500/50 text-green-400",
+};
 
 /**
- * Renders metadata, metrics, and a GitHub link for the selected graph node.
- * @param selectedNode The selected node with label, path, metrics, and badges.
- * @param setSelectedNode Setter used to clear the selection on close.
- * @param currentLevel The active graph level ("file" or "symbol"), controlling which metrics show.
+ * Splits a path into its directory (with trailing slash) and base name.
+ *
+ * @param path A repo-relative path.
+ * @returns The directory prefix and the final segment.
+ */
+function splitPath(path: string): { dir: string; base: string } {
+  const cut = path.lastIndexOf("/");
+  return cut === -1
+    ? { dir: "", base: path }
+    : { dir: path.slice(0, cut + 1), base: path.slice(cut + 1) };
+}
+
+/**
+ * Renders metadata, neighbours and onward links for the selected graph node.
+ *
+ * The importer list shows the first {@link IMPORTERS_PREVIEW} entries and folds
+ * the rest behind a toggle, because a hub file can be imported by hundreds of
+ * others and the list would otherwise push the actions off the card. The
+ * fold resets whenever a different node is selected, because the parent keys
+ * the card by node id.
+ *
+ * @param selectedNode The selected node.
+ * @param onClose Clears the selection.
+ * @param onSelectNode Selects another node by id, for the neighbour rows.
+ * @param importers Nodes that depend on the selected one.
+ * @param imports Nodes the selected one depends on.
+ * @param currentLevel The active graph level ("file" or "symbol").
+ * @param repoNumber The repository's number, for the chat and explorer links.
  * @param github_url The repository base URL for the GitHub link.
  * @param commitSha The ingested commit, which the link pins to when set.
  * @param branch Repository's ingested branch, used when the SHA is missing.
- * @param annotation Optional note shown for file-level nodes.
+ * @param annotation Reading-order note for the file, if it has one.
+ * @param tourPosition One-based reading-order position, if the file has one.
  * @returns The rendered graph inspector element.
  */
 export default function GraphCard({
   selectedNode,
-  setSelectedNode,
+  onClose,
+  onSelectNode,
+  importers,
+  imports,
   currentLevel,
+  repoNumber,
   github_url,
   commitSha,
   branch,
   annotation,
+  tourPosition,
 }: {
-  selectedNode: any;
-  setSelectedNode: (node: any) => void;
+  selectedNode: InspectedNode;
+  onClose: () => void;
+  onSelectNode: (id: string) => void;
+  importers: Neighbour[];
+  imports: Neighbour[];
   currentLevel: string;
+  repoNumber: string;
   github_url: string;
   commitSha?: string | null;
   branch?: string | null;
   annotation: string | null;
+  tourPosition: number | null;
 }) {
+  const [showAllImporters, setShowAllImporters] = useState(false);
   const githubRef = resolveGithubRef(commitSha, branch);
+  const isFile = currentLevel === "file";
+  const { dir, base } = splitPath(selectedNode.path);
+  const risk = selectedNode.criticality || "safe";
+  const noun = isFile ? "file" : "symbol";
+
+  const hiddenImporters = Math.max(0, importers.length - IMPORTERS_PREVIEW);
+  const visibleImporters = showAllImporters
+    ? importers
+    : importers.slice(0, IMPORTERS_PREVIEW);
+  const visibleImports = imports.slice(0, IMPORTS_LIMIT);
+
+  const chatHref = `/repo/${repoNumber}/chat?q=${encodeURIComponent(
+    `What does ${selectedNode.path} do, and what depends on it?`,
+  )}`;
+  const explorerHref = `/repo/${repoNumber}/explorer?file=${encodeURIComponent(
+    selectedNode.path,
+  )}`;
+
+  const rowClass =
+    "w-full truncate rounded-sm px-2 py-1.5 text-left font-pixel text-xs text-zinc-300 transition-colors hover:cursor-pointer hover:bg-(--secondary) hover:text-(--foreground)";
+  const labelClass =
+    "font-pixel text-[11px] tracking-[0.1em] text-(--subtle-foreground) uppercase";
+  const chipClass =
+    "border border-(--border) px-2 py-1 text-(--muted-foreground)";
 
   return (
-    <section className="absolute top-4 right-4 z-20 w-80 glass-card p-5 rounded-sm flex flex-col shadow-2xl animate-fade-left h-fit">
-      <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-(--primary) to-(--chart-2)" />
-      <button
-        onClick={() => setSelectedNode(null)}
-        className="absolute top-4 right-4 p-2 rounded-full cursor-pointer text-(--muted-foreground) hover:text-(--foreground) hover:bg-(--secondary) transition-colors"
-      >
-        <XIcon size={16} weight="bold" />
-      </button>
-
-      <div className="text-xl font-bold text-(--foreground) mb-2 break-all pr-6 leading-tight flex items-center gap-2">
-        {currentLevel === "file" && (
-          <div className="w-8 h-8 rounded-sm bg-(--primary)/10 flex items-center justify-center text-(--primary)">
-            <FileCodeIcon size={20} weight="duotone" />
-          </div>
-        )}
-        {currentLevel === "symbol" && (
-          <div className="w-8 h-8 rounded-sm bg-(--primary)/10 flex items-center justify-center text-(--primary)">
-            <CodeIcon size={20} weight="duotone" />
-          </div>
-        )}
-        <h2 className="font-bold text-xl text-(--foreground) truncate pr-8">
-          {selectedNode.label}
-        </h2>
+    <aside
+      aria-label={`Selected ${noun}`}
+      className="panel rise absolute top-5 right-5 z-20 flex max-h-[calc(100%-80px)] w-[min(340px,calc(100%-40px))] flex-col gap-4 overflow-y-auto bg-(--card)/95 p-5 backdrop-blur-sm"
+    >
+      <div className="flex items-start justify-between gap-2.5">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          {isFile && dir && (
+            <span className="font-pixel text-[11px] tracking-[0.1em] break-all text-(--subtle-foreground)">
+              {dir}
+            </span>
+          )}
+          <h2 className="font-pixel text-[22px] leading-tight break-all">
+            {isFile ? base : selectedNode.label}
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="ghost rounded-sm border border-(--border) px-2 py-1 font-pixel text-(--muted-foreground) hover:cursor-pointer"
+        >
+          ×
+        </button>
       </div>
 
-      <div className="flex items-center gap-2 mb-6">
-        <span className="px-2.5 py-1 rounded-sm text-[10px] uppercase font-bold tracking-widest bg-(--secondary) text-(--foreground) border border-(--border)">
-          {selectedNode.kind || currentLevel}
+      <div className="flex flex-wrap gap-1.5 font-pixel text-[11px] tracking-[0.08em] uppercase">
+        <span
+          className={`border px-2 py-1 ${RISK_STYLE[risk] ?? RISK_STYLE.safe}`}
+        >
+          {risk}
         </span>
-        {selectedNode.criticality && (
-          <span
-            className={`px-2.5 py-1 rounded-sm text-[10px] font-bold tracking-wider uppercase border ${
-              selectedNode.criticality === "critical"
-                ? "bg-red-500/10 text-red-500 border-red-500/20"
-                : selectedNode.criticality === "caution"
-                  ? "bg-yellow-400/10 text-yellow-400 border-yellow-400/20"
-                  : "bg-green-500/10 text-green-500 border-green-500/20"
-            }`}
-          >
-            {selectedNode.criticality}
+        {!isFile && selectedNode.kind && (
+          <span className={chipClass}>{selectedNode.kind}</span>
+        )}
+        {selectedNode.language && (
+          <span className={chipClass}>{selectedNode.language}</span>
+        )}
+        <span className={chipClass}>{selectedNode.loc ?? 0} LOC</span>
+        {!isFile && typeof selectedNode.complexity === "number" && (
+          <span className={chipClass}>
+            Complexity {selectedNode.complexity}
           </span>
         )}
       </div>
 
-      <div className="space-y-4 flex-1 overflow-y-auto custom-scrollbar">
-        <label
-          htmlFor="full-path"
-          className="text-xs text-(--muted-foreground)"
-        >
-          Full Path
-        </label>
-        <div className="text-sm text-(--muted-foreground) break-all font-mono bg-(--secondary)/30 p-2 rounded-sm border border-(--border)/50">
+      {!isFile && (
+        <span className="font-pixel text-xs break-all text-(--muted-foreground)">
           {selectedNode.path}
+        </span>
+      )}
+
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="rounded-sm border border-white/8 p-2.5">
+          <span className="block font-pixel text-2xl">{importers.length}</span>
+          <span className="font-pixel text-[10px] tracking-[0.1em] text-(--subtle-foreground) uppercase">
+            {isFile ? "Imported by" : "Used by"}
+          </span>
         </div>
-
-        {selectedNode.group && (
-          <div>
-            <span className="text-xs text-(--muted-foreground) block mb-1">
-              Directory Group
-            </span>
-            <p className="text-sm text-(--foreground)">{selectedNode.group}</p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3 pt-2">
-          <div className="bg-(--secondary)/30 p-3 rounded-sm border border-(--border)">
-            <span className="text-[10px] uppercase tracking-wider text-(--muted-foreground) block mb-1">
-              Lines of Code
-            </span>
-            <p className="font-mono text-lg font-semibold">
-              {selectedNode.loc || 0}
-            </p>
-          </div>
-
-          {selectedNode.language && (
-            <div className="bg-(--secondary)/30 p-3 rounded-sm border border-(--border)">
-              <span className="text-[10px] uppercase tracking-wider text-(--muted-foreground) block mb-1">
-                Language
-              </span>
-              <p className="font-mono text-sm font-semibold truncate mt-1.5">
-                {selectedNode.language}
-              </p>
-            </div>
-          )}
-
-          {currentLevel === "file" && (
-            <>
-              <div className="bg-(--secondary)/30 p-3 rounded-sm border border-(--border)">
-                <span className="text-[10px] uppercase tracking-wider text-(--muted-foreground) block mb-1">
-                  Fan In
-                </span>
-                <p className="font-mono text-lg font-semibold">
-                  {selectedNode.fan_in || 0}
-                </p>
-              </div>
-              <div className="bg-(--secondary)/30 p-3 rounded-sm border border-(--border)">
-                <span className="text-[10px] uppercase tracking-wider text-(--muted-foreground) block mb-1">
-                  Fan Out
-                </span>
-                <p className="font-mono text-lg font-semibold">
-                  {selectedNode.fan_out || 0}
-                </p>
-              </div>
-            </>
-          )}
-
-          {currentLevel === "symbol" &&
-            typeof selectedNode.complexity !== "undefined" && (
-              <div className="bg-(--secondary)/30 p-3 rounded-sm border border-(--border) col-span-1">
-                <span className="text-[10px] uppercase tracking-wider text-(--muted-foreground) block mb-1">
-                  Cyclomatic Complexity
-                </span>
-                <p className="font-mono text-lg font-semibold">
-                  {selectedNode.complexity}
-                </p>
-              </div>
-            )}
+        <div className="rounded-sm border border-white/8 p-2.5">
+          <span className="block font-pixel text-2xl">{imports.length}</span>
+          <span className="font-pixel text-[10px] tracking-[0.1em] text-(--subtle-foreground) uppercase">
+            {isFile ? "Imports" : "Uses"}
+          </span>
         </div>
-
-        {annotation && currentLevel == "file" && (
-          <div className="mt-4 pt-4 border-t border-(--border)">
-            <p className="text-sm text-(--muted-foreground)">
-              Note: {annotation}
-            </p>
-          </div>
-        )}
-
-        <a
-          className="bg-white hover:bg-white/80 transition-colors text-black flex items-center gap-2 p-2 justify-center rounded-sm font-semibold uppercase"
-          href={`${github_url}/blob/${githubRef}/${selectedNode.path}`}
-          target="_blank"
-        >
-          <GithubLogoIcon weight="bold" />
-          Github
-        </a>
       </div>
-    </section>
+
+      {annotation && (
+        <p className="m-0 border-l-2 border-(--accent) bg-(--accent)/5 px-3 py-2.5 text-[13px] leading-relaxed text-zinc-300">
+          {tourPosition !== null && (
+            <span className="font-pixel text-(--accent)">
+              {String(tourPosition).padStart(2, "0")}{" "}
+            </span>
+          )}
+          {annotation}
+        </p>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        <span className={labelClass}>{isFile ? "Imported by" : "Used by"}</span>
+        {importers.length === 0 ? (
+          <span className="px-2 font-pixel text-[11px] text-(--faint-foreground) uppercase">
+            Nothing depends on this {noun}
+          </span>
+        ) : (
+          <ul className="m-0 flex list-none flex-col p-0">
+            {visibleImporters.map(({ id, text }) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectNode(id)}
+                  title={text}
+                  className={rowClass}
+                >
+                  ← {text}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {hiddenImporters > 0 && (
+          <button
+            type="button"
+            aria-expanded={showAllImporters}
+            onClick={() => setShowAllImporters((v) => !v)}
+            className="flex items-center gap-2 rounded-sm px-2 py-1 text-left font-pixel text-[11px] tracking-[0.08em] text-(--subtle-foreground) uppercase hover:cursor-pointer hover:bg-(--secondary) hover:text-(--foreground)"
+          >
+            <span aria-hidden="true" className="text-[10px]">
+              {showAllImporters ? "▴" : "▾"}
+            </span>
+            {showAllImporters ? "Show fewer" : `Show ${hiddenImporters} more`}
+          </button>
+        )}
+
+        <span className={`${labelClass} mt-1.5`}>
+          {isFile ? "Imports" : "Uses"}
+        </span>
+        {imports.length === 0 ? (
+          <span className="px-2 font-pixel text-[11px] text-(--faint-foreground) uppercase">
+            No internal dependencies
+          </span>
+        ) : (
+          <ul className="m-0 flex list-none flex-col p-0">
+            {visibleImports.map(({ id, text }) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectNode(id)}
+                  title={text}
+                  className={rowClass}
+                >
+                  → {text}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {imports.length > IMPORTS_LIMIT && (
+          <span className="px-2 font-pixel text-[11px] text-(--faint-foreground) uppercase">
+            + {imports.length - IMPORTS_LIMIT} more
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Link
+          href={chatHref}
+          className="cta rounded-sm bg-(--primary) px-3.5 py-2.5 text-center font-pixel text-[13px] tracking-[0.04em] text-(--primary-foreground)"
+        >
+          Ask about this {noun} →
+        </Link>
+        <div className="flex gap-2">
+          <Link
+            href={explorerHref}
+            className="ghost flex-1 rounded-sm border border-(--input) p-2.5 text-center font-pixel text-xs text-zinc-300 uppercase"
+          >
+            Explorer
+          </Link>
+          <a
+            href={`${github_url}/blob/${githubRef}/${selectedNode.path}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ghost flex-1 rounded-sm border border-(--input) p-2.5 text-center font-pixel text-xs text-zinc-300 uppercase"
+          >
+            GitHub ↗
+          </a>
+        </div>
+      </div>
+    </aside>
   );
 }

@@ -192,7 +192,7 @@ describe("the interval selector", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: /Every 6 hours/i }),
+      screen.queryByRole("radio", { name: /Every 6 hours/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -207,8 +207,11 @@ describe("the interval selector", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: /Every 3 hours/i }),
-    ).toBeInTheDocument();
+      screen.getByRole("radio", { name: /Every 3 hours/i }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(
+      screen.getByRole("radio", { name: /Every 6 hours/i }),
+    ).toHaveAttribute("aria-checked", "false");
   });
 
   it("calls the action with the chosen interval_hours", async () => {
@@ -222,8 +225,7 @@ describe("the interval selector", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: /Every 6 hours/i }));
-    await user.click(screen.getByRole("button", { name: /Every hour/i }));
+    await user.click(screen.getByRole("radio", { name: /^Every hour$/i }));
 
     await waitFor(() => expect(updateAutoUpdateMock).toHaveBeenCalledTimes(1));
     expect(updateAutoUpdateMock).toHaveBeenCalledWith({
@@ -243,15 +245,7 @@ describe("the interval selector", () => {
       />,
     );
 
-    // The trigger opens the menu; the menu re-renders an item with the
-    // same label. Click the trigger to open, then the menu item to "select".
-    await user.click(screen.getByRole("button", { name: /Every 6 hours/i }));
-    const matches = screen.getAllByRole("button", {
-      name: /Every 6 hours/i,
-    });
-    // The first match is the now-hidden trigger (the menu is open and
-    // overlays the page); the second is the menu item.
-    await user.click(matches[matches.length - 1]);
+    await user.click(screen.getByRole("radio", { name: /Every 6 hours/i }));
 
     expect(updateAutoUpdateMock).not.toHaveBeenCalled();
   });
@@ -262,7 +256,7 @@ describe("sync now", () => {
     const user = userEvent.setup();
     render(<AutoUpdateSection repo={makeRepo()} />);
 
-    await user.click(screen.getByRole("button", { name: /Sync now/i }));
+    await user.click(screen.getByRole("button", { name: /Check now/i }));
 
     await waitFor(() => expect(triggerSyncMock).toHaveBeenCalledTimes(1));
     expect(triggerSyncMock).toHaveBeenCalledWith(REPO_ID);
@@ -272,7 +266,7 @@ describe("sync now", () => {
     const user = userEvent.setup();
     render(<AutoUpdateSection repo={makeRepo()} />);
 
-    await user.click(screen.getByRole("button", { name: /Sync now/i }));
+    await user.click(screen.getByRole("button", { name: /Check now/i }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
   });
@@ -280,7 +274,7 @@ describe("sync now", () => {
   it("is disabled while sync_status is active", () => {
     render(<AutoUpdateSection repo={makeRepo({ sync_status: "updating" })} />);
 
-    expect(screen.getByRole("button", { name: /Sync now/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Check now/i })).toBeDisabled();
   });
 
   it("surfaces the backend's reason when the sync is refused", async () => {
@@ -294,7 +288,7 @@ describe("sync now", () => {
     const user = userEvent.setup();
     render(<AutoUpdateSection repo={makeRepo()} />);
 
-    await user.click(screen.getByRole("button", { name: /Sync now/i }));
+    await user.click(screen.getByRole("button", { name: /Check now/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/already in flight/)).toBeInTheDocument(),
@@ -306,7 +300,7 @@ describe("sync now", () => {
     const user = userEvent.setup();
     render(<AutoUpdateSection repo={makeRepo()} />);
 
-    await user.click(screen.getByRole("button", { name: /Sync now/i }));
+    await user.click(screen.getByRole("button", { name: /Check now/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/Network unreachable/)).toBeInTheDocument(),
@@ -321,7 +315,7 @@ describe("sync now", () => {
     const user = userEvent.setup();
     render(<AutoUpdateSection repo={makeRepo()} />);
 
-    await user.click(screen.getByRole("button", { name: /Sync now/i }));
+    await user.click(screen.getByRole("button", { name: /Check now/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/no recorded baseline/)).toBeInTheDocument(),
@@ -344,7 +338,7 @@ describe("the sync_available gate", () => {
   it("disables the sync-now button when sync_available is false", () => {
     render(<AutoUpdateSection repo={makeRepo({ sync_available: false })} />);
 
-    expect(screen.getByRole("button", { name: /Sync now/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Check now/i })).toBeDisabled();
   });
 
   it("disables the interval picker when sync_available is false", async () => {
@@ -359,13 +353,11 @@ describe("the sync_available gate", () => {
       />,
     );
 
-    // The interval picker exists only when auto_update_enabled is true. Open it
-    // and try to pick a different value -- `OptionMenu` items carry their own
-    // `disabled` flag forwarded from `isSubmitting`, but here the gate is on
-    // the parent -- so the action must not fire when sync_available is false.
-    await user.click(screen.getByRole("button", { name: /Every 6 hours/i }));
-    const items = screen.getAllByRole("button", { name: /Every hour/i });
-    await user.click(items[items.length - 1]);
+    // The interval picker exists only when auto_update_enabled is true; with
+    // sync unavailable every choice is disabled, so the action must not fire.
+    const hourly = screen.getByRole("radio", { name: /^Every hour$/i });
+    expect(hourly).toBeDisabled();
+    await user.click(hourly);
 
     expect(updateAutoUpdateMock).not.toHaveBeenCalled();
   });
@@ -416,7 +408,7 @@ describe("the status line", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders 'Syncing…' while sync_status is active", () => {
+  it("reports Updating while sync_status is active", () => {
     render(
       <AutoUpdateSection
         repo={makeRepo({
@@ -426,7 +418,7 @@ describe("the status line", () => {
       />,
     );
 
-    expect(screen.getByText(/Syncing/)).toBeInTheDocument();
+    expect(screen.getByText("Updating")).toBeInTheDocument();
   });
 
   it("renders 'Paused after N failures' once auto-paused", () => {
@@ -463,8 +455,8 @@ describe("the status line", () => {
       />,
     );
 
-    expect(screen.getByText(/Updated .* ago/i)).toBeInTheDocument();
-    expect(screen.getByText(/4 files changed/i)).toBeInTheDocument();
+    expect(screen.getByText(/ago$/i)).toBeInTheDocument();
+    expect(screen.getByText(/changed 4 files/i)).toBeInTheDocument();
   });
 
   it("does not show the changed-file suffix when files_changed is zero", () => {
@@ -503,7 +495,7 @@ describe("the missing-baseline gate", () => {
       <AutoUpdateSection repo={makeRepo({ ingested_commit_sha: null })} />,
     );
 
-    expect(screen.getByRole("button", { name: /Sync now/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Check now/i })).toBeDisabled();
   });
 
   it("explains that a re-ingest is what unblocks it", () => {

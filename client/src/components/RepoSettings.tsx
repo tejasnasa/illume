@@ -1,63 +1,32 @@
 /**
- * Repository management panel with export and danger-zone actions.
+ * Repository settings: auto-update, the analysed version, export and
+ * rebuild, and deletion.
  * @module RepoSettings
  */
+"use client";
+
 import deleteRepoAction from "@/actions/deleteRepo";
 import regenerateRepoAction from "@/actions/regenerateRepo";
 import AutoUpdateSection from "@/components/AutoUpdateSection";
 import Repository from "@/types/repository";
-import {
-  GearFineIcon,
-  GitBranchIcon,
-  RepeatIcon,
-  TrashIcon,
-} from "@phosphor-icons/react/dist/ssr";
-import { useRouter, unstable_rethrow } from "next/navigation";
+import { splitRepoName } from "@/utils/repoName";
+import { runRedirectingAction } from "@/utils/redirectingAction";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import ExportIllumeButton from "./ExportIllumeButton";
 import GitGraph from "./GitGraph";
 import Button from "./ui/Button";
 import Input from "./ui/Input";
+import ConfirmBody from "./ui/ConfirmBody";
 import Modal from "./ui/Modal";
+import SettingsSection, { SettingsRow } from "./ui/SettingsSection";
 
 /**
- * Runs a server action that finishes by redirecting to the dashboard.
- *
- * A successful run ends in `redirect()`, which reaches the client as a thrown
- * framework error rather than a result -- `unstable_rethrow` hands it back to
- * the router so it navigates, and this returns `null` either way. Only a
- * genuine failure yields a message, which the caller renders next to the
- * button that triggered it.
- *
- * @param run - The action to invoke.
- * @param fallbackMessage - Shown when the failure carries no usable message,
- *                          which is the norm once React masks server errors in
- *                          production.
- * @returns The failure message, or null when the action redirected.
- */
-async function runRedirectingAction(
-  run: () => Promise<unknown>,
-  fallbackMessage: string,
-): Promise<string | null> {
-  try {
-    await run();
-    return null;
-  } catch (err) {
-    try {
-      unstable_rethrow(err);
-    } catch {
-      return null;
-    }
-    return err instanceof Error ? err.message : fallbackMessage;
-  }
-}
-
-/**
- * Renders export, delete, regenerate, auto-update, and version re-ingest controls.
+ * Renders the settings sections for one repository.
  *
  * @param repo - The repository whose settings are being shown. The auto-update
  *               section reads its full record so it can render status and counts.
- * @returns Settings panel with confirmation modals for destructive actions.
+ * @returns The settings sections, with confirmation dialogs for destructive actions.
  */
 export default function RepoSettings({ repo }: { repo: Repository }) {
   const router = useRouter();
@@ -70,12 +39,10 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
 
-  // Owner/name feed the version graph; empty strings hide that section.
-  const match = repo.github_url.match(
-    /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/?$/,
-  );
-  const owner = match ? match[1] : "";
-  const repoName = match ? match[2].replace(/\.git$/, "") : "";
+  // Owner/name feed the version graph; an unparseable URL hides that section.
+  const parsed = splitRepoName(repo.github_url, "");
+  const owner = parsed.owner;
+  const repoName = parsed.name;
 
   /**
    * Re-ingests the repo at the chosen branch/commit, then returns to dashboard.
@@ -101,8 +68,8 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
       );
 
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to trigger re-ingestion");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.detail || "Failed to trigger re-ingestion");
       }
 
       router.push("/dashboard");
@@ -150,196 +117,166 @@ export default function RepoSettings({ repo }: { repo: Repository }) {
     }
   };
 
+  const shortSha = repo.ingested_commit_sha?.slice(0, 7);
+
   return (
-    <div className="p-4 max-h-[90vh] overflow-y-auto custom-scrollbar w-2xl">
-      <div className="flex items-center gap-3 mb-6 text-(--primary)">
-        <GearFineIcon size={28} weight="duotone" />
-        <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
-          Settings
-        </h1>
-      </div>
+    <div className="flex flex-col">
+      <SettingsSection
+        id="settings-auto"
+        title="Auto-update"
+        description="Keep this repository in step with its branch. Only changed files are re-read, and the app stays usable while it updates."
+      >
+        <AutoUpdateSection repo={repo} />
+      </SettingsSection>
 
-      <AutoUpdateSection repo={repo} />
-
-      <div className="mt-8 rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10">
-        <div className="px-5 py-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-(--primary)">
-            Export Repository
-          </p>
-        </div>
-
-        <div className="flex items-center justify-between px-5 py-4">
-          <div>
-            <p className="text-sm font-medium text-(--foreground)">
-              Download .illume file
-            </p>
-            <p className="text-xs text-(--muted-foreground) mt-0.5 max-w-[280px]">
-              Get a compressed codebase context file optimized for AI models to
-              read instantly.
-            </p>
-          </div>
-          <ExportIllumeButton repo_id={repo.id} />
-        </div>
-      </div>
-
-      <div className="mt-8 rounded-sm border border-red-500/20 divide-y divide-red-500/10">
-        <div className="px-5 py-3">
-          <p className="text-xs font-semibold uppercase tracking-widest text-red-400">
-            Danger Zone
-          </p>
-        </div>
-
-        <div className="flex items-center justify-between px-5 py-4">
-          <div>
-            <p className="text-sm font-medium text-(--foreground)">
-              Regenerate Repository
-            </p>
-            <p className="text-xs text-(--muted-foreground) mt-0.5">
-              Re-analyze and rebuild all repository insights.
-            </p>
-          </div>
-          <Modal
-            className="p-4 w-120"
-            trigger={
-              <Button size="sm" className="gap-1.5 shrink-0">
-                <RepeatIcon weight="duotone" size={15} />
-                Regenerate
-              </Button>
-            }
-          >
-            <div className="flex items-center gap-3 mb-1 text-(--primary) text-2xl">
-              <RepeatIcon weight="duotone" />
-              <h1 className="font-bold text-(--foreground) tracking-tight">
-                Regenerate Repository
-              </h1>
-            </div>
-            <p className="text-(--muted-foreground) mb-12 text-sm">
-              Are you sure you want to regenerate this repository?
-            </p>
-            <Button
-              onClick={handleRegenerate}
-              loading={isRegenerating}
-              size="sm"
-              className="font-semibold absolute bottom-4 right-4"
-            >
-              REGENERATE
-            </Button>
-            {regenerateError && (
-              <p className="absolute bottom-4 left-4 text-xs text-red-400 max-w-[45%]">
-                {regenerateError}
-              </p>
+      {owner && repoName && (
+        <SettingsSection
+          id="settings-version"
+          title="Version"
+          description={
+            <>
+              Currently analysing{" "}
+              <span className="font-pixel text-(--foreground)">
+                {repo.ingested_branch ?? "a detached commit"}
+              </span>
+              {shortSha && (
+                <>
+                  {" "}
+                  at <span className="font-pixel text-(--accent)">{shortSha}</span>
+                </>
+              )}
+              . Pick another branch or commit to re-ingest. Re-ingesting
+              rebuilds everything for that version and clears this
+              repository&apos;s chats.
+            </>
+          }
+        >
+          <div className="flex flex-col gap-2 rounded-md border border-(--border) bg-(--card) pt-5">
+            {error && (
+              <div
+                role="alert"
+                className="mx-5 rounded-sm border border-red-500/25 bg-red-500/5 p-3 text-xs text-red-300"
+              >
+                {error}
+              </div>
             )}
-          </Modal>
-        </div>
+            <GitGraph
+              owner={owner}
+              repo={repoName}
+              onSelect={handleReingest}
+              isSubmitting={isSubmitting}
+              note="Rebuilds everything for that version"
+            />
+          </div>
+        </SettingsSection>
+      )}
 
-        {owner && repoName && (
-          <div className="flex items-center justify-between px-5 py-4">
-            <div>
-              <p className="text-sm font-medium text-(--foreground)">
-                Ingest Different Version
-              </p>
-              <p className="text-xs text-(--muted-foreground) mt-0.5">
-                Re-ingest the repository from a specific branch or commit.
-              </p>
-            </div>
+      <SettingsSection
+        id="settings-export"
+        title="Export and rebuild"
+        description="Take the analysis with you, or regenerate it from the current snapshot."
+      >
+        <SettingsRow
+          title="Export for AI agents"
+          description="A compressed .illume context file with the brief, reading order, glossary and hotspots, ready for an agent to read."
+          action={<ExportIllumeButton repo_id={repo.id} />}
+        />
+        <SettingsRow
+          title="Regenerate analysis"
+          description="Re-analyses the repository and rebuilds every insight from scratch."
+          action={
             <Modal
-              className="w-full min-w-2xl p-6"
+              className="w-[min(30rem,calc(100vw-2rem))]"
+              dialogLabel="Regenerate analysis"
               trigger={
-                <Button size="sm" className="gap-1.5 shrink-0">
-                  <GitBranchIcon weight="duotone" size={15} />
-                  Change Version
+                <Button size="sm" variant="ghost" className="shrink-0">
+                  <span aria-hidden="true">↻</span> Regenerate
                 </Button>
               }
             >
-              <div className="flex flex-col gap-4 max-w-2xl">
-                <div>
-                  <h1 className="text-2xl font-bold text-(--foreground) tracking-tight flex items-center gap-2">
-                    <GitBranchIcon className="text-(--primary)" />
-                    Re-ingest Specific Version
-                  </h1>
-                  <p className="text-xs text-(--muted-foreground) mt-1">
-                    Select a branch or commit from the repository history to
-                    re-analyze.
-                  </p>
-                </div>
-
-                {error && (
-                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
-                    {error}
-                  </div>
-                )}
-
-                <GitGraph
-                  owner={owner}
-                  repo={repoName}
-                  onSelect={handleReingest}
-                  isSubmitting={isSubmitting}
-                />
-              </div>
-            </Modal>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between px-5 py-4">
-          <div>
-            <p className="text-sm font-medium text-(--foreground)">
-              Delete Repository
-            </p>
-            <p className="text-xs text-(--muted-foreground) mt-0.5">
-              Permanently remove this repository and all its data.
-            </p>
-          </div>
-          <Modal
-            className="p-4 w-120"
-            trigger={
-              <Button
-                size="sm"
-                className="border-red-500 bg-white text-red-500 hover:border-red-700 border-2 gap-1.5 shrink-0"
+              <ConfirmBody
+                title="Regenerate analysis?"
+                footer={
+                  <>
+                    <span role="alert" className="max-w-[60%] text-xs text-red-300">
+                      {regenerateError}
+                    </span>
+                    <Button onClick={handleRegenerate} loading={isRegenerating} size="sm">
+                      Regenerate
+                    </Button>
+                  </>
+                }
               >
-                <TrashIcon weight="duotone" size={15} />
-                Delete
-              </Button>
-            }
-          >
-            <div className="flex items-center gap-3 mb-1 text-red-400 text-2xl">
-              <TrashIcon weight="duotone" />
-              <h1 className="font-bold text-(--foreground) tracking-tight">
-                Delete Repository
-              </h1>
-            </div>
-            <p className="text-(--muted-foreground) mb-3 text-sm">
-              This permanently deletes the repository and all of its analysis,
-              chat history and settings. Type{" "}
-              <span className="font-mono font-semibold text-(--foreground)">
-                {repo.name}
-              </span>{" "}
-              to confirm.
-            </p>
-            <Input
-              value={deleteConfirmation}
-              onChange={(e) => setDeleteConfirmation(e.target.value)}
-              aria-label="Repository name to confirm deletion"
-              placeholder={repo.name}
-              autoComplete="off"
-              className="w-full mb-14"
-            />
-            <Button
-              onClick={handleDelete}
-              loading={isDeleting}
-              disabled={deleteConfirmation !== repo.name}
-              size="sm"
-              className="font-semibold absolute bottom-4 right-4 bg-red-500 hover:bg-red-600 disabled:bg-red-500/40 text-white border-none"
+                <p className="m-0">
+                  The repository is rebuilt under the same address. It is
+                  unavailable while the new analysis runs, and you are taken
+                  back to the dashboard.
+                </p>
+              </ConfirmBody>
+            </Modal>
+          }
+        />
+      </SettingsSection>
+
+      <SettingsSection
+        id="settings-danger"
+        title="Danger zone"
+        tone="danger"
+        description="This cannot be undone."
+      >
+        <SettingsRow
+          tone="danger"
+          title="Delete this repository"
+          description="Removes the graph, guide, glossary, chats and search index. Your GitHub repository is not touched."
+          action={
+            <Modal
+              className="w-[min(30rem,calc(100vw-2rem))]"
+              dialogLabel="Delete repository"
+              trigger={
+                <Button size="sm" variant="danger" className="shrink-0">
+                  Delete repository
+                </Button>
+              }
             >
-              DELETE
-            </Button>
-            {deleteError && (
-              <p className="absolute bottom-4 left-4 text-xs text-red-400 max-w-[45%]">
-                {deleteError}
-              </p>
-            )}
-          </Modal>
-        </div>
-      </div>
+              <ConfirmBody
+                title="Delete repository"
+                danger
+                footer={
+                  <>
+                    <span role="alert" className="max-w-[60%] text-xs text-red-300">
+                      {deleteError}
+                    </span>
+                    <Button
+                      onClick={handleDelete}
+                      loading={isDeleting}
+                      disabled={deleteConfirmation !== repo.name}
+                      size="sm"
+                      className="border-none bg-red-500 text-white hover:bg-red-600 disabled:bg-red-500/40"
+                    >
+                      Delete
+                    </Button>
+                  </>
+                }
+              >
+                <p className="m-0">
+                  This permanently deletes the repository and all of its
+                  analysis, chat history and settings. Type{" "}
+                  <span className="font-pixel text-(--foreground)">{repo.name}</span> to
+                  confirm.
+                </p>
+                <Input
+                  value={deleteConfirmation}
+                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                  aria-label="Repository name to confirm deletion"
+                  placeholder={repo.name}
+                  autoComplete="off"
+                  className="w-full"
+                />
+              </ConfirmBody>
+            </Modal>
+          }
+        />
+      </SettingsSection>
     </div>
   );
 }

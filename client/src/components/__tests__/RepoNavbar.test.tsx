@@ -25,36 +25,65 @@ function repo(overrides: Partial<Repository> = {}): Repository {
   } as Repository;
 }
 
+const SECTIONS = ["Overview", "Chat", "Graph", "Explorer", "Glossary"];
+
 describe("RepoNavbar", () => {
   beforeEach(() => {
     pathname.value = "/repo/7";
   });
 
-  it("links to the chat page between Home and Glossary", () => {
-    render(<RepoNavbar repo={repo()} />);
-    const names = screen
+  /** Section links in the desktop row; the mobile row repeats them. */
+  const sectionLinks = () =>
+    screen
       .getAllByRole("link")
-      .map((link) => link.textContent)
-      .filter((text) => ["Home", "Chat", "Glossary", "Explorer", "Graph"].includes(text ?? ""));
-    expect(names).toEqual(["Home", "Chat", "Glossary", "Explorer", "Graph"]);
-    expect(screen.getByRole("link", { name: "Chat" })).toHaveAttribute("href", "/repo/7/chat");
+      .filter((link) => SECTIONS.includes(link.textContent ?? ""))
+      .slice(0, SECTIONS.length);
+
+  it("links every section in order, Chat right after the overview", () => {
+    render(<RepoNavbar repo={repo()} />);
+
+    expect(sectionLinks().map((link) => link.textContent)).toEqual(SECTIONS);
+    for (const chat of screen.getAllByRole("link", { name: "Chat" })) {
+      expect(chat).toHaveAttribute("href", "/repo/7/chat");
+    }
   });
 
   it("marks Chat as the current page on the chat route", () => {
     pathname.value = "/repo/7/chat";
     render(<RepoNavbar repo={repo()} />);
-    expect(screen.getByRole("link", { name: "Chat" }).className).toContain("font-semibold");
-    expect(screen.getByRole("link", { name: "Home" }).className).not.toContain("font-semibold");
+
+    expect(screen.getAllByRole("link", { name: "Chat" })[0]).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(
+      screen.getAllByRole("link", { name: "Overview" })[0],
+    ).not.toHaveAttribute("aria-current");
   });
 
   it("does not mark Chat on other pages", () => {
     render(<RepoNavbar repo={repo()} />);
-    expect(screen.getByRole("link", { name: "Chat" }).className).not.toContain("font-semibold");
+
+    expect(
+      screen.getAllByRole("link", { name: "Chat" })[0],
+    ).not.toHaveAttribute("aria-current");
+    expect(screen.getAllByRole("link", { name: "Overview" })[0]).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("links to the repository settings", () => {
+    render(<RepoNavbar repo={repo()} />);
+
+    expect(
+      screen.getByRole("link", { name: "Repository settings" }),
+    ).toHaveAttribute("href", "/repo/7/settings");
   });
 
   it("shows a placeholder, not a link, while the repository is indexing", () => {
     render(<RepoNavbar repo={repo({ status: "parsing" })} />);
     expect(screen.queryByRole("link", { name: "Chat" })).not.toBeInTheDocument();
-    expect(screen.getByText("Chat")).toBeInTheDocument();
+    expect(screen.getByText("Chat")).toHaveAttribute("aria-disabled", "true");
   });
 });

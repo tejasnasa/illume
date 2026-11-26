@@ -6,20 +6,10 @@
 
 import triggerSyncAction from "@/actions/triggerSync";
 import updateAutoUpdateAction from "@/actions/updateAutoUpdate";
-import {
-  ArrowsClockwiseIcon,
-  CheckCircleIcon,
-  CircleDashedIcon,
-  ClockIcon,
-  KeyIcon,
-  WarningIcon,
-} from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Repository from "@/types/repository";
-import Button from "./ui/Button";
-import OptionMenu from "./ui/OptionsMenu";
 import Switch from "./ui/Switch";
 import { timeAgo } from "@/utils/timeAgo";
 
@@ -66,8 +56,7 @@ type Props = {
  * Renders the auto-update switch, interval selector, sync-now action, and a
  * status line summarising the last sync.
  *
- * The whole panel mirrors the shape of the export/danger-zone sections in
- * `RepoSettings`. State changes PATCH the backend; the action throws on
+ * State changes PATCH the backend; the action throws on
  * failure, and the catch surfaces the backend's `detail` message inline. The
  * caller relies on `router.refresh()` (not `revalidatePath`) to repaint, which
  * is the codebase-wide convention.
@@ -92,7 +81,7 @@ export default function AutoUpdateSection({ repo }: Props) {
   const needsReingest = !repo.ingested_commit_sha;
   /**
    * The keyless free tier cannot pay for a sync -- the toggle / interval
-   * picker / "Sync now" button are all gated on `repo.sync_available`, which
+   * picker / "Check now" button are all gated on `repo.sync_available`, which
    * is the backend's derived user-level signal rather than a derived value
    * computed here. Locking all three controls off a single flag is what keeps
    * the gate honest; otherwise one of them would slip through silently and
@@ -176,118 +165,133 @@ export default function AutoUpdateSection({ repo }: Props) {
     }
   };
 
+  const status = statusTile(repo, summary);
+
   return (
-    <div className="mt-8 rounded-sm border border-(--primary)/20 divide-y divide-(--primary)/10">
-      <div className="px-5 py-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-(--primary)">
-          Auto-Update
-        </p>
+    <div className="flex flex-col gap-5 rounded-md border border-(--border) bg-(--card) p-5.5">
+      <div className="flex items-center justify-between gap-4">
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-[15px]">
+            Follow {repo.ingested_branch ?? "the branch"}
+          </span>
+          <span className="font-pixel text-[11px] tracking-[0.06em] text-(--subtle-foreground) uppercase">
+            {repo.auto_update_enabled
+              ? `On · checks ${formatInterval(repo.auto_update_interval_hours).toLowerCase()}`
+              : "Off · updates only when you re-ingest"}
+          </span>
+        </span>
+        <Switch
+          checked={repo.auto_update_enabled}
+          disabled={disabled}
+          onChange={(e) => handleToggle(e.target.checked)}
+          aria-label="Enable auto-update"
+        />
       </div>
 
-      <div className="px-5 py-4 space-y-3">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-(--foreground)">
-              Keep analysis current
-            </p>
-            <p className="text-xs text-(--muted-foreground) mt-0.5 max-w-[320px]">
-              Periodically check the repository for new commits and update the
-              graph, glossary, and embeddings in the background.
-            </p>
-          </div>
-          <Switch
-            checked={repo.auto_update_enabled}
-            disabled={disabled}
-            onChange={(e) => handleToggle(e.target.checked)}
-            aria-label="Enable auto-update"
-          />
-        </div>
-
-        {repo.auto_update_enabled && (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-(--muted-foreground)">Interval</span>
-            <OptionMenu
-              size="sm"
-              direction="left"
-              trigger={
-                <span
-                  aria-disabled={locked}
-                  className={`inline-flex items-center gap-1.5 text-xs text-(--foreground) bg-(--muted)/40 border border-(--border) rounded-sm px-3 py-1.5 transition-colors ${
-                    locked
-                      ? "opacity-50 cursor-not-allowed"
-                      : "hover:bg-(--muted)/60"
+      {repo.auto_update_enabled && (
+        <div className="rise flex flex-wrap items-center justify-between gap-3">
+          <span
+            id={`interval-${repo.id}`}
+            className="font-pixel text-xs tracking-[0.1em] text-(--muted-foreground) uppercase"
+          >
+            Check every
+          </span>
+          <div
+            role="radiogroup"
+            aria-labelledby={`interval-${repo.id}`}
+            className="flex divide-x divide-(--border) overflow-hidden rounded-sm border border-(--border)"
+          >
+            {INTERVAL_OPTIONS.map((opt) => {
+              const on = opt.hours === repo.auto_update_interval_hours;
+              return (
+                <button
+                  key={opt.hours}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  aria-label={opt.label}
+                  disabled={isSubmitting || locked}
+                  onClick={() => handleIntervalChange(opt.hours)}
+                  className={`px-3.5 py-2.25 font-pixel text-[13px] hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                    on
+                      ? "bg-(--accent)/15 text-(--foreground)"
+                      : "text-(--muted-foreground) hover:text-(--foreground)"
                   }`}
                 >
-                  <ClockIcon size={12} />
-                  {formatInterval(repo.auto_update_interval_hours)}
-                  <span className="text-(--muted-foreground)">▾</span>
-                </span>
-              }
-              items={INTERVAL_OPTIONS.map((opt) => ({
-                label: opt.label,
-                disabled: isSubmitting || locked,
-                onClick: () => handleIntervalChange(opt.hours),
-              }))}
-            />
+                  {opt.hours}h
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <StatusTile label="Last update" value={repo.last_synced_at ? timeAgo(repo.last_synced_at) : "Never synced"} />
+        <StatusTile
+          label="Next check"
+          value={
+            repo.auto_update_enabled && repo.next_sync_at && !isActive
+              ? timeAgo(repo.next_sync_at)
+              : "—"
+          }
+        />
+        <StatusTile label="Status" value={status.value} color={status.color} live={status.live} />
       </div>
 
-      <div className="flex items-center justify-between px-5 py-4">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-(--foreground)">Sync now</p>
-          <StatusLine repo={repo} summary={summary} />
-        </div>
-        <Button
-          size="sm"
-          onClick={handleSyncNow}
-          loading={isSyncing}
-          disabled={disabled}
-          className="gap-1.5 shrink-0"
-        >
-          <ArrowsClockwiseIcon weight="duotone" size={15} />
-          Sync now
-        </Button>
-      </div>
+      <StatusLine repo={repo} summary={summary} />
+
+      <button
+        type="button"
+        onClick={handleSyncNow}
+        disabled={disabled}
+        className="ghost self-start rounded-sm border border-(--input) px-3.5 py-2.25 font-pixel text-xs tracking-[0.06em] text-zinc-300 uppercase hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isSyncing ? "Queuing…" : "↻ Check now"}
+      </button>
 
       {needsReingest ? (
-        <div className="px-5 py-3 text-xs text-(--muted-foreground) border-t border-(--primary)/10 flex items-start gap-1.5">
-          <WarningIcon size={12} weight="duotone" className="mt-0.5 shrink-0" />
+        <p className="m-0 flex items-start gap-2 border-t border-white/8 pt-4 text-[13px] leading-normal text-(--muted-foreground)">
+          <span aria-hidden="true" className="font-pixel text-(--warning)">
+            !
+          </span>
           <span>
             This repository was ingested before sync tracking existed, so there
             is no baseline commit to update from. Re-ingest it to record one and
             enable auto-update.
           </span>
-        </div>
+        </p>
       ) : (
         !repo.sync_available && (
-          <div className="px-5 py-3 text-xs text-(--muted-foreground) border-t border-(--primary)/10 flex items-start gap-1.5">
-            <KeyIcon size={12} weight="duotone" className="mt-0.5 shrink-0" />
+          <p className="m-0 flex items-start gap-2 border-t border-white/8 pt-4 text-[13px] leading-normal text-(--muted-foreground)">
+            <span aria-hidden="true" className="font-pixel text-(--accent)">
+              ⚿
+            </span>
             <span>
               Syncing runs on your own API key.{" "}
               <Link
                 href="/settings"
-                className="text-(--primary) underline-offset-2 hover:underline"
+                className="text-(--accent) underline-offset-2 hover:underline"
               >
                 Add one in settings
               </Link>
               .
             </span>
-          </div>
+          </p>
         )
       )}
 
       {error && (
-        <div className="px-5 py-3 text-xs text-red-400 border-t border-red-500/10">
+        <p role="alert" className="m-0 text-[13px] text-red-300">
           {error}
-        </div>
+        </p>
       )}
     </div>
   );
 }
 
 /**
- * Picks a human label for the cadence picker.
+ * Picks a human label for an interval.
  */
 function formatInterval(hours: number): string {
   const match = INTERVAL_OPTIONS.find((opt) => opt.hours === hours);
@@ -296,14 +300,77 @@ function formatInterval(hours: number): string {
 }
 
 /**
- * Renders the one-line summary of the last sync's outcome.
+ * The Status tile's value: what the background updater is doing now.
  *
- * Three branches, in priority order:
+ * @param repo The repository.
+ * @param summary The last sync's summary, if any.
+ * @returns The label, its colour, and whether it is live.
+ */
+function statusTile(
+  repo: Repository,
+  summary: SyncSummary | null,
+): { value: string; color: string; live: boolean } {
+  if (ACTIVE_SYNC_STATUSES.has(repo.sync_status)) {
+    return { value: "Updating", color: "#53eafd", live: true };
+  }
+  if (repo.last_sync_error || repo.sync_status === "failed") {
+    return { value: "Failed", color: "#ef4444", live: false };
+  }
+  if (!repo.auto_update_enabled) {
+    return { value: "Off", color: "#71717a", live: false };
+  }
+  const head = summary?.new_commit_sha ?? repo.ingested_commit_sha;
+  return {
+    value: head ? `Up to date · ${head.slice(0, 7)}` : "Up to date",
+    color: "#22c55e",
+    live: false,
+  };
+}
+
+/** One of the three status tiles. */
+function StatusTile({
+  label,
+  value,
+  color,
+  live = false,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+  live?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-sm border border-white/8 p-3">
+      <span className="font-pixel text-[10px] tracking-[0.12em] text-(--subtle-foreground) uppercase">
+        {label}
+      </span>
+      <span
+        className="flex min-w-0 items-center gap-2 font-pixel text-sm"
+        style={color ? { color } : undefined}
+      >
+        {color && (
+          <span
+            aria-hidden="true"
+            className={`h-1.5 w-1.5 shrink-0 ${live ? "blink" : ""}`}
+            style={{ background: color }}
+          />
+        )}
+        <span className="truncate">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Renders the line that explains the last sync when it needs explaining.
+ *
+ * Three cases, in priority order:
  * 1. `last_sync_error` is set -- surface it (the backend writes the error
  *    string after a failed attempt).
- * 2. A sync is currently in flight -- show "Syncing…".
- * 3. Auto-update has been auto-paused after consecutive failures -- say so.
- * 4. Otherwise: relative time of the last sync plus a count of files touched.
+ * 2. Auto-update has been auto-paused after consecutive failures -- say so.
+ * 3. The last sync changed files -- say how many.
+ *
+ * "Never synced" and "Syncing…" are covered by the tiles above.
  */
 function StatusLine({
   repo,
@@ -314,18 +381,11 @@ function StatusLine({
 }) {
   if (repo.last_sync_error) {
     return (
-      <p className="text-xs text-red-400 mt-0.5 flex items-center gap-1.5">
-        <WarningIcon size={12} weight="fill" />
+      <p className="m-0 flex items-center gap-2 text-[13px] text-red-300">
+        <span aria-hidden="true" className="font-pixel text-red-400">
+          !
+        </span>
         <span className="truncate">{repo.last_sync_error}</span>
-      </p>
-    );
-  }
-
-  if (ACTIVE_SYNC_STATUSES.has(repo.sync_status)) {
-    return (
-      <p className="text-xs text-(--muted-foreground) mt-0.5 flex items-center gap-1.5">
-        <CircleDashedIcon size={12} className="animate-spin" />
-        Syncing…
       </p>
     );
   }
@@ -336,28 +396,20 @@ function StatusLine({
     repo.last_synced_at
   ) {
     return (
-      <p className="text-xs text-(--muted-foreground) mt-0.5 flex items-center gap-1.5">
-        <WarningIcon size={12} />
+      <p className="m-0 text-[13px] text-(--muted-foreground)">
         Paused after {repo.consecutive_sync_failures} consecutive failures
       </p>
     );
   }
 
-  if (!repo.last_synced_at) {
+  if (repo.last_synced_at && summary?.files_changed) {
     return (
-      <p className="text-xs text-(--muted-foreground) mt-0.5">Never synced</p>
+      <p className="m-0 font-pixel text-[11px] tracking-[0.06em] text-(--subtle-foreground) uppercase">
+        Last update changed {summary.files_changed}{" "}
+        {summary.files_changed === 1 ? "file" : "files"}
+      </p>
     );
   }
 
-  return (
-    <p className="text-xs text-(--muted-foreground) mt-0.5 flex items-center gap-1.5">
-      <CheckCircleIcon size={12} weight="fill" className="text-green-500" />
-      Updated {timeAgo(repo.last_synced_at)}
-      {summary &&
-      summary.files_changed !== undefined &&
-      summary.files_changed > 0
-        ? ` · ${summary.files_changed} file${summary.files_changed === 1 ? "" : "s"} changed`
-        : ""}
-    </p>
-  );
+  return null;
 }

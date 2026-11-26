@@ -17,6 +17,15 @@ export function isChatPath(path: string | null): boolean {
 }
 
 /**
+ * Matches the routes whose background is blurred almost out of sight: the
+ * graph page, where the real graph sits on top of it, and repository settings,
+ * which is a form rather than a view of the code.
+ */
+export function isVeiledPath(path: string | null): boolean {
+  return Boolean(path && /\/repo\/[^/]+\/(graph|settings)\/?$/.test(path));
+}
+
+/**
  * Provides the graph the layout already fetched.
  *
  * @param graph - File-level graph, or null when the repository is not ready.
@@ -43,7 +52,8 @@ export function useRepoGraph(): Graph | null {
 }
 
 /**
- * The ambient background for repository pages, skipped on the chat page.
+ * The ambient background for repository pages, skipped on the chat page and
+ * blurred on the pages where it would compete with the content.
  *
  * The chat page draws its own full-viewport graph that follows the agent, so
  * rendering this one as well would run two WebGL scenes on top of each other.
@@ -54,5 +64,5 @@ export function AmbientBackground() {
   const graph = useRepoGraph();
   const path = usePathname();
   if (isChatPath(path)) return null;
-  return <BackgroundGraph graph={graph} />;
+  return <BackgroundGraph graph={graph} veiled={isVeiledPath(path)} />;
 }

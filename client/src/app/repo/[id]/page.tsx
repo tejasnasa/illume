@@ -1,48 +1,39 @@
 /**
- * Repository overview: architecture summary, tech stack, where to start
- * reading, and what has changed lately.
+ * Repository overview: the architecture brief, the repository at a glance,
+ * where to start reading, what is risky to change, and who to ask.
  * @module RepositoryPage
  */
 import { GetGuide, GetGuideStats, GetRecentActivity } from "@/api/guide";
 import { GetRepository } from "@/api/repository";
 import IngestFlow from "@/components/IngestFlow";
-import DashboardCard from "@/components/ui/DashboardCard";
-import { resolveGithubRef } from "@/lib/github";
+import { GraphTile, RiskSpread } from "@/components/OverviewGraphTiles";
+import type Guide from "@/types/guide";
 import type { ActivityItem, Stats } from "@/types/guide";
+import { splitRepoName } from "@/utils/repoName";
+import { statusView, syncView } from "@/utils/repoStatus";
 import { stripLeadingTitle } from "@/utils/stripLeadingTitle";
 import { timeAgo } from "@/utils/timeAgo";
-import {
-  ArrowRightIcon,
-  ArrowSquareOutIcon,
-  AtomIcon,
-  BookOpenIcon,
-  ChartBarIcon,
-  CheckCircleIcon,
-  ClockCounterClockwiseIcon,
-  CodeIcon,
-  DatabaseIcon,
-  GitBranchIcon,
-  GitCommitIcon,
-  GithubLogoIcon,
-  GitPullRequestIcon,
-  LinkIcon,
-  TreeStructureIcon,
-  WrenchIcon,
-} from "@phosphor-icons/react/dist/ssr";
 import { cookies } from "next/headers";
 import Link from "next/link";
-import type { ElementType } from "react";
+import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 /**
- * Language colours, assigned in this fixed order by share of lines. Checked
- * for contrast and colour-blind separation against the dark surface; the
+ * Language colours, assigned in this fixed order by share of lines. The
  * legend names every segment, so colour is never the only cue.
  */
-const LANGUAGE_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"];
-const OTHER_COLOR = "#52514e";
-const START_STEPS = 8;
+const LANGUAGE_COLORS = ["#53eafd", "#f6339a", "#facc15", "#a855f7", "#22c55e"];
+const OTHER_COLOR = "#52525b";
+const START_STEPS = 6;
+const RISK_ROWS = 5;
+const PEOPLE_ROWS = 4;
+const PEOPLE_COLORS = ["#a3004c", "#0092b8", "#7e22ce", "#15803d"];
+
+const RISK_COLOR: Record<string, string> = {
+  critical: "#ef4444",
+  caution: "#facc15",
+};
 
 const compact = new Intl.NumberFormat("en", {
   notation: "compact",
@@ -77,6 +68,7 @@ function languageShares(stats: Stats) {
   return top;
 }
 
+/** A share as a whole percentage, with tiny shares shown as "<1%". */
 function percent(share: number): string {
   return share < 0.01 ? "<1%" : `${Math.round(share * 100)}%`;
 }
@@ -86,7 +78,8 @@ function activityHref(githubUrl: string, item: ActivityItem): string | null {
   if (item.kind === "pull_request" && item.number != null) {
     return `${githubUrl}/pull/${item.number}`;
   }
-  if (item.kind === "commit" && item.hash) return `${githubUrl}/commit/${item.hash}`;
+  if (item.kind === "commit" && item.hash)
+    return `${githubUrl}/commit/${item.hash}`;
   return null;
 }
 
@@ -99,63 +92,198 @@ function when(at: string): string {
   }
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/**
+ * Up to two initials for a contributor's tile.
+ *
+ * @param name The contributor's name as git records it.
+ * @returns The initials, upper-cased.
+ */
+function initialsOf(name: string): string {
+  const parts = name
+    .trim()
+    .split(/[\s._-]+/)
+    .filter(Boolean);
+  const letters =
+    parts.length > 1 ? parts[0][0] + parts[1][0] : name.slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/**
+ * One bento card with a pixel title row.
+ *
+ * @param title The card's heading.
+ * @param action Shown at the right end of the title row.
+ * @param className Grid placement.
+ * @param children The card's body.
+ * @returns The card.
+ */
+function Card({
+  title,
+  action,
+  className = "",
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <div title={hint}>
-      <p className="text-xl font-bold tabular-nums text-(--foreground)">{value}</p>
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-(--muted-foreground)">
+    <section className={`panel flex min-w-0 flex-col gap-4 p-5.5 ${className}`}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="m-0 font-pixel text-xs font-normal tracking-[0.12em] text-(--muted-foreground) uppercase">
+          {title}
+        </h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A small pixel link in a card's title row. */
+function CardLink({
+  href,
+  external = false,
+  children,
+}: {
+  href: string;
+  external?: boolean;
+  children: ReactNode;
+}) {
+  const className =
+    "font-pixel text-xs tracking-[0.06em] text-(--muted-foreground) uppercase hover:text-(--accent)";
+  return external ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={className}
+    >
+      {children}
+    </a>
+  ) : (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  );
+}
+
+/** A pixel stat: big number over a small label. */
+function Stat({
+  label,
+  value,
+  hint,
+  color,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  color?: string;
+}) {
+  return (
+    <div title={hint} className="flex flex-col gap-0.5">
+      <span className="font-pixel text-3xl leading-none" style={{ color }}>
+        {value}
+      </span>
+      <span className="font-pixel text-[11px] tracking-[0.1em] text-(--subtle-foreground) uppercase">
         {label}
-      </p>
+      </span>
     </div>
   );
 }
 
-/** One group of detected tools in the tech stack panel. */
-function StackGroup({
-  icon: Icon,
+/** One labelled row of the tech stack card. */
+function StackRow({
   label,
   items,
-  tone = "chart",
+  tone = "neutral",
 }: {
-  icon: ElementType;
   label: string;
   items: string[] | undefined | null;
-  tone?: "chart" | "accent";
+  tone?: "neutral" | "accent" | "cyan";
 }) {
+  if (!items || items.length === 0) return null;
   const chip =
     tone === "accent"
-      ? "bg-(--destructive)/10 text-(--destructive) border-(--destructive)/20"
-      : "bg-(--chart-1)/10 text-(--chart-1) border-(--chart-1)/20";
+      ? "border-(--accent)/40 text-(--accent)"
+      : tone === "cyan"
+        ? "border-(--chart-1)/35 text-(--chart-1)"
+        : "border-(--border) text-zinc-300";
   return (
-    <div>
-      <h3 className="text-[10px] font-bold uppercase tracking-widest text-(--muted-foreground) mb-1.5 flex items-center gap-1.5">
-        <Icon size={12} /> {label}
+    <div className="flex items-start gap-3.5">
+      <h3 className="m-0 w-26 shrink-0 pt-1.25 font-pixel text-[11px] font-normal tracking-[0.1em] text-(--subtle-foreground) uppercase">
+        {label}
       </h3>
-      {items && items.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {items.map((tool, i) => (
-            <span key={i} className={`px-2 py-0.5 border text-[10px] font-mono ${chip}`}>
-              {tool}
-            </span>
-          ))}
-        </div>
-      ) : (
-        <span className="text-xs text-(--muted-foreground)/50 italic">None detected</span>
-      )}
+      <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0">
+        {items.map((tool) => (
+          <li
+            key={tool}
+            className={`rounded-[3px] border px-2.25 py-1.25 font-pixel text-xs ${chip}`}
+          >
+            {tool}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
 /**
- * Server-rendered overview: summary, stack and onboarding panels when ready,
- * live logs while indexing.
+ * The riskiest files, as bars scaled to the busiest one's fan-in.
  *
- * Each onboarding panel is left out when its data is missing, so a repository
- * whose guide or stats failed to load shows what it has rather than empty
- * cards.
+ * @param files The guide's critical files.
+ * @returns The list.
+ */
+function RiskList({ files }: { files: Guide["critical_files"] }) {
+  const max = Math.max(1, ...files.map((f) => f.fan_in));
+  return (
+    <ul className="m-0 flex list-none flex-col gap-3 p-0">
+      {files.map((f) => {
+        const level = (f.criticality ?? "").toLowerCase();
+        const color = RISK_COLOR[level] ?? "#22c55e";
+        return (
+          <li key={f.file_path} className="flex flex-col gap-1.5">
+            <span className="flex justify-between gap-2 font-pixel text-[13px]">
+              <span className="truncate" title={f.file_path}>
+                {f.file_path}
+              </span>
+              <span
+                className="shrink-0 text-[11px] tracking-[0.08em] uppercase"
+                style={{ color }}
+              >
+                {level || "safe"}
+              </span>
+            </span>
+            <span aria-hidden="true" className="block h-1.5 bg-(--secondary)">
+              <span
+                className="bar-fill block h-1.5"
+                style={{
+                  width: `${Math.max(4, (f.fan_in / max) * 100)}%`,
+                  background: color,
+                }}
+              />
+            </span>
+            <span className="font-pixel text-[11px] tracking-[0.06em] text-(--faint-foreground) uppercase">
+              Fan-in {f.fan_in}
+              {f.change_frequency > 0 && ` · ${f.change_frequency} changes`}
+              {!f.has_tests && " · no tests"}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Server-rendered overview when ready; the live ingest view otherwise.
  *
- * @param params - Route params promise resolving to the repository id.
- * @returns Repository overview, or the live logs.
+ * Each panel is left out when its data is missing, so a repository whose
+ * guide or stats failed to load shows what it has rather than empty cards.
+ *
+ * @param params - Route params promise resolving to the repository number.
+ * @returns Repository overview, or the live ingest view.
  */
 export default async function Repository({
   params,
@@ -165,17 +293,11 @@ export default async function Repository({
   const { id } = await params;
   const repo = await GetRepository(Number(id));
 
-  const isReady = repo.status === "ready";
-
-  // Guide is only available after indexing; live logs need the auth token.
-  const guide = isReady ? await GetGuide(repo.id) : null;
-
-  const cookieStore = await cookies();
-  const token = cookieStore.get("access_token")?.value || "";
-
   // While indexing there is nothing to summarise yet, so the whole page
   // becomes the live progress view.
-  if (!isReady) {
+  if (repo.status !== "ready") {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("access_token")?.value || "";
     return (
       <IngestFlow
         repoId={repo.id}
@@ -190,125 +312,158 @@ export default async function Repository({
 
   // The panels are extras: a failed call leaves its panel out rather than
   // failing the page.
-  const [stats, activity] = await Promise.all([
+  const [guide, stats, activity] = await Promise.all([
+    GetGuide(repo.id).catch(() => null),
     GetGuideStats(repo.id).catch(() => null),
     GetRecentActivity(repo.id).catch(() => null),
   ]);
 
-  const ref = resolveGithubRef(repo.ingested_commit_sha, repo.ingested_branch);
-  const fileHref = (path: string) => `${repo.github_url}/blob/${ref}/${path}`;
+  const { owner, name } = splitRepoName(repo.github_url, repo.name);
+  const status = statusView(repo.status);
+  const sync = syncView(repo);
+  const explorerHref = (path: string) =>
+    `/repo/${repo.repo_number}/explorer?file=${encodeURIComponent(path)}`;
   const shares = stats ? languageShares(stats) : [];
   const steps = guide?.reading_order?.slice(0, START_STEPS) ?? [];
+  const risky = guide?.critical_files?.slice(0, RISK_ROWS) ?? [];
+  const people = stats?.top_contributors?.slice(0, PEOPLE_ROWS) ?? [];
   const recent = activity ?? [];
   const stack = repo.detected_stack;
   const external = (guide?.architecture_brief?.external_integrations ?? []).map(
     (tool: string) => tool.charAt(0).toUpperCase() + tool.slice(1),
   );
+  const hasStack = [
+    stack?.languages,
+    stack?.frameworks,
+    stack?.databases,
+    stack?.infrastructure,
+    stack?.ci_cd,
+    external,
+  ].some((g) => g && g.length > 0);
+
+  // Split the name so the last segment can carry the gradient.
+  const cut = Math.max(
+    name.lastIndexOf("-"),
+    name.lastIndexOf("_"),
+    name.lastIndexOf("."),
+  );
+  const head = cut > 0 ? name.slice(0, cut + 1) : "";
+  const tail = cut > 0 ? name.slice(cut + 1) : name;
 
   return (
-    <main className="p-4 flex flex-col gap-4 max-w-7xl mx-auto lg:h-[calc(100vh-64px)] lg:flex-row">
-      <section className="w-full flex flex-col gap-4 lg:h-full lg:w-1/2">
-        <div className="grid grid-cols-1 gap-4 shrink-0 sm:grid-cols-2 sm:h-30">
-          <DashboardCard href={repo.github_url}>
-            <div className="absolute inset-0 bg-linear-to-br from-(--primary)/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="absolute top-4 right-4 text-(--muted-foreground) group-hover:text-(--foreground) transition-colors">
-              <LinkIcon size={20} />
-            </div>
-            <div className="flex flex-col justify-between h-full">
-              <div className="flex justify-between items-start">
-                <span className="text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
-                  Repository
-                </span>
-                {repo.ingested_branch && (
-                  <span className="mr-7 text-[10px] font-mono bg-(--primary)/10 text-(--primary) px-2 py-0.5 rounded border border-(--primary)/20 flex items-center gap-1 shrink-0">
-                    <GitBranchIcon size={12} />
-                    {repo.ingested_branch}
-                    {repo.ingested_commit_sha && (
-                      <span className="opacity-75">
-                        @{repo.ingested_commit_sha.substring(0, 7)}
-                      </span>
-                    )}
-                  </span>
-                )}
-              </div>
-              <h2 className="text-2xl font-bold flex items-center gap-3 text-(--foreground) truncate">
-                <GithubLogoIcon size={28} weight="fill" className="text-(--primary) shrink-0" />
-                <span className="truncate">{repo.github_url.split("github.com/")[1]}</span>
-              </h2>
-            </div>
-          </DashboardCard>
-
-          <DashboardCard className="justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
-              Processing Status
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-7 px-4 pt-11 pb-16 sm:px-6">
+      <header className="flex flex-wrap items-end justify-between gap-6">
+        <div className="flex min-w-0 flex-col gap-3.5">
+          <div className="flex flex-wrap items-center gap-2.5 font-pixel text-xs tracking-[0.08em] uppercase">
+            <span
+              className="flex items-center gap-1.5 border px-2.25 py-1.25"
+              style={{ borderColor: `${status.color}55`, color: status.color }}
+            >
+              <span
+                className="h-1.5 w-1.5"
+                style={{ background: status.color }}
+              />
+              {status.label}
             </span>
-            <div className="flex items-end justify-between">
-              {/* Reaching this card means the repository is indexed, so the
-                  status is always the terminal one here. */}
-              <div className="flex items-center gap-2 font-bold text-xl uppercase text-(--success)">
-                <CheckCircleIcon size={24} weight="fill" />
-                {repo.status}
-              </div>
-              <div className="text-right text-xs text-(--muted-foreground)">
-                <p>Updated: {timeAgo(repo.updated_at)}</p>
-                <p className="opacity-60">Created: {timeAgo(repo.created_at)}</p>
-              </div>
-            </div>
-          </DashboardCard>
+            {(repo.ingested_branch || repo.ingested_commit_sha) && (
+              <span className="border border-(--border) px-2.25 py-1.25 text-(--muted-foreground) normal-case">
+                ⎇ {repo.ingested_branch ?? "detached"}
+                {repo.ingested_commit_sha && (
+                  <>
+                    {" "}
+                    <span className="text-(--faint-foreground)">@</span>{" "}
+                    <span className="text-(--accent)">
+                      {repo.ingested_commit_sha.slice(0, 7)}
+                    </span>
+                  </>
+                )}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 border border-(--border) px-2.25 py-1.25 text-(--muted-foreground)">
+              <span
+                className={`h-1.5 w-1.5 ${sync.live ? "blink" : ""}`}
+                style={{ background: sync.color }}
+              />
+              {sync.label}
+            </span>
+          </div>
+          <h1 className="m-0 font-pixel text-[clamp(2.4rem,5vw,4.2rem)] leading-none font-normal tracking-[-0.02em] break-all">
+            {head}
+            <span className="gradient-text">{tail}</span>
+          </h1>
+          <a
+            href={repo.github_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-pixel text-[13px] text-(--muted-foreground) hover:text-(--accent)"
+          >
+            github.com/{owner ? `${owner}/` : ""}
+            {name} <span aria-hidden="true">↗</span>
+          </a>
         </div>
+        <RiskSpread repoNumber={repo.repo_number} />
+      </header>
 
-        <DashboardCard
-          icon={TreeStructureIcon}
-          title="AI Architecture Overview"
-          className="flex-1 min-h-80 relative overflow-hidden lg:min-h-0"
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <Card
+          title="Architecture brief"
+          action={
+            <CardLink href={`/repo/${repo.repo_number}/glossary`}>
+              Glossary →
+            </CardLink>
+          }
+          className="lg:col-span-8 lg:row-span-2 lg:min-h-112"
         >
           {repo.architecture_summary ? (
-            <div className="overflow-y-auto custom-scrollbar pr-2.5 text-sm text-(--muted-foreground) leading-relaxed text-justify prose prose-sm dark:prose-invert">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {stripLeadingTitle(repo.architecture_summary)}
-              </ReactMarkdown>
+            // On wide screens the brief is taken out of flow and scrolls in its
+            // card, so the rows are as tall as the graph and the glance cards
+            // need and a long brief never stretches them.
+            <div className="lg:relative lg:min-h-0 lg:flex-1">
+              <div
+                role="region"
+                tabIndex={0}
+                aria-label="Architecture brief"
+                className="brief custom-scrollbar lg:absolute lg:inset-0 lg:overflow-y-auto lg:pr-3"
+              >
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {stripLeadingTitle(repo.architecture_summary)}
+                </ReactMarkdown>
+              </div>
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-(--muted-foreground) text-sm italic">
+            <p className="m-0 font-pixel text-xs text-(--faint-foreground) uppercase">
               No architecture summary generated.
-            </div>
+            </p>
           )}
-        </DashboardCard>
+        </Card>
 
-        <DashboardCard icon={AtomIcon} title="Tech Stack Detected" className="shrink-0">
-          <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 grid grid-cols-2 gap-x-6 gap-y-3">
-            <StackGroup icon={CodeIcon} label="Languages" items={stack?.languages} tone="accent" />
-            <StackGroup icon={WrenchIcon} label="Frameworks" items={stack?.frameworks} />
-            <StackGroup icon={DatabaseIcon} label="Databases" items={stack?.databases} />
-            <StackGroup icon={DatabaseIcon} label="Infrastructure" items={stack?.infrastructure} />
-            <StackGroup icon={GitBranchIcon} label="CI/CD And Infra" items={stack?.ci_cd} />
-            <StackGroup icon={DatabaseIcon} label="External" items={external} />
-          </div>
-        </DashboardCard>
-      </section>
+        <GraphTile repoNumber={repo.repo_number} className="lg:col-span-4" />
 
-      <section className="w-full flex flex-col gap-4 lg:h-full lg:w-1/2">
         {stats && (
-          <DashboardCard icon={ChartBarIcon} title="At a Glance" className="shrink-0">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Card title="At a glance" className="lg:col-span-4">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-4">
               <Stat label="Files" value={compact.format(stats.total_files)} />
               <Stat
                 label="Lines"
                 value={compact.format(stats.total_loc)}
                 hint={`${stats.total_loc.toLocaleString()} lines of code`}
               />
-              <Stat label="Contributors" value={compact.format(stats.total_contributors)} />
+              <Stat
+                label="Contributors"
+                value={compact.format(stats.total_contributors)}
+              />
               <Stat
                 label="Silos"
                 value={compact.format(stats.knowledge_silo_count)}
                 hint="Files that only one person has worked on"
+                color={stats.knowledge_silo_count > 0 ? "#facc15" : undefined}
               />
             </div>
 
             {shares.length > 0 && (
-              <div className="mt-4">
+              <div className="flex flex-col gap-2.5">
                 <div
-                  className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full"
+                  className="flex h-2.5 gap-0.5"
                   role="img"
                   aria-label={`Lines by language: ${shares
                     .map((s) => `${s.name} ${percent(s.share)}`)
@@ -317,131 +472,205 @@ export default async function Repository({
                   {shares.map((s) => (
                     <span
                       key={s.name}
-                      className="h-full first:rounded-l-full last:rounded-r-full"
-                      style={{
-                        width: `${Math.max(s.share * 100, 1)}%`,
-                        backgroundColor: s.color,
-                      }}
+                      className="min-w-1"
+                      style={{ flex: `${s.loc} 1 0`, background: s.color }}
                       title={`${s.name}: ${s.loc.toLocaleString()} lines in ${s.files} ${s.files === 1 ? "file" : "files"} (${percent(s.share)})`}
                     />
                   ))}
                 </div>
-                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                <ul className="m-0 flex list-none flex-wrap gap-x-3.5 gap-y-1.5 p-0">
                   {shares.map((s) => (
                     <li
                       key={s.name}
-                      className="flex items-center gap-1.5 text-xs text-(--muted-foreground)"
+                      className="flex items-center gap-1.5 font-pixel text-[11px] text-(--muted-foreground)"
                     >
                       <span
                         aria-hidden="true"
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: s.color }}
+                        className="h-1.5 w-1.5"
+                        style={{ background: s.color }}
                       />
                       <span className="text-(--foreground)">{s.name}</span>
-                      <span className="tabular-nums">{percent(s.share)}</span>
+                      <span>{percent(s.share)}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-          </DashboardCard>
+          </Card>
         )}
 
         {steps.length > 0 && (
-          <DashboardCard
-            icon={BookOpenIcon}
-            title="Start Here"
-            className="flex-[9] min-h-0"
+          <Card
+            title="Start here"
             action={
-              <Link
-                href={`/repo/${repo.repo_number}/graph`}
-                className="flex shrink-0 items-center gap-1 text-xs text-(--muted-foreground) hover:text-(--foreground)"
-              >
-                Full reading tour
-                <ArrowRightIcon size={12} />
-              </Link>
+              <CardLink href={`/repo/${repo.repo_number}/graph`}>
+                Full reading tour →
+              </CardLink>
             }
+            className="lg:col-span-4"
           >
-            <ol className="min-h-0 space-y-3 overflow-y-auto custom-scrollbar pr-2">
+            <ol className="m-0 flex list-none flex-col gap-0.5 p-0">
               {steps.map((step) => (
-                <li key={step.file_path} className="flex gap-3">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-(--primary)/30 bg-(--primary)/10 text-[10px] font-bold text-(--primary)">
-                    {step.position}
-                  </span>
-                  <div className="min-w-0">
-                    <a
-                      href={fileHref(step.file_path)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group flex items-center gap-1 font-mono text-xs text-(--foreground) hover:text-(--primary)"
+                <li key={step.file_path}>
+                  <Link
+                    href={explorerHref(step.file_path)}
+                    className="flex items-start gap-3 rounded-sm px-2 py-2.25 hover:bg-(--secondary)"
+                  >
+                    <span
+                      className={`w-5.5 shrink-0 font-pixel text-[13px] ${step.position === 1 ? "text-(--accent)" : "text-(--faint-foreground)"}`}
                     >
-                      <span className="truncate">{step.file_path}</span>
-                      <ArrowSquareOutIcon
-                        size={11}
-                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                      />
-                    </a>
-                    {step.annotation && (
-                      <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-(--muted-foreground)">
-                        {step.annotation}
-                      </p>
-                    )}
-                  </div>
+                      {String(step.position).padStart(2, "0")}
+                    </span>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate font-pixel text-[13px]">
+                        {step.file_path}
+                      </span>
+                      {step.annotation && (
+                        <span className="line-clamp-2 text-xs text-(--subtle-foreground)">
+                          {step.annotation}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ol>
-          </DashboardCard>
+          </Card>
+        )}
+
+        {risky.length > 0 && (
+          <Card
+            title="Riskiest to change"
+            action={
+              <CardLink href={`/repo/${repo.repo_number}/explorer`}>
+                Explorer →
+              </CardLink>
+            }
+            className="lg:col-span-4"
+          >
+            <RiskList files={risky} />
+          </Card>
         )}
 
         {recent.length > 0 && (
-          <DashboardCard
-            icon={ClockCounterClockwiseIcon}
-            title="Recent Activity"
-            className="flex-[5] min-h-0"
+          <Card
+            title="Recent activity"
+            action={
+              <CardLink href={repo.github_url} external>
+                GitHub ↗
+              </CardLink>
+            }
+            className="lg:col-span-4"
           >
-            <ul className="min-h-0 space-y-2.5 overflow-y-auto custom-scrollbar pr-2">
+            <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
               {recent.map((item) => {
                 const href = activityHref(repo.github_url, item);
-                const Icon = item.kind === "pull_request" ? GitPullRequestIcon : GitCommitIcon;
-                const tag =
-                  item.kind === "pull_request" ? `#${item.number}` : (item.hash ?? "").slice(0, 7);
+                const isPr = item.kind === "pull_request";
+                const tag = isPr
+                  ? `#${item.number}`
+                  : (item.hash ?? "").slice(0, 7);
+                const meta = [item.author, when(item.at)]
+                  .filter(Boolean)
+                  .join(" · ");
+                const body = (
+                  <>
+                    <span
+                      className={`w-14.5 shrink-0 font-pixel text-xs ${isPr ? "text-(--accent)" : "text-(--chart-1)"}`}
+                    >
+                      {tag}
+                    </span>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span
+                        className="truncate text-[13px] leading-snug"
+                        title={item.title}
+                      >
+                        {item.title}
+                      </span>
+                      <span className="font-pixel text-[11px] tracking-[0.04em] text-(--subtle-foreground)">
+                        {meta}
+                      </span>
+                    </span>
+                  </>
+                );
                 return (
-                  <li
-                    key={`${item.kind}-${item.number ?? item.hash}`}
-                    className="flex items-start gap-2.5"
-                  >
-                    <Icon
-                      size={14}
-                      className={`mt-0.5 shrink-0 ${item.kind === "pull_request" ? "text-(--primary)" : "text-(--muted-foreground)"}`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      {href ? (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block truncate text-xs text-(--foreground) hover:text-(--primary)"
-                          title={item.title}
-                        >
-                          {item.title}
-                        </a>
-                      ) : (
-                        <p className="truncate text-xs text-(--foreground)" title={item.title}>
-                          {item.title}
-                        </p>
-                      )}
-                      <p className="mt-0.5 truncate text-[11px] text-(--muted-foreground)">
-                        <span className="font-mono">{tag}</span> · {item.author}
-                        {when(item.at) && ` · ${when(item.at)}`}
-                      </p>
-                    </div>
+                  <li key={`${item.kind}-${item.number ?? item.hash}`}>
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={item.title}
+                        className="flex items-start gap-3 rounded-sm px-2 py-2.25 hover:bg-(--secondary)"
+                      >
+                        {body}
+                      </a>
+                    ) : (
+                      <div className="flex items-start gap-3 px-2 py-2.25">
+                        {body}
+                      </div>
+                    )}
                   </li>
                 );
               })}
             </ul>
-          </DashboardCard>
+          </Card>
         )}
-      </section>
-    </main>
+
+        {hasStack && (
+          <Card title="Tech stack" className="lg:col-span-6">
+            <div className="flex flex-col gap-3.5">
+              <StackRow
+                label="Languages"
+                items={stack?.languages}
+                tone="accent"
+              />
+              <StackRow
+                label="Frameworks"
+                items={stack?.frameworks}
+                tone="cyan"
+              />
+              <StackRow label="Databases" items={stack?.databases} />
+              <StackRow label="Infra" items={stack?.infrastructure} />
+              <StackRow label="CI / CD" items={stack?.ci_cd} />
+              <StackRow label="External" items={external} />
+            </div>
+          </Card>
+        )}
+
+        {people.length > 0 && (
+          <Card
+            title="Who to ask"
+            action={
+              <span className="font-pixel text-xs tracking-[0.06em] text-(--faint-foreground) uppercase">
+                From git history
+              </span>
+            }
+            className="lg:col-span-6"
+          >
+            <ul className="m-0 flex list-none flex-col gap-3 p-0">
+              {people.map((p, i) => (
+                <li key={p.name} className="flex items-center gap-3.5">
+                  <span
+                    aria-hidden="true"
+                    className="flex h-8.5 w-8.5 shrink-0 items-center justify-center font-pixel text-[13px]"
+                    style={{
+                      background: PEOPLE_COLORS[i % PEOPLE_COLORS.length],
+                    }}
+                  >
+                    {initialsOf(p.name)}
+                  </span>
+                  <span className="min-w-0 grow truncate text-sm">
+                    {p.name}
+                  </span>
+                  <span className="shrink-0 font-pixel text-xs text-(--muted-foreground)">
+                    {p.files_owned} files
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
+    </div>
   );
 }
