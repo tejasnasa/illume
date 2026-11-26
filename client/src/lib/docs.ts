@@ -394,3 +394,44 @@ export function resolveDocTarget(
     external: true,
   };
 }
+
+/** Reading speed the estimate assumes, in words per minute. */
+const WORDS_PER_MINUTE = 200;
+
+/**
+ * Estimates how long a doc takes to read, leaving code blocks out of the count.
+ *
+ * @param markdown - The doc's Markdown body.
+ * @returns Whole minutes, at least one.
+ */
+export function readingMinutes(markdown: string): number {
+  const prose = markdown.replace(/^\s{0,3}(```+|~~~+)[\s\S]*?^\s{0,3}\1\s*$/gm, " ");
+  const words = prose.split(/\s+/).filter((word) => /[a-z0-9]/i.test(word)).length;
+  return Math.max(1, Math.round(words / WORDS_PER_MINUTE));
+}
+
+/** Where a doc sits in the reading order the sidebar sets out. */
+export type DocPlace = {
+  /** The sidebar group it belongs to; null for the overview. */
+  section: string | null;
+  prev: Pick<DocMeta, "slug" | "title"> | null;
+  next: Pick<DocMeta, "slug" | "title"> | null;
+};
+
+/**
+ * Places a doc in the sidebar's order, overview first, for its breadcrumb and pager.
+ *
+ * @param slug - The doc's slug.
+ * @param sections - The sidebar, as {@link listDocSections} returns it.
+ * @returns Its group and its neighbours either side.
+ */
+export function placeDoc(slug: string, sections: DocSection[]): DocPlace {
+  const order = [
+    { slug: INDEX_SLUG, title: "Overview", section: null as string | null },
+    ...sections.flatMap((s) => s.docs.map((d) => ({ ...d, section: s.title as string | null }))),
+  ];
+  const at = order.findIndex((d) => d.slug === slug);
+  if (at < 0) return { section: null, prev: null, next: null };
+  const pick = (i: number) => (order[i] ? { slug: order[i].slug, title: order[i].title } : null);
+  return { section: order[at].section, prev: pick(at - 1), next: pick(at + 1) };
+}

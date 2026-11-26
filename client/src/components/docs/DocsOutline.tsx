@@ -68,7 +68,7 @@ export function DocsOutline({ headings }: { headings: readonly DocHeading[] }) {
   }, [headings]);
 
   return (
-    <ul className="flex max-h-[70vh] flex-col gap-0.5 overflow-y-auto border-l border-(--border) text-sm">
+    <ul className="m-0 flex list-none flex-col gap-0.5 border-l border-white/10 p-0 text-[13px]">
       {headings.map((heading) => {
         const active = heading.id === activeId;
         return (
@@ -76,9 +76,9 @@ export function DocsOutline({ headings }: { headings: readonly DocHeading[] }) {
             <a
               href={`#${heading.id}`}
               aria-current={active ? "location" : undefined}
-              className={`-ml-px block border-l-2 py-1 pl-3 transition-colors ${
+              className={`-ml-px block border-l-2 py-1.5 pl-3 transition-colors ${
                 active
-                  ? "border-(--primary) font-semibold text-(--foreground)"
+                  ? "border-(--accent) text-(--foreground)"
                   : "border-transparent text-(--muted-foreground) hover:text-(--foreground)"
               }`}
             >
