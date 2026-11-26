@@ -12,6 +12,9 @@
 #   - anthropic/claude-haiku-5.5:batch: OpenRouter's model listing, read on 2026-11-26. The same
 #     model through OpenRouter's batch API, at half the input and output rates. OpenRouter does
 #     not list a batch cache-hit rate, so the hit rate is the full one, which can only overstate.
+#   - openai/gpt-6.1-terra:batch: OpenRouter's model listing, read on 2026-11-26. A second judge,
+#     from another model family, grading the labelling sample. The cache-hit rate is the listed
+#     batch one.
 #   - text-embedding-3-small: OpenAI's model page.
 #
 # Rates are US dollars per 1M tokens: input cache miss, input cache hit and output. DeepSeek is
@@ -21,7 +24,7 @@
 # priced at the peak rate, which can only overstate the cost.
 #
 # Cohere and Jev report their own cost on every call, so they need no rate here.
-version: "3"
+version: "4"
 as_of: 2026-11-26
 verified: true
 
@@ -51,6 +54,11 @@ models:
       input_cache_miss: 0.05
       input_cache_hit: 0.01
       output: 0.25
+  openai/gpt-6.1-terra:batch:
+    rates:
+      input_cache_miss: 0.50
+      input_cache_hit: 0.025
+      output: 2.50
 
 embeddings:
   text-embedding-3-small: 0.02

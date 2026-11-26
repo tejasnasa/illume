@@ -145,7 +145,7 @@ Terms used across several pages. Each page also defines its own terms where they
 | **Fusion (RRF)**         | merging several ranked lists by rank, not by score, with reciprocal rank fusion                                                                                         |
 | **Gold item**            | an eval question with a known answer: the files a correct answer names and a reference answer                                                                           |
 | **Ingest**               | the one background task that clones and analyses a repository and writes every artefact                                                                                 |
-| **Judge**                | the model that scores eval answers for correctness, faithfulness and relevancy. Not yet validated against hand labels                                                   |
+| **Judge**                | the model that scores eval answers for correctness, faithfulness and relevancy. Checked against a second judge from another model family                                |
 | **Knowledge silo**       | a file with a bus factor of one                                                                                                                                         |
 | **Lease**                | the expiry time a sync writes before it starts, so a killed sync cannot hold a repository forever                                                                       |
 | **`LLMConfig`**          | the frozen value that says which provider, key and model pay for a call; passed explicitly to every service and thread                                                  |

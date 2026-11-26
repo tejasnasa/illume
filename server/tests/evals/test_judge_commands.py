@@ -156,6 +156,38 @@ def test_sample_only_draws_the_sheet_without_calling_a_judge(recorded):
     assert len(read_sheet(run_dir / SHEET_NAME)) == 4
 
 
+def test_a_second_judge_can_grade_only_the_labelling_sheet_and_leaves_it_alone(recorded):
+    out, run_dir, _ = recorded
+    judge(out, FakeJudge(), sample_size=3)
+    sheet_before = (run_dir / SHEET_NAME).read_bytes()
+    sampled = {entry.generation_key for entry in read_sheet(run_dir / SHEET_NAME)}
+    free = "qwen/qwen4-max:free"
+    table = complete_table(
+        models={free: {"rates": {"input_cache_miss": 0, "input_cache_hit": 0, "output": 0}}}
+    )
+    other = endpoint(free, "https://api.example.org/v1")
+    second = FakeJudge()
+
+    status = judge(out, second, endpoint=other, table=table, labelled_only=True)
+
+    graded = read_judgments(judgments_path(run_dir, other))
+    assert status == 0 and second.calls == 3 * 5
+    assert {j.generation_key for j in graded} == sampled and len(graded) == 3 * 3
+    assert (run_dir / SHEET_NAME).read_bytes() == sheet_before
+
+
+def test_grading_only_the_sheet_needs_a_sheet_and_no_sample_draw(recorded, capsys):
+    out, _, _ = recorded
+    model = FakeJudge()
+
+    missing = judge(out, model, labelled_only=True)
+    both = judge(out, model, labelled_only=True, sample_only=True)
+
+    err = capsys.readouterr().err
+    assert (missing, both) == (1, 2) and model.requests == []
+    assert "no labelling sheet" in err and "cannot be combined" in err
+
+
 def test_label_then_agreement_per_judge_and_between_judges(recorded, capsys):
     out, run_dir, _ = recorded
     judge(out, FakeJudge())

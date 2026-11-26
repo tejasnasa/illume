@@ -122,9 +122,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--judge-api-style", choices=["responses", "chat"], help="judge: the transport"
     )
     run.add_argument("--compare-judge-model", help="judge-agreement: a second judge's model")
-    run.add_argument("--compare-judge-base-url", help="judge-agreement: a second judge's base URL")
+    run.add_argument(
+        "--compare-judge-base-url",
+        help="judge-agreement: a second judge's base URL (default: the judge's)",
+    )
     run.add_argument(
         "--sample-only", action="store_true", help="judge: draw the labelling sample, no calls"
+    )
+    run.add_argument(
+        "--labelled-only",
+        action="store_true",
+        help="judge: grade only the answers on the labelling sheet (a second judge's check)",
     )
     run.add_argument("--sample-size", type=int, default=30, help="judge: answers to label")
     run.add_argument(
@@ -519,7 +527,7 @@ def cmd_judge(args: argparse.Namespace) -> int:
         compare = (
             JudgeEndpoint(
                 model=args.compare_judge_model or endpoint.model,
-                base_url=args.compare_judge_base_url,
+                base_url=args.compare_judge_base_url or endpoint.base_url,
             )
             if args.compare_judge_model or args.compare_judge_base_url
             else None
@@ -546,6 +554,7 @@ def cmd_judge(args: argparse.Namespace) -> int:
         budget_usd=args.budget,
         stop_usd=args.stop,
         sample_only=args.sample_only,
+        labelled_only=args.labelled_only,
         seed=args.seed,
         sample_size=args.sample_size,
         include_unanswerable=args.include_unanswerable,

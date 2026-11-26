@@ -97,11 +97,11 @@ A judge's grades mean something only if they agree with a person. [`run/judge_va
 
 1. `run judge --sample-only` draws `LABEL_SAMPLE_SIZE` (30) judged answers **without looking at the scores**, spread across arms and question kinds, and writes `judge_sample.jsonl` with the question, reference notes, gold files, answer and cited evidence, but no scores and no arm.
 2. `run judge-label` is an interactive session where a person labels each answer `correct`, `partly` or `wrong`, and whether it made something up. Labels append to `judge_labels.jsonl`, so a session resumes.
-3. `run judge-agreement` bins the judge's scores (rubric 0 is wrong, 1 partly, 2 and 3 correct; faithfulness below `UNFAITHFUL_BELOW`, 0.8, is made up) and reports quadratically weighted kappa with a bootstrap interval and raw agreement, per family. With `--compare-judge-model` it compares two judges instead.
+3. `run judge-agreement` bins the judge's scores (rubric 0 is wrong, 1 partly, 2 and 3 correct; faithfulness below `UNFAITHFUL_BELOW`, 0.8, is made up) and reports quadratically weighted kappa with a bootstrap interval and raw agreement, per family. With `--compare-judge-model` it compares two judges instead; the second judge uses the first one's base URL unless `--compare-judge-base-url` says otherwise. To give a second judge something to compare, `run judge --labelled-only --judge-model <model>` grades only the answers on the existing sheet and leaves the sheet untouched, so a second opinion on 30 answers costs cents rather than a whole run.
 
 A family whose correctness kappa is below `EXPLORATORY_BELOW` (0.6) has its judged numbers reported as exploratory.
 
-**Status for `full_v1`: not done.** The 30-answer sample has been drawn, but no answer has been labelled, so the correctness, faithfulness and relevancy columns are **unvalidated**. A second-judge pass from another model family over the sample was configured (its batch rate is in `prices.yaml`) but has produced no judgments the reports use. File recall, precision, cost and speed do not depend on the judge.
+**Status for `full_v1`: checked by a second judge, not by hand.** No answer has been hand-labelled. Instead, `openai/gpt-6.1-terra:batch` graded the 30 sampled answers for $0.29. Correctness agreed strongly (weighted kappa 0.87, 0.72 to 0.97); faithfulness did not (kappa 0.10), because the second judge marks far more claims `borderline` and `penalize_ambiguous_claims` counts those as unsupported. The numbers and the explanation are in [the results page](results-full-v1.md#checking-the-judge). File recall, precision, cost and speed do not depend on the judge.
 
 ## Statistics
 
@@ -164,7 +164,7 @@ Fixed in the design files before any result: an error record is excluded from co
 
 ## Design trade-offs and limits
 
-- **An unvalidated judge.** Until the hand labels exist, every judged number is provisional; the judge-free metrics are the reliable ones.
+- **A judge checked only by another model.** Correctness is consistent across two model families, but no person has graded the sample, and faithfulness levels depend on how strictly a judge treats `borderline` claims. The judge-free metrics remain the most reliable ones.
 - **One judge family phrases and grades change questions.** Wording affinity could favour some answers.
 - **Faithfulness punishes proposals.** For change questions, a correct plan for new code scores as unfaithful.
 - **Answer relevancy does not discriminate**: every arm in `full_v1` scored 0.87 to 0.94.

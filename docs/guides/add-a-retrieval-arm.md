@@ -141,7 +141,7 @@ A comparison belongs in a design file under [`server/evals/prereg/`](../../serve
 
 ### 4. Report it with the wording rules
 
-Report a difference as a finding only if it survives the corrections in [the statistics page](../evals/judging-and-statistics.md#wording-rules). The judge is not validated yet, so every judged result is exploratory.
+Report a difference as a finding only if it survives the corrections in [the statistics page](../evals/judging-and-statistics.md#wording-rules). Correctness is consistent across two judge families; treat faithfulness as a comparison between arms, not an absolute level.
 
 ## Checklist
 

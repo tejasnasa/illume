@@ -141,3 +141,18 @@ full-run score existed.
   at report time.
 - **Metric scope.** All three judged metrics on all 1,620 generated answers; `auto` copies the
   grade of the arm it routed to.
+
+### 2026-11-27: checking the judge with a second judge instead of hand labels
+
+- **Deviation.** The 30 hand labels this design requires were not collected. The same 30 blind
+  sample answers were instead graded by a second judge from another model family,
+  `openai/gpt-6.1-terra:batch` through OpenRouter's batch API ($0.29), with the same metric
+  settings, and compared with `run judge-agreement --compare-judge-model`. This is agreement
+  between two models, not validation against a person, and is reported as such.
+- **Correctness.** Weighted kappa 0.87 (0.72 to 0.97) over all 30, 0.74 (0.44 to 0.92) on change
+  questions and 1.00 on explain questions, above the 0.6 bar.
+- **Faithfulness.** Binned agreement 63%, kappa 0.10 (0.00 to 0.33). Both judges rarely call a
+  claim contradicted (2% and 7% of verdicts), but the second judge marks 50% of claims
+  `borderline` against the main judge's 31%, and `penalize_ambiguous_claims` counts those as
+  unsupported. Faithfulness levels are therefore judge-dependent and are read only as a comparison
+  between arms. Answer relevancy was not compared.

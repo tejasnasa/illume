@@ -148,6 +148,7 @@ def cmd_run_judge(
     budget_usd: float,
     stop_usd: float,
     sample_only: bool = False,
+    labelled_only: bool = False,
     seed: int = 0,
     sample_size: int = DEFAULT_SAMPLE_SIZE,
     include_unanswerable: bool = False,
@@ -180,6 +181,9 @@ def cmd_run_judge(
         budget_usd: The spending cap; the run's generation spend counts against it.
         stop_usd: The spend at which judging stops cleanly.
         sample_only: Draw the labelling sample from existing judgments without calling a judge.
+        labelled_only: Grade only the answers on the existing labelling sheet, and leave the
+            sheet as it is. This is how a second judge grades the same blind sample, so the two
+            can be compared without paying for the whole run.
         seed: The seed of the change-set cluster draw and the labelling sample.
         sample_size: How many answers to put on the labelling sheet.
         include_unanswerable: Also grade the items marked unanswerable.
@@ -222,6 +226,15 @@ def cmd_run_judge(
         changeset_fraction=changeset_fraction,
         include_unanswerable=include_unanswerable,
     )
+    if labelled_only:
+        if sample_only:
+            print("--labelled-only and --sample-only cannot be combined", file=sys.stderr)
+            return 2
+        sheet = {entry.generation_key for entry in read_sheet(run_dir / SHEET_NAME)}
+        if not sheet:
+            print(f"no labelling sheet at {run_dir / SHEET_NAME}", file=sys.stderr)
+            return 1
+        pairs = [pair for pair in pairs if pair.generation.record_key in sheet]
     path = judgments_path(run_dir, endpoint)
     prices = table or PriceTable.load(PRICES_PATH)
     status = 0
@@ -302,6 +315,8 @@ def cmd_run_judge(
             status = WAITING
             print(f"{result.pending} metrics are waiting on batch replies; run this again later")
         print(f"judgments: {path}")
+        if labelled_only:
+            return status
 
     sample = sample_for_labelling(
         grades_by_generation(read_judgments(path)), n=sample_size, seed=seed

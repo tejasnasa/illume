@@ -1,6 +1,6 @@
 # Results: full_v1
 
-`full_v1` is the first full run of the eval harness: ten arms answered 180 questions over three pinned repositories, 1,800 answers in all with no generation errors, for about $10.86. The deep agent found the most of the right files and gave the most correct answers, at roughly four times the cost of the best single-shot arm; the structural channels and co-change did not measurably beat plain hybrid retrieval; and the router saved money but lost too much recall. The judged columns (correctness, faithfulness, relevancy) are **not yet validated against hand labels**, so read them as provisional; file recall, precision, cost and speed do not depend on the judge.
+`full_v1` is the first full run of the eval harness: ten arms answered 180 questions over three pinned repositories, 1,800 answers in all with no generation errors, for about $10.86. The deep agent found the most of the right files and gave the most correct answers, at roughly four times the cost of the best single-shot arm; the structural channels and co-change did not measurably beat plain hybrid retrieval; and the router saved money but lost too much recall. A second judge from another model family re-graded a sample of 30 answers: it agreed strongly with the main judge on correctness (weighted kappa 0.87) but not on faithfulness, so read the faithfulness column as a comparison between arms rather than an absolute level. File recall, precision, cost and speed do not depend on the judge.
 
 ## Terms used on this page
 
@@ -27,7 +27,7 @@ uv run python -m evals report --run full_v1 --mode full   --judge-slug anthropic
 | Answers      | 1,800, 0 generation errors (1,620 generated, 180 composed for `auto`)                                                                                                                 |
 | Generator    | `deepseek-flash`                                                                                                                                                                      |
 | Judge        | `anthropic/claude-haiku-5.5:batch` through OpenRouter, DeepEval 4.3.2, JSON-schema output                                                                                             |
-| Spend        | $6.25 generation and routing, $4.49 judging (25.1M input and 12.9M output tokens), about $10.86                                                                                       |
+| Spend        | $6.25 generation and routing, $4.49 judging (25.1M input and 12.9M output tokens), $0.29 for the second judge, about $11.15                                                           |
 | Slice        | `pilot` (no tuning/test split)                                                                                                                                                        |
 
 | Repository | Files | Symbols | Edges | Commits | PRs as history | Co-change pairs |
@@ -190,9 +190,28 @@ Every arm scored its highest correctness on `pvlib`. Structural arms did worst o
 
 Answer recall did not fall steadily with how far after the base commit a PR landed: for most arms it rose from the first bucket (0 to 24 merges after B) to the middle ones and dropped again in the last (75 to 99). Only 4 change questions come from PRs merged after the generator's training cutoff, so the memorisation check is uninformative here.
 
+## Checking the judge
+
+The design called for 30 hand-labelled answers to check the judge. Instead, the same 30 answers (drawn blind: 16 change and 14 explain questions) were re-graded by a second judge from a different model family, `openai/gpt-6.1-terra` through OpenRouter's batch API, for $0.29 with no errors. `run judge-agreement` bins both judges' scores and compares them:
+
+| Questions | Scale             | n   | Exact agreement | Weighted kappa (95% interval) |
+| --------- | ----------------- | --- | --------------- | ----------------------------- |
+| Change    | Correctness       | 16  | 69%             | 0.74 (0.44 to 0.92)           |
+| Explain   | Correctness       | 14  | 100%            | 1.00                          |
+| **All**   | **Correctness**   | 30  | 83%             | **0.87 (0.72 to 0.97)**       |
+| Change    | Made something up | 16  | 100%            | 1.00                          |
+| Explain   | Made something up | 14  | 21%             | 0.00                          |
+| All       | Made something up | 30  | 63%             | 0.10 (0.00 to 0.33)           |
+
+**Correctness holds up.** Kappa 0.87 is well above the 0.6 bar the design set, and the two judges' mean correctness is close: 0.57 against 0.55 on explain questions, 0.40 against 0.29 on change questions, where the second judge is a little harsher.
+
+**Faithfulness does not, for a specific reason.** Faithfulness asks a judge for a verdict on every claim in an answer: `yes` (the evidence supports it), `no` (the evidence contradicts it) or `borderline` (the evidence neither shows nor contradicts it, for example a line number or a full signature that is not in the excerpt). The harness runs DeepEval with `penalize_ambiguous_claims=True`, so a borderline claim counts as unsupported. Neither judge calls many claims contradicted (the second judge 2% of its verdicts, the main judge 7%), so neither sees much invention. They differ on borderline: the second judge used it for 50% of its verdicts, the main judge for 31%. That alone pulls the second judge's faithfulness means down to about 0.2, against the main judge's 0.6 to 0.85, and makes the binned "made something up" comparison disagree on explain questions. Faithfulness therefore measures how much of an answer is visibly backed by its cited excerpts, at a level that depends on the judge: compare arms with each other, not with a fixed threshold.
+
+Answer relevancy is not part of the comparison, and it does not separate the arms anyway (0.87 to 0.94). No answer was hand-labelled, so none of the judged columns has been checked against a person.
+
 ## Caveats
 
-- **The judge is unvalidated.** No answer has been hand-scored; see [validating the judge](judging-and-statistics.md#validating-the-judge). If agreement turns out poor, the judged columns become exploratory.
+- **The judge was checked by a second judge, not by hand.** Correctness agreement is strong (kappa 0.87); faithfulness levels depend on the judge. See [checking the judge](#checking-the-judge).
 - **The same model phrased the change questions and judged the answers**, so its wording habits may favour answers that resemble it.
 - **Faithfulness method.** Claims are checked against the cited evidence passed verbatim; an answer that cites nothing is held to everything it was shown. `classic` therefore scores lowest (0.60 against about 0.70) under a different standard, not because it invents more.
 - **Faithfulness penalises proposed new code.** Every arm's faithfulness is lower on change questions (0.61 to 0.65, `classic` 0.46) than explain questions (0.78 to 0.88).
@@ -218,7 +237,7 @@ These are readings of the numbers above, not tested claims:
 - **The pilot slice only.** The hypotheses were written for a held-out test split, which has not been run; these numbers come from a slice the design could have been tuned on.
 - **H4 and H5 were not run**, so the text-tools and planner-workers questions are open.
 - **One run, no repeats.** Run-to-run variance of the agent is not measured.
-- **Unvalidated judged columns**, as above.
+- **Judged columns checked by a second model, not by people.** Correctness is consistent across two judge families; faithfulness is only comparable between arms.
 
 ## Related documentation
 

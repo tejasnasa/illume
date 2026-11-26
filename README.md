@@ -80,7 +80,7 @@ The first full evaluation ran ten answering configurations on 180 questions acro
 | `auto`          | 0.60        | 0.47        | $0.0030         | 14.6    |
 | `classic`       | 0.56        | 0.44        | $0.0015         | 10.9    |
 
-The judge that scored correctness has **not yet been validated** against hand labels, so the judged columns are exploratory. The scope is three repositories and one generator model. [Results: full_v1](docs/evals/results-full-v1.md) has every configuration, the hypotheses, the statistics and the caveats.
+A second judge from another model family re-graded a 30-answer sample and agreed strongly on correctness (kappa 0.87); faithfulness levels depend on the judge. The scope is three repositories and one generator model. [Results: full_v1](docs/evals/results-full-v1.md) has every configuration, the hypotheses, the statistics and the caveats.
 
 ## Tech stack
 
@@ -167,7 +167,7 @@ The [documentation](docs/README.md) is also published on the site at `/docs`. Go
 - **Snapshots lag.** Pages and answers describe the ingested commit until the next sync. Chat marks answers whose snapshot has moved.
 - **One machine.** The API, worker and scheduler share one droplet, and the worker runs one ingest at a time.
 - **Security gaps.** Public paths are matched by prefix, the ingest WebSocket accepts its token in a query string, and login and register have no rate limit. All three are listed in [authentication](docs/security/auth.md#known-security-issues).
-- **Unvalidated judge.** The evaluation's judged scores are exploratory until the judge has been checked against hand labels.
+- **Judge checked by a model, not a person.** Correctness agrees across two judge families; faithfulness is only comparable between arms.
 
 ## Security
 

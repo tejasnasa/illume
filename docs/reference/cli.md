@@ -165,16 +165,16 @@ uv run python -m tests.tools.retrieval_trace "What relies on RateLimiter?"
 
 `uv run python -m evals <command>` from `server/`. Importing it pins every setting to the eval stack, so it cannot touch the development or production database. The full guide is on [the eval harness](../evals/harness.md).
 
-| Command    | Actions or key flags                                                                                                                                                                                |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `db`       | `migrate`, `status`                                                                                                                                                                                 |
-| `corpus`   | `ingest`, `snapshot`, `restore`, `report`; `--repo`, `--corpus`, `--name`                                                                                                                           |
-| `mine`     | clone a corpus repository and cache its PRs; `--repo`, `--refresh`                                                                                                                                  |
-| `gold`     | `build`, `phrase`, `check`, `verify`, `split`; `--include-anchor`, `--include-rationale`, `--include-structural`, `--include-unanswerable`, `--tuning-test-split`, `--annotator`, `--checker-model` |
-| `run`      | `generate`, `judge`, `judge-label`, `judge-agreement`; `--slice`, `--arms`, `--run`, `--subset ARM=N`, `--repeats`, `--off-peak-only`, `--judge-model`, `--sample-only`, `--wait`                   |
-| `report`   | `--run` (required), `--mode simple\|full\|pilot`, `--out`, `--judge-slug`                                                                                                                           |
-| `selftest` | the metric self-tests                                                                                                                                                                               |
-| `budget`   | spend so far; `--project` with `--items`, `--arms`, `--repeats` to estimate a planned run                                                                                                           |
+| Command    | Actions or key flags                                                                                                                                                                                                          |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `db`       | `migrate`, `status`                                                                                                                                                                                                           |
+| `corpus`   | `ingest`, `snapshot`, `restore`, `report`; `--repo`, `--corpus`, `--name`                                                                                                                                                     |
+| `mine`     | clone a corpus repository and cache its PRs; `--repo`, `--refresh`                                                                                                                                                            |
+| `gold`     | `build`, `phrase`, `check`, `verify`, `split`; `--include-anchor`, `--include-rationale`, `--include-structural`, `--include-unanswerable`, `--tuning-test-split`, `--annotator`, `--checker-model`                           |
+| `run`      | `generate`, `judge`, `judge-label`, `judge-agreement`; `--slice`, `--arms`, `--run`, `--subset ARM=N`, `--repeats`, `--off-peak-only`, `--judge-model`, `--sample-only`, `--labelled-only`, `--compare-judge-model`, `--wait` |
+| `report`   | `--run` (required), `--mode simple\|full\|pilot`, `--out`, `--judge-slug`                                                                                                                                                     |
+| `selftest` | the metric self-tests                                                                                                                                                                                                         |
+| `budget`   | spend so far; `--project` with `--items`, `--arms`, `--repeats` to estimate a planned run                                                                                                                                     |
 
 `gold`, `run` and `budget` take `--budget` and `--stop` in US dollars, defaulting to `STARTER_BUDGET_USD = 10.0` and `STARTER_STOP_USD = 9.50` in [`evals/settings.py`](../../server/evals/settings.py). The budget is cumulative across a run's resumptions.
 

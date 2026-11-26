@@ -195,7 +195,7 @@ The choice is made once per request or task and carried as a frozen `LLMConfig` 
 - **Snapshots lag.** An answer can describe code that has since changed; chat marks such answers as stale when the snapshot moves.
 - **Lost frames.** Progress is pub/sub without storage, so a browser that connects late sees only later frames, and reconstructs earlier ones from the row's status.
 - **Killed ingests need a hand.** Syncs have a lease that expires; ingests do not, so a worker killed mid-ingest leaves a row that needs a manual fix ([runbook](operations/runbook.md#a-repository-shows-progress-forever)).
-- **The judge is unvalidated.** The eval harness's judged metrics have not yet been checked against hand labels, so judged results are exploratory ([judging](evals/judging-and-statistics.md#validating-the-judge)).
+- **The judge is checked by a second model, not by hand.** On a 30-answer sample, a judge from another model family agreed strongly on correctness but not on faithfulness, so faithfulness levels are judge-dependent ([judging](evals/judging-and-statistics.md#validating-the-judge)).
 
 ## Related documentation
 
