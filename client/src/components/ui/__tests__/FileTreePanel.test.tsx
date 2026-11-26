@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import FileTreePanel from "@/components/ui/FileTreePanel";
+import FileTreePanel, { ReadingOrderBar } from "@/components/ui/FileTreePanel";
 import type { FileNode, TreeNode } from "@/types/explorer";
 
 /** A file node with the fields the tree reads. */
@@ -44,31 +44,36 @@ const TREE = dir("root", "", [
 function renderPanel(props: Partial<React.ComponentProps<typeof FileTreePanel>> = {}) {
   const defaults = {
     fileTree: TREE,
+    fileCount: 2,
     selectedFile: null,
     expandedDirs: new Set<string>(),
     onFileClick: vi.fn(),
     onToggleDir: vi.fn(),
-    pageIndex: null,
-    totalPages: 0,
-    onNavigate: vi.fn(),
   };
   const merged = { ...defaults, ...props };
   return { ...render(<FileTreePanel {...merged} />), ...merged };
 }
 
-describe("header", () => {
-  it("renders the title", () => {
+/** Renders the reading-order bar with defaults. */
+function renderBar(props: Partial<React.ComponentProps<typeof ReadingOrderBar>> = {}) {
+  const merged = { pageIndex: null, totalPages: 5, onNavigate: vi.fn(), ...props };
+  return { ...render(<ReadingOrderBar {...merged} />), ...merged };
+}
+
+const previous = () => screen.getByRole("button", { name: /Previous file/ });
+const next = () => screen.getByRole("button", { name: /Next file/ });
+
+describe("the panel", () => {
+  it("is a navigation landmark named for the files", () => {
     renderPanel();
 
-    expect(screen.getByRole("heading", { name: "File Explorer" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Files" })).toBeInTheDocument();
   });
 
-  it("labels the columns", () => {
-    renderPanel();
+  it("shows how many files there are", () => {
+    renderPanel({ fileCount: 1234 });
 
-    expect(screen.getByText("Directory / File")).toBeInTheDocument();
-    expect(screen.getByText("LOC")).toBeInTheDocument();
-    expect(screen.getByText("Guardrail")).toBeInTheDocument();
+    expect(screen.getByText("1,234")).toBeInTheDocument();
   });
 });
 
@@ -103,125 +108,89 @@ describe("the tree", () => {
 
     expect(onToggleDir).toHaveBeenCalledWith("src");
   });
+
+  it("marks the selected file", () => {
+    renderPanel({ selectedFile: file("README.md", "README.md") });
+
+    const row = screen.getByText("README.md").closest("button")!;
+    expect(row).toHaveAttribute("aria-current", "true");
+  });
 });
 
-describe("reading-order pager", () => {
+describe("the reading-order bar", () => {
+  it("renders nothing when the guide has no order", () => {
+    const { container } = renderBar({ totalPages: 0 });
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it("renders the label", () => {
-    renderPanel();
+    renderBar();
 
-    expect(screen.getByText("Reading Order:")).toBeInTheDocument();
+    expect(screen.getByText("Reading order")).toBeInTheDocument();
   });
 
-  it("disables the previous arrow before the order loads", () => {
-    renderPanel({ pageIndex: null, totalPages: 0 });
+  it("shows a dash while the selected file is not on the order", () => {
+    renderBar({ pageIndex: null });
 
-    expect(screen.getAllByRole("button")[0]).toBeDisabled();
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  it("leaves the next arrow enabled before the order loads", () => {
-    // Deliberate, from the shape of the expressions: `disabled` is
-    // `pageIndex !== null && …`, so a null index passes, and the handler is
-    // `(pageIndex ?? -1) + 1` -- which is exactly 0. So the arrow looks active and lands
-    // on the first page.
-    //
-    // The two arrows disagree about whether the pager is usable yet, which reads oddly
-    // beside the "— / 0" counter. It is pinned rather than flagged because the `?? -1` is
-    // too specific to be accidental: without it, the click would send 1.
-    renderPanel({ pageIndex: null, totalPages: 0 });
+  it("shows a one-based position", () => {
+    // The index is zero-based but the label is not, so the last of five reads "5".
+    renderBar({ pageIndex: 4 });
 
-    expect(screen.getAllByRole("button")[1]).toBeEnabled();
+    expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.getByText("/ 5")).toBeInTheDocument();
   });
 
-  it("navigates to the first page from an unloaded index", async () => {
+  it("disables previous while off the order", () => {
+    renderBar({ pageIndex: null });
+    expect(previous()).toBeDisabled();
+  });
+
+  it("disables previous on the first file", () => {
+    renderBar({ pageIndex: 0 });
+    expect(previous()).toBeDisabled();
+  });
+
+  it("starts the order from the first file when off it", async () => {
+    // `(pageIndex ?? -1) + 1` is exactly 0, so the arrow lands on the first file.
     const onNavigate = vi.fn();
-    renderPanel({ pageIndex: null, totalPages: 0, onNavigate });
+    renderBar({ pageIndex: null, onNavigate });
 
-    await userEvent.setup().click(screen.getAllByRole("button")[1]);
+    await userEvent.setup().click(next());
 
     expect(onNavigate).toHaveBeenCalledWith(0);
   });
 
-  it("shows a dash for the current page before the order loads", () => {
-    renderPanel({ pageIndex: null, totalPages: 0 });
-
-    expect(screen.getByText("— / 0")).toBeInTheDocument();
-  });
-
-  it("shows a one-based page number", () => {
-    // The index is zero-based but the label is not, so the last of five pages reads "5 / 5".
-    renderPanel({ pageIndex: 4, totalPages: 5 });
-
-    expect(screen.getByText("5 / 5")).toBeInTheDocument();
-  });
-
-  it("disables the previous arrow on the first page", () => {
-    renderPanel({ pageIndex: 0, totalPages: 5 });
-
-    expect(screen.getAllByRole("button")[0]).toBeDisabled();
-  });
-
-  it("enables the next arrow when pages remain", () => {
-    renderPanel({ pageIndex: 0, totalPages: 5 });
-
-    expect(screen.getAllByRole("button")[1]).toBeEnabled();
-  });
-
-  it("disables the next arrow on the last page", () => {
-    renderPanel({ pageIndex: 4, totalPages: 5 });
-
-    expect(screen.getAllByRole("button")[1]).toBeDisabled();
+  it("disables next on the last file", () => {
+    renderBar({ pageIndex: 4 });
+    expect(next()).toBeDisabled();
   });
 
   it("navigates forward", async () => {
     const onNavigate = vi.fn();
-    renderPanel({ pageIndex: 1, totalPages: 5, onNavigate });
+    renderBar({ pageIndex: 1, onNavigate });
 
-    await userEvent.setup().click(screen.getAllByRole("button")[1]);
+    await userEvent.setup().click(next());
 
     expect(onNavigate).toHaveBeenCalledWith(2);
   });
 
   it("navigates backward", async () => {
     const onNavigate = vi.fn();
-    renderPanel({ pageIndex: 2, totalPages: 5, onNavigate });
+    renderBar({ pageIndex: 2, onNavigate });
 
-    await userEvent.setup().click(screen.getAllByRole("button")[0]);
+    await userEvent.setup().click(previous());
 
     expect(onNavigate).toHaveBeenCalledWith(1);
   });
 
-  it("treats a null index as the first page when going back", () => {
-    // `(pageIndex ?? 0) - 1` yields -1, which the parent is expected to clamp. The arrow
-    // is disabled in this state, so the call is unreachable from the UI -- pinned so a
-    // future change that enables it does not silently send -1.
-    const onNavigate = vi.fn();
-    renderPanel({ pageIndex: null, totalPages: 3, onNavigate });
+  it("caps a long order at forty segments", () => {
+    const { container } = renderBar({ totalPages: 120 });
 
-    expect(screen.getAllByRole("button")[0]).toBeDisabled();
-    expect(onNavigate).not.toHaveBeenCalled();
-  });
-});
-
-describe("selection layout", () => {
-  it("centers the panel when nothing is selected", () => {
-    // The panel takes the full width until a file is chosen and the detail card appears
-    // beside it. The centering is applied through motion, so the assertion is that
-    // rendering does not depend on a selection.
-    renderPanel({ selectedFile: null });
-
-    expect(screen.getByRole("heading", { name: "File Explorer" })).toBeInTheDocument();
-  });
-
-  it("renders with a selection", () => {
-    renderPanel({ selectedFile: file("README.md", "README.md") });
-
-    expect(screen.getByRole("heading", { name: "File Explorer" })).toBeInTheDocument();
-  });
-
-  it("marks the selected file in the tree", () => {
-    renderPanel({ selectedFile: file("README.md", "README.md") });
-
-    const row = screen.getByText("README.md").closest("button")!;
-    expect(row.className).toContain("bg-(--primary)/10");
+    // The segments are mouse shortcuts, hidden from assistive technology.
+    expect(container.querySelectorAll('button[aria-hidden="true"]')).toHaveLength(40);
   });
 });

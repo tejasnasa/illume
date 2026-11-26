@@ -29,3 +29,13 @@ export interface TreeNode {
   children: Record<string, TreeNode>;
   file?: FileNode;
 }
+
+/**
+ * One file's definitions and the latest commits that changed it.
+ */
+export interface FileDetail {
+  /** Functions, classes and methods, in line order. */
+  symbols: { kind: string; name: string; start_line: number | null }[];
+  /** Commits whose changes include the file, newest first. */
+  commits: { hash: string; title: string; author: string; at: string }[];
+}

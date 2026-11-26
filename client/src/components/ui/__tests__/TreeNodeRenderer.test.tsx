@@ -101,7 +101,7 @@ describe("the root wrapper", () => {
     const main = screen.getByText("main.py").closest("button")!;
 
     expect(readme.style.paddingLeft).toBe("8px");
-    expect(main.style.paddingLeft).toBe("28px");
+    expect(main.style.paddingLeft).toBe("22px");
   });
 });
 
@@ -177,8 +177,9 @@ describe("files", () => {
   it("renders the line count", () => {
     renderTree({ expandedDirs: new Set(["src"]) });
 
+    // The count rides in the row's tooltip, beside the path and the risk.
     const button = screen.getByText("main.py").closest("button")!;
-    expect(within(button).getByText("10")).toBeInTheDocument();
+    expect(button).toHaveAttribute("title", expect.stringContaining("10 LOC"));
   });
 
   it("renders 0 for a file with no recorded line count", () => {
@@ -187,10 +188,15 @@ describe("files", () => {
       node: root([fileNode("empty.py", "empty.py", { loc: 0 })]),
     });
 
-    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("empty.py").closest("button")).toHaveAttribute(
+      "title",
+      expect.stringContaining("0 LOC"),
+    );
   });
 
-  it("renders the criticality badge", () => {
+  it("speaks the risk of a file that has one", () => {
+    // The visible marker is a coloured dot, so the word is there for a screen
+    // reader rather than left to colour alone.
     renderTree({ expandedDirs: new Set(["src"]) });
 
     expect(screen.getByText("critical")).toBeInTheDocument();
@@ -213,10 +219,8 @@ describe("files", () => {
       selectedFile: file("README.md", "README.md"),
     });
 
-    // The selection is a class change on the row, so the assertion is on the row's
-    // resolved classes rather than on any text.
     const row = screen.getByText("README.md").closest("button")!;
-    expect(row.className).toContain("bg-(--primary)/10");
+    expect(row).toHaveAttribute("aria-current", "true");
     expect(container).toBeTruthy();
   });
 
@@ -224,7 +228,7 @@ describe("files", () => {
     renderTree({ selectedFile: file("other.py", "other.py") });
 
     const row = screen.getByText("README.md").closest("button")!;
-    expect(row.className).not.toContain("bg-(--primary)/10");
+    expect(row).not.toHaveAttribute("aria-current");
   });
 
   it("renders a directory row as a button without a criticality badge", () => {

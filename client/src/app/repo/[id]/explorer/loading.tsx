@@ -1,67 +1,60 @@
 /**
- * Skeleton fallback for the file explorer route.
+ * Skeleton fallback for the explorer route.
  * @module ExplorerLoading
  */
 import Skeleton from "@/components/ui/Skeleton";
-import { FolderOpenIcon } from "@phosphor-icons/react/dist/ssr";
+
+/** Indents of the placeholder tree rows, in 14px steps. */
+const ROWS = [0, 1, 1, 2, 2, 2, 1, 0, 1, 1, 2, 0, 1, 1];
 
 /**
- * Renders placeholder explorer rows while the file tree loads.
+ * Renders the reading-order bar, tree and detail section as placeholders.
  *
- * @returns Skeleton file explorer table.
+ * @returns The skeleton.
  */
 export default function ExplorerLoading() {
   return (
-    <main className="max-w-4xl mx-auto pt-12 text-(--muted-foreground) overflow-hidden h-[calc(100vh-64px)] animate-pulse">
-      <div className="flex gap-3 mb-2 justify-between flex-col">
-        <div className="flex justify-between items-end gap-3 mb-2 ">
-          <div className="flex gap-3 items-center ">
-            <FolderOpenIcon size={28} weight="duotone" />
-            <h1 className="text-3xl font-bold  tracking-tight">
-              File Explorer
-            </h1>
-          </div>
-
-          <div className="flex justify-between items-center mb-6 gap-4">
-            <Skeleton className="w-32 h-7 rounded-md" />
-            <div className="flex items-center gap-2">
-              <Skeleton className="w-7 h-7 rounded-md" />
-              <Skeleton className="w-12 h-7 rounded-md" />
-              <Skeleton className="w-7 h-7 rounded-md" />
+    <div
+      aria-busy="true"
+      className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 pt-8 pb-16 sm:px-6"
+    >
+      <div className="panel flex items-center gap-3.5 px-3.5 py-3">
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="h-7 w-9" />
+        <Skeleton className="h-4 w-12" />
+        <Skeleton className="h-7 w-9" />
+        <Skeleton className="h-1.5 grow" />
+      </div>
+      <div className="grid grid-cols-1 items-start gap-5 md:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="panel flex flex-col gap-2.5 p-4">
+          <Skeleton className="mb-1 h-3 w-16" />
+          {ROWS.map((level, i) => (
+            <div key={i} style={{ paddingLeft: level * 14 }}>
+              <Skeleton className="h-3.5" style={{ width: `${70 - level * 12}%` }} />
             </div>
-          </div>
+          ))}
         </div>
-
-        <p className="text-(--muted-foreground)">
-          Browse the entire repository tree. Criticality guardrails are mapped
-          directly to files.
-        </p>
-      </div>
-
-      <div className="glass-card rounded-sm overflow-hidden border border-(--border) bg-(--card)/40 p-2">
-        <div className="flex items-center justify-between px-4 py-3 bg-(--secondary)/40 rounded-xs mb-2 border border-(--border)">
-          <span className="text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
-            Directory / File
-          </span>
-          <div className="flex items-center gap-8 text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
-            <span className="w-16 text-right">LOC</span>
-            <span className="w-24 text-right">Guardrail</span>
+        <div className="flex flex-col gap-4">
+          <Skeleton className="h-3.5 w-40" />
+          <Skeleton className="h-12 w-72 max-w-full" />
+          <div className="flex gap-1.5">
+            <Skeleton className="h-6 w-18" />
+            <Skeleton className="h-6 w-16" />
+            <Skeleton className="h-6 w-20" />
           </div>
-        </div>
-
-        <div className="p-4">
-          <div className="min-w-150 flex flex-col gap-2 overflow-hidden">
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
-            <Skeleton className="w-full h-7 rounded-md shrink-0" />
+          <Skeleton className="h-16 w-full" />
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="panel flex flex-col gap-3 p-5">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-4/5" />
+                <Skeleton className="h-3 w-3/5" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            ))}
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

@@ -1,118 +1,133 @@
 /**
- * File explorer panel with reading-order navigation and tree table.
+ * The explorer's reading-order bar and its sticky file tree.
  * @module FileTreePanel
  */
 import { FileNode, TreeNode } from "@/types/explorer";
-import { FolderOpenIcon } from "@phosphor-icons/react";
-import { ArrowLeftIcon, ArrowRightIcon } from "@phosphor-icons/react/dist/ssr";
-import { motion } from "motion/react";
 import TreeNodeRenderer from "./TreeNodeRenderer";
 
+/** Reading-order segments drawn at most; long orders are bucketed into these. */
+const MAX_SEGMENTS = 40;
+
 /**
- * Props for the FileTreePanel component.
+ * Props for the reading-order bar.
  */
-interface Props {
-  fileTree: TreeNode;
-  selectedFile: FileNode | null;
-  expandedDirs: Set<string>;
-  onFileClick: (e: React.MouseEvent, file: FileNode) => void;
-  onToggleDir: (path: string) => void;
+interface ReadingOrderProps {
   pageIndex: number | null;
   totalPages: number;
   onNavigate: (index: number) => void;
 }
 
 /**
- * Renders the repository tree with pager controls and selection state.
+ * Steps through the guide's reading order, with a segmented progress rail.
+ *
+ * @param pageIndex Current reading-order position, or null when the selected
+ *   file is not on the order.
+ * @param totalPages Number of files on the order.
+ * @param onNavigate Called with the target index.
+ * @returns The bar, or null when the guide has no order.
+ */
+export function ReadingOrderBar({ pageIndex, totalPages, onNavigate }: ReadingOrderProps) {
+  if (totalPages === 0) return null;
+  const segments = Math.min(totalPages, MAX_SEGMENTS);
+  const perSegment = totalPages / segments;
+  const arrow =
+    "ghost rounded-sm border border-(--input) px-2.5 py-1.5 font-pixel text-xs text-zinc-300 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-30";
+
+  return (
+    <div className="panel flex flex-wrap items-center gap-3.5 px-3.5 py-3">
+      <span className="font-pixel text-xs tracking-[0.12em] text-(--muted-foreground) uppercase">
+        Reading order
+      </span>
+      <button
+        type="button"
+        aria-label="Previous file in reading order"
+        onClick={() => onNavigate((pageIndex ?? 0) - 1)}
+        disabled={pageIndex === null || pageIndex === 0}
+        className={arrow}
+      >
+        ◀
+      </button>
+      <span className="font-pixel text-sm tabular-nums">
+        <span className="text-(--accent)">{pageIndex === null ? "—" : pageIndex + 1}</span>{" "}
+        <span className="text-(--faint-foreground)">/ {totalPages}</span>
+      </span>
+      <button
+        type="button"
+        aria-label="Next file in reading order"
+        onClick={() => onNavigate((pageIndex ?? -1) + 1)}
+        disabled={pageIndex !== null && pageIndex === totalPages - 1}
+        className={arrow}
+      >
+        ▶
+      </button>
+      <span className="flex h-1.5 min-w-30 grow gap-0.5">
+        {Array.from({ length: segments }, (_, s) => {
+          const start = Math.floor(s * perSegment);
+          const end = Math.floor((s + 1) * perSegment) - 1;
+          const here = pageIndex !== null && pageIndex >= start && pageIndex <= end;
+          const read = pageIndex !== null && pageIndex > end;
+          return (
+            <button
+              key={s}
+              type="button"
+              tabIndex={-1}
+              aria-hidden="true"
+              onClick={() => onNavigate(start)}
+              className={`h-1.5 flex-1 hover:cursor-pointer ${here ? "bg-(--accent)" : read ? "bg-(--chart-3)" : "bg-(--muted) hover:bg-(--border-strong)"}`}
+            />
+          );
+        })}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Props for the FileTreePanel component.
+ */
+interface Props {
+  fileTree: TreeNode;
+  fileCount: number;
+  selectedFile: FileNode | null;
+  expandedDirs: Set<string>;
+  onFileClick: (e: React.MouseEvent, file: FileNode) => void;
+  onToggleDir: (path: string) => void;
+}
+
+/**
+ * Renders the repository tree in a sticky, independently scrolling panel.
  * @param fileTree Root tree node to render.
- * @param selectedFile Currently selected file, centering the panel when null.
+ * @param fileCount Number of files in the tree.
+ * @param selectedFile Currently selected file.
  * @param expandedDirs Set of expanded directory paths.
  * @param onFileClick Handler invoked when a file row is clicked.
  * @param onToggleDir Handler invoked when a directory is expanded or collapsed.
- * @param pageIndex Current reading-order page, or null before it loads.
- * @param totalPages Total number of reading-order pages.
- * @param onNavigate Handler invoked with the target page index.
  * @returns The rendered file tree panel element.
  */
 export default function FileTreePanel({
   fileTree,
+  fileCount,
   selectedFile,
   expandedDirs,
   onFileClick,
   onToggleDir,
-  pageIndex,
-  totalPages,
-  onNavigate,
 }: Props) {
   return (
-    <motion.div
-      className="w-full max-w-4xl shrink-0"
-      animate={{
-        marginLeft: selectedFile ? "0" : "auto",
-        marginRight: selectedFile ? "0" : "auto",
-      }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
+    <nav
+      aria-label="Files"
+      className="panel flex flex-col gap-0.5 overflow-y-auto p-3 [scrollbar-width:thin] md:sticky md:top-21 md:max-h-[calc(100dvh-110px)]"
     >
-      <div className="flex gap-3 mb-2 justify-between flex-col">
-        <div className="flex justify-between items-end gap-3 mb-2 ">
-          <div className="flex gap-3 items-center text-(--primary)">
-            <FolderOpenIcon size={28} weight="duotone" />
-            <h1 className="text-3xl font-bold text-(--foreground) tracking-tight">
-              File Explorer
-            </h1>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="font-medium uppercase text-(--foreground)/90">Reading Order:</div>
-            <button
-              onClick={() => onNavigate((pageIndex ?? 0) - 1)}
-              disabled={pageIndex === null || pageIndex === 0}
-              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
-            >
-              <ArrowLeftIcon size={14} />
-            </button>
-            <span className="text-sm text-(--muted-foreground) tabular-nums">
-              {pageIndex === null ? "—" : pageIndex + 1} / {totalPages}
-            </span>
-            <button
-              onClick={() => onNavigate((pageIndex ?? -1) + 1)}
-              disabled={pageIndex !== null && pageIndex === totalPages - 1}
-              className="p-1.5 rounded-sm border border-(--border) hover:bg-(--secondary) disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-(--foreground)"
-            >
-              <ArrowRightIcon size={14} />
-            </button>
-          </div>
-        </div>
-
-        <p className="text-(--muted-foreground)">
-          Browse the entire repository tree. Criticality guardrails are mapped
-          directly to files.
-        </p>
-      </div>
-
-      <div className="glass-card rounded-sm overflow-hidden border border-(--border) bg-(--card)/40 p-2">
-        <div className="flex items-center justify-between px-4 py-3 bg-(--secondary)/40 rounded-xs mb-2 border border-(--border)">
-          <span className="text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
-            Directory / File
-          </span>
-          <div className="flex items-center gap-8 text-xs font-semibold uppercase tracking-wider text-(--muted-foreground)">
-            <span className="w-16 text-right">LOC</span>
-            <span className="w-24 text-right">Guardrail</span>
-          </div>
-        </div>
-
-        <div className="p-2 overflow-x-auto custom-scrollbar">
-          <div className={selectedFile ? "" : "min-w-150"}>
-            <TreeNodeRenderer
-              node={fileTree}
-              selectedFile={selectedFile}
-              expandedDirs={expandedDirs}
-              onFileClick={onFileClick}
-              onToggleDir={onToggleDir}
-            />
-          </div>
-        </div>
-      </div>
-    </motion.div>
+      <p className="m-0 flex justify-between px-2 pt-1 pb-2.5 font-pixel text-xs tracking-[0.12em] text-(--muted-foreground) uppercase">
+        <span>Files</span>
+        <span className="text-(--faint-foreground)">{fileCount.toLocaleString()}</span>
+      </p>
+      <TreeNodeRenderer
+        node={fileTree}
+        selectedFile={selectedFile}
+        expandedDirs={expandedDirs}
+        onFileClick={onFileClick}
+        onToggleDir={onToggleDir}
+      />
+    </nav>
   );
 }

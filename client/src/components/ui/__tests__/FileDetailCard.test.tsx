@@ -2,11 +2,14 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import FileDetailCard from "@/components/ui/FileDetailCard";
+import FileDetailCard, {
+  type FileOwnership,
+} from "@/components/ui/FileDetailCard";
+import type { FileDetail, FileNode } from "@/types/explorer";
 
 const GITHUB_URL = "https://github.com/example/cool-project";
 
-const FILE = {
+const FILE: FileNode = {
   id: "f1",
   label: "util.py",
   path: "src/core/util.py",
@@ -19,7 +22,7 @@ const FILE = {
   kind: "file",
 };
 
-const OWNERSHIP = {
+const OWNERSHIP: FileOwnership = {
   file_id: "f1",
   file_path: "src/core/util.py",
   primary_owner: "Ada Lovelace",
@@ -41,6 +44,11 @@ const OWNERSHIP = {
   is_knowledge_silo: false,
 };
 
+/** A neighbour file at `path`. */
+function neighbour(path: string, criticality = "safe"): FileNode {
+  return { ...FILE, id: path, path, label: path, criticality };
+}
+
 /** Renders the card with defaults, overridable per test. */
 function renderCard(
   props: Partial<React.ComponentProps<typeof FileDetailCard>> = {},
@@ -50,22 +58,31 @@ function renderCard(
       file={FILE}
       ownershipData={OWNERSHIP}
       isLoading={false}
+      detail={null}
+      isLoadingDetail={false}
       githubUrl={GITHUB_URL}
+      repoNumber={7}
       annotation={null}
-      onClose={vi.fn()}
+      readingPosition={null}
+      importers={[]}
+      imports={[]}
+      onSelectPath={vi.fn()}
       {...props}
     />,
   );
 }
 
+/** The card titled `title`, located by its heading. */
+function card(title: RegExp): HTMLElement {
+  return screen.getByRole("heading", { name: title }).closest("section")!;
+}
+
 describe("file metadata", () => {
-  it("renders the filename and full path", () => {
+  it("renders the filename, with its directory above it", () => {
     renderCard();
 
-    expect(
-      screen.getByRole("heading", { name: "util.py" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("src/core/util.py")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "util.py" })).toBeInTheDocument();
+    expect(screen.getByText("src/core/")).toBeInTheDocument();
   });
 
   it("renders the language", () => {
@@ -75,18 +92,24 @@ describe("file metadata", () => {
   });
 
   it("falls back to Unknown for a falsy language", () => {
-    // The fallback is `file.language || "Unknown"`, so it is the falsy case rather than
-    // the null one. The graph endpoint coerces a null column to `"unknown"`
-    // (`graph_builder.py`), so an empty string is the reachable falsy value here.
+    // The graph endpoint coerces a null column to `"unknown"`, so an empty
+    // string is the reachable falsy value here.
     renderCard({ file: { ...FILE, language: "" } });
 
     expect(screen.getByText("Unknown")).toBeInTheDocument();
   });
 
-  it("renders the criticality badge", () => {
-    renderCard();
+  it("renders the criticality, defaulting a missing one to safe", () => {
+    renderCard({ file: { ...FILE, criticality: "" } });
 
     expect(screen.getByText("safe")).toBeInTheDocument();
+  });
+
+  it("renders size and connection counts", () => {
+    renderCard();
+
+    expect(screen.getByText("40 LOC")).toBeInTheDocument();
+    expect(screen.getByText("In 3 · Out 1")).toBeInTheDocument();
   });
 
   it("flags a knowledge silo", () => {
@@ -94,22 +117,46 @@ describe("file metadata", () => {
       ownershipData: { ...OWNERSHIP, is_knowledge_silo: true, bus_factor: 1 },
     });
 
-    expect(screen.getByText("Knowledge Silo")).toBeInTheDocument();
+    expect(screen.getByText("Knowledge silo")).toBeInTheDocument();
   });
 
   it("does not flag a file that is not a silo", () => {
     renderCard();
 
-    expect(screen.queryByText("Knowledge Silo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Knowledge silo")).not.toBeInTheDocument();
+  });
+});
+
+describe("actions", () => {
+  it("asks the chat about this file", () => {
+    renderCard();
+
+    const href = screen
+      .getByRole("link", { name: /Ask about this file/ })
+      .getAttribute("href")!;
+    expect(href.startsWith("/repo/7/chat?q=")).toBe(true);
+    expect(decodeURIComponent(href.split("q=")[1])).toContain(
+      "src/core/util.py",
+    );
+  });
+
+  it("links to the graph", () => {
+    renderCard();
+
+    expect(screen.getByRole("link", { name: "Graph" })).toHaveAttribute(
+      "href",
+      "/repo/7/graph",
+    );
   });
 });
 
 describe("github link", () => {
-  it("links to the file on GitHub", () => {
-    const { container } = renderCard();
+  const githubLink = () => screen.getByRole("link", { name: /GitHub/ });
 
-    const link = container.querySelector("a");
-    expect(link).toHaveAttribute(
+  it("links to the file on GitHub", () => {
+    renderCard();
+
+    expect(githubLink()).toHaveAttribute(
       "href",
       `${GITHUB_URL}/blob/master/src/core/util.py`,
     );
@@ -117,97 +164,30 @@ describe("github link", () => {
 
   it("pins the link to the ingested commit when one is supplied", () => {
     // The commit is the snapshot the file was indexed at, so it wins over the branch.
-    const { container } = renderCard({
-      commitSha: "a1b2c3d4",
-      branch: "develop",
-    });
+    renderCard({ commitSha: "a1b2c3d4", branch: "develop" });
 
-    expect(container.querySelector("a")?.getAttribute("href")).toContain(
-      "/blob/a1b2c3d4/",
-    );
+    expect(githubLink().getAttribute("href")).toContain("/blob/a1b2c3d4/");
   });
 
   it("falls back to the ingested branch when the commit is missing", () => {
-    const { container } = renderCard({ branch: "develop" });
+    renderCard({ branch: "develop" });
 
-    expect(container.querySelector("a")?.getAttribute("href")).toContain(
-      "/blob/develop/",
-    );
-  });
-
-  it("falls back to master when neither ref is recorded", () => {
-    // Last resort for rows that carry neither a commit nor a branch.
-    const { container } = renderCard();
-
-    expect(container.querySelector("a")?.getAttribute("href")).toContain(
-      "/blob/master/",
-    );
+    expect(githubLink().getAttribute("href")).toContain("/blob/develop/");
   });
 
   it("opens in a new tab", () => {
-    const { container } = renderCard();
+    renderCard();
 
-    expect(container.querySelector("a")).toHaveAttribute("target", "_blank");
+    expect(githubLink()).toHaveAttribute("target", "_blank");
   });
 });
 
-describe("ownership", () => {
-  it("renders the primary owner", () => {
-    // Scoped rather than queried globally: the same name also appears in the contributor
-    // list below, so an unscoped lookup matches twice and proves nothing about the owner
-    // card specifically.
+describe("who to ask", () => {
+  it("marks the primary owner", () => {
     renderCard();
 
-    const ownerCard = screen.getByText(
-      "Highest contribution share",
-    ).parentElement!;
-    expect(within(ownerCard).getByText("Ada Lovelace")).toBeInTheDocument();
-  });
-
-  it("falls back to Unknown for a missing owner", () => {
-    renderCard({ ownershipData: { ...OWNERSHIP, primary_owner: null } });
-
-    const ownerCard = screen.getByText(
-      "Highest contribution share",
-    ).parentElement!;
-    expect(within(ownerCard).getByText("Unknown")).toBeInTheDocument();
-  });
-
-  it("renders the bus factor", () => {
-    // Scoped for the same reason: "2" is also the contributor count, and both are in the
-    // card at once.
-    renderCard();
-
-    const busFactorCard = screen.getByText("Bus Factor").parentElement!;
-    expect(within(busFactorCard).getByText("2")).toBeInTheDocument();
-  });
-
-  it("renders the contributor count as its own figure", () => {
-    renderCard();
-
-    const contributorCard = screen.getByText("Contributors").parentElement!;
-    expect(within(contributorCard).getByText("2")).toBeInTheDocument();
-  });
-
-  it("uses the singular unit for a bus factor of one", () => {
-    // The unit is derived from the number, so it reads "1 engineer" rather than the
-    // "1 engineers" a naive interpolation would produce.
-    renderCard({ ownershipData: { ...OWNERSHIP, bus_factor: 1 } });
-
-    expect(screen.getByText("engineer")).toBeInTheDocument();
-  });
-
-  it("uses the plural unit above one", () => {
-    renderCard();
-
-    expect(screen.getByText("engineers")).toBeInTheDocument();
-  });
-
-  it("counts the contributors", () => {
-    renderCard();
-
-    expect(screen.getByText("Contributors")).toBeInTheDocument();
-    expect(screen.getByText(/2 authors/)).toBeInTheDocument();
+    const ada = within(card(/Who to ask/)).getByText("Ada Lovelace");
+    expect(within(ada).getByText("Owner")).toBeInTheDocument();
   });
 
   it("formats each contributor's share to one decimal place", () => {
@@ -223,85 +203,164 @@ describe("ownership", () => {
     expect(screen.getByText("66.7%")).toBeInTheDocument();
   });
 
-  it("renders N/A for a null percentage", () => {
-    // `percentage` is nullable on the JSONB payload; `null.toFixed` would throw.
+  it("shows a dash for a null share, and a real zero as zero", () => {
     renderCard({
       ownershipData: {
         ...OWNERSHIP,
         contributors: [
           { name: "Ada", email: null, percentage: null, last_commit: null },
+          { name: "Grace", email: null, percentage: 0, last_commit: null },
         ],
       },
     });
 
-    expect(screen.getByText("N/A")).toBeInTheDocument();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("0.0%")).toBeInTheDocument();
   });
 
-  it("omits the distribution section when there are no contributors", () => {
-    renderCard({ ownershipData: { ...OWNERSHIP, contributors: [] } });
+  it("states the bus factor and contributor count", () => {
+    renderCard();
 
-    expect(screen.queryByText(/authors/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Bus factor 2 · 2 contributors/)).toBeInTheDocument();
+  });
+
+  it("uses the singular for one contributor", () => {
+    renderCard({
+      ownershipData: {
+        ...OWNERSHIP,
+        bus_factor: 1,
+        contributors: [OWNERSHIP.contributors[0]],
+      },
+    });
+
+    expect(screen.getByText(/1 contributor$/)).toBeInTheDocument();
   });
 });
 
 describe("loading and empty states", () => {
-  it("shows the loading state", () => {
+  it("shows the loading state, and no ownership, while loading", () => {
     renderCard({ isLoading: true });
 
-    expect(screen.getByText("Loading ownership data...")).toBeInTheDocument();
-  });
-
-  it("does not show ownership while loading", () => {
-    renderCard({ isLoading: true });
-
+    expect(screen.getByText("Loading ownership")).toBeInTheDocument();
     expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
   });
 
   it("shows the empty state when there is no ownership data", () => {
     renderCard({ ownershipData: null });
 
-    expect(screen.getByText("No ownership data")).toBeInTheDocument();
+    expect(screen.getByText(/No ownership data/)).toBeInTheDocument();
   });
 
   it("prefers loading over the empty state", () => {
-    // Both are falsy-ish at once on first open: the request is in flight and the payload
-    // is still null. Loading is the honest thing to show.
-    renderCard({ isLoading: true, ownershipData: null });
+    renderCard({ ownershipData: null, isLoading: true });
 
-    expect(screen.getByText("Loading ownership data...")).toBeInTheDocument();
-    expect(screen.queryByText("No ownership data")).not.toBeInTheDocument();
+    expect(screen.getByText("Loading ownership")).toBeInTheDocument();
+    expect(screen.queryByText(/No ownership data/)).not.toBeInTheDocument();
   });
 });
 
 describe("annotation", () => {
-  it("renders the note when present", () => {
-    renderCard({ annotation: "Read this first." });
+  it("renders the note with its reading-order position", () => {
+    renderCard({ annotation: "Start here.", readingPosition: 3 });
 
-    expect(screen.getByText(/Read this first\./)).toBeInTheDocument();
+    expect(screen.getByText(/Start here\./)).toBeInTheDocument();
+    expect(screen.getByText(/Read 3/)).toBeInTheDocument();
   });
 
   it("omits the note when absent", () => {
-    renderCard({ annotation: null });
+    renderCard();
 
-    expect(screen.queryByText(/^Note:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Read \d/)).not.toBeInTheDocument();
   });
 });
 
-describe("closing", () => {
-  it("calls onClose when the close button is clicked", async () => {
-    const onClose = vi.fn();
-    renderCard({ onClose });
+describe("connections", () => {
+  it("counts importers and imports in the card titles", () => {
+    renderCard({
+      importers: [neighbour("a.py"), neighbour("b.py")],
+      imports: [neighbour("c.py")],
+    });
 
-    // The close button is the only button without a title, and it is the first one.
-    await userEvent.setup().click(screen.getAllByRole("button")[0]);
-
-    expect(onClose).toHaveBeenCalled();
+    expect(card(/Imported by · 2/)).toBeInTheDocument();
+    expect(card(/Imports · 1/)).toBeInTheDocument();
   });
 
-  it("does not call onClose on render", () => {
-    const onClose = vi.fn();
-    renderCard({ onClose });
+  it("selects a neighbour when its row is clicked", async () => {
+    const onSelectPath = vi.fn();
+    const user = userEvent.setup();
+    renderCard({ importers: [neighbour("src/app.py")], onSelectPath });
 
-    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /src\/app\.py/ }));
+
+    expect(onSelectPath).toHaveBeenCalledWith("src/app.py");
+  });
+
+  it("shows ten rows and says how many more there are", () => {
+    const many = Array.from({ length: 13 }, (_, i) => neighbour(`m${i}.py`));
+    renderCard({ importers: many });
+
+    const list = card(/Imported by/);
+    expect(within(list).getAllByRole("button")).toHaveLength(10);
+    expect(within(list).getByText("and 3 more")).toBeInTheDocument();
+  });
+
+  it("says so when nothing is connected", () => {
+    renderCard();
+
+    expect(screen.getByText("Nothing imports this file")).toBeInTheDocument();
+    expect(screen.getByText("No internal imports")).toBeInTheDocument();
+  });
+});
+
+const DETAIL: FileDetail = {
+  symbols: [
+    { kind: "class", name: "Parser", start_line: 5 },
+    { kind: "function", name: "tokenize", start_line: 40 },
+  ],
+  commits: [
+    {
+      hash: "c".repeat(40),
+      title: "fix: tokenize tabs",
+      author: "Ada",
+      at: new Date().toISOString(),
+    },
+  ],
+};
+
+describe("symbols and recent changes", () => {
+  it("links each symbol to its line at the pinned commit", () => {
+    renderCard({ detail: DETAIL, commitSha: "abc123" });
+    const symbols = card(/^symbols/i);
+
+    const link = within(symbols).getByRole("link", { name: /tokenize/ });
+    expect(link).toHaveAttribute(
+      "href",
+      `${GITHUB_URL}/blob/abc123/src/core/util.py#L40`,
+    );
+    expect(within(symbols).getByText("L5")).toBeInTheDocument();
+  });
+
+  it("links each recent change to its commit, with author", () => {
+    renderCard({ detail: DETAIL });
+    const changes = card(/recent changes/i);
+
+    const link = within(changes).getByRole("link", { name: /tokenize tabs/ });
+    expect(link).toHaveAttribute("href", `${GITHUB_URL}/commit/${"c".repeat(40)}`);
+    expect(within(changes).getByText("ccccccc")).toBeInTheDocument();
+    expect(within(changes).getByText(/Commit · Ada ·/)).toBeInTheDocument();
+  });
+
+  it("says so when there is nothing to list", () => {
+    renderCard({ detail: { symbols: [], commits: [] } });
+
+    expect(screen.getByText("No functions or classes")).toBeInTheDocument();
+    expect(screen.getByText("No commits in the analysed history")).toBeInTheDocument();
+  });
+
+  it("shows a loading line while the detail is on its way", () => {
+    renderCard({ isLoadingDetail: true });
+
+    expect(screen.getByText("Loading symbols")).toBeInTheDocument();
+    expect(screen.getByText("Loading history")).toBeInTheDocument();
   });
 });
