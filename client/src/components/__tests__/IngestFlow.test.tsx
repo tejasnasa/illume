@@ -23,16 +23,10 @@ vi.mock("next/navigation", () => ({
     refresh,
     back: vi.fn(),
   }),
+  unstable_rethrow: vi.fn(),
 }));
 
-// Mutable so a single test can turn reduced motion on without a second module
-// graph; `vi.hoisted` keeps it reachable from the hoisted mock factory.
-const motion = vi.hoisted(() => ({ reduced: false }));
-
-vi.mock("motion/react", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("motion/react")>();
-  return { ...actual, useReducedMotion: () => motion.reduced };
-});
+vi.mock("@/actions/regenerateRepo", () => ({ default: vi.fn() }));
 
 /** Read a stage's line back out of the screen-reader summary. */
 function nodeDetail(label: string): string {
@@ -71,7 +65,6 @@ function mount(props: Partial<React.ComponentProps<typeof IngestFlow>> = {}) {
 
 beforeEach(() => {
   refresh.mockClear();
-  motion.reduced = false;
   vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "http://localhost:8000");
   installFakeWebSocket();
   vi.useFakeTimers();
@@ -87,9 +80,8 @@ describe("the header", () => {
   it("names the active stage while running", () => {
     mount();
 
-    // `repoLabel` is no longer rendered in the header; the headline reflects
-    // the currently-running stage instead. Scoped to <header> so the SVG text
-    // node with the same label (it's the canvas) doesn't satisfy the query.
+    // Scoped to <header> so the stage card carrying the same label doesn't
+    // satisfy the query.
     expect(
       within(screen.getByRole("banner")).getByText("Fetch Repo"),
     ).toBeInTheDocument();
@@ -144,15 +136,6 @@ describe("node states", () => {
     expect(nodeState("Mine Git History")).toBe("done");
     expect(nodeState("Create Reading Order")).toBe("done");
     expect(nodeState("Generate Embeddings")).toBe("active");
-  });
-
-  it("keeps the information when reduced motion is requested", () => {
-    motion.reduced = true;
-    mount({ status: "embedding" });
-
-    expect(nodeState("Fetch Repo")).toBe("done");
-    expect(nodeState("Generate Embeddings")).toBe("active");
-    expect(nodeState("Ready")).toBe("pending");
   });
 });
 
@@ -253,11 +236,15 @@ describe("the refresh policy", () => {
       });
     });
 
-    // Both terminal frames arrive, and neither may fire before the settle.
+    // Both terminal frames arrive, and neither may fire before the countdown
+    // the header announces has run out.
+    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.getByText("Redirecting")).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(2000));
     expect(refresh).not.toHaveBeenCalled();
 
     act(() => vi.advanceTimersByTime(1000));
-
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
@@ -350,15 +337,83 @@ describe("failure and retry", () => {
   });
 });
 
-describe("the raw log drawer", () => {
-  it("is collapsed by default and shows the newest line when opened", () => {
+describe("a run that has failed for good", () => {
+  it("offers a fresh run once the retry window has passed", () => {
     mount();
 
-    expect(screen.queryByLabelText("Raw ingestion output")).toBeNull();
+    send({
+      event: "clone_complete",
+      message: "Clone complete.",
+      stage: "clone",
+      phase: "done",
+    });
+    send({
+      event: "parsing_started",
+      message: "Starting file analysis...",
+      stage: "parse",
+      phase: "started",
+    });
+    send({
+      event: "status_update",
+      message: "Error: clone timed out",
+      status: "failed",
+      phase: "failed",
+    });
+    send({ event: "error", message: "ERROR", phase: "failed" });
 
-    const toggle = screen.getByRole("button", { name: /Ingest logs/ });
-    act(() => toggle.click());
+    // Inside the window a retry is still expected, so nothing is offered.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Failed, retrying…")).toBeInTheDocument();
 
-    expect(screen.getByLabelText("Raw ingestion output")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(15_000));
+
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByText(/Stopped at Parse files/)).toBeInTheDocument();
+    expect(within(alert).getByText("clone timed out")).toBeInTheDocument();
+    expect(
+      within(alert).getByRole("button", { name: /Try again/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("treats a page opened on a failed run as failed without a frame", () => {
+    mount({ status: "failed" });
+
+    act(() => vi.advanceTimersByTime(15_000));
+
+    expect(screen.getByText("Ingestion failed")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    // The server already rendered this state; repainting it would loop.
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("clears the failure when a retry arrives on a page opened after it", () => {
+    mount({ status: "failed" });
+
+    send({
+      event: "clone_started",
+      message: "Cloning repository...",
+      stage: "clone",
+      phase: "started",
+    });
+    act(() => vi.advanceTimersByTime(15_000));
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(nodeState("Fetch Repo")).toBe("active");
+  });
+});
+
+describe("the live log", () => {
+  it("shows every line as it arrives", () => {
+    mount();
+
+    send({
+      event: "clone_started",
+      message: "Cloning repository...",
+      stage: "clone",
+      phase: "started",
+    });
+
+    const log = screen.getByRole("log", { name: "Raw ingestion output" });
+    expect(within(log).getByText("Cloning repository...")).toBeInTheDocument();
   });
 });

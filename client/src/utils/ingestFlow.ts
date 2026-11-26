@@ -1,5 +1,5 @@
 /**
- * The ingestion pipeline as a graph, and the pure functions that drive it.
+ * The ingestion pipeline's stages, and the pure functions that drive them.
  *
  * Nothing here touches React or the DOM, which is what lets the reducer --
  * the part with the real logic -- be tested in the fast node environment.
@@ -21,16 +21,10 @@ import type {
   StageStateMap,
 } from "@/types/ingest";
 
-/** A point in the canvas coordinate space. */
-export type Point = readonly [number, number];
-
-/** One stage box in the flow. */
+/** One stage of the pipeline. */
 export interface FlowNode {
   id: string;
   label: string;
-  /** Centre of the box. */
-  cx: number;
-  cy: number;
   /**
    * Singular and plural noun for the total this stage publishes. Absent where
    * the stage publishes no total, which is most of them -- a bare number on a
@@ -39,76 +33,41 @@ export interface FlowNode {
   unit?: readonly [string, string];
 }
 
-/** One edge between stages, with authored geometry. */
-export interface FlowEdge {
-  from: string;
-  to: string;
-  /**
-   * Explicit waypoints. Authoring these instead of measuring the DOM keeps
-   * the travelling pulse driven by literal numbers -- no layout effect, no
-   * reflow on resize, no `getTotalLength()`.
-   */
-  points: readonly Point[];
-  /** `sidecar` marks work that runs alongside the spine rather than in it. */
-  kind: "main" | "sidecar";
-  /**
-   * The stages that must *all* be done for this edge to light.
-   *
-   * An edge leaving a junction cannot key off its own source -- a junction is
-   * not a stage and never completes -- so it names the stages it actually
-   * waited for instead. Defaults to "the source is done".
-   */
-  requires?: readonly string[];
-}
-
-export const NODE_WIDTH = 200;
-export const NODE_HEIGHT = 60;
-export const VIEWBOX = { width: 1210, height: 580 } as const;
-
 /**
- * The pipeline, drawn to match the real execution order.
+ * Every stage the backend publishes, with the label the page shows for it.
  *
- * The spine runs top-to-bottom because it is genuinely one sequential chain;
- * the two fork/join pairs sit to its right where their parallelism is
- * visible; `pr_fetch` rides a rail above everything because its future is
- * only joined at the very end, so it can outlive every other stage.
+ * Order is the screen-reader summary's order. `pr_fetch` comes last because
+ * its future is only joined at the very end, so it can outlive every other
+ * stage.
  */
 export const NODES: readonly FlowNode[] = [
-  { id: "clone", label: "Fetch Repo", cx: 150, cy: 70 },
-  { id: "parse", label: "Parse files", cx: 150, cy: 146 },
+  { id: "clone", label: "Fetch Repo" },
+  { id: "parse", label: "Parse files" },
   {
     id: "resolve_dependencies",
     label: "Map Connections",
-    cx: 150,
-    cy: 222,
     unit: ["dependency", "dependencies"],
   },
-  { id: "compute_fan_metrics", label: "Rank Impact", cx: 150, cy: 298 },
-  { id: "detect_stack", label: "Identify Stack", cx: 150, cy: 374 },
+  { id: "compute_fan_metrics", label: "Rank Impact" },
+  { id: "detect_stack", label: "Identify Stack" },
   {
     id: "git_history",
     label: "Mine Git History",
-    cx: 150,
-    cy: 450,
     unit: ["file", "files"],
   },
-  { id: "criticality", label: "Score Risk", cx: 150, cy: 526 },
-  { id: "glossary", label: "Create Glossary", cx: 470, cy: 390 },
-  { id: "reading_order", label: "Create Reading Order", cx: 470, cy: 526 },
+  { id: "criticality", label: "Score Risk" },
+  { id: "glossary", label: "Create Glossary" },
+  { id: "reading_order", label: "Create Reading Order" },
   {
     id: "generate_embeddings",
     label: "Generate Embeddings",
-    cx: 790,
-    cy: 390,
     unit: ["vector", "vectors"],
   },
-  { id: "brief", label: "Analyze Architecture", cx: 790, cy: 526 },
-  { id: "ready", label: "Ready", cx: 1080, cy: 298 },
+  { id: "brief", label: "Analyze Architecture" },
+  { id: "ready", label: "Ready" },
   {
     id: "pr_fetch",
     label: "Gather PRs",
-    cx: 470,
-    cy: 70,
     unit: ["PR", "PRs"],
   },
 ];
@@ -117,197 +76,8 @@ export const NODES_BY_ID: Record<string, FlowNode> = Object.fromEntries(
   NODES.map((node) => [node.id, node]),
 );
 
-/** Every stage id the graph can render. */
+/** Every stage id the page can render. */
 export const STAGE_IDS: readonly string[] = NODES.map((node) => node.id);
-
-export const EDGES: readonly FlowEdge[] = [
-  // The spine.
-  {
-    from: "clone",
-    to: "parse",
-    points: [
-      [150, 100],
-      [150, 116],
-    ],
-    kind: "main",
-  },
-  {
-    from: "parse",
-    to: "resolve_dependencies",
-    points: [
-      [150, 176],
-      [150, 192],
-    ],
-    kind: "main",
-  },
-  {
-    from: "resolve_dependencies",
-    to: "compute_fan_metrics",
-    points: [
-      [150, 252],
-      [150, 268],
-    ],
-    kind: "main",
-  },
-  {
-    from: "compute_fan_metrics",
-    to: "detect_stack",
-    points: [
-      [150, 328],
-      [150, 344],
-    ],
-    kind: "main",
-  },
-  {
-    from: "detect_stack",
-    to: "git_history",
-    points: [
-      [150, 404],
-      [150, 420],
-    ],
-    kind: "main",
-  },
-  {
-    from: "git_history",
-    to: "criticality",
-    points: [
-      [150, 480],
-      [150, 496],
-    ],
-    kind: "main",
-  },
-  {
-    from: "clone",
-    to: "pr_fetch",
-    points: [
-      [250, 70],
-      [370, 70],
-    ],
-    kind: "sidecar",
-  },
-  {
-    from: "pr_fetch",
-    to: "ready",
-    points: [
-      [570, 70],
-      [1080, 70],
-      [1080, 268],
-    ],
-    kind: "sidecar",
-  },
-  {
-    from: "criticality",
-    to: "fork_risk",
-    points: [
-      [250, 526],
-      [290, 526],
-      [290, 458],
-      [330, 458],
-    ],
-    kind: "main",
-  },
-  {
-    from: "fork_risk",
-    to: "glossary",
-    points: [
-      [330, 458],
-      [330, 390],
-      [370, 390],
-    ],
-    kind: "main",
-    requires: ["criticality"],
-  },
-  {
-    from: "fork_risk",
-    to: "reading_order",
-    points: [
-      [330, 458],
-      [330, 526],
-      [370, 526],
-    ],
-    kind: "main",
-    requires: ["criticality"],
-  },
-  {
-    from: "glossary",
-    to: "join_llm",
-    points: [
-      [570, 390],
-      [610, 390],
-      [610, 458],
-      [620, 458],
-    ],
-    kind: "main",
-  },
-  {
-    from: "reading_order",
-    to: "join_llm",
-    points: [
-      [570, 526],
-      [610, 526],
-      [610, 458],
-      [620, 458],
-    ],
-    kind: "main",
-  },
-  {
-    from: "join_llm",
-    to: "generate_embeddings",
-    points: [
-      [620, 458],
-      [650, 458],
-      [650, 390],
-      [690, 390],
-    ],
-    kind: "main",
-    requires: ["glossary", "reading_order"],
-  },
-  {
-    from: "join_llm",
-    to: "brief",
-    points: [
-      [620, 458],
-      [650, 458],
-      [650, 526],
-      [690, 526],
-    ],
-    kind: "main",
-    requires: ["glossary", "reading_order"],
-  },
-  {
-    from: "generate_embeddings",
-    to: "join_final",
-    points: [
-      [890, 390],
-      [930, 390],
-      [930, 458],
-      [940, 458],
-    ],
-    kind: "main",
-  },
-  {
-    from: "brief",
-    to: "join_final",
-    points: [
-      [890, 526],
-      [930, 526],
-      [930, 458],
-      [940, 458],
-    ],
-    kind: "main",
-  },
-  {
-    from: "join_final",
-    to: "ready",
-    points: [
-      [940, 458],
-      [1080, 458],
-      [1080, 328],
-    ],
-    kind: "main",
-    requires: ["generate_embeddings", "brief"],
-  },
-];
 
 /** Higher rank means further along. A frame can only ever move a node up. */
 const RANK: Record<NodeState, number> = {
@@ -515,126 +285,6 @@ export function reduceFrames(
 }
 
 /**
- * Convert authored waypoints into an SVG path.
- *
- * @param points - Waypoints in canvas space.
- * @returns An `M`/`L` path string, or an empty string for no points.
- */
-export function pathFromPoints(points: readonly Point[]): string {
-  if (points.length === 0) return "";
-  const [first, ...rest] = points;
-  const head = `M ${first[0]} ${first[1]}`;
-  return rest.reduce((path, [x, y]) => `${path} L ${x} ${y}`, head);
-}
-
-/**
- * Cumulative arc length at each waypoint, starting at 0.
- *
- * @param points - Waypoints in canvas space.
- * @returns One running total per waypoint.
- */
-function cumulativeLengths(points: readonly Point[]): number[] {
-  const lengths: number[] = [0];
-  let total = 0;
-  for (let i = 1; i < points.length; i += 1) {
-    const [x0, y0] = points[i - 1];
-    const [x1, y1] = points[i];
-    total += Math.hypot(x1 - x0, y1 - y0);
-    lengths.push(total);
-  }
-  return lengths;
-}
-
-/**
- * Total arc length of an edge.
- *
- * The travelling comet is drawn as a dash on the edge's own path, so it needs
- * the path's length in the same units the geometry was authored in -- no
- * `getTotalLength()`, and therefore no layout read.
- *
- * @param points - Waypoints in canvas space.
- * @returns The summed segment length, or 0 for a degenerate edge.
- */
-export function pathLengthOf(points: readonly Point[]): number {
-  const lengths = cumulativeLengths(points);
-  return lengths[lengths.length - 1] ?? 0;
-}
-
-/**
- * Progress fractions (0..1) for each waypoint, by cumulative arc length.
- *
- * Keyframing a pulse by vertex index would make a four-point edge move at a
- * different speed from a two-point one. Weighting by distance keeps every
- * pulse at a constant pixels-per-second.
- *
- * @param points - Waypoints in canvas space.
- * @returns One fraction per waypoint, starting at 0 and ending at 1.
- */
-export function normaliseTimes(points: readonly Point[]): number[] {
-  if (points.length < 2) return points.map(() => 0);
-
-  const cumulative = cumulativeLengths(points);
-  const total = cumulative[cumulative.length - 1];
-
-  // A degenerate edge (all waypoints identical) would divide by zero and
-  // hand motion a NaN keyframe, so fall back to an even split.
-  if (total === 0) return points.map((_, i) => i / (points.length - 1));
-
-  return cumulative.map((length) => length / total);
-}
-
-/** Whether a stage has stopped changing. */
-function hasSettled(state: NodeState | undefined): boolean {
-  return state === "done" || state === "failed";
-}
-
-/**
- * Whether an edge should be drawn as lit.
- *
- * An edge leaving a barrier names the stages it waited for rather than
- * carrying a source that can complete -- a barrier is not a stage and never
- * finishes -- so `requires` is checked first.
- */
-export function isLit(edge: FlowEdge, states: StageStateMap): boolean {
-  if (edge.requires) {
-    return edge.requires.every((id) => states[id]?.state === "done");
-  }
-  return states[edge.from]?.state === "done";
-}
-
-/**
- * Whether an edge's far end has stopped changing.
- *
- * An edge into a barrier has no stage of its own to consult. Looking its
- * target up in the state map returns `undefined`, which is never `done`, so
- * a finished run kept its particles flowing forever. The stages the barrier
- * feeds stand in for it instead.
- */
-function downstreamSettled(edge: FlowEdge, states: StageStateMap): boolean {
-  if (!(edge.to in NODES_BY_ID)) {
-    return EDGES.filter((candidate) => candidate.from === edge.to).every(
-      (candidate) => hasSettled(states[candidate.to]?.state),
-    );
-  }
-  return hasSettled(states[edge.to]?.state);
-}
-
-/**
- * Whether an edge should show particles in transit.
- *
- * True while it is lit and whatever it leads to has not settled. Note this
- * is not the same question as `isLit`: an edge stays lit once its source is
- * done, but particles belong only to work still in flight.
- *
- * @param edge - The edge to test.
- * @param states - Current state of every stage.
- * @returns True when particles should be drawn along this edge.
- */
-export function isFlowing(edge: FlowEdge, states: StageStateMap): boolean {
-  return isLit(edge, states) && !downstreamSettled(edge, states);
-}
-
-/**
  * The stage currently running, if exactly one is.
  *
  * @param state - Current states.
@@ -663,4 +313,48 @@ export function isComplete(state: StageStateMap): boolean {
  */
 export function hasFailed(state: StageStateMap): boolean {
   return STAGE_IDS.some((id) => state[id]?.state === "failed");
+}
+
+/** One column of the pipeline board: a heading and the stages under it. */
+export interface PipelineColumn {
+  label: string;
+  stages: readonly string[];
+}
+
+/**
+ * The board's columns, left to right.
+ *
+ * Stages that share a column run at the same time -- the parse, the git
+ * history mine and the PR fetch all start straight after the clone -- so the
+ * columns read as "what can happen now" rather than as a strict sequence.
+ */
+export const PIPELINE_COLUMNS: readonly PipelineColumn[] = [
+  { label: "Fetch", stages: ["clone"] },
+  { label: "Read", stages: ["parse", "git_history", "pr_fetch"] },
+  {
+    label: "Connect",
+    stages: ["resolve_dependencies", "compute_fan_metrics", "detect_stack"],
+  },
+  { label: "Score", stages: ["criticality"] },
+  { label: "Write", stages: ["glossary", "reading_order"] },
+  { label: "Index", stages: ["generate_embeddings", "brief"] },
+  { label: "Done", stages: ["ready"] },
+];
+
+/**
+ * Render a stage's published total with its noun, e.g. ``2,871 dependencies``.
+ *
+ * @param node - The stage the total belongs to.
+ * @param count - The total it published.
+ * @returns The label, or null for a stage whose totals carry no noun.
+ */
+export function countLabel(node: FlowNode, count: number): string | null {
+  if (!node.unit) return null;
+  const noun = count === 1 ? node.unit[0] : node.unit[1];
+  return `${count.toLocaleString("en-US")} ${noun}`;
+}
+
+/** How many stages have finished. */
+export function doneCount(state: StageStateMap): number {
+  return STAGE_IDS.filter((id) => state[id]?.state === "done").length;
 }

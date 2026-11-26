@@ -9,14 +9,10 @@
 
 import type { IngestFrame, StageStateMap } from "@/types/ingest";
 import {
-  EDGES,
   STAGE_IDS,
   emptyStateMap,
   hasFailed,
   isComplete,
-  isFlowing,
-  normaliseTimes,
-  pathLengthOf,
   reduceFrame,
   reduceFrames,
   seedFromStatus,
@@ -328,150 +324,5 @@ describe("counts", () => {
     );
 
     expect(next.detect_stack.count).toBeUndefined();
-  });
-});
-
-describe("isFlowing", () => {
-  /** Look an edge up by its endpoints, failing loudly if the graph moved. */
-  function edgeBetween(from: string, to: string) {
-    const edge = EDGES.find((e) => e.from === from && e.to === to);
-    if (!edge) throw new Error(`no edge ${from} -> ${to} in the graph`);
-    return edge;
-  }
-
-  /** A state map with every named stage done. */
-  function statesWith(done: readonly string[]): StageStateMap {
-    const map = emptyStateMap();
-    for (const id of done) map[id] = { state: "done" };
-    return map;
-  }
-
-  it("leaves nothing flowing once every stage is done", () => {
-    // The regression. Edges into a barrier have no stage to look up, so the
-    // original check compared `undefined` against "done", never matched, and
-    // left finished runs with particles streaming forever.
-    const finished = statesWith(STAGE_IDS);
-
-    expect(EDGES.filter((edge) => isFlowing(edge, finished))).toEqual([]);
-  });
-
-  it("stops an edge into a barrier once everything it feeds is done", () => {
-    const edge = edgeBetween("criticality", "fork_risk");
-
-    expect(isFlowing(edge, statesWith(["criticality"]))).toBe(true);
-    expect(
-      isFlowing(edge, statesWith(["criticality", "glossary"])),
-      "still waiting on reading_order",
-    ).toBe(true);
-    expect(
-      isFlowing(edge, statesWith(["criticality", "glossary", "reading_order"])),
-    ).toBe(false);
-  });
-
-  it("stops the feed into ready once ready is done", () => {
-    const edge = edgeBetween("join_final", "ready");
-
-    expect(isFlowing(edge, statesWith(["generate_embeddings", "brief"]))).toBe(
-      true,
-    );
-    expect(
-      isFlowing(edge, statesWith(["generate_embeddings", "brief", "ready"])),
-    ).toBe(false);
-  });
-
-  it("stops a plain edge when its target settles", () => {
-    const edge = edgeBetween("clone", "parse");
-
-    expect(isFlowing(edge, statesWith(["clone"]))).toBe(true);
-    expect(isFlowing(edge, statesWith(["clone", "parse"]))).toBe(false);
-  });
-
-  it("treats a failed target as settled rather than as still in flight", () => {
-    const edge = edgeBetween("clone", "parse");
-    const map = statesWith(["clone"]);
-    map.parse = { state: "failed" };
-
-    expect(isFlowing(edge, map)).toBe(false);
-  });
-
-  it("never flows before its source is done", () => {
-    expect(isFlowing(edgeBetween("clone", "parse"), emptyStateMap())).toBe(
-      false,
-    );
-  });
-});
-
-describe("normaliseTimes", () => {
-  it("starts at zero and ends at one", () => {
-    const times = normaliseTimes([
-      [0, 0],
-      [100, 0],
-      [100, 50],
-    ]);
-
-    expect(times[0]).toBe(0);
-    expect(times.at(-1)).toBe(1);
-  });
-
-  it("weights by arc length, not by waypoint index", () => {
-    // A long first leg and a short second one must not be treated as equal,
-    // or a four-point edge would move at a different speed from a two-point
-    // one and every pulse would look like it stuttered.
-    const times = normaliseTimes([
-      [0, 0],
-      [300, 0],
-      [300, 100],
-    ]);
-
-    expect(times[1]).toBeCloseTo(0.75, 5);
-  });
-
-  it("stays finite on a degenerate zero-length edge", () => {
-    const times = normaliseTimes([
-      [10, 10],
-      [10, 10],
-      [10, 10],
-    ]);
-
-    expect(times.every((value) => Number.isFinite(value))).toBe(true);
-  });
-
-  it("handles a two-point edge", () => {
-    expect(
-      normaliseTimes([
-        [0, 0],
-        [10, 0],
-      ]),
-    ).toEqual([0, 1]);
-  });
-});
-
-describe("pathLengthOf", () => {
-  it("sums the segments rather than measuring end to end", () => {
-    // The comet is a dash on the path, so it needs the travelled length of an
-    // elbow -- the straight-line distance would put it in the wrong place.
-    expect(
-      pathLengthOf([
-        [0, 0],
-        [300, 0],
-        [300, 100],
-      ]),
-    ).toBe(400);
-  });
-
-  it("is zero for a degenerate edge", () => {
-    expect(pathLengthOf([[5, 5]])).toBe(0);
-  });
-
-  it("agrees with the last entry of normaliseTimes", () => {
-    const points = [
-      [0, 0],
-      [120, 40],
-      [200, 40],
-      [200, 300],
-    ] as const;
-
-    expect(pathLengthOf(points)).toBeGreaterThan(0);
-    expect(normaliseTimes(points).at(-1)).toBe(1);
   });
 });
