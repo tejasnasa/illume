@@ -17,7 +17,7 @@ export default function Input({
   return (
     <input
       {...props}
-      className={`bg-(--muted)/50 h-11 rounded-sm px-4 py-3 text-sm border border-(--border) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:border-(--primary)/30 transition-all duration-200 placeholder:text-(--muted-foreground)/50 ${className}`}
+      className={`h-11 rounded-sm border border-(--input) bg-(--background) px-3 text-sm text-(--foreground) transition-colors duration-150 placeholder:text-(--faint-foreground) focus-visible:border-(--accent) focus-visible:outline-none disabled:opacity-60 ${className}`}
     />
   );
 }

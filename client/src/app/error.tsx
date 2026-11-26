@@ -4,11 +4,10 @@
  */
 "use client";
 
-import {
-  ArrowsClockwiseIcon,
-  HouseIcon,
-  WarningDiamondIcon,
-} from "@phosphor-icons/react/dist/ssr";
+import StatusScreen, {
+  STATUS_GHOST,
+  STATUS_PRIMARY,
+} from "@/components/ui/StatusScreen";
 import Link from "next/link";
 import { useEffect } from "react";
 
@@ -36,45 +35,30 @@ export default function Error({
   }, [error]);
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="glass-card rounded-sm border border-(--destructive)/30 p-8 max-w-md w-full flex flex-col items-center gap-5 text-center">
-        <WarningDiamondIcon size={48} className="text-(--destructive)" />
-
-        <div className="flex flex-col gap-2">
-          <h1 className="text-xl font-bold text-(--foreground)">
-            Something went wrong
-          </h1>
-          <p className="text-sm text-(--muted-foreground) leading-relaxed">
-            This page could not be loaded. Please retry later.
-          </p>
-        </div>
-
-        {/* In production the framework replaces a server error's message with a
-            generic one, so the digest is the only handle on the real cause. */}
-        {error.digest && (
-          <p className="font-mono text-xs text-(--muted-foreground)/60 break-all">
-            Reference: {error.digest}
-          </p>
-        )}
-
-        <div className="flex items-center gap-3">
+    <StatusScreen
+      command="illume retry"
+      code="500"
+      title="Something went wrong"
+      className="min-h-dvh"
+      actions={
+        <>
           <button
             type="button"
             onClick={() => unstable_retry()}
-            className="flex items-center gap-2 px-4 py-2 bg-(--primary)/10 hover:bg-(--primary)/20 border border-(--primary)/30 text-(--primary) text-sm font-semibold rounded-sm transition-colors"
+            className={STATUS_PRIMARY}
           >
-            <ArrowsClockwiseIcon size={16} />
-            Try Again
+            <span aria-hidden="true">↻</span> Try again
           </button>
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2 px-4 py-2 border border-(--border) hover:bg-(--secondary) text-sm font-semibold rounded-sm transition-colors text-(--muted-foreground)"
-          >
-            <HouseIcon size={16} />
+          <Link href="/dashboard" className={STATUS_GHOST}>
             Dashboard
           </Link>
-        </div>
-      </div>
-    </main>
+        </>
+      }
+      // In production the framework replaces a server error's message with a
+      // generic one, so the digest is the only handle on the real cause.
+      footnote={error.digest ? `Reference: ${error.digest}` : undefined}
+    >
+      <p className="m-0">This page could not be loaded. The server may be restarting; trying again in a moment usually works.</p>
+    </StatusScreen>
   );
 }

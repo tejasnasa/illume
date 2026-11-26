@@ -22,4 +22,9 @@ export const handlers = [
   http.get(`${BACKEND_URL}/healthz`, () =>
     HttpResponse.json({ status: "ok", checks: { database: "ok", redis: "ok" } }),
   ),
+  // The public navbar shows the project's star count, fetched straight from GitHub on
+  // every page that renders it.
+  http.get("https://api.github.com/repos/:owner/:repo", () =>
+    HttpResponse.json({ stargazers_count: 42 }),
+  ),
 ];

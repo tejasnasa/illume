@@ -3,13 +3,10 @@
  * @module RootLayout
  */
 import type { Metadata } from "next";
-import { Space_Grotesk } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistPixelSquare } from "geist/font/pixel/square";
+import Starfield from "@/components/Starfield";
 import "./globals.css";
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--space-grotesk",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://illume.tejasnasa.me"),
@@ -62,7 +59,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * Root HTML shell: applies the app font and global styles.
+ * Root HTML shell: exposes the body and pixel fonts as CSS variables,
+ * applies the global styles, and pins the starfield behind every page,
+ * beneath any page's own background graph. Body text uses Geist; the `font-pixel` utility
+ * switches labels and headings to Geist Pixel.
  *
  * @param children - Page content rendered inside the body.
  * @returns HTML document structure with SEO metadata applied.
@@ -73,8 +73,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${spaceGrotesk.className} antialiased`}>
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${GeistPixelSquare.variable} antialiased`}
+    >
       <body className="min-h-screen bg-background text-foreground overflow-x-hidden">
+        <Starfield className="-z-20" />
         {children}
         <script
           type="application/ld+json"

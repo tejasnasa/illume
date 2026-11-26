@@ -4,12 +4,13 @@ import { describe, expect, it } from "vitest";
 import NotFound from "@/app/not-found";
 
 describe("not found page", () => {
-  it("explains that the repository was not found", () => {
+  it("says the page was not found, and why a repository link might be stale", () => {
     render(<NotFound />);
 
     expect(
-      screen.getByRole("heading", { name: /repository not found/i }),
+      screen.getByRole("heading", { name: /page not found/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/link to a\s+repository/i)).toBeInTheDocument();
   });
 
   it("offers a route back to the dashboard", () => {

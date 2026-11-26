@@ -1,5 +1,5 @@
 /**
- * Primary button with size variants and a loading state.
+ * Pixel-labelled button with size and colour variants and a loading state.
  * @module Button
  */
 import { SpinnerIcon } from "@phosphor-icons/react/dist/ssr";
@@ -11,13 +11,23 @@ type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: "xs" | "sm" | "md" | "lg";
   ratio?: number;
   loading?: boolean;
+  variant?: "primary" | "ghost" | "danger";
 };
 
 const sizes = {
-  xs: "px-2.5 py-1 text-xs",
-  sm: "px-4 py-2 text-sm",
-  md: "h-11 px-5 text-sm",
-  lg: "h-12 px-6 text-base",
+  xs: "h-7 px-2.5 text-[11px]",
+  sm: "h-9 px-3.5 text-xs",
+  md: "h-11 px-5 text-[13px]",
+  lg: "h-12 px-6 text-sm",
+};
+
+const variants = {
+  primary:
+    "cta bg-(--primary) text-(--primary-foreground) border border-transparent disabled:bg-(--primary)/40",
+  ghost:
+    "ghost bg-transparent text-zinc-300 border border-(--input) disabled:opacity-50",
+  danger:
+    "bg-transparent text-red-400 border border-red-500/40 transition-colors hover:bg-red-500/10 disabled:opacity-50",
 };
 
 const iconSizes = {
@@ -34,6 +44,7 @@ const iconSizes = {
  * @param ratio Optional aspect ratio applied via inline style.
  * @param style Inline styles merged with the aspect-ratio style.
  * @param loading When true, shows a spinner and disables the button.
+ * @param variant Filled primary, outlined ghost, or outlined destructive.
  * @param props Remaining native button attributes including children.
  * @returns The rendered button element.
  */
@@ -43,6 +54,7 @@ export default function Button({
   ratio,
   style,
   loading = false,
+  variant = "primary",
   ...props
 }: Props) {
   const base = sizes[size];
@@ -55,7 +67,7 @@ export default function Button({
         ...(ratio && { aspectRatio: ratio }),
       }}
       disabled={loading || props.disabled}
-      className={`bg-(--primary) text-(--primary-foreground) hover:cursor-pointer hover:scale-[1.02] transform rounded-sm transition-all duration-200 active:translate-y-0.5 inline-flex items-center justify-center gap-2 font-medium disabled:bg-(--primary)/40 disabled:cursor-default ${base} ${ratio ? "px-0" : ""} ${className}`}
+      className={`${variants[variant]} inline-flex items-center justify-center gap-2 rounded-sm font-pixel tracking-[0.06em] uppercase hover:cursor-pointer active:translate-y-px disabled:cursor-default ${base} ${ratio ? "px-0" : ""} ${className}`}
     >
       {loading && <SpinnerIcon className={`animate-spin ${iconSizes[size]}`} />}
       {props.children}

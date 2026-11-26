@@ -4,41 +4,51 @@
 @plugin "@tailwindcss/typography";
 
 /* ── Theme tokens ──
-   Dark-first oklch palette mapped to shadcn-style vars; single source
-   for surfaces, charts, and sidebar so components share one theme. */
+   Near-black zinc surfaces with a magenta primary, a pink accent for focus
+   and selection, and a cyan ramp for charts. Risk colours are shared by the
+   graph, the explorer and the repository cards, so they live here too. */
 @theme inline {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.459 0.187 3.815);
-  --primary-foreground: oklch(0.971 0.014 343.198);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --success: oklch(0.75 0.16 155);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --chart-1: oklch(0.865 0.127 207.078);
-  --chart-2: oklch(0.715 0.143 215.221);
-  --chart-3: oklch(0.609 0.126 221.723);
-  --chart-4: oklch(0.52 0.105 223.128);
-  --chart-5: oklch(0.45 0.085 224.283);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.656 0.241 354.308);
-  --sidebar-primary-foreground: oklch(0.971 0.014 343.198);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-pixel: var(--font-geist-pixel-square), ui-monospace, monospace;
+
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #0e0e11;
+  --card-foreground: #fafafa;
+  --popover: #0e0e11;
+  --popover-foreground: #fafafa;
+  --primary: #a3004c;
+  --primary-foreground: #fdf2f8;
+  --secondary: #18181b;
+  --secondary-foreground: #fafafa;
+  --muted: #27272a;
+  --muted-foreground: #9f9fa9;
+  --subtle-foreground: #71717a;
+  --faint-foreground: #52525b;
+  --accent: #f6339a;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --success: #22c55e;
+  --warning: #facc15;
+  --selected: #0078ff;
+  --match: #a855f7;
+  --border: #ffffff1a;
+  --border-strong: #ffffff33;
+  --input: #ffffff26;
+  --ring: #f6339a;
+  --chart-1: #53eafd;
+  --chart-2: #00b8db;
+  --chart-3: #0092b8;
+  --chart-4: #005f78;
+  --chart-5: #104e64;
+  --sidebar: #0e0e11;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #f6339a;
+  --sidebar-primary-foreground: #fdf2f8;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: #ffffff1a;
+  --sidebar-ring: #f6339a;
 }
 
 /* ── Document base ──
@@ -52,12 +62,13 @@ html {
   * {
     border-color: var(--border);
     scrollbar-width: thin;
-    scrollbar-color: oklch(from var(--primary) l c h) transparent;
+    scrollbar-color: var(--muted) transparent;
   }
 
   body {
     background-color: var(--background);
     color: var(--foreground);
+    font-family: var(--font-sans);
   }
 
   ::-webkit-scrollbar {
@@ -70,12 +81,11 @@ html {
   }
 
   ::-webkit-scrollbar-thumb {
-    background: oklch(from var(--primary) l c h / 0.5);
-    border-radius: 999px;
+    background: var(--muted);
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: oklch(from var(--primary) l c h / 0.7);
+    background: #3f3f46;
   }
 }
 
@@ -109,7 +119,7 @@ html {
       oklch(from var(--foreground) l c h / 0.04) 1px,
       transparent 1px
     );
-  background-size: 64px 64px;
+  background-size: 48px 48px;
 }
 
 .gradient-text {
@@ -119,6 +129,7 @@ html {
     var(--chart-1),
     var(--primary)
   );
+  padding-bottom: 0.06em;
   background-size: 200% 200%;
   animation: gradient-shift 4s ease-in-out infinite;
   -webkit-background-clip: text;
@@ -147,10 +158,10 @@ html {
 }
 
 .glass-card {
-  background: oklch(from var(--card) l c h / 0.4);
-  backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid oklch(1 0 0 / 10%);
-  box-shadow: 0 8px 32px 0 oklch(0 0 0 / 0.2);
+  background: oklch(from var(--card) l c h / 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* ── Compact scrollbars ──
@@ -158,7 +169,7 @@ html {
    6px scrollbar would feel heavy. */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: oklch(from var(--primary) l c h / 0.5) transparent;
+  scrollbar-color: var(--muted) transparent;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
@@ -170,12 +181,11 @@ html {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: oklch(from var(--primary) l c h / 0.2);
-  border-radius: 10px;
+  background: var(--muted);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: oklch(from var(--primary) l c h / 0.4);
+  background: #3f3f46;
 }
 
 /* ── Entrance motion ──
@@ -195,74 +205,190 @@ html {
   animation: fade-in 0.5s ease-out forwards;
 }
 
-/* ── Ingestion flow ──
-   The only repeating animation in the progress view. It is done in CSS
-   rather than a requestAnimationFrame loop so a long parse does not cost a
-   frame of JavaScript work per tick, and so it can be switched off wholesale
-   for anyone who has asked for reduced motion. */
-@keyframes flow-ring {
-  to {
-    stroke-dashoffset: -28;
-  }
+/* ── Pixel language ──
+   Geist Pixel labels, a terminal caret, a stepped blink for "live" dots and
+   a short rise for menus and dialogs. Hover feedback on the two button
+   styles is stepped too, so the interface moves like a terminal rather than
+   gliding. */
+@utility font-pixel {
+  font-family: var(--font-pixel);
+  font-weight: 400;
 }
 
-.flow-node-ring {
-  animation: flow-ring 1.6s linear infinite;
-}
-
-/* Particles drifting along an edge whose downstream stage is still to run.
-   The dash period is 16 units and the offset travels exactly one period, so
-   the loop is seamless -- there is no visible reset. */
-@keyframes flow-stream {
-  to {
-    stroke-dashoffset: -16;
-  }
-}
-
-.flow-stream {
-  stroke-dasharray: 4 12;
-  animation: flow-stream 1.1s linear infinite;
-}
-
-/* The halo behind the working node. Breathing rather than spinning, so the
-   eye reads "running" without the agitation of a spinner. */
-@keyframes flow-halo {
-  0%,
-  100% {
-    opacity: 0.28;
-    transform: scale(1);
-  }
+@keyframes caret {
   50% {
-    opacity: 0.55;
-    transform: scale(1.06);
+    opacity: 0;
   }
 }
 
-.flow-halo {
-  animation: flow-halo 2.4s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
+.caret {
+  animation: caret 1s steps(1) infinite;
 }
 
-/* The end-of-run sweep: one pass of brightness travelling the graph, then
-   settled. One-shot by design -- a lit graph should not keep throbbing. */
-@keyframes flow-surge {
-  0% {
-    opacity: 0.55;
-    stroke-width: 2;
+@keyframes blink {
+  50% {
+    opacity: 0.25;
   }
-  40% {
+}
+
+.blink {
+  animation: blink 1.6s steps(2) infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
     opacity: 1;
-    stroke-width: 3.5;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 0.18s steps(3) both;
+}
+
+.cta {
+  transition: filter 0.2s steps(2);
+}
+
+.cta:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.ghost {
+  transition:
+    border-color 0.2s steps(2),
+    color 0.2s steps(2);
+}
+
+.ghost:hover:not(:disabled) {
+  border-color: var(--accent) !important;
+  color: var(--foreground) !important;
+}
+
+/* A labelled panel: thin border, flat card surface, small radius. */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+}
+
+/* Small uppercase pixel label used for card titles and metadata. */
+.eyebrow {
+  font-family: var(--font-pixel);
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+/* Long-form generated prose, such as the architecture brief. */
+.brief {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #a1a1aa;
+}
+
+.brief :where(h1, h2, h3, h4) {
+  margin: 18px 0 6px;
+  font-family: var(--font-pixel);
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--foreground);
+}
+
+.brief :where(p, ul, ol) {
+  margin: 0 0 10px;
+}
+
+.brief :where(ul, ol) {
+  padding-left: 1.2em;
+}
+
+.brief :where(ul) {
+  list-style: square;
+}
+
+.brief :where(ol) {
+  list-style: decimal;
+}
+
+.brief :where(strong) {
+  color: #d4d4d8;
+  font-weight: 500;
+}
+
+.brief :where(code) {
+  font-family: var(--font-pixel);
+  font-size: 0.92em;
+  color: var(--chart-1);
+}
+
+.brief :where(a) {
+  color: var(--accent);
+}
+
+.brief > :first-child {
+  margin-top: 0;
+}
+
+/* ── Landing demos ──
+   Stepped fills and a commit ticker for the feature cards. Each runs on its
+   own loop and carries no information the card's text does not also give. */
+@keyframes bar-fill {
+  0% {
+    transform: scaleX(0);
+  }
+  45%,
+  85% {
+    transform: scaleX(1);
   }
   100% {
-    opacity: 1;
-    stroke-width: 1.8;
+    transform: scaleX(1);
+    opacity: 0;
   }
 }
 
-.flow-surge {
-  animation: flow-surge 0.7s ease-out 1 both;
+.bar-fill {
+  animation: bar-fill 5s steps(12) infinite;
+  transform-origin: left center;
+}
+
+@keyframes line-fill {
+  0% {
+    transform: scaleX(0);
+  }
+  40%,
+  90% {
+    transform: scaleX(1);
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+.line-fill {
+  animation: line-fill 6s steps(10) infinite;
+  transform-origin: left center;
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee {
+  display: flex;
+  gap: 10px;
+  width: max-content;
+  animation: marquee 22s linear infinite;
 }
 
 /* ── Reduced motion ──
@@ -273,10 +399,12 @@ html {
   .animate-shimmer,
   .gradient-text,
   .animate-fade-in,
-  .flow-node-ring,
-  .flow-stream,
-  .flow-halo,
-  .flow-surge {
+  .caret,
+  .blink,
+  .rise,
+  .bar-fill,
+  .line-fill,
+  .marquee {
     animation: none;
   }
 

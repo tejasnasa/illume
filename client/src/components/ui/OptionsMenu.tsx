@@ -87,24 +87,26 @@ export default function OptionMenu({
 
       {open && (
         <div
-          className={`absolute z-50 mt-1 rounded-sm border border-(--border) bg-(--card) shadow-xl shadow-(--primary)/5 p-1.5 backdrop-blur-xl ${direction === "left" ? "right-0" : "left-0"} ${className || ""}`}
-          style={{ animation: "scale-in 0.15s ease-out" }}
+          role="menu"
+          className={`rise absolute z-50 mt-1 rounded-md border border-(--border) bg-(--card) p-1.5 shadow-[0_16px_40px_#00000080] ${direction === "left" ? "right-0" : "left-0"} ${className || ""}`}
         >
           {items.map((item, i) => (
             <button
               key={i}
+              type="button"
+              role="menuitem"
               disabled={item.disabled}
               onClick={() => {
                 item.onClick?.();
                 setOpen(false);
               }}
-              className={`flex w-full items-center gap-2.5 rounded-xs px-3 py-2 transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 hover:cursor-pointer whitespace-nowrap
+              className={`flex w-full items-center gap-2.5 rounded-sm px-3 py-2 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 hover:cursor-pointer whitespace-nowrap
                 ${size === "sm" && "text-xs"}
                 ${size === "lg" && "text-sm"}
                 ${
                   item.destructive
                     ? "text-(--destructive) hover:bg-(--destructive)/10"
-                    : "text-(--foreground) hover:bg-(--muted)/60"
+                    : "text-(--foreground) hover:bg-(--secondary)"
                 }`}
             >
               {item.icon && (

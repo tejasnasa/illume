@@ -50,12 +50,9 @@ if (typeof window !== "undefined" && window.Animation) {
  * checks `typeof ResizeObserver` before using it sees the shim, takes the
  * measurement path, and then waits for a notification that can never arrive.
  *
- * `BackgroundGraph` is the component that cares. It sizes its canvas from its
- * own frame rather than letting the force engine take the window's, and
- * withholds the render until the measurement is non-zero -- so under the shim
- * it renders nothing at all, whatever data it is handed. The real canvas is
- * covered end to end; this exists so the props the app passes down are
- * assertable.
+ * Anything that waits for a measurement before drawing would therefore wait
+ * forever. The real layout is covered end to end; this exists so code paths
+ * that depend on a size are reachable here.
  *
  * A browser reports the current size as soon as `observe` is called, from a
  * later frame rather than synchronously during it. That is what this

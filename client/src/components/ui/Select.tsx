@@ -151,7 +151,10 @@ export default function Select({
 
   return (
     <div className="flex flex-col gap-1" ref={wrapperRef}>
-      <span id={labelId} className={compact ? "text-xs font-medium" : "text-sm"}>
+      <span
+        id={labelId}
+        className="font-pixel text-[11px] tracking-[0.12em] text-(--muted-foreground) uppercase"
+      >
         {label}
       </span>
 
@@ -167,9 +170,9 @@ export default function Select({
           aria-activedescendant={open && activeIndex >= 0 ? optionId(activeIndex) : undefined}
           onClick={() => (open ? setOpen(false) : openList())}
           onKeyDown={handleKeyDown}
-          className={`w-full ${compact ? "h-8 rounded-md pl-2.5 pr-8 text-xs" : "h-11 rounded-sm pl-4 pr-10 text-sm"} text-left border border-(--border) bg-(--muted)/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:border-(--primary)/30 transition-all duration-200`}
+          className={`w-full ${compact ? "h-8 rounded-sm pl-2.5 pr-8 text-xs" : "h-11 rounded-sm pl-4 pr-10 text-sm"} text-left border border-(--input) bg-(--background) cursor-pointer focus-visible:outline-none focus-visible:border-(--accent) transition-colors duration-150`}
         >
-          <span className={selected ? "text-(--foreground)" : "text-(--muted-foreground)/50"}>
+          <span className={selected ? "text-(--foreground)" : "text-(--faint-foreground)"}>
             {selected?.label ?? placeholder}
           </span>
         </button>
@@ -185,8 +188,8 @@ export default function Select({
             role="listbox"
             id={listboxId}
             aria-labelledby={labelId}
-            className="absolute z-50 left-0 right-0 mt-1 rounded-sm border border-(--border) bg-(--card) shadow-xl shadow-(--primary)/5 p-1.5 backdrop-blur-xl"
-            style={{ animation: "scale-in 0.15s ease-out" }}
+            className="absolute z-50 left-0 right-0 mt-1 rounded-md border border-(--border) bg-(--card) p-1.5 shadow-[0_16px_40px_#00000080]"
+            style={{ animation: "rise 0.18s steps(3) both" }}
           >
             {options.map((option, index) => (
               <li
@@ -207,7 +210,7 @@ export default function Select({
                   <CheckIcon
                     aria-hidden="true"
                     size={14}
-                    className="shrink-0 text-(--primary)"
+                    className="shrink-0 text-(--accent)"
                   />
                 )}
               </li>

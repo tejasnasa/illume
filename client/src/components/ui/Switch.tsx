@@ -30,11 +30,11 @@ export default function Switch(props: SwitchProps) {
         />
         <span
           aria-hidden="true"
-          className="absolute inset-0 rounded-full bg-(--muted)/60 transition-colors duration-200 peer-checked:bg-(--primary) peer-focus-visible:ring-2 peer-focus-visible:ring-(--ring)"
+          className="absolute inset-0 border border-(--input) bg-(--background) transition-colors duration-200 [transition-timing-function:steps(2)] peer-checked:border-(--accent) peer-checked:bg-(--accent)/15 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-(--ring)"
         />
         <span
           aria-hidden="true"
-          className="absolute top-1 left-1 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 peer-checked:translate-x-4"
+          className="absolute top-1 left-1 h-4 w-4 bg-(--faint-foreground) transition-transform duration-200 [transition-timing-function:steps(3)] peer-checked:translate-x-4 peer-checked:bg-(--accent)"
         />
       </span>
       {labelText ? (
