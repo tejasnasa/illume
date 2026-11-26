@@ -2,8 +2,6 @@
 
 The web client draws the dependency graph in two quite different ways. The graph page uses a real 3D force-directed layout in WebGL ([`GraphClient.tsx`](../../client/src/components/GraphClient.tsx)), with search, a level switch, a reading-order tour and an inspector. Everywhere else (the background of every repository page, the live chat graph, repository cards, file neighbourhoods and the marketing pages) uses a hand-written pixel-art constellation on a 2D canvas ([`PixelGraph.tsx`](../../client/src/components/PixelGraph.tsx) and [`lib/pixelGraph.ts`](../../client/src/lib/pixelGraph.ts)). This page covers both renderers, every component built on them, and the 2D commit timeline that is often confused with them.
 
-> **Working-tree state.** The pixel renderer and the components built on it (`PixelGraph.tsx`, `lib/pixelGraph.ts`, `NeighbourhoodGraph`, `RepoThumb`, `OverviewGraphTiles`) belong to the client redesign that is still uncommitted on the `ui-redesign` branch, so their GitHub links resolve only once it is committed. On `main`, `BackgroundGraph` is a non-interactive `react-force-graph-3d` scene instead.
-
 ## Terms used on this page
 
 - **Force-directed layout**: positions computed by simulating nodes that repel each other and links that pull like springs, so connected files end up near each other.
@@ -45,7 +43,7 @@ The web client draws the dependency graph in two quite different ways. The graph
 
 The match colour is checked **before** the selection colour, so a selected node that also matches the search is purple. Because unscored files are labelled `medium` by the server, they fall through to green, the same as `safe`.
 
-The brackets are `THREE.Sprite`s with a canvas texture drawn once per colour by `getBracketTexture` and shared. The texture uses `NearestFilter`, so the corners stay crisp pixels at any distance, and `depthTest` is off, so a bracket is never hidden behind another node. The selected node's bracket "breathes" with a stepped pulse (`Math.round(Math.sin(now / 333))`, so it jumps between three sizes rather than scaling smoothly) driven by one `requestAnimationFrame` loop; the loop idles when nothing is selected.
+The brackets are `THREE.Sprite`s with a canvas texture drawn once per colour by `getBracketTexture` and shared. The texture uses `NearestFilter`, so the corners stay crisp pixels at any distance, and `depthTest` is off, so a bracket is never hidden behind another node. One `requestAnimationFrame` loop resizes every live bracket each frame. A bracket's base size follows its node's size, but it is never drawn smaller than `BRACKET_MIN_PX = 28` screen pixels: the loop converts that to world units from the camera's distance to its target, its field of view and the canvas height, so zooming out keeps the brackets readable instead of shrinking them to dots. The selected node's bracket also "breathes" with a stepped pulse (`Math.round(Math.sin(now / 333))`, so it jumps between three sizes, ±6 %, rather than scaling smoothly). Brackets whose node has left the scene are dropped from the loop.
 
 Selection is the only focus mechanism. Neighbours are not dimmed or recoloured; only the links touching the selected node change colour and width.
 

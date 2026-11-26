@@ -2,8 +2,6 @@
 
 The web client in [`client/`](../../client/) is a Next.js 16 App Router application on React 19 and Tailwind 4. It renders the landing page and the public docs, the dashboard of a user's repositories, five views of each repository (overview, explorer, glossary, graph and chat, plus settings), and the account settings. This page explains its routes, how it fetches data, how authentication gates pages, its component layout, and the conventions that matter when changing it.
 
-> **Working-tree state.** The client is mid-redesign on the `ui-redesign` branch, with the work uncommitted. This page describes the working tree: several files it names (for example `PixelGraph.tsx`, `RepoCollection.tsx`, the `repo/[id]/settings` route and `app/mobile`) exist only there, so their GitHub links resolve only once that work is committed. `main` still has the earlier interface.
-
 ## Terms used on this page
 
 - **Server component**: a React component rendered on the Next.js server. It can read cookies and call the backend before any HTML is sent.
@@ -49,7 +47,7 @@ Path alias `@/*` maps to `src/*`. The only environment variable is `NEXT_PUBLIC_
 
 `[id]` is the repository's `repo_number`, not its UUID. Pages that call UUID-keyed endpoints first load the repository to get its `id`.
 
-Every route has a `loading.tsx` skeleton, so navigation streams immediately. `app/error.tsx` and `app/repo/[id]/error.tsx` are error boundaries, and `app/not-found.tsx` is the 404 page; the last two use `StatusScreen`. There is no `/signup` route: sign-in is through GitHub OAuth, and `SignupForm.tsx` is no longer rendered anywhere.
+Every route has a `loading.tsx` skeleton, so navigation streams immediately. `app/error.tsx` and `app/repo/[id]/error.tsx` are error boundaries, and `app/not-found.tsx` is the 404 page; the last two use `StatusScreen`. The root layout ([`app/layout.tsx`](../../client/src/app/layout.tsx)) draws `Starfield`, a fixed canvas of twinkling pixel stars, behind every page at `-z-20`; the favicon and touch icon are `app/icon.svg`, `app/favicon.ico` and `app/apple-icon.png`. There is no `/signup` route: sign-in is through GitHub OAuth, and `SignupForm.tsx` is no longer rendered anywhere.
 
 ### The repository layout
 

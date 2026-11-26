@@ -18,7 +18,7 @@ Illume has four automated suites in two languages: a backend suite (pytest), a f
 | Backend          | `server/tests/` except `tests/evals/`       | pytest     | yes          | about 3,450 tests collected             |
 | Eval harness     | `server/tests/evals/`                       | pytest     | yes          | about 830 tests collected               |
 | MCP launcher     | `mcp-local/tests/`                          | pytest     | yes          | 14 tests                                |
-| Frontend         | `client/tests/`, `client/src/**/__tests__/` | Vitest     | no           | about 840 tests                         |
+| Frontend         | `client/tests/`, `client/src/**/__tests__/` | Vitest     | no           | about 900 tests                         |
 | End-to-end       | `client/e2e/`                               | Playwright | yes          | 49 tests in 7 specs, plus 2 setup steps |
 | Production smoke | `client/e2e-prod/`                          | Playwright | no           | 21 tests in 3 specs, plus setup         |
 | Mobile           | `mobile/src/**/*.test.ts(x)`                | Jest       | no           | 62 test files                           |
