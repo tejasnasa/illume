@@ -684,6 +684,26 @@ def limitations_section(
             },
         }
     )
+    final_keys = {g.record_key for g in data.generations}
+    excluded = [g for g in data.judgments if g.not_applicable and g.generation_key in final_keys]
+    if excluded:
+        listing = ", ".join(f"`{g.arm}` on `{g.item_id}`" for g in excluded)
+        out.append(
+            {
+                "id": "empty_answers",
+                "text": (
+                    f"{len(excluded)} empty "
+                    f"{'answer has' if len(excluded) == 1 else 'answers have'} no faithfulness "
+                    "or relevancy score and "
+                    f"{'is' if len(excluded) == 1 else 'are'} left out of those columns; "
+                    f"correctness counts {'it' if len(excluded) == 1 else 'them'} as 0: "
+                    f"{listing}."
+                ),
+                "facts": {
+                    "empty_answers": [{"arm": g.arm, "item_id": g.item_id} for g in excluded]
+                },
+            }
+        )
     reach = {arm: a["n_not_reached"] for arm, a in tables["overall"]["arms"].items()}
     missing = {arm: n for arm, n in reach.items() if n}
     if missing:

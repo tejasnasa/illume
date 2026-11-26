@@ -28,7 +28,7 @@ from evals.manifest import MANIFEST_NAME
 from evals.models import JUDGE_MODEL
 from evals.run.endpoint import JudgeEndpoint
 from evals.run.generate import GENERATIONS, ROUTES, final_records, read_generations, read_routes
-from evals.run.judge import Grade, grades_by_generation, read_judgments
+from evals.run.judge import Grade, exclude_empty_answers, grades_by_generation, read_judgments
 from evals.run.judge_validation import HumanLabel, read_labels
 from evals.run.records import Generation, RouteRecord
 
@@ -212,7 +212,7 @@ def load_run(
 
     slug = choose_judge(run_dir, judge_slug)
     records = read_judgments(run_dir / f"judgments.{slug}.jsonl") if slug else []
-    judgments = grades_by_generation(records)
+    judgments = exclude_empty_answers(grades_by_generation(records), finals)
     deepeval_versions = sorted({r.judge.deepeval_version for r in records})
     judge_manifest = _json(run_dir / f"manifest.judge.{slug}.json") if slug else None
 

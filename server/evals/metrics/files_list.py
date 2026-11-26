@@ -26,6 +26,20 @@ _PATHISH = re.compile(r"[/\\]|\.\w")
 _LEADING_PATH = re.compile(r"[/\\]|\.\w+$")
 _LINES_PHRASE = re.compile(r"^lines?\s+\d", re.IGNORECASE)
 _NOT_PATHS = frozenset({"none", "n/a", "na", "-", "—", "nothing"})
+_BARE_FILES = frozenset(
+    {
+        "makefile",
+        "dockerfile",
+        "procfile",
+        "gemfile",
+        "rakefile",
+        "justfile",
+        "jenkinsfile",
+        "vagrantfile",
+        "license",
+        "codeowners",
+    }
+)
 _STRIP = "`*_<>\"'"
 _OPENERS = {"(": ")", "[": "]", "`": "`"}
 
@@ -89,7 +103,9 @@ def parse_item(text: str) -> str | None:
 
     Returns:
         The normalised path, or ``None`` when the item holds no path (empty, ``none``,
-        ``n/a``, a bare ``lines 10-20`` note or a URL).
+        ``n/a``, a bare ``lines 10-20`` note, a URL, or a word with no separator and no
+        extension, such as prose or a symbol name; a few well-known extensionless file names
+        like ``Makefile`` are still paths).
     """
     body = text.strip().strip("*_").strip()
     if not body or _LINES_PHRASE.match(body):
@@ -107,6 +123,8 @@ def parse_item(text: str) -> str | None:
     candidate = _clean(_first_token(candidate.strip().strip(_STRIP)))
     if not candidate or candidate.lower() in _NOT_PATHS or "://" in candidate:
         return None
+    if not _PATHISH.search(candidate) and candidate.lower() not in _BARE_FILES:
+        return None  # a word of prose or a symbol name, not a file
     path = normalise_path(candidate, strip_diff_prefix=False)
     return path or None
 

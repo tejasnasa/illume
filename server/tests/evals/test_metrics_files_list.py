@@ -92,3 +92,29 @@ def test_unbulleted_paths_directly_under_the_heading():
 
 def test_duplicates_keep_their_first_position():
     assert paths("Files:\n- b.py\n- a.py\n- b.py:3-4") == ("b.py", "a.py")
+
+
+def test_words_of_prose_are_not_paths():
+    text = (
+        "Files: none identifiable; the remaining files (routes, sitemap) are not shown, "
+        "so I cannot name them"
+    )
+    assert parse_files_list(text) == parse_files_list("Files:")
+    assert paths("Files:\n- The module exporting `ComputerAction` (not shown)") == ()
+
+
+def test_a_symbol_name_is_not_a_path():
+    assert paths("Files:\n- `handle_tool_message`\n- `src/agent.py`") == ("src/agent.py",)
+
+
+def test_well_known_extensionless_files_are_paths():
+    assert paths("Files:\n- Makefile\n- `Dockerfile`\n- docs") == ("Makefile", "Dockerfile")
+
+
+def test_prose_after_a_path_drops_its_words_but_keeps_named_paths():
+    text = "Files:\n- `apps/www/blog.ts` — lookup, TOC generation, see `apps/www/seo.ts`"
+    assert paths(text) == ("apps/www/blog.ts", "apps/www/seo.ts")
+
+
+def test_a_hyphenated_path_is_still_a_path():
+    assert paths("Files:\n- `src/multi-agent-triage.py`") == ("src/multi-agent-triage.py",)

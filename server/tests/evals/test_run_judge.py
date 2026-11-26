@@ -637,3 +637,66 @@ class TestEnvironment:
         source = open(judge_module.__file__, encoding="utf-8").read()
 
         assert "evaluate(" not in source and "assert_test" not in source
+
+
+# --- empty answers -------------------------------------------------------------------
+
+
+def _grade(key: str, **fields):
+    from evals.run.judge import Grade
+
+    base = {
+        "generation_key": key,
+        "item_id": "hand-0",
+        "family": "hand",
+        "arm": "classic",
+        "correct": 0,
+        "correct_score": 0.0,
+        "faithful_score": 1.0,
+        "relevancy_score": 1.0,
+    }
+    base.update(fields)
+    return Grade(**base)
+
+
+def test_an_empty_answer_has_no_faithfulness_or_relevancy():
+    from evals.run.judge import NOT_APPLICABLE_WHEN_EMPTY, exclude_empty_answers
+
+    gold = item("hand", 0)
+    empty = generation(gold, key="e" * 16, answer="  \n ")
+    full = generation(gold, "hybrid", key="f" * 16)
+    grades = [_grade(empty.record_key), _grade(full.record_key, arm="hybrid")]
+
+    out = exclude_empty_answers(grades, [empty, full])
+
+    assert out[0].faithful_score is None and out[0].relevancy_score is None
+    assert out[0].correct == 0 and out[0].correct_score == 0.0
+    assert out[0].not_applicable == NOT_APPLICABLE_WHEN_EMPTY
+    assert out[0].status == "ok"
+    assert out[1] == grades[1]
+
+
+def test_an_empty_answer_metric_error_is_not_counted_as_an_error():
+    from evals.run.judge import exclude_empty_answers
+
+    gold = item("hand", 0)
+    empty = generation(gold, key="e" * 16, answer="")
+    grade = _grade(empty.record_key, faithful_score=None, errors=("faithfulness",))
+
+    (out,) = exclude_empty_answers([grade], [empty])
+
+    assert out.errors == () and out.status == "ok"
+
+
+def test_an_error_record_with_no_answer_is_not_treated_as_empty():
+    from evals.run.judge import exclude_empty_answers
+
+    gold = item("hand", 0)
+    failed = generation(gold, key="e" * 16, answer="", status="error")
+    grade = _grade(failed.record_key)
+
+    assert exclude_empty_answers([grade], [failed]) == [grade]
+
+
+def test_a_missing_faithfulness_grade_is_still_an_error():
+    assert _grade("k", faithful_score=None).status == "error"

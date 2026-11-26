@@ -360,3 +360,12 @@ def test_the_report_command_takes_a_run_a_mode_and_an_output_directory():
         timeout=120,
     )
     assert missing.returncode == 2
+
+
+def test_the_judge_table_names_the_empty_answers_left_out():
+    from evals.report.render import _not_applicable_note
+
+    block = {"not_applicable": [{"arm": "classic", "item_id": "hand-0", "metrics": ["x"]}]}
+    (note,) = _not_applicable_note(block)
+    assert "`classic` on `hand-0`" in note and "as 0" in note
+    assert _not_applicable_note({"not_applicable": []}) == []

@@ -24,7 +24,7 @@ import asyncio
 import hashlib
 import math
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -199,6 +199,8 @@ class Grade:
         errors: Names of the metrics whose latest record is an error.
         reused: Whether the grades were copied from the answer's target rather than judged, for a
             composed generation whose answer is identical to it.
+        not_applicable: Names of the metrics that do not apply to this answer, so their scores are
+            left out rather than counted (see :func:`exclude_empty_answers`).
     """
 
     generation_key: str
@@ -211,6 +213,7 @@ class Grade:
     relevancy_score: float | None = None
     errors: tuple[str, ...] = ()
     reused: bool = False
+    not_applicable: tuple[str, ...] = ()
 
     @property
     def faithful(self) -> int | None:
@@ -221,8 +224,12 @@ class Grade:
 
     @property
     def status(self) -> str:
-        """``ok`` when correctness and faithfulness both have a grade, otherwise ``error``."""
-        return "ok" if self.correct is not None and self.faithful_score is not None else "error"
+        """``ok`` when correctness and faithfulness both have a grade, otherwise ``error``.
+
+        A faithfulness that does not apply counts as graded, so an empty answer is not an error.
+        """
+        faithful = self.faithful_score is not None or "faithfulness" in self.not_applicable
+        return "ok" if self.correct is not None and faithful else "error"
 
 
 def grades_by_generation(judgments: Iterable[Judgment]) -> list[Grade]:
@@ -273,6 +280,47 @@ def grades_by_generation(judgments: Iterable[Judgment]) -> list[Grade]:
                 relevancy_score=ok_score("answer_relevancy"),
                 errors=tuple(sorted(n for n, j in metrics.items() if j.status == "error")),
                 reused=any(j.reused_from is not None for j in metrics.values()),
+            )
+        )
+    return rows
+
+
+NOT_APPLICABLE_WHEN_EMPTY = ("answer_relevancy", "faithfulness")
+"""The metrics an empty answer has no score for: with no claims or statements, DeepEval would
+score both 1.0, which says nothing about the answer. Correctness still grades it (as 0)."""
+
+
+def is_empty_answer(answer: str | None) -> bool:
+    """Whether an answer has no text at all once whitespace is removed."""
+    return not (answer or "").strip()
+
+
+def exclude_empty_answers(
+    grades: Iterable[Grade], generations: Iterable[Generation]
+) -> list[Grade]:
+    """Drop faithfulness and relevancy from the grades of empty answers.
+
+    Args:
+        grades: One judge's rows.
+        generations: The run's records; a grade whose record is missing is kept as it is.
+
+    Returns:
+        The rows, in order. An empty answer's row has both scores set to ``None``, the metrics
+        named in ``not_applicable`` and removed from ``errors``.
+    """
+    empty = {g.record_key for g in generations if g.status == "ok" and is_empty_answer(g.answer)}
+    rows: list[Grade] = []
+    for grade in grades:
+        if grade.generation_key not in empty:
+            rows.append(grade)
+            continue
+        rows.append(
+            replace(
+                grade,
+                faithful_score=None,
+                relevancy_score=None,
+                errors=tuple(e for e in grade.errors if e not in NOT_APPLICABLE_WHEN_EMPTY),
+                not_applicable=NOT_APPLICABLE_WHEN_EMPTY,
             )
         )
     return rows

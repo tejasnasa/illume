@@ -635,6 +635,17 @@ def _judge_table(block: Mapping[str, Any]) -> str:
     return md_table(headers, rows)
 
 
+def _not_applicable_note(block: Mapping[str, Any]) -> list[str]:
+    excluded = block.get("not_applicable") or []
+    if not excluded:
+        return []
+    names = ", ".join(f"{code(e['arm'])} on {code(e['item_id'])}" for e in excluded)
+    return [
+        f"Empty answers have no faithfulness or relevancy score and are left out of those "
+        f"columns (their correctness counts, as 0): {names}."
+    ]
+
+
 def render_judge(data: Data) -> str:
     """Judge grades, descriptive."""
     section = data.get("judge_results")
@@ -647,6 +658,7 @@ def render_judge(data: Data) -> str:
     for family, block in section["descriptive"].items():
         flag = " (exploratory: judge agreement below the cut-off)" if block["exploratory"] else ""
         blocks += [f"**{family}**, {block['n_judged']} judged answers{flag}:", _judge_table(block)]
+        blocks += _not_applicable_note(block)
     sanity = section["structural_sanity"]
     for family, block in sanity.items():
         blocks += [

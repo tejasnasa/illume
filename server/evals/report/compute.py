@@ -643,7 +643,11 @@ def judge_results_section(
                         f"judge:{family}:{arm}:correct",
                     ),
                     "faithful": mean_ci(
-                        zip(refs, (float(j.faithful or 0) for j in mine), strict=True),
+                        (
+                            (ref, float(j.faithful))
+                            for ref, j in zip(refs, mine, strict=True)
+                            if j.faithful is not None
+                        ),
                         config,
                         f"judge:{family}:{arm}:faithful",
                     ),
@@ -652,6 +656,11 @@ def judge_results_section(
                 "by_arm": per_arm,
                 "n_judged": len(rows),
                 "n_judge_errors": errors.get(family, 0),
+                "not_applicable": [
+                    {"arm": j.arm, "item_id": j.item_id, "metrics": list(j.not_applicable)}
+                    for j in rows
+                    if j.not_applicable
+                ],
                 "exploratory": family in exploratory_families,
             }
         return result
