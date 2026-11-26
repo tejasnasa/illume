@@ -102,3 +102,42 @@ Made before any ingestion, generation or judgment has run, so no result informed
   the generator's training cutoff, apart from a handful in the before-AI repository. All arms
   share one answering model, so remembered changes would favour every arm alike; the
   post-cutoff questions are still reported apart, as the corpus file already provides.
+
+### 2026-11-26: judge, faithfulness method, empty answers and the `Files:` parser
+
+Made after the full run's 1,800 answers were generated and after the 30 pilot answers
+(`pilot_v2`) were judged, but before any full-run answer was judged. The generated answers were
+read while building these rules (the empty-answer count, the parser's stray entries); no judged
+full-run score existed.
+
+- **Judge.** `anthropic/claude-haiku-5.5` through OpenRouter's batch API
+  (`anthropic/claude-haiku-5.5:batch`, the same model at half the price, answered within 24
+  hours), with JSON-schema structured output and DeepEval 4.3.2. It replaces the default judge
+  named in the plan because of cost. It is from a different family than the generator. Every
+  full-run judgment comes from this judge; the live-API pilot judgments are kept apart and never
+  mixed in. On the 30 pilot answers the batch and live judgments of the same model agreed closely
+  on the means (correctness 0.644 against 0.622, faithfulness 0.786 against 0.795, relevancy
+  0.885 against 0.876), with per-answer differences consistent with ordinary judge noise.
+- **Faithfulness method.** "Against the cited evidence" is applied as follows. Each claim is
+  checked against the evidence text itself, passed verbatim, rather than against the judge's
+  restatement of it (DeepEval's stock metric restates the context first, which on code dropped
+  the code and marked true claims unsupported). The evidence has a 24,000-character budget, shared
+  so that a short piece hands its unused share to the others. An answer that cites nothing is held
+  to the context it was shown, its final candidates in rank order, so an arm that never cites is
+  not scored 0 by construction. All three were found and fixed on the pilot, before the full run
+  was judged.
+- **Empty answers.** An answer that came back empty because the generator spent its whole output
+  limit on reasoning was retried once with unchanged settings: 11 answers, 10 recovered (per arm:
+  `hybrid` 2, `hybrid_rerank` 2, `structural_rerank` 2, `auto` 2, `classic` 1,
+  `hybrid_multiquery` 1, `structural_-cochange` 1). The one that stayed empty scores 0
+  correctness and 0 file recall, and has no faithfulness or relevancy score: with no claims
+  DeepEval would give it 1.0 on both, which says nothing about the answer. It is left out of
+  those two cells and listed, as errors are.
+- **The `Files:` parser.** A list item whose path candidate has no directory separator and no
+  extension (a word of prose such as "the" or "not", or a symbol name) is no longer read as a
+  path; a few well-known extensionless file names such as `Makefile` still are. On the full run
+  this removes 1,551 such entries from 591 of the 1,800 answers and no entry naming a real file,
+  so file recall is unchanged and only precision moves. The rule is applied to every arm alike,
+  at report time.
+- **Metric scope.** All three judged metrics on all 1,620 generated answers; `auto` copies the
+  grade of the arm it routed to.
