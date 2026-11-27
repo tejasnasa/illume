@@ -223,14 +223,14 @@ export default function Home() {
               <span className="caret text-(--accent)">_</span>
             </p>
             <h1 className="m-0 flex flex-col items-center gap-1.5 font-pixel leading-none">
-              <span className="text-[clamp(1.7rem,7.6vw,7.6rem)] tracking-[-0.02em] whitespace-nowrap">
+              <span className="text-[calc((100vw-3rem)/4.75)] sm:text-[min(calc((100vw-3.5rem)/8.75),8.5rem)] tracking-[-0.02em] text-balance sm:whitespace-nowrap">
                 Onboard engineers
               </span>
-              <span className="gradient-text text-[clamp(1.7rem,7.6vw,7.6rem)] tracking-[-0.02em] whitespace-nowrap">
+              <span className="gradient-text text-[calc((100vw-3rem)/4.75)] sm:text-[min(calc((100vw-3.5rem)/8.75),8.5rem)] tracking-[-0.02em] text-balance sm:whitespace-nowrap">
                 in days, not weeks
               </span>
             </h1>
-            <p className="m-0 max-w-160 text-[19px] leading-relaxed text-zinc-400">
+            <p className="m-0 max-w-160 text-[15px] leading-relaxed text-zinc-400 sm:text-[19px]">
               Point Illume at a GitHub repository. It maps every file into a
               living dependency graph, writes the{" "}
               <span className="text-(--foreground)">architecture brief</span>,
