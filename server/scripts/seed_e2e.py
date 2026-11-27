@@ -153,6 +153,10 @@ async def seed_repositories() -> list[dict]:
                 file_count=file_count,
                 repo_number=REPO_NUMBER_BASE + offset,
             )
+            # The interface names a repository from its GitHub URL, so the URL has to
+            # carry the same name the specs look for.
+            repo.github_url = f"https://github.com/e2e/{name}"
+            await db.commit()
             seeded.append(
                 {
                     "name": repo.name,

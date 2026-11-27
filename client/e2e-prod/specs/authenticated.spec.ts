@@ -28,17 +28,18 @@ test.beforeEach(() => {
 /**
  * Waits for the repository route to finish streaming.
  *
- * `loading.tsx` renders a skeleton carrying the same "Processing Status" label as the real
- * page, so mid-stream a bare locator for that text matches two elements and Playwright
- * raises a strict-mode violation. A count of one is the settled state.
+ * `loading.tsx` renders placeholder blocks with no heading, so the page's level-one
+ * heading (the repository's name) appears only once the server component has resolved.
  */
 async function settle(page: Page) {
-  await expect(page.getByText("Processing Status")).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 }
 
 /** Counts the distinct colours the compositor actually put on the canvas. */
 async function distinctCanvasColours(page: Page) {
-  const canvas = page.locator("canvas").first();
+  // The graph's own `<main>` sits inside the repository layout's, and only the WebGL
+  // canvas lives there; the starfield and the background graph are canvases too.
+  const canvas = page.locator("main main canvas").first();
   await expect(canvas).toBeVisible();
 
   const shot = await canvas.screenshot();
@@ -74,16 +75,18 @@ test.describe("the dashboard", () => {
   test("lists the smoke repository as ready, and opens it", async ({ page }) => {
     await page.goto("/dashboard");
 
-    const card = page.getByRole("link", { name: info.repo.name });
+    // Each card is one `<article>` whose title is a link named after the repository.
+    const link = page.getByRole("link", { name: info.repo.name });
+    const card = page.getByRole("article").filter({ has: link });
     await expect(card).toBeVisible();
     // `ready` is the gate on the graph endpoint and on the repository page rendering its
     // guide instead of a log stream, so it is worth pinning rather than assuming.
-    await expect(card.getByText("ready", { exact: true })).toBeVisible();
+    await expect(card.getByText("Ready", { exact: true })).toBeVisible();
 
     // Clicked rather than navigated to by URL, so the link the dashboard actually renders
     // is exercised. Every other spec navigates directly, which would never touch a broken
     // href -- this is the one place the rendered link is the thing under test.
-    await card.click();
+    await link.click();
     await expect(page).toHaveURL(new RegExp(`${home}$`));
   });
 });
@@ -95,7 +98,7 @@ test.describe("the repository overview", () => {
     expect(response?.status()).toBe(200);
     await settle(page);
     await expect(page.getByText(/Application error/i)).toHaveCount(0);
-    await expect(page.getByText("AI Architecture Overview")).toBeVisible();
+    await expect(page.getByText("Architecture brief", { exact: true })).toBeVisible();
   });
 
   test("links to the chat page, which renders its composer", async ({ page }) => {
@@ -137,7 +140,7 @@ test.describe("the dependency graph", () => {
     // A blank or unrendered canvas is one or two colours; a force graph with antialiased
     // nodes, links and text is in the hundreds.
     await page.goto(`${home}/graph`);
-    await expect(page.getByText(/Size ∝ LOC/)).toBeVisible();
+    await expect(page.getByText(/[\d,]+ files · [\d,]+ edges/)).toBeVisible();
 
     expect(await distinctCanvasColours(page)).toBeGreaterThan(50);
   });
@@ -145,7 +148,7 @@ test.describe("the dependency graph", () => {
   test("switches between file and symbol level", async ({ page }) => {
     await page.goto(`${home}/graph`);
 
-    await page.getByRole("button", { name: "Symbol Level" }).click();
+    await page.getByRole("group", { name: "Level" }).getByRole("button", { name: "Symbols" }).click();
 
     // The level is a route query, so the assertion is that the navigation happened and the
     // page came back rather than erroring.
@@ -159,6 +162,6 @@ test.describe("the settings route", () => {
     const response = await page.goto("/settings");
 
     expect(response?.status()).toBe(200);
-    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: /settings/i })).toBeVisible();
   });
 });

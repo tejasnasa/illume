@@ -85,7 +85,10 @@ test.describe("opening the chat", () => {
 
   test("marks Chat as the current page", async ({ page }) => {
     await page.goto(chat);
-    await expect(page.getByRole("link", { name: "Chat", exact: true })).toHaveClass(/font-semibold/);
+    await expect(page.getByRole("link", { name: "Chat", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
   });
 });
 
@@ -276,17 +279,18 @@ test.describe("mobile viewport", () => {
 
   test("works as a plain conversation, without the graph", async ({ page }) => {
     // Straight to the chat route: the ambient graph on other repo pages is a separate
-    // thing, and this is about the page that would otherwise draw its own.
+    // thing, and this is about the page that would otherwise draw its own. Scoped to
+    // `main` because the starfield behind every page is a canvas too.
     await page.goto(chat);
     await expect(composer(page)).toBeVisible();
     await expect(page.getByTestId("graph-layer")).toHaveCount(0);
-    await expect(page.locator("canvas")).toHaveCount(0);
+    await expect(page.locator("main canvas")).toHaveCount(0);
 
     await send(page, "What is module_1?");
     await expect(page.getByText(/Based on the indexed sources/).last()).toBeVisible({
       timeout: 30_000,
     });
     await expect(page.getByTestId("activity-block").last()).toBeVisible();
-    await expect(page.locator("canvas")).toHaveCount(0);
+    await expect(page.locator("main canvas")).toHaveCount(0);
   });
 });

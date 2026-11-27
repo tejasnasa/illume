@@ -34,13 +34,12 @@ test.beforeEach(() => {
 /**
  * Waits for the repository route to finish streaming.
  *
- * `repo/[id]/loading.tsx` renders a pulsing skeleton carrying the same "Processing Status"
- * label as the real page, so while the server component resolves, a bare locator for that
- * text matches **two** elements and Playwright raises a strict-mode violation. Waiting for
- * the count to reach one is the settled state -- a real wait, not a sleep.
+ * `repo/[id]/loading.tsx` renders placeholder blocks with no heading, so the page's
+ * level-one heading (the repository's name) appears only once the server component has
+ * resolved -- a real wait, not a sleep.
  */
 async function settle(page: import("@playwright/test").Page) {
-  await expect(page.getByText("Processing Status")).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 }
 
 test.describe("the dashboard", () => {
@@ -55,13 +54,13 @@ test.describe("the dashboard", () => {
     // whether the repository page renders the guide or a log stream.
     await page.goto("/dashboard");
 
-    // Scope the card by its role and accessible name rather than by a wrapper div.
-    // A `div` filter matches every ancestor that contains the name, so `.first()`
-    // resolves to the grid holding *all* cards and the status assertion matches more
-    // than one of them. The card is a link whose accessible name begins with the
-    // repository name, which is exactly one element.
-    const card = page.getByRole("link", { name: repo.name });
-    await expect(card.getByText("ready", { exact: true })).toBeVisible();
+    // Scope the card by its role rather than by a wrapper div. A `div` filter matches
+    // every ancestor that contains the name, so `.first()` resolves to the grid holding
+    // *all* cards. Each card is one `<article>` holding a link named after the repository.
+    const card = page
+      .getByRole("article")
+      .filter({ has: page.getByRole("link", { name: repo.name }) });
+    await expect(card.getByText("Ready", { exact: true })).toBeVisible();
   });
 });
 
@@ -77,27 +76,28 @@ test.describe("the repository overview", () => {
   test("names the repository", async ({ page }) => {
     await page.goto(home);
 
-    await expect(page.getByText(repo.name).first()).toBeVisible();
+    // Text rather than accessible name: the last segment is a separately styled span,
+    // and Chromium puts a space at that boundary when it computes the name.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(repo.name);
   });
 
   test("reports the processing status", async ({ page }) => {
     await page.goto(home);
     await settle(page);
 
-    await expect(page.getByText(/^ready$/).first()).toBeVisible();
+    await expect(page.getByText("Ready", { exact: true }).first()).toBeVisible();
   });
 
   test("renders the architecture summary", async ({ page }) => {
-    // The "AI Architecture Overview" section reads `Repository.architecture_summary`, not
-    // the guide's `architecture_brief` -- two fields with similar names, of which only the
-    // first reaches this page. The seed sets both, so this is checking the one that is
+    // The "Architecture brief" card reads `Repository.architecture_summary`, not the
+    // guide's `architecture_brief` -- two fields with similar names, of which only the
+    // first reaches this card. The seed sets both, so this is checking the one that is
     // actually rendered.
     await page.goto(home);
 
-    // The summary text exists only on the rendered page, so waiting for it first lets
-    // the route's loading skeleton, which shares the section title, leave the DOM.
-    await expect(page.getByText(/A small fixture repository used by the end-to-end/)).toBeVisible();
-    await expect(page.getByText("AI Architecture Overview").first()).toBeVisible();
+    const brief = page.getByRole("region", { name: "Architecture brief" });
+    await expect(brief).toBeVisible();
+    await expect(brief.getByText(/A small fixture repository used by the end-to-end/)).toBeVisible();
   });
 
   test("links to the chat page instead of embedding the chat", async ({ page }) => {
@@ -131,14 +131,16 @@ test.describe("the explorer", () => {
 
   test("collapses and re-expands a directory", async ({ page }) => {
     await page.goto(`${home}/explorer`);
-    const src = page.getByRole("button", { name: "src" });
-    await expect(page.getByText("module_0.py").first()).toBeVisible();
+    // Scoped to the tree: the explorer also lists files by path outside it.
+    const tree = page.getByRole("navigation", { name: "Files" });
+    const src = tree.getByRole("button", { name: "src", exact: true });
+    await expect(tree.getByText("module_0.py")).toBeVisible();
 
     await src.click();
-    await expect(page.getByText("module_0.py")).toHaveCount(0);
+    await expect(tree.getByText("module_0.py")).toHaveCount(0);
 
     await src.click();
-    await expect(page.getByText("module_0.py").first()).toBeVisible();
+    await expect(tree.getByText("module_0.py")).toBeVisible();
   });
 
   test("opens a detail card with ownership for a selected file", async ({ page }) => {
@@ -206,7 +208,9 @@ test.describe("the dependency graph", () => {
    * far below a real render, so it fails only when nothing was drawn.
    */
   async function distinctCanvasColours(page: import("@playwright/test").Page) {
-    const canvas = page.locator("canvas").first();
+    // The graph's own `<main>` sits inside the repository layout's, and only the WebGL
+    // canvas lives there; the starfield and the background graph are canvases too.
+    const canvas = page.locator("main main canvas").first();
     await expect(canvas).toBeVisible();
 
     const shot = await canvas.screenshot();
@@ -231,16 +235,17 @@ test.describe("the dependency graph", () => {
     // WebGL in a headless container relies on the SwiftShader flags in the config; if
     // those regress, this is the test that says so rather than a blank graph shipping.
     await page.goto(`${home}/graph`);
-    await expect(page.getByText(/Size ∝ LOC/)).toBeVisible();
+    await expect(page.getByText(/[\d,]+ files · [\d,]+ edges/)).toBeVisible();
 
     expect(await distinctCanvasColours(page)).toBeGreaterThan(50);
   });
 
   test("switches between file and symbol level", async ({ page }) => {
     await page.goto(`${home}/graph`);
-    await expect(page.getByRole("button", { name: "Symbol Level" })).toBeVisible();
+    const level = page.getByRole("group", { name: "Level" });
+    await expect(level.getByRole("button", { name: "Symbols" })).toBeVisible();
 
-    await page.getByRole("button", { name: "Symbol Level" }).click();
+    await level.getByRole("button", { name: "Symbols" }).click();
 
     // The level is a route query, so the assertion is that the navigation happened and
     // the page came back rather than erroring.
@@ -255,32 +260,29 @@ test.describe("the dependency graph", () => {
     // and the two are matched at render time. The seeded guide names module_0 and
     // module_3, so the pager reports two steps.
     //
-    // The next arrow is enabled before the order is walked (`disabled` is
-    // `pageIndex !== null && ...`), and its handler resolves `(null ?? -1) + 1` to 0 --
-    // the first step.
+    // The next arrow is enabled before the order is walked, and its handler resolves
+    // `(null ?? -1) + 1` to 0 -- the first step.
     await page.goto(`${home}/graph`);
-    await expect(page.getByText("Reading Order:")).toBeVisible();
+    await expect(page.getByText("Reading order tour")).toBeVisible();
     await expect(page.getByText(/— \/ 2/)).toBeVisible();
 
-    // Scoped to the pager's own section: the navigation bar carries buttons too, and the
-    // arrows are the only unlabelled ones -- the level toggle beside them has text.
-    const pager = page.locator("section").filter({ hasText: "Reading Order:" });
-    await pager.getByRole("button").last().click();
+    await page.getByRole("button", { name: "Next file" }).click();
 
-    // The counter is one-based, and selecting the node renders the inspector with the
-    // guide's annotation for that file.
+    // The counter is one-based, and the annotation for that file shows both in the tour
+    // panel and in the inspector the selection opens.
     await expect(page.getByText(/1 \/ 2/)).toBeVisible();
-    await expect(page.getByText("Start here.")).toBeVisible();
+    await expect(page.getByText("Start here.", { exact: true })).toBeVisible();
+    await expect(page.locator("p").filter({ hasText: "Start here." })).toBeVisible();
   });
 
   test("filters nodes by search", async ({ page }) => {
     await page.goto(`${home}/graph`);
-    const search = page.getByPlaceholder("Search nodes...");
+    const search = page.getByRole("searchbox", { name: "Search files" });
     await expect(search).toBeVisible();
 
     await search.fill("module_0");
 
-    // The legend grows a match count once there is a query.
-    await expect(page.getByText(/Match/)).toBeVisible();
+    // A match count appears under the box once there is a query.
+    await expect(page.getByRole("status").filter({ hasText: /\d+ match/ })).toBeVisible();
   });
 });

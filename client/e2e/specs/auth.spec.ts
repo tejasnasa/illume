@@ -104,18 +104,17 @@ test.describe("a signed-in user", () => {
   });
 
   test("is sent to login after logging out", async ({ page }) => {
-    // Logout sits behind the navbar's options menu, whose trigger is the avatar image,
-    // so the menu has to be opened first. That the item is reachable at all is part of
-    // what this asserts.
+    // Log out sits behind the navbar's account menu, so the menu has to be opened
+    // first. That the item is reachable at all is part of what this asserts.
     await page.goto("/dashboard");
 
     // The dashboard renders a Suspense fallback while its async server component
-    // resolves. The fallback itself must not render <Navbar /> (it does not), but
-    // the swap is not synchronised with goto returning, so wait for exactly one
-    // avatar before clicking -- Playwright's getByAltText runs in strict mode.
-    await expect(page.getByAltText("User Avatar")).toHaveCount(1);
-    await page.getByAltText("User Avatar").click();
-    await page.getByRole("button", { name: "Logout" }).click();
+    // resolves, and the swap is not synchronised with goto returning, so wait for
+    // exactly one trigger before clicking -- Playwright's locators run in strict mode.
+    const trigger = page.getByRole("button", { name: "Account menu" });
+    await expect(trigger).toHaveCount(1);
+    await trigger.click();
+    await page.getByRole("menuitem", { name: "Log out" }).click();
 
     await expect(page).toHaveURL(/\/login/);
 

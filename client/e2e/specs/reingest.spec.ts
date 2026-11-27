@@ -42,27 +42,22 @@ test.beforeEach(() => {
 /**
  * The settings gear in the repository navbar.
  *
- * Found by role and accessible name. That is only possible because `Modal`'s trigger is
- * now a real `<button aria-label="Repository settings">` rather than a bare `<div
- * onClick>`: a control with no role, no name and no tab stop can only be addressed by a
- * class selector, which is what this helper used to do. Driving it by name here is the
- * end-to-end proof that the fix reaches a real browser.
+ * Found by role and accessible name: it is a link to the repository's settings page,
+ * labelled "Repository settings".
  */
 function settingsGear(page: import("@playwright/test").Page) {
-  return page.getByRole("button", { name: "Repository settings" });
+  return page.getByRole("link", { name: "Repository settings" });
 }
 
 /**
  * Waits for the repository route to finish streaming.
  *
- * `repo/[id]/loading.tsx` renders a pulsing skeleton that carries the same "Processing
- * Status" label as the real page, so while the server component is resolving a bare
- * locator for that text matches **two** elements and Playwright raises a strict-mode
- * violation. Waiting for the count to reach one is the settled state, and it is a real
- * wait rather than a sleep -- the skeleton disappears when the page arrives.
+ * `repo/[id]/loading.tsx` renders placeholder blocks with no heading, so the page's
+ * level-one heading (the repository's name) appears only once the server component has
+ * resolved -- a real wait rather than a sleep.
  */
 async function settle(page: import("@playwright/test").Page) {
-  await expect(page.getByText("Processing Status")).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 }
 
 test.describe("the settings panel", () => {
@@ -71,7 +66,12 @@ test.describe("the settings panel", () => {
 
     await settingsGear(page).click();
 
-    await expect(page.getByText(/Regenerate Repository/i)).toBeVisible();
+    await expect(
+      page.getByText("Regenerate analysis", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Regenerate", exact: true }),
+    ).toBeVisible();
   });
 
   test("does not re-ingest anything until asked", async ({ page }) => {
@@ -81,7 +81,9 @@ test.describe("the settings panel", () => {
     await page.goto(home);
     await settle(page);
 
-    await expect(page.getByText(/^ready$/).first()).toBeVisible();
+    await expect(
+      page.getByText("Ready", { exact: true }).first(),
+    ).toBeVisible();
   });
 });
 
@@ -96,15 +98,19 @@ test.describe("re-ingesting", () => {
     // which is what keeps the dashboard render intact.
     await page.goto(home);
     await settle(page);
-    await expect(page.getByText(/^ready$/).first()).toBeVisible();
+    await expect(
+      page.getByText("Ready", { exact: true }).first(),
+    ).toBeVisible();
 
     await settingsGear(page).click();
 
-    // Two steps: the panel's "Regenerate" opens a confirmation, and the
-    // confirmation's "REGENERATE" is what acts. Matched exactly, since
-    // the two labels differ only in case.
+    // Two steps: the row's "Regenerate" opens a confirmation dialog, and the
+    // dialog's own "Regenerate" is what acts.
     await page.getByRole("button", { name: "Regenerate", exact: true }).click();
-    await page.getByRole("button", { name: "REGENERATE", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Regenerate analysis" })
+      .getByRole("button", { name: "Regenerate", exact: true })
+      .click();
 
     // The route returns 402 and the action throws a generic error -- the
     // observable outcome is that the page never navigates to /dashboard.
