@@ -3,13 +3,17 @@
  * @module AuthProxy
  */
 import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import { NextResponse, userAgent } from "next/server";
 
 const protectedRoutes = ["/dashboard", "/repo", "/settings"];
 const publicRoutes = ["/login", "/"];
 
 /**
  * Routes unauthenticated users to login and logged-in users to the dashboard.
+ *
+ * Phones have no web sign-in: the web app needs a large screen, so a phone
+ * visitor without a session is sent to the Android app's download page
+ * wherever they would otherwise reach the login page.
  *
  * @param req - Incoming Next.js request with cookies and URL.
  * @returns Redirect to login/dashboard, or continuation to the page.
@@ -24,6 +28,12 @@ export function proxy(req: NextRequest) {
 
   const token = req.cookies.get("access_token")?.value;
   const hasSession = Boolean(token);
+
+  const onPhone = userAgent(req).device.type === "mobile";
+
+  if (onPhone && !hasSession && (isProtectedRoute || path === "/login")) {
+    return NextResponse.redirect(new URL("/mobile", req.url));
+  }
 
   if (isProtectedRoute && !hasSession) {
     return NextResponse.redirect(new URL("/login", req.url));

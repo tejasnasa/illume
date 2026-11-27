@@ -9,8 +9,10 @@ import { proxy } from "@/proxy";
  * The cookie name must match the one the backend sets; a rename there without a rename
  * here would let every protected route through, so the assertions below are the guard.
  */
-function request(path: string, token?: string): NextRequest {
-  const req = new NextRequest(new URL(path, "http://localhost:3000"));
+function request(path: string, token?: string, ua?: string): NextRequest {
+  const req = new NextRequest(new URL(path, "http://localhost:3000"), {
+    headers: ua ? { "user-agent": ua } : undefined,
+  });
   if (token) {
     req.cookies.set("access_token", token);
   }
@@ -95,6 +97,41 @@ describe("route matching boundaries", () => {
 
   it("does not gate an unrelated path", () => {
     const response = proxy(request("/pricing"));
+
+    expect(redirects(response)).toBe(false);
+  });
+});
+
+describe("phone visitors", () => {
+  const PHONE =
+    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36";
+  const TABLET =
+    "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
+  it.each(["/login", "/dashboard", "/repo/abc123/chat"])(
+    "sends %s to the Android app page without a session",
+    (path) => {
+      const response = proxy(request(path, undefined, PHONE));
+
+      expect(redirects(response)).toBe(true);
+      expect(locationOf(response)).toBe("/mobile");
+    },
+  );
+
+  it.each(["/", "/mobile", "/docs"])("passes %s through", (path) => {
+    const response = proxy(request(path, undefined, PHONE));
+
+    expect(redirects(response)).toBe(false);
+  });
+
+  it("keeps a signed-in phone on the dashboard", () => {
+    const response = proxy(request("/login", "a-token", PHONE));
+
+    expect(locationOf(response)).toBe("/dashboard");
+  });
+
+  it("leaves the login page open on a tablet", () => {
+    const response = proxy(request("/login", undefined, TABLET));
 
     expect(redirects(response)).toBe(false);
   });
