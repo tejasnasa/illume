@@ -51,7 +51,24 @@ export interface LayoutResult {
   simulationMs: number;
   /** How many ticks were actually run. */
   ticks: number;
+  /** How many nodes were laid out; fewer than the payload's when it was capped. */
+  nodeCount: number;
+  /** True when the payload had more than {@link MAX_LAYOUT_NODES} nodes. */
+  truncated: boolean;
 }
+
+/**
+ * The most nodes the layout will simulate.
+ *
+ * The endpoint has no node cap. Past this size the simulation and the
+ * per-node buffers cost more memory and time than a phone has, and the
+ * picture is unreadable anyway, so the payload is cut here and the screen
+ * says so.
+ */
+export const MAX_LAYOUT_NODES = 30_000;
+
+/** The longest a chunk of ticks may run before it yields to the event loop. */
+const CHUNK_BUDGET_MS = 24;
 
 /** Tuning for {@link computeLayout}. */
 export interface LayoutOptions {
@@ -104,6 +121,19 @@ function yieldToUI(): Promise<void> {
 }
 
 /**
+ * A coordinate the simulation produced, or 0 when it is missing or not finite.
+ *
+ * A NaN position turns every matrix it touches into NaN and the node
+ * silently disappears; zero keeps it on screen at the centre.
+ *
+ * @param value - A coordinate.
+ * @returns A finite number.
+ */
+export function finiteOrZero(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/**
  * Find the radius that contains every node.
  *
  * Used to frame the camera without hardcoding a distance, so a five-hundred
@@ -120,9 +150,10 @@ export function boundingRadius(positions: Float32Array): number {
     const y = positions[i + 1];
     const z = positions[i + 2];
     const d = x * x + y * y + z * z;
-    if (d > maxSq) maxSq = d;
+    if (Number.isFinite(d) && d > maxSq) maxSq = d;
   }
-  return Math.sqrt(maxSq) || 1;
+  const radius = Math.sqrt(maxSq);
+  return Number.isFinite(radius) && radius > 0 ? radius : 1;
 }
 
 /**
@@ -136,9 +167,16 @@ export async function computeLayout(
   data: GraphPayload,
   options: LayoutOptions = {},
 ): Promise<LayoutResult> {
-  const nodeCount = data.nodes.length;
+  // A payload that is missing either list is treated as an empty graph
+  // rather than thrown at: the layout runs inside an effect, where a throw
+  // is an unhandled rejection and the screen is left loading forever.
+  const allNodes = Array.isArray(data?.nodes) ? data.nodes : [];
+  const allLinks = Array.isArray(data?.links) ? data.links : [];
+  const truncated = allNodes.length > MAX_LAYOUT_NODES;
+  const nodes = truncated ? allNodes.slice(0, MAX_LAYOUT_NODES) : allNodes;
+  const nodeCount = nodes.length;
   const ticks = options.ticks ?? defaultTicks(nodeCount);
-  const chunkSize = options.chunkSize ?? 10;
+  const chunkSize = Math.max(1, options.chunkSize ?? 10);
   // Repulsion and link length are tuned for a phone-sized viewport: at the
   // web defaults (-30 / 30) a few hundred nodes bunch into one blob and the
   // spheres of neighbouring nodes merge, which reads as a single mass
@@ -146,15 +184,17 @@ export async function computeLayout(
   // structure legible at this size.
   const chargeStrength = options.chargeStrength ?? -110;
 
-  const simNodes: SimNode[] = data.nodes.map((node) => ({ id: node.id }));
+  const simNodes: SimNode[] = nodes.map((node) => ({ id: node.id }));
   const indexById = new Map<string, number>();
   simNodes.forEach((node, i) => indexById.set(node.id, i));
 
   const simLinks: IndexedLink[] = [];
-  for (const link of data.links) {
+  for (const link of allLinks) {
     const source = indexById.get(link.source);
     const target = indexById.get(link.target);
-    if (source === undefined || target === undefined) continue;
+    if (source === undefined || target === undefined || source === target) {
+      continue;
+    }
     simLinks.push({ source, target });
   }
 
@@ -174,6 +214,18 @@ export async function computeLayout(
 
   const started = Date.now();
 
+  if (nodeCount === 0) {
+    return {
+      positions: new Float32Array(0),
+      links: [],
+      boundingRadius: 1,
+      simulationMs: 0,
+      ticks: 0,
+      nodeCount: 0,
+      truncated,
+    };
+  }
+
   const sim = forceSimulation(simNodes, 3)
     .force(
       "link",
@@ -185,21 +237,29 @@ export async function computeLayout(
     .force("center", forceCenter(0, 0, 0))
     .stop();
 
-  for (let done = 0; done < ticks; done += chunkSize) {
+  let done = 0;
+  while (done < ticks) {
     if (options.signal?.aborted) break;
+    // Run ticks until the chunk is full or its time budget is spent, so a
+    // very large graph yields after a tick or two instead of after ten.
+    const chunkStart = Date.now();
     const end = Math.min(done + chunkSize, ticks);
-    for (let t = done; t < end; t += 1) sim.tick();
-    options.onProgress?.(end, ticks);
-    if (end < ticks) await yieldToUI();
+    while (done < end) {
+      sim.tick();
+      done += 1;
+      if (Date.now() - chunkStart > CHUNK_BUDGET_MS) break;
+    }
+    options.onProgress?.(done, ticks);
+    if (done < ticks) await yieldToUI();
   }
 
   const simulationMs = Date.now() - started;
 
   const positions = new Float32Array(nodeCount * 3);
   for (let i = 0; i < nodeCount; i += 1) {
-    positions[i * 3] = simNodes[i].x ?? 0;
-    positions[i * 3 + 1] = simNodes[i].y ?? 0;
-    positions[i * 3 + 2] = simNodes[i].z ?? 0;
+    positions[i * 3] = finiteOrZero(simNodes[i].x);
+    positions[i * 3 + 1] = finiteOrZero(simNodes[i].y);
+    positions[i * 3 + 2] = finiteOrZero(simNodes[i].z);
   }
 
   return {
@@ -207,6 +267,8 @@ export async function computeLayout(
     links: simLinks,
     boundingRadius: boundingRadius(positions),
     simulationMs,
-    ticks,
+    ticks: done,
+    nodeCount,
+    truncated,
   };
 }

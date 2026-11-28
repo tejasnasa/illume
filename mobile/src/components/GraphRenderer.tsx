@@ -5,7 +5,7 @@
  *
  * There is no reconciler in the path. The scene is built once with
  * imperative three calls, and a single animation frame owns the camera,
- * the haloes and the draw. That is the cost of not using a React 3D
+ * the brackets and the draw. That is the cost of not using a React 3D
  * library, and it buys a graph that draws tens of thousands of nodes
  * without a component tree to reconcile.
  *
@@ -17,6 +17,29 @@
  * 2. `gl.endFrameEXP()` must be called after every draw to present the
  *    buffer. Omitting it yields a permanently blank view with no error --
  *    the single most common way this integration fails silently.
+ *
+ * Things that would crash or stall a device, and what this file does about
+ * each:
+ *
+ * - The GL surface can be created after the screen has already unmounted, so
+ *   the scene is only built while a mounted flag is set, and the draw loop
+ *   checks it before every frame and before `endFrameEXP`.
+ * - An exception inside the animation frame is not caught by React, so the
+ *   frame body is wrapped, stops the loop on failure and reports through
+ *   state instead of killing the app.
+ * - There is no DOM canvas, so nothing here builds a texture or sprite from
+ *   one. The selection and search brackets are line segments.
+ * - Instanced meshes are never frustum-culled: their bounding sphere is
+ *   computed once, from the instances present at the time, and goes stale.
+ * - Android destroys the surface behind a `GLView` when its screen is hidden
+ *   or the app goes to the background, and may hand over a new context
+ *   later. Drawing with buffers that belonged to the old context reads
+ *   through dangling handles in native code and takes the process down, so
+ *   every frame belongs to one context: a new context cancels the old loop
+ *   and drops the old scene before anything is built on it.
+ * - Frames are drawn only while something is changing (the camera easing,
+ *   a gesture, a colour update). An idle graph costs no GPU work and puts
+ *   nothing on the GL thread's queue.
  *
  * The matrix is set once, when the scene is built. After that only the
  * things that change are touched: the node colours when the selection or
@@ -43,6 +66,12 @@ import {
 import { GLView } from "expo-gl";
 import * as THREE from "three";
 
+import {
+  BRACKET_MIN_PX,
+  bracketHalfSize,
+  bracketVertices,
+  CAMERA_FOV_DEG,
+} from "@/lib/graphBrackets";
 import { clampPhi } from "@/lib/graphCamera";
 import type { IndexedLink } from "@/lib/graphLayout";
 import {
@@ -69,11 +98,11 @@ function sphereSegments(nodeCount: number): { segments: number; rings: number } 
 /** Nodes are this fraction of the graph's own extent in radius. */
 const NODE_SIZE_FRACTION = 0.011;
 
-/** How many search matches get a pulsing halo. The rest are coloured only. */
-export const MAX_HALO_MATCHES = 8;
+/** How many search matches get a bracket. The rest are coloured only. */
+export const MAX_BRACKET_MATCHES = 8;
 
-/** How many rings each halo is drawn with. */
-const RINGS_PER_HALO = 3;
+/** How much larger than its node a bracket frames it. */
+const BRACKET_FRAMING = 1.8;
 
 /** How many incident links are drawn wide. The rest are only recoloured. */
 const MAX_WIDE_LINKS = 64;
@@ -87,8 +116,11 @@ const LINK_COLOR_DIM = new THREE.Color(0x2a3550);
 /** The colour of a link incident to the selection. */
 const LINK_COLOR_FOCUSED = new THREE.Color(0x5aa2ff);
 
-/** The colour of the halo rings. */
-const HALO_COLOR = new THREE.Color(NODE_COLOR_MATCH);
+/** The colour of a search-match bracket. */
+const MATCH_BRACKET_COLOR = new THREE.Color(NODE_COLOR_MATCH);
+
+/** The colour of the selection bracket. */
+const SELECTED_BRACKET_COLOR = new THREE.Color(NODE_COLOR_SELECTED);
 
 /** The slice of a GL context this file inspects. */
 interface GLContext {
@@ -133,12 +165,12 @@ interface Scene {
   incidentGeometry: THREE.CylinderGeometry;
   incidentMaterial: THREE.MeshBasicMaterial;
   incidentMesh: THREE.InstancedMesh;
-  haloGeometry: THREE.RingGeometry;
-  /** One material per halo ring: each ring fades on its own schedule. */
-  haloMaterials: THREE.MeshBasicMaterial[];
-  /** The pool of halo rings, reused for every match. */
-  halos: THREE.Mesh[];
-  /** The world radius of each node, used to size its halo. */
+  bracketGeometry: THREE.BufferGeometry;
+  /** One material per bracket, so each keeps its own colour. */
+  bracketMaterials: THREE.LineBasicMaterial[];
+  /** The pool of brackets: slot 0 is the selection, the rest are matches. */
+  brackets: THREE.LineSegments[];
+  /** The world radius of each node, used to size its bracket. */
   nodeRadii: Float32Array;
 }
 
@@ -207,6 +239,30 @@ function createRenderer(
 }
 
 /**
+ * Release everything a scene owns on the GPU.
+ *
+ * `LineSegments` has no `dispose` of its own -- calling one would throw --
+ * but its geometry and material do, and those are what own the buffers.
+ * `InstancedMesh` is the exception: it has a `dispose` for its instance
+ * buffers.
+ *
+ * @param scene - The scene to release.
+ */
+function disposeScene(scene: Scene): void {
+  scene.nodeMesh.dispose();
+  scene.geometry.dispose();
+  scene.nodeMaterial.dispose();
+  scene.linkGeometry.dispose();
+  scene.linkMaterial.dispose();
+  scene.incidentMesh.dispose();
+  scene.incidentGeometry.dispose();
+  scene.incidentMaterial.dispose();
+  scene.bracketGeometry.dispose();
+  scene.bracketMaterials.forEach((material) => material.dispose());
+  scene.renderer.dispose();
+}
+
+/**
  * The graph, drawn in 3D.
  *
  * @param props - The layout, the nodes, and the current selection.
@@ -235,6 +291,16 @@ export const GraphRenderer = forwardRef<
   const startedAtRef = useRef(0);
   const spreadRef = useRef<number | undefined>(undefined);
   const surfaceSizeRef = useRef({ width: 0, height: 0 });
+  /** False once the component has unmounted; guards every late GL callback. */
+  const mountedRef = useRef(true);
+  /** The context the current scene was built on; a frame from any other stops. */
+  const glRef = useRef<GLContext | null>(null);
+  /** Frames left to draw before the loop goes idle. */
+  const dirtyFramesRef = useRef(0);
+  /** Asks for a few more frames; called whenever something visible changes. */
+  const invalidate = useCallback(() => {
+    dirtyFramesRef.current = Math.max(dirtyFramesRef.current, 2);
+  }, []);
 
   const cameraStateRef = useRef<CameraState>({
     theta: 0,
@@ -290,34 +356,33 @@ export const GraphRenderer = forwardRef<
     return map;
   }, [nodes]);
 
-  /**
-   * Release the GPU resources.
-   *
-   * Called on unmount only. `LineSegments` has no `dispose` of its own --
-   * calling one would throw -- but its geometry and material do, and those
-   * are what own the buffers. `InstancedMesh` is the exception: it has a
-   * `dispose` for its instance buffers.
-   */
-  const dispose = useCallback(() => {
+  /** Cancel the loop and release the current scene, if there is one. */
+  const releaseScene = useCallback(() => {
     cancelAnimationFrame(rafRef.current);
     const scene = sceneRef.current;
+    sceneRef.current = null;
     if (!scene) return;
 
-    scene.nodeMesh.dispose();
-    scene.geometry.dispose();
-    scene.nodeMaterial.dispose();
-    scene.linkGeometry.dispose();
-    scene.linkMaterial.dispose();
-    scene.incidentMesh.dispose();
-    scene.incidentGeometry.dispose();
-    scene.incidentMaterial.dispose();
-    scene.haloGeometry.dispose();
-    scene.haloMaterials.forEach((material) => material.dispose());
-    scene.renderer.dispose();
-    sceneRef.current = null;
+    // The context may already be gone, in which case the calls below are
+    // no-ops on the native side; a throw from one must not reach React.
+    try {
+      disposeScene(scene);
+    } catch {
+      // Nothing more can be released from a dead context.
+    }
   }, []);
 
-  useEffect(() => dispose, [dispose]);
+  /** Release the GPU resources. Called on unmount only. */
+  const dispose = useCallback(() => {
+    mountedRef.current = false;
+    glRef.current = null;
+    releaseScene();
+  }, [releaseScene]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return dispose;
+  }, [dispose]);
 
   /**
    * Build the scene once the GL context exists.
@@ -325,10 +390,24 @@ export const GraphRenderer = forwardRef<
    * @param gl - The expo-gl context.
    */
   const onContextCreate = useCallback((gl: GLContext) => {
+    // The surface can come up after the screen has been left. Building a
+    // scene then would start a draw loop nothing is left to stop.
+    if (!mountedRef.current) return;
+
+    // A second context means the first one's surface is gone. Its loop and
+    // its buffers are dropped without touching them, and the scene is built
+    // again from scratch on the new context.
+    cancelAnimationFrame(rafRef.current);
+    sceneRef.current = null;
+    glRef.current = gl;
+
     try {
       const current = propsRef.current;
       const width = gl.drawingBufferWidth;
       const height = gl.drawingBufferHeight;
+      if (!(width > 0) || !(height > 0)) {
+        throw new Error("The graphics surface has no size.");
+      }
 
       // Three reads these properties off the canvas; nothing else is
       // required of it.
@@ -342,7 +421,12 @@ export const GraphRenderer = forwardRef<
         clientWidth: width,
         getContext: () => gl,
       } as unknown as HTMLCanvasElement;
-      (gl as unknown as { canvas: unknown }).canvas = canvasShim;
+      try {
+        (gl as unknown as { canvas: unknown }).canvas = canvasShim;
+      } catch {
+        // The property is read-only on some builds; three is handed the shim
+        // directly, so the context does not need it.
+      }
 
       let renderer: THREE.WebGLRenderer;
       try {
@@ -358,7 +442,7 @@ export const GraphRenderer = forwardRef<
 
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(
-        50,
+        CAMERA_FOV_DEG,
         width / height,
         0.1,
         Math.max(current.boundingRadius * 20, 100),
@@ -378,6 +462,7 @@ export const GraphRenderer = forwardRef<
         Math.max(current.nodes.length, 1),
       );
       nodeMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+      nodeMesh.frustumCulled = false;
 
       const matrix = new THREE.Matrix4();
       const color = new THREE.Color();
@@ -450,6 +535,7 @@ export const GraphRenderer = forwardRef<
         opacity: 0.9,
       });
       const linkMesh = new THREE.LineSegments(linkGeometry, linkMaterial);
+      linkMesh.frustumCulled = false;
       scene.add(linkMesh);
 
       // ── Incident links ──
@@ -469,27 +555,33 @@ export const GraphRenderer = forwardRef<
         MAX_WIDE_LINKS,
       );
       incidentMesh.count = 0;
+      incidentMesh.frustumCulled = false;
       scene.add(incidentMesh);
 
-      // ── Haloes ──
-      const haloGeometry = new THREE.RingGeometry(1, 1.18, 32);
-      const haloMaterials: THREE.MeshBasicMaterial[] = [];
-      const halos: THREE.Mesh[] = [];
-      for (let i = 0; i < MAX_HALO_MATCHES * RINGS_PER_HALO; i += 1) {
-        const material = new THREE.MeshBasicMaterial({
-          color: HALO_COLOR,
+      // ── Brackets ──
+      // Corner marks as line segments: there is no DOM canvas to paint a
+      // sprite texture on. They are depth-test free so a bracket stays
+      // visible when the node it frames is behind another.
+      const bracketGeometry = new THREE.BufferGeometry();
+      bracketGeometry.setAttribute(
+        "position",
+        new THREE.BufferAttribute(bracketVertices(), 3),
+      );
+      const bracketMaterials: THREE.LineBasicMaterial[] = [];
+      const brackets: THREE.LineSegments[] = [];
+      for (let i = 0; i < MAX_BRACKET_MATCHES + 1; i += 1) {
+        const material = new THREE.LineBasicMaterial({
+          color: i === 0 ? SELECTED_BRACKET_COLOR : MATCH_BRACKET_COLOR,
+          depthTest: false,
           transparent: true,
-          opacity: 0,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          toneMapped: false,
         });
-        haloMaterials.push(material);
-        const ring = new THREE.Mesh(haloGeometry, material);
-        ring.visible = false;
-        ring.userData.phase = (i % RINGS_PER_HALO) / RINGS_PER_HALO;
-        halos.push(ring);
-        scene.add(ring);
+        bracketMaterials.push(material);
+        const bracket = new THREE.LineSegments(bracketGeometry, material);
+        bracket.visible = false;
+        bracket.frustumCulled = false;
+        bracket.renderOrder = 10;
+        brackets.push(bracket);
+        scene.add(bracket);
       }
 
       sceneRef.current = {
@@ -509,9 +601,9 @@ export const GraphRenderer = forwardRef<
         incidentGeometry,
         incidentMaterial,
         incidentMesh,
-        haloGeometry,
-        haloMaterials,
-        halos,
+        bracketGeometry,
+        bracketMaterials,
+        brackets,
         nodeRadii,
       };
 
@@ -520,48 +612,79 @@ export const GraphRenderer = forwardRef<
       // Paint whatever the selection and the search already say.
       refreshVisualsRef.current();
 
+      invalidate();
+
       const animate = () => {
         const active = sceneRef.current;
-        if (!active) return;
+        if (!active || !mountedRef.current || glRef.current !== gl) return;
 
-        const state = cameraStateRef.current;
+        try {
+          const state = cameraStateRef.current;
 
-        // Ease the camera toward its goal so focusing a node glides
-        // rather than jumps.
-        state.target.lerp(state.targetGoal, 0.12);
-        state.radius += (state.radiusGoal - state.radius) * 0.12;
+          // Idle until something changes: no draw, nothing queued on the GL
+          // thread, only a cheap check per frame.
+          const easing =
+            state.target.distanceToSquared(state.targetGoal) > 1e-6 ||
+            Math.abs(state.radiusGoal - state.radius) > 1e-3;
+          if (!easing && dirtyFramesRef.current <= 0) {
+            rafRef.current = requestAnimationFrame(animate);
+            return;
+          }
+          if (!easing) dirtyFramesRef.current -= 1;
 
-        const cosPhi = Math.cos(state.phi);
-        active.camera.position.set(
-          state.target.x - state.radius * cosPhi * Math.sin(state.theta),
-          state.target.y + state.radius * Math.sin(state.phi),
-          state.target.z + state.radius * cosPhi * Math.cos(state.theta),
-        );
-        active.camera.lookAt(state.target);
+          // Ease the camera toward its goal so focusing a node glides
+          // rather than jumps.
+          state.target.lerp(state.targetGoal, 0.12);
+          state.radius += (state.radiusGoal - state.radius) * 0.12;
 
-        // ── Haloes ──
-        const now = Date.now() - startedAtRef.current;
-        active.halos.forEach((ring) => {
-          if (!ring.visible) return;
-          ring.quaternion.copy(active.camera.quaternion);
-          const phase = ring.userData.phase as number;
-          const t = (now / 1500 + phase) % 1;
-          const base = ring.userData.baseRadius as number;
-          ring.scale.setScalar(base * (1 + t * 2.5));
-          (ring.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.6;
-        });
+          const cosPhi = Math.cos(state.phi);
+          active.camera.position.set(
+            state.target.x - state.radius * cosPhi * Math.sin(state.theta),
+            state.target.y + state.radius * Math.sin(state.phi),
+            state.target.z + state.radius * cosPhi * Math.cos(state.theta),
+          );
+          active.camera.lookAt(state.target);
 
-        active.renderer.render(active.scene, active.camera);
-        gl.endFrameEXP();
+          // ── Brackets ──
+          // Faced to the camera and sized so none is smaller than
+          // BRACKET_MIN_PX on screen.
+          const viewportHeight = surfaceSizeRef.current.height || height;
+          active.brackets.forEach((bracket) => {
+            if (!bracket.visible) return;
+            bracket.quaternion.copy(active.camera.quaternion);
+            const distance = active.camera.position.distanceTo(bracket.position);
+            const base = (bracket.userData.baseHalf as number) ?? 0;
+            bracket.scale.setScalar(
+              bracketHalfSize(base, distance, viewportHeight, BRACKET_MIN_PX),
+            );
+          });
+
+          active.renderer.render(active.scene, active.camera);
+          // The context may have been torn down while the draw was being
+          // issued; present only if this component is still on screen.
+          if (!mountedRef.current || glRef.current !== gl) return;
+          gl.endFrameEXP();
+        } catch (cause) {
+          // A throw inside an animation frame is outside React, so it would
+          // surface as a fatal error. Stop the loop and show the message.
+          if (mountedRef.current) {
+            setError(
+              cause instanceof Error ? cause.message : "Unknown GL error",
+            );
+          }
+          return;
+        }
 
         rafRef.current = requestAnimationFrame(animate);
       };
 
       rafRef.current = requestAnimationFrame(animate);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unknown GL error");
+      if (mountedRef.current) {
+        setError(cause instanceof Error ? cause.message : "Unknown GL error");
+      }
     }
-  }, []);
+  }, [invalidate]);
 
   /**
    * Repaint the nodes the search or the selection has claimed.
@@ -697,36 +820,42 @@ export const GraphRenderer = forwardRef<
   }, [indexById]);
 
   /**
-   * Place the halo rings on the nodes the search matched.
+   * Place the brackets on the selection and on the nodes the search matched.
    *
-   * The rings are a fixed pool: the number of matches that get one is
+   * The brackets are a fixed pool: the number of matches that get one is
    * capped, because a search that matches everything would otherwise ask
-   * for a ring per node.
+   * for a bracket per node. Slot 0 belongs to the selection.
    */
-  const applyHalos = useCallback(() => {
+  const applyBrackets = useCallback(() => {
     const active = sceneRef.current;
     if (!active) return;
 
     const current = propsRef.current;
-    const haloed = current.matchNodeIds.slice(0, MAX_HALO_MATCHES);
+    const selectedIndex = current.selectedNodeId
+      ? indexById.get(current.selectedNodeId)
+      : undefined;
+    const matched = current.matchNodeIds
+      .filter((id) => id !== current.selectedNodeId)
+      .slice(0, MAX_BRACKET_MATCHES);
 
-    active.halos.forEach((ring, slot) => {
-      const matchIndex = Math.floor(slot / RINGS_PER_HALO);
-      const nodeId = haloed[matchIndex];
-      const index = nodeId ? indexById.get(nodeId) : undefined;
+    active.brackets.forEach((bracket, slot) => {
+      const index =
+        slot === 0
+          ? selectedIndex
+          : indexById.get(matched[slot - 1] ?? "");
 
       if (index === undefined) {
-        ring.visible = false;
+        bracket.visible = false;
         return;
       }
 
-      ring.visible = true;
-      ring.position.set(
+      bracket.visible = true;
+      bracket.position.set(
         current.positions[index * 3],
         current.positions[index * 3 + 1],
         current.positions[index * 3 + 2],
       );
-      ring.userData.baseRadius = Math.max(active.nodeRadii[index] * 1.4, 0.4);
+      bracket.userData.baseHalf = active.nodeRadii[index] * BRACKET_FRAMING;
     });
   }, [indexById]);
 
@@ -735,17 +864,20 @@ export const GraphRenderer = forwardRef<
   refreshVisualsRef.current = () => {
     applyNodeColours();
     applyLinkFocus();
-    applyHalos();
+    applyBrackets();
+    invalidate();
   };
 
   useEffect(() => {
     applyNodeColours();
     applyLinkFocus();
-    applyHalos();
+    applyBrackets();
+    invalidate();
   }, [
+    invalidate,
     applyNodeColours,
     applyLinkFocus,
-    applyHalos,
+    applyBrackets,
     selectedNodeId,
     matchNodeIds,
   ]);
@@ -832,6 +964,7 @@ export const GraphRenderer = forwardRef<
 
           state.theta -= deltaX * 0.005;
           state.phi = clampPhi(state.phi + deltaY * 0.005);
+          invalidate();
         },
         onPanResponderRelease: (event, gesture) => {
           spreadRef.current = undefined;
@@ -848,7 +981,7 @@ export const GraphRenderer = forwardRef<
           spreadRef.current = undefined;
         },
       }),
-    [pick],
+    [pick, invalidate],
   );
 
   /**
@@ -860,6 +993,7 @@ export const GraphRenderer = forwardRef<
   const handleLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
     surfaceSizeRef.current = { width, height };
+    invalidate();
   };
 
   useImperativeHandle(
@@ -904,6 +1038,10 @@ export const GraphRenderer = forwardRef<
     <View style={styles.root} testID="graph-renderer">
       <GLView
         style={StyleSheet.absoluteFill}
+        // The scene is drawn without antialiasing, so the default four
+        // multisample buffers would only cost memory; some Android GPUs fail
+        // to allocate them at all.
+        msaaSamples={0}
         onContextCreate={onContextCreate as (gl: unknown) => void}
       />
       {/* A transparent view over the GL surface carries the gestures, so

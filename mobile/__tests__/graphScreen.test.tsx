@@ -20,6 +20,9 @@ import type Repository from "@/types/repository";
 /** The route parameters the stubbed router reports. */
 let mockParams: Record<string, string> = { id: "42" };
 
+/** Whether the stubbed navigator reports the graph screen as focused. */
+let mockFocused = true;
+
 jest.mock("expo-router", () => {
   function noop() {
     /* router stub */
@@ -39,6 +42,7 @@ jest.mock("expo-router", () => {
     router: routerObj,
     useRouter: () => routerObj,
     useGlobalSearchParams: () => mockParams,
+    useIsFocused: () => mockFocused,
     useSegments: () => ["repo", "42"],
     usePathname: () => "/repo/42/graph",
     Stack: ((p: { children?: unknown }) => p.children) as unknown as object,
@@ -137,6 +141,7 @@ let stubbedFetch: typeof fetch | null = null;
 
 beforeEach(() => {
   mockParams = { id: "42" };
+  mockFocused = true;
   __setTokenStoreImplementation({
     async getItemAsync() {
       return "valid-jwt";
@@ -231,6 +236,23 @@ describe("GraphScreen", () => {
       },
       { timeout: 10_000 },
     );
+  });
+
+  it("keeps no GL surface while the screen is not focused", async () => {
+    // Android destroys the surface behind a hidden tab, so the renderer is
+    // only mounted while the graph is on screen. The layout still runs, so
+    // coming back draws at once.
+    mockFocused = false;
+    const screen = await renderGraph();
+
+    await waitFor(
+      () => {
+        expect(screen.queryByTestId("graph-loading")).toBeNull();
+        expect(screen.getByTestId("graph-tour-next")).toBeTruthy();
+      },
+      { timeout: 10_000 },
+    );
+    expect(screen.queryByTestId("graph-renderer")).toBeNull();
   });
 
   it("offers a search box", async () => {

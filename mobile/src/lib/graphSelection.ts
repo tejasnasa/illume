@@ -160,3 +160,51 @@ export function nodeIndexById(
   }
   return -1;
 }
+
+/** A node on the far side of a link from the selection. */
+export interface Neighbour {
+  /** The neighbour node id. */
+  id: string;
+  /** The text shown for it: its label, with the path when they differ. */
+  text: string;
+}
+
+/**
+ * The nodes that depend on a node, and the nodes it depends on.
+ *
+ * A link points from the file that imports to the file that is imported, so
+ * the importers of a node are the sources of the links that end at it.
+ * Out-of-range indices, self links and duplicates are skipped.
+ *
+ * @param nodes - Every node in the graph.
+ * @param links - Every link, resolved to node indices.
+ * @param nodeIndex - The index of the selected node.
+ * @returns The importers and the imports, each in link order.
+ */
+export function neighboursOf(
+  nodes: readonly GraphNodeMeta[],
+  links: readonly IndexedLink[],
+  nodeIndex: number,
+): { importers: Neighbour[]; imports: Neighbour[] } {
+  const importers: Neighbour[] = [];
+  const imports: Neighbour[] = [];
+  if (nodeIndex < 0 || nodeIndex >= nodes.length) return { importers, imports };
+  const seenIn = new Set<number>();
+  const seenOut = new Set<number>();
+  const describe = (node: GraphNodeMeta): string =>
+    node.path && node.path !== node.label
+      ? `${node.label} · ${node.path}`
+      : node.label;
+
+  for (const { source, target } of links) {
+    if (target === nodeIndex && source !== nodeIndex && !seenIn.has(source) && nodes[source]) {
+      seenIn.add(source);
+      importers.push({ id: nodes[source].id, text: describe(nodes[source]) });
+    }
+    if (source === nodeIndex && target !== nodeIndex && !seenOut.has(target) && nodes[target]) {
+      seenOut.add(target);
+      imports.push({ id: nodes[target].id, text: describe(nodes[target]) });
+    }
+  }
+  return { importers, imports };
+}
