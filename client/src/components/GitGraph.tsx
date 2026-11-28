@@ -197,7 +197,7 @@ export default function GitGraph({
           </ul>
         </div>
 
-        <div className="relative max-h-90 min-h-40 overflow-y-auto [scrollbar-width:thin]">
+        <div className="relative h-90 overflow-y-auto [scrollbar-width:thin]">
           {error && (
             <div
               role="alert"
@@ -288,11 +288,11 @@ export default function GitGraph({
           {commits.length === 0 &&
             !error &&
             (loadingCommits || loadingBranches ? (
-              <p className="blink m-0 py-12 text-center font-pixel text-xs tracking-[0.12em] text-(--muted-foreground) uppercase">
+              <p className="blink m-0 flex h-full items-center justify-center text-center font-pixel text-xs tracking-[0.12em] text-(--muted-foreground) uppercase">
                 Loading history
               </p>
             ) : (
-              <p className="m-0 py-12 text-center font-pixel text-xs text-(--faint-foreground) uppercase">
+              <p className="m-0 flex h-full items-center justify-center text-center font-pixel text-xs text-(--faint-foreground) uppercase">
                 No commits found
               </p>
             ))}
