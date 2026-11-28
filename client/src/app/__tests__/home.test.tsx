@@ -38,4 +38,18 @@ describe("landing page", () => {
       screen.getByRole("heading", { name: /codebase glossary/i }),
     ).toBeInTheDocument();
   });
+
+  it("points to the Android app and the MCP guide", () => {
+    render(<Home />);
+
+    expect(
+      screen.getByRole("link", { name: /get the android app/i }),
+    ).toHaveAttribute("href", "/mobile");
+    expect(
+      screen.getByRole("link", { name: /read the mcp guide/i }),
+    ).toHaveAttribute("href", "/docs/mcp/server");
+    expect(
+      screen.getByRole("link", { name: /create a token/i }),
+    ).toHaveAttribute("href", "/settings");
+  });
 });

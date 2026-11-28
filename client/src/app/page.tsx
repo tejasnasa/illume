@@ -107,6 +107,32 @@ const FOOTER_COLUMNS: {
   },
 ];
 
+/** The other places Illume can be used, each with where to start. */
+const ELSEWHERE: {
+  tag: string;
+  title: string;
+  body: string;
+  code?: string;
+  links: { label: string; href: string }[];
+}[] = [
+  {
+    tag: "ANDROID APP",
+    title: "Illume in your pocket",
+    body: "Browse the brief, the glossary, the files and the 3D graph, and ask the agent, from your phone. Same account, same repositories.",
+    links: [{ label: "Get the Android app →", href: "/mobile" }],
+  },
+  {
+    tag: "MCP SERVER",
+    title: "Your editor's agent, briefed",
+    body: "Give Claude Code, Cursor or any MCP client Illume's search and graph tools. Create a token in Settings, then add the server.",
+    code: "claude mcp add illume --env ILLUME_MCP_TOKEN=ilm_... -- uvx illume-mcp",
+    links: [
+      { label: "Read the MCP guide →", href: "/docs/mcp/server" },
+      { label: "Create a token", href: "/settings" },
+    ],
+  },
+];
+
 /**
  * A section's eyebrow, two-line heading and side blurb.
  *
@@ -451,6 +477,55 @@ export default function Home() {
             blurb="Watch Illume take a real codebase from a link to a guide, start to finish. Jump to the part you care about."
           />
           <Tour />
+        </div>
+      </section>
+
+      <section id="elsewhere" className="scroll-mt-16">
+        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-6 py-22.5">
+          <div className="flex flex-col gap-3">
+            <p className="m-0 font-pixel text-sm tracking-[0.14em] text-(--chart-2) uppercase">
+              Beyond the browser
+            </p>
+            <h2 className="m-0 font-pixel text-[clamp(1.8rem,3.4vw,2.8rem)] leading-[1.05] tracking-[-0.02em]">
+              On your phone, <span className="gradient-text">in your editor</span>
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {ELSEWHERE.map((item) => (
+              <article
+                key={item.tag}
+                className="panel flex min-w-0 flex-col gap-4 p-6"
+              >
+                <p className="m-0 font-pixel text-[13px] tracking-[0.12em] text-(--chart-2)">
+                  {item.tag}
+                </p>
+                <h3 className="m-0 font-pixel text-2xl font-normal">{item.title}</h3>
+                <p className="m-0 grow text-[15px] leading-relaxed text-zinc-400">
+                  {item.body}
+                </p>
+                {item.code && (
+                  <code className="block overflow-x-auto border border-(--border) bg-(--background) px-3 py-2 font-pixel [scrollbar-width:none] text-xs whitespace-nowrap text-zinc-300">
+                    {item.code}
+                  </code>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  {item.links.map((link, i) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className={
+                        i === 0
+                          ? "cta inline-flex items-center gap-2 rounded-sm bg-(--primary) px-4 py-2.5 font-pixel text-[13px] tracking-[0.04em] text-(--primary-foreground)"
+                          : "ghost inline-flex items-center gap-2 rounded-sm border border-(--border-strong) bg-(--background)/60 px-4 py-2.5 font-pixel text-[13px] tracking-[0.04em] text-zinc-300"
+                      }
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
         </div>
       </section>
 
