@@ -1,0 +1,52 @@
+# Excluded from the EAS build upload of the mobile app.
+#
+# EAS archives the git repository root and reads this file from there, so
+# the rules in mobile/.easignore alone are not applied. Keep this file LF.
+
+node_modules/
+.expo/
+dist/
+web-build/
+android/
+ios/
+*.apk
+*.aab
+*.ipa
+*.app
+
+# Sibling applications are not part of a mobile build.
+client/
+server/
+docs/
+showcase/
+
+# Local environment. EAS reads its values from the build profile or the
+# EAS environment, never from a checked-out .env.
+.env
+.env.*
+!.env.example
+
+# Local tooling state.
+.agents/
+skills-lock.json
+coverage/
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# OS / editor noise.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.pem
+
+# Untracked local folders at the repository root.
+.claude/
+.eval-phases/
+.mcp-phases/
+.pytest_cache/
+.zed/
+mcp-local/
+.tmp_*
