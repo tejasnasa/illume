@@ -56,17 +56,21 @@ export type GlossaryEntryItem = Glossary["entries"][number];
  * @param repoId - The repository's UUID.
  * @param page - 1-indexed page number.
  * @param pageSize - Entries per page.
+ * @param letter - Optional initial, or ``#`` for names that start with
+ *   anything but a letter.
  * @returns The absolute API path.
  */
 function glossaryPath(
   repoId: string,
   page: number,
   pageSize: number,
+  letter?: string,
 ): string {
   const query = new URLSearchParams({
     page: page.toString(),
     page_size: pageSize.toString(),
   });
+  if (letter) query.set("letter", letter);
 
   return `/api/v1/repository/${repoId}/glossary?${query.toString()}`;
 }
@@ -101,16 +105,18 @@ function glossarySearchPath(
  * @param repoId - The repository's UUID.
  * @param page - 1-indexed page number. Defaults to the first page.
  * @param pageSize - Entries per page. Defaults to twenty.
+ * @param letter - Only names starting with this letter; ``#`` for the rest.
  * @param options - Test-friendly transport overrides.
- * @returns The entries on that page plus the total count.
+ * @returns The entries on that page, the total count and the initials on offer.
  */
 export function getGlossary(
   repoId: string,
   page: number = 1,
   pageSize: number = GLOSSARY_PAGE_SIZE,
+  letter?: string,
   options: TestOptions = {},
 ): Promise<Glossary> {
-  return apiGet<Glossary>(glossaryPath(repoId, page, pageSize), options);
+  return apiGet<Glossary>(glossaryPath(repoId, page, pageSize, letter), options);
 }
 
 /**

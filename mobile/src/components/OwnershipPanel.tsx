@@ -79,7 +79,7 @@ export function OwnershipPanel({
         testID="ownership-loading"
         className="mb-3 rounded border border-border bg-card p-4"
       >
-        <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <Text className="mb-3 text-[11px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
           Ownership
         </Text>
         <View className="items-center justify-center py-6">
@@ -109,7 +109,7 @@ export function OwnershipPanel({
             onPress={onRetry}
             className="mx-4 min-h-[44px] items-center justify-center rounded border border-border px-4 py-2 active:bg-secondary"
           >
-            <Text className="text-[13px] font-semibold text-foreground">
+            <Text className="text-[13px] font-sans-semibold text-foreground">
               Try again
             </Text>
           </Pressable>
@@ -124,11 +124,11 @@ export function OwnershipPanel({
         testID={testID}
         className="mb-3 rounded border border-border bg-card p-4"
       >
-        <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <Text className="mb-3 text-[11px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
           Ownership
         </Text>
         <View testID="ownership-empty" className="items-center justify-center py-6">
-          <Text className="text-[13px] font-medium text-foreground">
+          <Text className="text-[13px] font-sans-medium text-foreground">
             No ownership data
           </Text>
           <Text className="mt-1 text-center text-xs text-muted-foreground">
@@ -148,7 +148,7 @@ export function OwnershipPanel({
       className="mb-3 rounded border border-border bg-card p-4"
     >
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <Text className="text-[11px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
           Ownership
         </Text>
         {silo ? (
@@ -156,7 +156,7 @@ export function OwnershipPanel({
             testID="ownership-silo-badge"
             className="rounded border border-chart-2/30 bg-chart-2/10 px-2 py-0.5"
           >
-            <Text className="text-[10px] font-bold uppercase tracking-wider text-chart-2">
+            <Text className="text-[10px] font-pixel uppercase tracking-[1.2px] text-chart-2">
               Knowledge Silo
             </Text>
           </View>
@@ -168,7 +168,7 @@ export function OwnershipPanel({
         <View className="flex-1">
           <Text
             testID="ownership-primary-owner"
-            className="font-semibold text-foreground"
+            className="font-sans-semibold text-foreground"
             numberOfLines={1}
           >
             {ownership.primary_owner || "Unknown"}
@@ -181,33 +181,33 @@ export function OwnershipPanel({
 
       <View className="mb-3 flex-row">
         <View className="mr-3 flex-1 rounded border border-border bg-secondary/40 p-3">
-          <Text className="text-[10px] font-semibold uppercase text-muted-foreground">
+          <Text className="text-[10px] font-pixel uppercase text-muted-foreground">
             Bus Factor
           </Text>
           <View className="flex-row items-end">
             <Text
               testID="ownership-bus-factor"
-              className="text-xl font-bold text-foreground"
+              className="text-xl font-pixel text-foreground"
             >
               {ownership.bus_factor}
             </Text>
-            <Text className="mb-0.5 ml-1 text-[10px] font-medium text-muted-foreground">
+            <Text className="mb-0.5 ml-1 text-[10px] font-sans-medium text-muted-foreground">
               {ownership.bus_factor === 1 ? "engineer" : "engineers"}
             </Text>
           </View>
         </View>
         <View className="flex-1 rounded border border-border bg-secondary/40 p-3">
-          <Text className="text-[10px] font-semibold uppercase text-muted-foreground">
+          <Text className="text-[10px] font-pixel uppercase text-muted-foreground">
             Contributors
           </Text>
           <View className="flex-row items-end">
             <Text
               testID="ownership-contributor-count"
-              className="text-xl font-bold text-foreground"
+              className="text-xl font-pixel text-foreground"
             >
               {contributors.length}
             </Text>
-            <Text className="mb-0.5 ml-1 text-[10px] font-medium text-muted-foreground">
+            <Text className="mb-0.5 ml-1 text-[10px] font-sans-medium text-muted-foreground">
               total
             </Text>
           </View>
@@ -217,7 +217,7 @@ export function OwnershipPanel({
       {contributors.length > 0 ? (
         <View testID="ownership-contributors">
           <View className="mb-2 flex-row items-center justify-between">
-            <Text className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Text className="text-[10px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
               Knowledge Distribution
             </Text>
             <Text className="text-[10px] text-muted-foreground">
@@ -235,14 +235,14 @@ export function OwnershipPanel({
               >
                 <View className="mb-1 flex-row items-center justify-between">
                   <Text
-                    className="mr-2 flex-1 text-xs font-medium text-foreground"
+                    className="mr-2 flex-1 text-xs font-sans-medium text-foreground"
                     numberOfLines={1}
                   >
                     {contributor.name}
                   </Text>
                   <Text
                     testID={`ownership-contributor-percentage-${index}`}
-                    className="font-mono text-xs font-bold text-primary"
+                    className="font-mono text-xs font-sans-bold text-primary"
                   >
                     {share > 0 ? `${share.toFixed(1)}%` : "N/A"}
                   </Text>
@@ -267,7 +267,7 @@ export function OwnershipPanel({
           onPress={onRetry}
           className="mt-1 min-h-[44px] items-center justify-center rounded border border-border active:bg-secondary"
         >
-          <Text className="text-[13px] font-medium text-foreground">
+          <Text className="text-[13px] font-sans-medium text-foreground">
             Reload ownership
           </Text>
         </Pressable>

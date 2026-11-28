@@ -153,7 +153,7 @@ export function GlossaryEntry({
       <View className="mb-2 flex-row items-start justify-between gap-3">
         <Text
           testID={`${testID}-term`}
-          className="flex-1 text-base font-bold text-foreground"
+          className="flex-1 text-base font-pixel text-foreground"
         >
           {entry.name}
         </Text>

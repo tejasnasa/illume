@@ -185,7 +185,7 @@ function TreeRowItem({
       </Text>
       <Text
         testID={`file-tree-criticality-${pathToken(file.path)}`}
-        className="ml-2 w-16 text-right text-[10px] font-bold uppercase text-muted-foreground"
+        className="ml-2 w-16 text-right text-[10px] font-pixel uppercase text-muted-foreground"
         numberOfLines={1}
       >
         {file.criticality}

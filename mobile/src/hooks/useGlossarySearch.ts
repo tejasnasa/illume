@@ -98,6 +98,12 @@ export interface UseGlossarySearchResult {
   retry: () => void;
   /** Show another page of the current listing. */
   goToPage: (page: number) => void;
+  /** The initial the listing is filtered to, or null for every term. */
+  letter: string | null;
+  /** Filter the listing to an initial (``#`` for the rest), or null for all. */
+  setLetter: (letter: string | null) => void;
+  /** The initials that have at least one term. */
+  letters: string[];
 }
 
 /**
@@ -116,6 +122,7 @@ export function useGlossarySearch({
   // The term the reader has settled on. Only this reaches the network.
   const [term, setTerm] = useState("");
   const [page, setPage] = useState(1);
+  const [letter, setLetterState] = useState<string | null>(null);
 
   // The term the last settled request was made with, kept outside the
   // state so the debounce can tell a new term from the same one typed
@@ -141,11 +148,21 @@ export function useGlossarySearch({
   }, [query]);
 
   const result = useQuery({
-    queryKey: queryKeys.repositories.glossary(repoId ?? "", page, term),
+    queryKey: queryKeys.repositories.glossary(
+      repoId ?? "",
+      page,
+      term,
+      term.length > 0 ? "" : (letter ?? ""),
+    ),
     queryFn: () =>
       term.length > 0
         ? searchGlossary(repoId as string, term, page, GLOSSARY_PAGE_SIZE)
-        : getGlossary(repoId as string, page, GLOSSARY_PAGE_SIZE),
+        : getGlossary(
+            repoId as string,
+            page,
+            GLOSSARY_PAGE_SIZE,
+            letter ?? undefined,
+          ),
     enabled: enabled && typeof repoId === "string" && repoId.length > 0,
     // The previous page stays on screen while the next one is fetched, so
     // the list does not blank out under the reader on every term change.
@@ -162,6 +179,24 @@ export function useGlossarySearch({
     setTerm("");
     setPage(1);
   }, []);
+
+  // Picking an initial leaves search: the two filters are different
+  // routes, and a letter chosen while a term is typed would silently do
+  // nothing.
+  const setLetter = useCallback((next: string | null) => {
+    settledTerm.current = "";
+    setQuery("");
+    setTerm("");
+    setPage(1);
+    setLetterState(next);
+  }, []);
+
+  // The browse route reports the initials on offer; the last answer is kept
+  // so the rail does not empty out while a search is in flight.
+  const lettersRef = useRef<string[]>([]);
+  if (result.data?.letters && result.data.letters.length > 0) {
+    lettersRef.current = result.data.letters;
+  }
 
   const goToPage = useCallback(
     (next: number) => {
@@ -189,5 +224,8 @@ export function useGlossarySearch({
       void result.refetch();
     },
     goToPage,
+    letter,
+    setLetter,
+    letters: lettersRef.current,
   };
 }

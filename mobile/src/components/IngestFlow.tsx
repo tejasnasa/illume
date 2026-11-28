@@ -21,16 +21,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { queryKeys } from "@/api/queryKeys";
-import { IngestFlowCanvas } from "@/components/IngestFlowCanvas";
-import { IngestLogDrawer } from "@/components/IngestLogDrawer";
+import { IngestLog } from "@/components/ingest/IngestLog";
+import { PipelineBoard } from "@/components/ingest/PipelineBoard";
 import { useAuth } from "@/hooks/useAuth";
 import { useIngestStream, type IngestStream } from "@/hooks/useIngestStream";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { useReducedMotion } from "@/hooks/useReducedMotion";
 import {
   NODES_BY_ID,
   activeStage,
@@ -39,6 +38,8 @@ import {
   reduceFrames,
   seedFromStatus,
 } from "@/lib/ingestFlow";
+import { doneCount } from "@/lib/pipelineBoard";
+import { STAGE_IDS } from "@/lib/ingestFlow";
 import { RepoStatusView } from "@/ui/RepoStatusView";
 import { colors } from "@/theme/tokens";
 import type { IngestFrame, StageStateMap } from "@/types/ingest";
@@ -147,7 +148,6 @@ export function IngestFlow({
 }: IngestFlowProps) {
   const { token } = useAuth();
   const queryClient = useQueryClient();
-  const reducedMotion = useReducedMotion();
   const { enable: enablePush } = usePushNotifications();
 
   const own = useIngestStream({
@@ -157,7 +157,6 @@ export function IngestFlow({
   });
   const { frames, closed, reconnect } = injected ?? own;
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [stalled, setStalled] = useState(false);
 
@@ -333,10 +332,6 @@ export function IngestFlow({
             ? "Still working…"
             : (activeLabel ?? "Starting…");
 
-  const toggleDrawer = useCallback(() => {
-    setDrawerOpen((value) => !value);
-  }, []);
-
   if (queued) {
     // The static view keeps its own testID, so a screen that reaches this
     // branch is indistinguishable from the one that renders it directly.
@@ -350,11 +345,11 @@ export function IngestFlow({
       : colors.chart1;
 
   return (
-    <View testID="ingest-flow" className="flex-1 bg-background">
-      <View className="flex-row items-center justify-between px-4 py-2">
+    <View testID="ingest-flow" className="flex-1">
+      <View className="flex-row items-center justify-between px-4 py-3">
         <Text
           testID="ingest-flow-headline"
-          className="flex-1 text-sm font-bold uppercase tracking-wide"
+          className="flex-1 font-pixel text-sm uppercase tracking-[1px]"
           style={{ color: tone }}
           numberOfLines={1}
         >
@@ -362,28 +357,29 @@ export function IngestFlow({
         </Text>
 
         {attempt > 1 ? (
-          <Text className="ml-2 font-mono text-[10px] text-muted-foreground">
+          <Text className="ml-2 font-pixel text-[10px] text-muted-foreground">
             attempt {attempt} of 4
           </Text>
         ) : null}
 
-        <Text className="ml-3 font-mono text-xs text-muted-foreground">
+        <Text className="ml-3 font-pixel text-xs text-muted-foreground">
           {formatElapsed(elapsed)}
         </Text>
       </View>
 
-      <IngestFlowCanvas
-        states={states}
-        live={!stalled}
-        attempt={attempt}
-        reducedMotion={reducedMotion}
-      />
-
-      <IngestLogDrawer
-        frames={frames}
-        open={drawerOpen}
-        onToggle={toggleDrawer}
-      />
+      <ScrollView
+        testID="ingest-flow-scroll"
+        contentContainerStyle={{ padding: 16, paddingTop: 4, gap: 16 }}
+      >
+        <Text
+          testID="ingest-flow-count"
+          className="font-pixel text-xs uppercase tracking-[1px] text-muted-foreground"
+        >
+          {doneCount(states)} / {STAGE_IDS.length} stages
+        </Text>
+        <PipelineBoard states={states} />
+        <IngestLog frames={frames} repoId={repoId} />
+      </ScrollView>
     </View>
   );
 }

@@ -35,12 +35,18 @@ export const queryKeys = {
       [...queryKeys.repositories.all, "guide", id] as const,
     stats: (id: string) =>
       [...queryKeys.repositories.all, "stats", id] as const,
+    activity: (id: string) =>
+      [...queryKeys.repositories.all, "activity", id] as const,
     explorer: (id: string) =>
       [...queryKeys.repositories.all, "explorer", id] as const,
+    fileDetail: (id: string, path: string) =>
+      [...queryKeys.repositories.all, "file", id, path] as const,
     ownership: (id: string) =>
       [...queryKeys.repositories.all, "ownership", id] as const,
-    glossary: (id: string, page: number, query: string) =>
-      [...queryKeys.repositories.all, "glossary", id, page, query] as const,
+    glossary: (id: string, page: number, query: string, letter = "") =>
+      letter
+        ? ([...queryKeys.repositories.all, "glossary", id, page, query, letter] as const)
+        : ([...queryKeys.repositories.all, "glossary", id, page, query] as const),
     chatHistory: (id: string) =>
       [...queryKeys.repositories.all, "chat", id, "history"] as const,
   },
@@ -56,7 +62,8 @@ export const queryKeys = {
      * shared by every search term -- no refetch per keystroke, and no
      * cache entry per term either.
      */
-    myRepos: () => [...queryKeys.github.all, "repos"] as const,
+    myRepos: (search = "") =>
+      [...queryKeys.github.all, "repos", search] as const,
     branches: (owner: string, repo: string) =>
       [...queryKeys.github.all, "branches", owner, repo] as const,
     commits: (owner: string, repo: string, sha: string) =>

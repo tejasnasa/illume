@@ -149,7 +149,7 @@ export function ExportIllumeButton({
         {isExporting ? (
           <ActivityIndicator size="small" color={colors.primaryForeground} />
         ) : (
-          <Text className="text-[13px] font-semibold text-primary-foreground">
+          <Text className="text-[13px] font-sans-semibold text-primary-foreground">
             {label}
           </Text>
         )}

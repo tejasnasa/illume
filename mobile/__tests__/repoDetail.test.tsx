@@ -129,6 +129,41 @@ function makeGuide(): Guide {
   };
 }
 
+const STATS = {
+  repository_id: "repo-1",
+  total_files: 1200,
+  total_loc: 48000,
+  language_breakdown: [
+    { language: "TypeScript", file_count: 700, loc_count: 30000 },
+    { language: "Python", file_count: 500, loc_count: 18000 },
+  ],
+  total_contributors: 4,
+  top_contributors: [{ name: "Ada Lovelace", files_owned: 90 }],
+  knowledge_silo_count: 2,
+  total_dependencies: 300,
+};
+
+const ACTIVITY = [
+  {
+    kind: "pull_request",
+    title: "Add the overview cards",
+    author: "ada",
+    at: "2026-01-14T12:00:00Z",
+    number: 7,
+    hash: null,
+    files_changed: 3,
+  },
+];
+
+const GRAPH = {
+  nodes: [
+    { id: "a", label: "a.ts", path: "a.ts", group: "src", kind: "file", loc: 10, criticality: "critical", criticality_score: 90, language: "TypeScript", fan_in: 2, fan_out: 1 },
+    { id: "b", label: "b.ts", path: "b.ts", group: "src", kind: "file", loc: 10, criticality: "safe", criticality_score: 10, language: "TypeScript", fan_in: 0, fan_out: 1 },
+  ],
+  links: [{ source: "b", target: "a", type: "imports", weight: 1 }],
+  metadata: { total_nodes: 2, total_edges: 1, clusters: 1 },
+};
+
 /**
  * Render the overview screen against a repository fixture.
  *
@@ -150,6 +185,11 @@ async function renderScreen(repo: Repository) {
     if (url.endsWith("/api/v1/repository/42")) return json(repo);
     if (url.endsWith("/api/v1/repository/repo-1/guide"))
       return json(makeGuide());
+    if (url.endsWith("/api/v1/repository/repo-1/stats")) return json(STATS);
+    if (url.includes("/api/v1/repository/repo-1/activity"))
+      return json({ items: ACTIVITY });
+    if (url.includes("/api/v1/repository/repo-1/graph?level=file"))
+      return json(GRAPH);
     return new Response("not found", { status: 404 });
   });
 
@@ -222,7 +262,7 @@ describe("RepoIndexScreen", () => {
     expect(screen.getByTestId("repo-detail-status")).toBeTruthy();
 
     // The architecture overview.
-    expect(screen.getByText("AI Architecture Overview")).toBeTruthy();
+    expect(screen.getByText("Architecture brief")).toBeTruthy();
     expect(
       screen.getByText(
         "Illume clones a repository, parses every file and maps the connections between them.",
@@ -230,7 +270,7 @@ describe("RepoIndexScreen", () => {
     ).toBeTruthy();
 
     // The detected stack, group by group.
-    expect(screen.getByText("Tech Stack Detected")).toBeTruthy();
+    expect(screen.getByText("Tech stack")).toBeTruthy();
     expect(screen.getByText("Languages")).toBeTruthy();
     expect(screen.getByText("TypeScript")).toBeTruthy();
     expect(screen.getByText("Python")).toBeTruthy();
@@ -238,10 +278,33 @@ describe("RepoIndexScreen", () => {
     expect(screen.getByText("FastAPI")).toBeTruthy();
     expect(screen.getByText("Databases")).toBeTruthy();
     expect(screen.getByText("PostgreSQL")).toBeTruthy();
-    expect(screen.getByText("Infrastructure")).toBeTruthy();
+    expect(screen.getByText("Infra")).toBeTruthy();
     expect(screen.getByText("Docker")).toBeTruthy();
-    expect(screen.getByText("CI/CD And Infra")).toBeTruthy();
+    expect(screen.getByText("CI / CD")).toBeTruthy();
     expect(screen.getByText("GitHub Actions")).toBeTruthy();
+  });
+
+  it("draws the cards the web overview shows from stats, activity and the graph", async () => {
+    const screen = await renderScreen(makeRepo());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-glance")).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("overview-graph")).toBeTruthy();
+      expect(screen.getByTestId("overview-activity")).toBeTruthy();
+    });
+
+    expect(screen.getByText("1.2K")).toBeTruthy();
+    expect(screen.getByText("48K")).toBeTruthy();
+    expect(screen.getByTestId("overview-language-bar")).toBeTruthy();
+    expect(screen.getByText("#7")).toBeTruthy();
+    expect(screen.getByText("Add the overview cards")).toBeTruthy();
+    expect(screen.getByText("AL", { includeHiddenElements: true })).toBeTruthy();
+    expect(screen.getByText("90 files")).toBeTruthy();
+    expect(screen.getByTestId("overview-risk-spread")).toBeTruthy();
+    expect(screen.getByTestId("overview-risk")).toBeTruthy();
+    expect(screen.getByText("server/app/tasks/ingest.py")).toBeTruthy();
   });
 
   it("renders the external integrations from the guide", async () => {
@@ -280,7 +343,7 @@ describe("RepoIndexScreen", () => {
       "Parse files",
     );
     // The live board draws the pipeline the repository is walking.
-    expect(screen.getByTestId("ingest-flow-canvas")).toBeTruthy();
+    expect(screen.getByTestId("pipeline-board")).toBeTruthy();
     expect(screen.queryByTestId("repo-detail")).toBeNull();
   });
 
@@ -301,7 +364,7 @@ describe("RepoIndexScreen", () => {
     const screen = await renderScreen(makeRepo({ status: "parsing" }));
 
     await waitFor(() => {
-      expect(screen.getByTestId("ingest-flow-canvas")).toBeTruthy();
+      expect(screen.getByTestId("pipeline-board")).toBeTruthy();
     });
 
     expect(screen.queryByText("External")).toBeNull();

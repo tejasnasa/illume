@@ -108,16 +108,16 @@ describe("IngestFlow", () => {
     );
   });
 
-  it("shows the board and the log drawer", async () => {
+  it("shows the board and the log", async () => {
     const screen = await renderFlow({
       stream: makeStream([
         makeFrame({ stage: "parse", phase: "started", message: "parsing" }),
       ]),
     });
 
-    expect(screen.getByTestId("ingest-flow-canvas")).toBeTruthy();
-    expect(screen.getByTestId("ingest-log-drawer")).toBeTruthy();
-    expect(screen.getByText("Ingest logs (1)")).toBeTruthy();
+    expect(screen.getByTestId("pipeline-board")).toBeTruthy();
+    expect(screen.getByTestId("ingest-log")).toBeTruthy();
+    expect(screen.getByText(/1 lines/)).toBeTruthy();
   });
 
   it("shows a failure frame as a failure", async () => {
@@ -165,7 +165,7 @@ describe("IngestFlow", () => {
     expect(screen.getByTestId("repo-status-headline")).toHaveTextContent(
       "Queued — waiting for a worker",
     );
-    expect(screen.queryByTestId("ingest-flow-canvas")).toBeNull();
+    expect(screen.queryByTestId("pipeline-board")).toBeNull();
   });
 
   it("says the run is ready when every stage finished", async () => {

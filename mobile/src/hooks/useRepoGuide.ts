@@ -11,8 +11,8 @@
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 
-import type { default as Guide } from "@/types/guide";
-import { getGuide } from "@/api/guide";
+import type { default as Guide, ActivityItem, Stats } from "@/types/guide";
+import { getGuide, getRecentActivity, getStats } from "@/api/guide";
 import { queryKeys } from "@/api/queryKeys";
 
 /**
@@ -43,6 +43,42 @@ export function useRepositoryGuide(
   return useQuery({
     queryKey: queryKeys.repositories.guide(repoId ?? ""),
     queryFn: () => getGuide(repoId as string),
+    enabled: canFetch(repoId, enabled),
+  });
+}
+
+/**
+ * Fetch the aggregated stats for a repository.
+ *
+ * @param repoId - The repository UUID.
+ * @param enabled - Whether the repository is ready.
+ * @returns The stats query.
+ */
+export function useRepositoryStats(
+  repoId: string | undefined,
+  enabled = true,
+): UseQueryResult<Stats, Error> {
+  return useQuery({
+    queryKey: queryKeys.repositories.stats(repoId ?? ""),
+    queryFn: () => getStats(repoId as string),
+    enabled: canFetch(repoId, enabled),
+  });
+}
+
+/**
+ * Fetch the latest pull requests and commits.
+ *
+ * @param repoId - The repository UUID.
+ * @param enabled - Whether the repository is ready.
+ * @returns The activity query.
+ */
+export function useRepositoryActivity(
+  repoId: string | undefined,
+  enabled = true,
+): UseQueryResult<ActivityItem[], Error> {
+  return useQuery({
+    queryKey: queryKeys.repositories.activity(repoId ?? ""),
+    queryFn: () => getRecentActivity(repoId as string),
     enabled: canFetch(repoId, enabled),
   });
 }

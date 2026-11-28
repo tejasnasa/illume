@@ -18,7 +18,7 @@
 
 import { apiGet, type ApiRequestOptions } from "@/api/client";
 import type { default as Graph } from "@/types/graph";
-import type { FileNode } from "@/types/explorer";
+import type { FileDetail, FileNode } from "@/types/explorer";
 
 type TestOptions = Omit<ApiRequestOptions, "method" | "body">;
 
@@ -49,5 +49,27 @@ export function getFileTree(
 ): Promise<FileNode[]> {
   return apiGet<Graph>(fileTreePath(repoId), options).then(
     (graph) => graph.nodes,
+  );
+}
+
+/** Commits requested with a file's detail. */
+export const FILE_DETAIL_COMMITS = 3;
+
+/**
+ * Fetch one file's symbols and its latest commits.
+ *
+ * @param repoId - The repository's UUID.
+ * @param path - Repository-relative file path.
+ * @param options - Test-friendly transport overrides.
+ * @returns The file's symbols and recent commits.
+ */
+export function getFileDetail(
+  repoId: string,
+  path: string,
+  options: TestOptions = {},
+): Promise<FileDetail> {
+  return apiGet<FileDetail>(
+    `/api/v1/repository/${repoId}/file?path=${encodeURIComponent(path)}&commits=${FILE_DETAIL_COMMITS}`,
+    options,
   );
 }

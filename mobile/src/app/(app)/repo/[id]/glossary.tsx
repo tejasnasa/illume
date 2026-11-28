@@ -30,8 +30,10 @@ import {
   View,
 } from "react-native";
 import { useGlobalSearchParams } from "expo-router";
+import { useEffect } from "react";
 
 import { GlossaryEntry } from "@/components/GlossaryEntry";
+import { GlossaryLetters, parseInitial } from "@/components/GlossaryLetters";
 import { GlossarySearch } from "@/components/GlossarySearch";
 import { useGlossarySearch } from "@/hooks/useGlossarySearch";
 import { useRepository } from "@/hooks/useRepositories";
@@ -47,7 +49,10 @@ export default function GlossaryScreen() {
   // tab children, not the ``[id]`` segment itself, and a local lookup
   // only sees the current route's own params -- which is why every
   // screen here used to receive an empty id and render nothing.
-  const { id } = useGlobalSearchParams<{ id: string }>();
+  const { id, letter: letterParam } = useGlobalSearchParams<{
+    id: string;
+    letter?: string;
+  }>();
   const repoNumber = String(id ?? "");
 
   // The route carries the repository's user-scoped number; the glossary
@@ -73,14 +78,23 @@ export default function GlossaryScreen() {
     error,
     retry,
     goToPage,
+    letter,
+    setLetter,
+    letters,
   } = useGlossarySearch({ repoId });
+
+  // A link can open the glossary on one initial.
+  const initialLetter = parseInitial(letterParam);
+  useEffect(() => {
+    if (initialLetter) setLetter(initialLetter);
+  }, [initialLetter, setLetter]);
 
   const onPrevious = useCallback(() => goToPage(page - 1), [goToPage, page]);
   const onNext = useCallback(() => goToPage(page + 1), [goToPage, page]);
 
   const header = (
     <View className="px-4 pb-3 pt-4">
-      <Text className="text-lg font-bold text-foreground">
+      <Text className="text-lg font-pixel text-foreground">
         Codebase Glossary
       </Text>
       <Text className="mt-1 text-[13px] text-muted-foreground">
@@ -89,6 +103,10 @@ export default function GlossaryScreen() {
 
       <View className="mt-3">
         <GlossarySearch value={query} onChangeText={setQuery} onClear={reset} />
+      </View>
+
+      <View className="mt-3">
+        <GlossaryLetters active={letter} present={letters} onSelect={setLetter} />
       </View>
 
       <View className="mt-2 flex-row items-center justify-between">
@@ -167,7 +185,7 @@ export default function GlossaryScreen() {
           onPress={retry}
           className="mx-4 mb-3 min-h-[44px] self-start justify-center rounded border border-border px-4 py-2 active:bg-secondary"
         >
-          <Text className="text-sm font-semibold text-foreground">
+          <Text className="text-sm font-sans-semibold text-foreground">
             Try again
           </Text>
         </Pressable>
@@ -182,7 +200,9 @@ export default function GlossaryScreen() {
             ? "This repository could not be loaded."
             : isSearching
               ? "No glossary entries found matching your query."
-              : "No glossary entries found."}
+              : letter
+                ? `No glossary terms start with ${letter === "#" ? "anything but a letter" : letter}.`
+                : "No glossary entries found."}
         </Text>
       </View>
     );

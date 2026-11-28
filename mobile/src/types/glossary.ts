@@ -21,4 +21,6 @@ export default interface Glossary {
   total: number;
   page: number;
   page_size: number;
+  /** Initials that have at least one term; only the browse route fills it. */
+  letters?: string[];
 }

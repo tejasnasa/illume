@@ -120,6 +120,50 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+describe("useGlossarySearch letters", () => {
+  it("browses one initial, returns to page one and reports the rail", async () => {
+    getGlossaryMock.mockResolvedValue({ ...PAGE, letters: ["A", "I", "#"] });
+    const result = await renderSearch();
+    await waitFor(() => {
+      expect(result.current.letters).toEqual(["A", "I", "#"]);
+    });
+
+    await act(async () => {
+      result.current.setLetter("I");
+    });
+    await waitFor(() => {
+      expect(getGlossaryMock).toHaveBeenLastCalledWith("repo-1", 1, 20, "I");
+    });
+    expect(result.current.letter).toBe("I");
+    // The rail survives the filtered answer.
+    expect(result.current.letters).toEqual(["A", "I", "#"]);
+
+    await act(async () => {
+      result.current.setLetter(null);
+    });
+    await waitFor(() => {
+      expect(getGlossaryMock).toHaveBeenLastCalledWith("repo-1", 1, 20, undefined);
+    });
+  });
+
+  it("leaves search when an initial is picked", async () => {
+    const result = await renderSearch();
+    await type(result, "ingest");
+    await advance(GLOSSARY_SEARCH_DEBOUNCE_MS);
+    await waitFor(() => {
+      expect(result.current.isSearching).toBe(true);
+    });
+    await act(async () => {
+      result.current.setLetter("#");
+    });
+    expect(result.current.isSearching).toBe(false);
+    expect(result.current.query).toBe("");
+    await waitFor(() => {
+      expect(getGlossaryMock).toHaveBeenLastCalledWith("repo-1", 1, 20, "#");
+    });
+  });
+});
+
 describe("useGlossarySearch", () => {
   it("uses the web client's debounce window", () => {
     // The web client waits 400 ms before acting on a search box. A shorter
@@ -134,7 +178,7 @@ describe("useGlossarySearch", () => {
     await waitFor(() => {
       expect(getGlossaryMock).toHaveBeenCalledTimes(1);
     });
-    expect(getGlossaryMock).toHaveBeenCalledWith("repo-1", 1, 20);
+    expect(getGlossaryMock).toHaveBeenCalledWith("repo-1", 1, 20, undefined);
     expect(searchGlossaryMock).not.toHaveBeenCalled();
     expect(result.current.isSearching).toBe(false);
   });

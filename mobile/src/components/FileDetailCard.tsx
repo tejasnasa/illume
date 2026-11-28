@@ -50,6 +50,14 @@ export interface FileDetailCardProps {
    * repository does not record one.
    */
   branch?: string | null;
+  /** The reading-order note for the file, when it is on the order. */
+  annotation?: string | null;
+  /** One-based place on the reading order, when the file is on it. */
+  readingPosition?: number | null;
+  /** Opens the chat with a question about this file. */
+  onAsk?: () => void;
+  /** Opens the dependency graph. */
+  onOpenGraph?: () => void;
   /** Called when the reader dismisses the card. */
   onClose?: () => void;
   /** Test hook. */
@@ -150,7 +158,7 @@ function Badge({
       }}
     >
       <Text
-        className="text-[10px] font-bold uppercase tracking-wider"
+        className="text-[10px] font-pixel uppercase tracking-[1.2px]"
         style={{ color: tone?.color ?? colors.mutedForeground }}
       >
         {label}
@@ -176,10 +184,10 @@ function Stat({
 }) {
   return (
     <View className="mr-4 flex-1">
-      <Text className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <Text className="text-[10px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
         {label}
       </Text>
-      <Text testID={testID} className="text-lg font-bold text-foreground">
+      <Text testID={testID} className="text-lg font-pixel text-foreground">
         {value}
       </Text>
     </View>
@@ -196,6 +204,10 @@ export function FileDetailCard({
   file,
   githubUrl,
   branch,
+  annotation,
+  readingPosition,
+  onAsk,
+  onOpenGraph,
   onClose,
   testID = "file-detail",
 }: FileDetailCardProps) {
@@ -212,7 +224,7 @@ export function FileDetailCard({
           <Text className="mr-2 text-lg text-primary">▤</Text>
           <Text
             testID="file-detail-label"
-            className="flex-1 text-base font-bold text-foreground"
+            className="flex-1 text-base font-pixel text-foreground"
             numberOfLines={2}
           >
             {file.label}
@@ -272,6 +284,47 @@ export function FileDetailCard({
         />
       </View>
 
+      {annotation ? (
+        <Text
+          testID="file-detail-annotation"
+          className="mb-3 border-l-2 border-accent bg-accent/5 px-3 py-2.5 text-sm leading-5 text-zinc-300"
+        >
+          {readingPosition != null ? (
+            <Text className="font-pixel text-accent">Read {readingPosition} · </Text>
+          ) : null}
+          {annotation}
+        </Text>
+      ) : null}
+
+      {onAsk || onOpenGraph ? (
+        <View className="mb-3 flex-row gap-2">
+          {onAsk ? (
+            <Pressable
+              testID="file-detail-ask"
+              accessibilityRole="button"
+              accessibilityLabel={`Ask about ${file.path}`}
+              onPress={onAsk}
+              className="min-h-[44px] flex-1 items-center justify-center rounded-md bg-primary px-3"
+            >
+              <Text className="font-pixel text-[13px] text-primary-foreground">
+                Ask about this file →
+              </Text>
+            </Pressable>
+          ) : null}
+          {onOpenGraph ? (
+            <Pressable
+              testID="file-detail-graph"
+              accessibilityRole="button"
+              accessibilityLabel="Open the dependency graph"
+              onPress={onOpenGraph}
+              className="min-h-[44px] items-center justify-center rounded-md border border-border px-4 active:bg-secondary"
+            >
+              <Text className="font-pixel text-[13px] uppercase text-zinc-300">Graph</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
       <Pressable
         testID="file-detail-github-link"
         accessibilityRole="link"
@@ -280,7 +333,7 @@ export function FileDetailCard({
         className="min-h-[44px] flex-row items-center rounded border border-border px-3 active:bg-secondary"
       >
         <Text className="mr-2 text-sm text-foreground">◈</Text>
-        <Text className="text-[13px] font-medium text-primary">
+        <Text className="text-[13px] font-sans-medium text-primary">
           View on GitHub
         </Text>
         <Text

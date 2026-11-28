@@ -49,6 +49,14 @@ describe("queryKeys", () => {
   });
 
   it("repositories.glossary includes page and query", () => {
+    expect(queryKeys.repositories.glossary("abc", 1, "", "#")).toEqual([
+      "repositories",
+      "glossary",
+      "abc",
+      1,
+      "",
+      "#",
+    ]);
     expect(queryKeys.repositories.glossary("abc", 0, "")).toEqual([
       "repositories",
       "glossary",
@@ -66,7 +74,8 @@ describe("queryKeys", () => {
   });
 
   it("github.* keys are deterministic for the same inputs", () => {
-    expect(queryKeys.github.myRepos()).toEqual(["github", "repos"]);
+    expect(queryKeys.github.myRepos()).toEqual(["github", "repos", ""]);
+    expect(queryKeys.github.myRepos("x")).toEqual(["github", "repos", "x"]);
     expect(queryKeys.github.branches("foo", "bar")).toEqual([
       "github",
       "branches",

@@ -18,23 +18,34 @@
  * a file can be tapped and its details read without the tree scrolling out
  * from under the reader.
  *
- * The reading-order pager the web client carries is not here. It needs the
- * onboarding guide, which is a separate request the web page makes on the
- * server; the mobile reader reaches the same files through the tree.
+ * A ``file`` route parameter opens that file's details, which is how the
+ * overview and the graph inspector link here. The details add the file's
+ * reading-order note, its symbols and recent commits, a still picture of its
+ * neighbourhood and its importers and imports; tapping a neighbour moves the
+ * selection to it. The reading-order pager the web client carries is not
+ * here; the overview's "Start here" card opens the same files.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { useGlobalSearchParams } from "expo-router";
+import { router, useGlobalSearchParams, type Href } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { getFileTree } from "@/api/explorer";
+import { getFileDetail } from "@/api/explorer";
+import { getGraph } from "@/api/graph";
 import { getOwnership } from "@/api/ownership";
 import { queryKeys } from "@/api/queryKeys";
 import { FileDetailCard } from "@/components/FileDetailCard";
 import { FileTreePanel } from "@/components/FileTreePanel";
+import {
+  NeighbourListCard,
+  NeighbourhoodCard,
+  RecentChangesCard,
+  SymbolsCard,
+} from "@/components/explorer/FileExtras";
 import { OwnershipPanel } from "@/components/OwnershipPanel";
+import { useRepositoryGuide } from "@/hooks/useRepoGuide";
 import { useRepository } from "@/hooks/useRepositories";
 import {
   ancestorPaths,
@@ -42,6 +53,7 @@ import {
   defaultExpandedPaths,
   toggleExpandedPath,
 } from "@/lib/fileTree";
+import { neighboursByPath } from "@/lib/neighbourhood";
 import type { FileNode } from "@/types/explorer";
 
 /**
@@ -55,7 +67,7 @@ export default function ExplorerScreen() {
   // tab children, not the ``[id]`` segment itself, and a local lookup
   // only sees the current route's own params -- which is why every
   // screen here used to receive an empty id and render nothing.
-  const { id } = useGlobalSearchParams<{ id: string }>();
+  const { id, file: fileParam } = useGlobalSearchParams<{ id: string; file?: string }>();
   const repoNumber = String(id ?? "");
   const insets = useSafeAreaInsets();
 
@@ -68,23 +80,59 @@ export default function ExplorerScreen() {
   } = useRepository(repoNumber);
   const repoId = repo?.id;
 
+  // The file graph is the tree's source and also where each file's
+  // neighbours come from. Sharing the graph screen's query key means the
+  // payload is fetched once however the reader moves between the tabs.
   const treeQuery = useQuery({
-    queryKey: queryKeys.repositories.explorer(repoId ?? ""),
-    queryFn: () => getFileTree(repoId as string),
+    queryKey: queryKeys.repositories.graph(repoId ?? "", "file"),
+    queryFn: () => getGraph(repoId as string, "file"),
     enabled: typeof repoId === "string" && repoId.length > 0,
   });
+  const files = treeQuery.data?.nodes;
+  const links = treeQuery.data?.links;
+  const { data: guide } = useRepositoryGuide(repoId, repo?.status === "ready");
 
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   // ``null`` means "not decided yet": the tree opens with its top level
   // expanded, and the first tap on a directory takes over from there.
   const [expandedDirs, setExpandedDirs] = useState<Set<string> | null>(null);
 
-  const tree = useMemo(
-    () => buildFileTree(treeQuery.data ?? []),
-    [treeQuery.data],
-  );
+  const tree = useMemo(() => buildFileTree(files ?? []), [files]);
   const defaultExpanded = useMemo(() => defaultExpandedPaths(tree), [tree]);
   const openDirs = expandedDirs ?? defaultExpanded;
+
+  // A link from the overview or the graph names the file to open.
+  useEffect(() => {
+    if (!fileParam || !files) return;
+    const match = files.find((f) => f.path === fileParam);
+    if (match) {
+      setSelectedFile(match);
+      setExpandedDirs((previous) => {
+        const next = new Set(previous ?? defaultExpandedPaths(buildFileTree(files)));
+        for (const ancestor of ancestorPaths(match.path)) next.add(ancestor);
+        return next;
+      });
+    }
+  }, [fileParam, files]);
+
+  const neighbours = useMemo(
+    () =>
+      selectedFile && files && links
+        ? neighboursByPath(files, links, selectedFile.path)
+        : { importers: [], imports: [] },
+    [selectedFile, files, links],
+  );
+
+  const detailQuery = useQuery({
+    queryKey: queryKeys.repositories.fileDetail(repoId ?? "", selectedFile?.path ?? ""),
+    queryFn: () => getFileDetail(repoId as string, selectedFile?.path as string),
+    enabled: typeof repoId === "string" && repoId.length > 0 && selectedFile !== null,
+  });
+
+  const guideStep = useMemo(
+    () => guide?.reading_order?.find((step) => step.file_path === selectedFile?.path) ?? null,
+    [guide, selectedFile],
+  );
 
   const ownershipQuery = useQuery({
     queryKey: [
@@ -120,6 +168,11 @@ export default function ExplorerScreen() {
    *
    * @param file - The file whose row was tapped.
    */
+  const selectByPath = (path: string) => {
+    const match = files?.find((f) => f.path === path);
+    if (match) handleFilePress(match);
+  };
+
   const handleFilePress = (file: FileNode) => {
     setSelectedFile(file);
     setExpandedDirs((previous) => {
@@ -131,7 +184,7 @@ export default function ExplorerScreen() {
 
   const header = (
     <View className="px-4 pb-2 pt-4">
-      <Text className="text-lg font-bold text-foreground">File Explorer</Text>
+      <Text className="text-lg font-pixel text-foreground">File Explorer</Text>
       <Text className="mt-1 text-[13px] text-muted-foreground">
         Browse the entire repository tree. Criticality guardrails are mapped
         directly to files.
@@ -175,7 +228,7 @@ export default function ExplorerScreen() {
           <Pressable
             accessibilityRole="none"
             onPress={() => {}}
-            className="max-h-[80%] rounded-t-2xl border-t border-border bg-background p-4"
+            className="max-h-[80%] rounded-t-md border-t border-border bg-background p-4"
             style={{ paddingBottom: insets.bottom + 16 }}
           >
             {selectedFile ? (
@@ -187,7 +240,48 @@ export default function ExplorerScreen() {
                   file={selectedFile}
                   githubUrl={repo?.github_url ?? ""}
                   branch={repo?.ingested_branch ?? null}
+                  annotation={guideStep?.annotation ?? null}
+                  readingPosition={guideStep?.position ?? null}
+                  onAsk={() =>
+                    router.push(
+                      `/(app)/repo/${repoNumber}/chat?q=${encodeURIComponent(
+                        `What does ${selectedFile.path} do, and what depends on it?`,
+                      )}` as Href,
+                    )
+                  }
+                  onOpenGraph={() => router.push(`/(app)/repo/${repoNumber}/graph` as Href)}
                   onClose={closeDetails}
+                />
+                <NeighbourhoodCard
+                  file={selectedFile}
+                  importers={neighbours.importers}
+                  imports={neighbours.imports}
+                />
+                <SymbolsCard
+                  detail={detailQuery.data ?? null}
+                  loading={detailQuery.isLoading}
+                  githubUrl={repo?.github_url ?? ""}
+                  gitRef={repo?.ingested_commit_sha ?? repo?.ingested_branch ?? "master"}
+                  path={selectedFile.path}
+                />
+                <RecentChangesCard
+                  detail={detailQuery.data ?? null}
+                  loading={detailQuery.isLoading}
+                  githubUrl={repo?.github_url ?? ""}
+                />
+                <NeighbourListCard
+                  title="Imported by"
+                  testID="file-importers"
+                  files={neighbours.importers}
+                  empty="Nothing imports this file"
+                  onSelectPath={selectByPath}
+                />
+                <NeighbourListCard
+                  title="Imports"
+                  testID="file-imports"
+                  files={neighbours.imports}
+                  empty="No internal imports"
+                  onSelectPath={selectByPath}
                 />
                 <OwnershipPanel
                   ownership={ownershipQuery.data?.files?.[0] ?? null}

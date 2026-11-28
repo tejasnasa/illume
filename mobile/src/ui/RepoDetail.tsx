@@ -3,33 +3,39 @@
  *
  * @module RepoDetail
  *
- * Port of ``client/src/app/repo/[id]/page.tsx`` (the 341-line web
- * repository page) to a vertical scroll. The web page is a two-column
- * split -- overview on the left, chat on the right -- and on a phone the
- * chat half becomes a screen of its own, reached from the button below.
+ * Port of ``client/src/app/repo/[id]/page.tsx``. The web page is a bento
+ * grid; on a phone the same cards stack in one column in the same order:
+ * identity and risk spread, the architecture brief, a graph tile, the
+ * repository at a glance, where to start reading, the riskiest files,
+ * recent activity, the tech stack and who to ask. The chat is a screen of
+ * its own on a phone, reached from the button under the header.
  *
- * The cards the web page shows, in the same order and with the same
- * headings:
- *
- * 1. The repository itself -- its GitHub link, branch and commit.
- * 2. The processing status.
- * 3. The AI architecture overview.
- * 4. The detected tech stack.
- *
- * The card surfaces are transparent: the page background shows through and
- * only the border separates a card from the one below it.
+ * Each card is left out when its data is missing, so a repository whose
+ * stats, guide or graph failed to load shows what it has.
  */
 
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 
-import type Repository from "@/types/repository";
-import type { default as Guide } from "@/types/guide";
-import { timeAgo } from "@/lib/timeAgo";
+import {
+  ActivityCard,
+  BriefCard,
+  GlanceCard,
+  GraphTile,
+  PeopleCard,
+  RiskCard,
+  RiskSpread,
+  StackCard,
+  StartHereCard,
+} from "@/components/overview/OverviewCards";
 import { formatRepoLabel } from "@/lib/githubUrl";
 import { statusTone } from "@/lib/repoStatus";
-import { MarkdownText } from "@/ui/MarkdownText";
+import { PEOPLE_ROWS, RISK_ROWS, START_STEPS } from "@/lib/overview";
+import { timeAgo } from "@/lib/timeAgo";
 import { colors } from "@/theme/tokens";
+import type Graph from "@/types/graph";
+import type { default as Guide, ActivityItem, Stats } from "@/types/guide";
+import type Repository from "@/types/repository";
 
 /** Props for the {@link RepoDetail} component. */
 export interface RepoDetailProps {
@@ -37,232 +43,148 @@ export interface RepoDetailProps {
   repo: Repository;
   /** The onboarding guide, when it has been generated. */
   guide?: Guide | null;
+  /** Aggregated stats, when they have loaded. */
+  stats?: Stats | null;
+  /** Recent pull requests and commits, when they have loaded. */
+  activity?: readonly ActivityItem[] | null;
+  /** The file graph, when it has loaded. */
+  graph?: Graph | null;
   /** Test hook. */
   testID?: string;
 }
 
 /**
- * One labelled group of the tech stack card.
- */
-function StackGroup({
-  title,
-  items,
-  tone,
-}: {
-  title: string;
-  items: string[];
-  tone: string;
-}) {
-  return (
-    <View className="mb-3">
-      <Text className="mb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-        {title}
-      </Text>
-      {items.length > 0 ? (
-        <View className="flex-row flex-wrap gap-1.5">
-          {items.map((item, index) => (
-            <View
-              key={`${item}-${index}`}
-              className="rounded border px-2 py-0.5"
-              style={{
-                borderColor: `${tone}33`,
-                backgroundColor: `${tone}1a`,
-              }}
-            >
-              <Text className="font-mono text-[10px]" style={{ color: tone }}>
-                {item}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <Text className="text-xs italic text-muted-foreground opacity-50">
-          None detected
-        </Text>
-      )}
-    </View>
-  );
-}
-
-/**
  * Render the repository overview.
  *
- * @param props - The repository and the optional guide.
+ * @param props - The repository and whatever supporting data has loaded.
  * @returns The rendered overview.
  */
 export function RepoDetail({
   repo,
   guide,
+  stats,
+  activity,
+  graph,
   testID = "repo-detail",
 }: RepoDetailProps) {
   const label = formatRepoLabel(repo.github_url, repo.name);
-  const shortSha = repo.ingested_commit_sha
-    ? repo.ingested_commit_sha.substring(0, 7)
-    : null;
+  const shortSha = repo.ingested_commit_sha ? repo.ingested_commit_sha.substring(0, 7) : null;
+  const tone = statusTone(repo.status);
+  const toneColor =
+    tone === "destructive" ? colors.destructive : tone === "success" ? colors.chart2 : colors.warning;
 
-  const stack = repo.detected_stack ?? {
-    ci_cd: [],
-    databases: [],
-    languages: [],
-    frameworks: [],
-    infrastructure: [],
-  };
+  const base = `/(app)/repo/${repo.repo_number}`;
+  const go = (path: string) => router.push(`${base}/${path}` as Href);
+  const openFile = (file: string) => go(`explorer?file=${encodeURIComponent(file)}`);
 
-  const externalIntegrations = (
-    guide?.architecture_brief?.external_integrations ?? []
-  ).map((tool) => tool.charAt(0).toUpperCase() + tool.slice(1));
+  const external = (guide?.architecture_brief?.external_integrations ?? []).map(
+    (tool) => tool.charAt(0).toUpperCase() + tool.slice(1),
+  );
+  const steps = guide?.reading_order ?? [];
+  const risky = guide?.critical_files ?? [];
+  const people = stats?.top_contributors ?? [];
+  const recent = activity ?? [];
 
   return (
     <ScrollView
       testID={testID}
-      className="flex-1 bg-background"
-      contentContainerClassName="p-4"
+      className="flex-1"
+      contentContainerClassName="p-4 pb-10"
     >
-      {/* 1. The repository itself. */}
-      <View className="mb-4 rounded border border-border p-4">
-        <View className="mb-3 flex-row items-start justify-between">
-          <Text className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Repository
-          </Text>
+      <View className="mb-4 gap-3">
+        <View className="flex-row flex-wrap items-center gap-2">
+          <View
+            className="flex-row items-center gap-1.5 border px-2 py-1"
+            style={{ borderColor: `${toneColor}55` }}
+          >
+            <View style={{ width: 6, height: 6, backgroundColor: toneColor }} />
+            <Text
+              testID="repo-detail-status"
+              className="font-pixel text-xs uppercase"
+              style={{ color: toneColor }}
+            >
+              {repo.status}
+            </Text>
+          </View>
           {repo.ingested_branch ? (
-            <View className="flex-row items-center rounded border border-primary/20 bg-primary/10 px-2 py-0.5">
-              <Text className="mr-1 text-[11px]">🔀</Text>
-              <Text className="font-mono text-[10px] text-primary">
+            <View className="flex-row items-center gap-1 border border-border px-2 py-1">
+              <Text className="font-pixel text-xs text-muted-foreground">⎇</Text>
+              <Text className="font-pixel text-xs text-muted-foreground">
                 {repo.ingested_branch}
               </Text>
               {shortSha ? (
-                <Text className="font-mono text-[10px] text-primary opacity-75">
-                  @{shortSha}
-                </Text>
+                <Text className="font-pixel text-xs text-accent">@{shortSha}</Text>
               ) : null}
             </View>
           ) : null}
+          <Text className="font-pixel text-xs text-faint-foreground">
+            Updated {timeAgo(repo.updated_at)}
+          </Text>
         </View>
+
+        <Text
+          testID="repo-detail-title"
+          className="font-pixel text-[34px] leading-[38px] text-foreground"
+          numberOfLines={3}
+        >
+          {label}
+        </Text>
 
         <Pressable
           accessibilityRole="link"
           accessibilityLabel={`Open ${label} on GitHub`}
           onPress={() => void Linking.openURL(repo.github_url)}
-          className="min-h-[44px] flex-row items-center"
+          className="min-h-[44px] justify-center"
         >
-          <Text className="mr-2 text-lg text-primary">◈</Text>
-          <Text
-            className="flex-1 text-xl font-bold text-foreground"
-            numberOfLines={2}
-          >
-            {label}
+          <Text className="font-pixel text-[13px] text-muted-foreground">
+            github.com/{label} ↗
           </Text>
         </Pressable>
       </View>
 
-      {/* 2. The processing status. */}
-      <View className="mb-4 rounded border border-border p-4">
-        <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Processing Status
-        </Text>
-        <View className="flex-row items-end justify-between">
-          {/* The overview is only reached for a ready repository in the
-              normal flow, but the status is still read from the record:
-              printing a success tick for a failed row is worse than
-              printing nothing. */}
-          <Text
-            testID="repo-detail-status"
-            className={`text-xl font-bold uppercase ${
-              statusTone(repo.status) === "destructive"
-                ? "text-destructive"
-                : statusTone(repo.status) === "success"
-                  ? "text-success"
-                  : "text-chart-2"
-            }`}
-          >
-            {statusTone(repo.status) === "success"
-              ? "✓"
-              : statusTone(repo.status) === "destructive"
-                ? "!"
-                : "…"}{" "}
-            {repo.status}
-          </Text>
-          <View className="items-end">
-            <Text className="text-[11px] text-muted-foreground">
-              Updated: {timeAgo(repo.updated_at)}
-            </Text>
-            <Text className="text-[11px] text-muted-foreground opacity-60">
-              Created: {timeAgo(repo.created_at)}
-            </Text>
-          </View>
-        </View>
-      </View>
+      {graph && graph.nodes.length > 0 ? (
+        <RiskSpread graph={graph} onOpen={() => go("graph")} />
+      ) : null}
 
-      {/* The chat is a screen of its own on a phone, so the overview is
-          where it is reached from. */}
       <Pressable
         testID="repo-detail-chat"
         accessibilityRole="button"
         accessibilityLabel="Ask a question about this repository"
-        onPress={() => router.push(`/(app)/repo/${repo.repo_number}/chat`)}
-        className="mb-4 min-h-[44px] flex-row items-center justify-center gap-2 rounded bg-primary px-4 py-2.5"
+        onPress={() => go("chat")}
+        className="mb-4 min-h-[44px] flex-row items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5"
       >
-        <Text className="text-sm font-semibold text-primary-foreground">
-          Ask about this code
-        </Text>
+        <Text className="font-pixel text-[13px] text-primary-foreground">Ask about this code</Text>
       </Pressable>
 
-      {/* 3. The AI architecture overview. */}
-      <View className="mb-4 rounded border border-border p-4">
-        <Text className="mb-3 text-base font-bold text-foreground">
-          AI Architecture Overview
-        </Text>
-        {repo.architecture_summary ? (
-          <MarkdownText
-            source={repo.architecture_summary}
-            className="text-[13px] leading-[19px] text-muted-foreground"
-          />
-        ) : (
-          <View className="items-center justify-center py-4">
-            <Text className="text-[13px] italic text-muted-foreground">
-              No architecture summary generated.
-            </Text>
-          </View>
-        )}
-      </View>
+      <BriefCard summary={repo.architecture_summary} onGlossary={() => go("glossary")} />
 
-      {/* 4. The detected tech stack. */}
-      <View className="mb-4 rounded border border-border p-4">
-        <Text className="mb-3 text-base font-bold text-foreground">
-          Tech Stack Detected
-        </Text>
+      {graph && graph.nodes.length > 0 ? (
+        <GraphTile repoId={repo.id} graph={graph} onOpen={() => go("graph")} />
+      ) : null}
 
-        <StackGroup
-          title="Languages"
-          items={stack.languages ?? []}
-          tone={colors.destructive}
+      {stats ? <GlanceCard stats={stats} /> : null}
+
+      {steps.length > 0 ? (
+        <StartHereCard
+          steps={steps.slice(0, START_STEPS)}
+          onOpenFile={openFile}
+          onTour={() => go("graph")}
         />
-        <StackGroup
-          title="Frameworks"
-          items={stack.frameworks ?? []}
-          tone={colors.chart1}
+      ) : null}
+
+      {risky.length > 0 ? (
+        <RiskCard
+          files={risky.slice(0, RISK_ROWS)}
+          onOpenExplorer={() => go("explorer")}
+          onOpenFile={openFile}
         />
-        <StackGroup
-          title="Databases"
-          items={stack.databases ?? []}
-          tone={colors.chart1}
-        />
-        <StackGroup
-          title="Infrastructure"
-          items={stack.infrastructure ?? []}
-          tone={colors.chart1}
-        />
-        <StackGroup
-          title="CI/CD And Infra"
-          items={stack.ci_cd ?? []}
-          tone={colors.chart1}
-        />
-        <StackGroup
-          title="External"
-          items={externalIntegrations}
-          tone={colors.chart1}
-        />
-      </View>
+      ) : null}
+
+      {recent.length > 0 ? <ActivityCard items={recent} githubUrl={repo.github_url} /> : null}
+
+      <StackCard stack={repo.detected_stack} external={external} />
+
+      {people.length > 0 ? <PeopleCard people={people.slice(0, PEOPLE_ROWS)} /> : null}
     </ScrollView>
   );
 }

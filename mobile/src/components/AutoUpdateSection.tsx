@@ -114,13 +114,13 @@ export function AutoUpdateSection({
       testID="auto-update-section"
       className="rounded border border-primary/20 bg-card p-4"
     >
-      <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-primary">
+      <Text className="mb-3 font-pixel text-xs uppercase tracking-[1.2px] text-primary">
         Auto-Update
       </Text>
 
       <View className="flex-row items-start justify-between gap-3">
         <View className="min-w-0 flex-1">
-          <Text className="text-[13px] font-medium text-foreground">
+          <Text className="text-[13px] font-sans-medium text-foreground">
             Keep analysis current
           </Text>
           <Text className="mt-0.5 text-xs text-muted-foreground">
@@ -165,7 +165,7 @@ export function AutoUpdateSection({
 
       <View className="mt-4 flex-row items-center justify-between gap-3 border-t border-border/60 pt-4">
         <View className="min-w-0 flex-1">
-          <Text className="text-[13px] font-medium text-foreground">
+          <Text className="text-[13px] font-sans-medium text-foreground">
             Sync now
           </Text>
           <StatusLine
@@ -194,7 +194,7 @@ export function AutoUpdateSection({
           {isSyncing ? (
             <ActivityIndicator size="small" color={colors.primaryForeground} />
           ) : (
-            <Text className="text-[13px] font-semibold text-primary-foreground">
+            <Text className="font-pixel text-[13px] text-primary-foreground">
               Sync now
             </Text>
           )}
@@ -301,7 +301,7 @@ export function RepositoryPicker({
             onPress={onRetry}
             className="mt-3 min-h-[44px] items-center justify-center self-center rounded border border-border px-4 py-2 active:bg-secondary"
           >
-            <Text className="text-[13px] font-semibold text-foreground">
+            <Text className="font-pixel text-[13px] text-foreground">
               Try again
             </Text>
           </Pressable>
@@ -323,7 +323,7 @@ export function RepositoryPicker({
 
   return (
     <View testID="repository-picker">
-      <Text className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <Text className="mb-2 font-pixel text-xs uppercase tracking-[1.2px] text-muted-foreground">
         {label}
       </Text>
       {repositories.map((repo) => {
@@ -340,7 +340,7 @@ export function RepositoryPicker({
           >
             <View className="min-w-0 flex-1 pr-3">
               <Text
-                className="text-sm font-medium text-foreground"
+                className="text-sm font-sans-medium text-foreground"
                 numberOfLines={1}
               >
                 {repo.name}
@@ -512,9 +512,9 @@ function IntervalPicker({
         <Pressable
           accessibilityRole="none"
           onPress={() => {}}
-          className="rounded-t-2xl border-t border-border bg-card p-4"
+          className="rounded-t-md border-t border-border bg-card p-4"
         >
-          <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <Text className="mb-3 font-pixel text-xs uppercase tracking-[1.2px] text-muted-foreground">
             Sync interval
           </Text>
 
@@ -550,7 +550,7 @@ function IntervalPicker({
             onPress={onClose}
             className="mt-3 min-h-[44px] items-center justify-center rounded border border-border active:bg-secondary"
           >
-            <Text className="text-[13px] font-medium text-foreground">
+            <Text className="text-[13px] font-sans-medium text-foreground">
               Cancel
             </Text>
           </Pressable>

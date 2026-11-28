@@ -6,8 +6,8 @@
  * The "Home" tab of the repository shell. It branches on the repository's
  * status the same way the web repository page does:
  *
- * - ``ready`` -- the overview: identity, status, architecture summary and
- *   the detected tech stack.
+ * - ``ready`` -- the overview cards: brief, graph, stats, reading order,
+ *   riskiest files, activity, stack and owners.
  * - anything else -- the live ingest view, which watches the pipeline run
  *   and keeps the raw log one tap away.
  *
@@ -21,7 +21,15 @@ import { ActivityIndicator, Text, View } from "react-native";
 import { useGlobalSearchParams } from "expo-router";
 
 import { useRepository } from "@/hooks/useRepositories";
-import { useRepositoryGuide } from "@/hooks/useRepoGuide";
+import { useQuery } from "@tanstack/react-query";
+
+import { getGraph } from "@/api/graph";
+import { queryKeys } from "@/api/queryKeys";
+import {
+  useRepositoryActivity,
+  useRepositoryGuide,
+  useRepositoryStats,
+} from "@/hooks/useRepoGuide";
 import { isReadyStatus } from "@/lib/repoStatus";
 import { IngestFlow } from "@/components/IngestFlow";
 import { RepoDetail } from "@/ui/RepoDetail";
@@ -44,6 +52,15 @@ export default function RepoIndexScreen() {
 
   const ready = isReadyStatus(repo?.status);
   const { data: guide } = useRepositoryGuide(repo?.id, ready);
+  const { data: stats } = useRepositoryStats(repo?.id, ready);
+  const { data: activity } = useRepositoryActivity(repo?.id, ready);
+  // The same query key as the graph screen, so opening the graph after the
+  // overview reuses this payload instead of fetching it again.
+  const { data: graph } = useQuery({
+    queryKey: queryKeys.repositories.graph(repo?.id ?? "", "file"),
+    queryFn: () => getGraph(repo?.id as string, "file"),
+    enabled: ready && Boolean(repo?.id),
+  });
 
   // When the repository fails, the pipeline retries for a short while
   // before the failure is final. The web client draws that distinction
@@ -94,5 +111,5 @@ export default function RepoIndexScreen() {
     );
   }
 
-  return <RepoDetail repo={repo} guide={guide} />;
+  return <RepoDetail repo={repo} guide={guide} stats={stats} activity={activity} graph={graph} />;
 }
