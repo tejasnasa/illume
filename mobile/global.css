@@ -15,49 +15,63 @@
 @import "nativewind/theme";
 
 @theme {
+  /* The families loaded by src/lib/fonts.ts; one per weight because React
+     Native selects a weight by family name. */
+  --font-sans: Geist-Regular;
+  --font-sans-medium: Geist-Medium;
+  --font-sans-semibold: Geist-SemiBold;
+  --font-sans-bold: Geist-Bold;
+  --font-pixel: GeistPixel-Square;
+
   --color-background: #09090b;
   --color-foreground: #fafafa;
 
   /* Kept in step with src/theme/tokens.ts. The card surface sits just
      above the background so a phone screen does not read as a stack of
      separate panes; the border does the separating instead of the fill. */
-  --color-card: #0e0e10;
+  --color-card: #0e0e11;
   --color-card-foreground: #fafafa;
 
-  --color-popover: #0e0e10;
+  --color-popover: #0e0e11;
   --color-popover-foreground: #fafafa;
 
   --color-primary: #a3004c;
   --color-primary-foreground: #fdf2f8;
 
-  --color-secondary: #27272a;
+  --color-secondary: #18181b;
   --color-secondary-foreground: #fafafa;
 
   --color-muted: #27272a;
   --color-muted-foreground: #9f9fa9;
 
-  --color-accent: #27272a;
+  --color-accent: #f6339a;
   --color-accent-foreground: #fafafa;
 
-  --color-destructive: #ff6467;
-  --color-success: #42cb80;
+  --color-destructive: #ef4444;
+  --color-success: #22c55e;
 
   --color-border: rgba(255, 255, 255, 0.1);
   --color-input: rgba(255, 255, 255, 0.15);
-  --color-ring: #71717b;
+  --color-ring: #f6339a;
 
+  --color-warning: #facc15;
+  --color-selected: #0078ff;
+  --color-match: #a855f7;
+  --color-subtle-foreground: #71717a;
+  --color-faint-foreground: #52525b;
+  --color-border-strong: rgba(255, 255, 255, 0.20);
   --color-chart-1: #53eafd;
   --color-chart-2: #00b8db;
   --color-chart-3: #0092b8;
-  --color-chart-4: #007595;
-  --color-chart-5: #005f78;
+  --color-chart-4: #005f78;
+  --color-chart-5: #104e64;
 
-  --color-sidebar: #0e0e10;
+  --color-sidebar: #0e0e11;
   --color-sidebar-foreground: #fafafa;
   --color-sidebar-primary: #f6339a;
   --color-sidebar-primary-foreground: #fdf2f8;
-  --color-sidebar-accent: #27272a;
+  --color-sidebar-accent: #18181b;
   --color-sidebar-accent-foreground: #fafafa;
-  --color-sidebar-border: rgba(255, 255, 255, 0.1);
-  --color-sidebar-ring: #71717b;
+  --color-sidebar-border: rgba(255, 255, 255, 0.10);
+  --color-sidebar-ring: #f6339a;
 }

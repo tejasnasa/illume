@@ -12,69 +12,78 @@ export const colors = {
   background: "#09090b",
   // oklch(0.985 0 0)
   foreground: "#fafafa",
-  // The web value is oklch(0.21 0.006 285.885) (#18181b), which reads as a
-  // raised slab on a desktop display. On a phone the same value makes every
-  // card look like a separate pane, so the card surface sits just above the
-  // background and the border does the separating.
-  card: "#0e0e10",
+  // web value
+  card: "#0e0e11",
   // oklch(0.985 0 0)
   cardForeground: "#fafafa",
-  // Matches the card surface, for the same reason.
-  popover: "#0e0e10",
+  // web value
+  popover: "#0e0e11",
   // oklch(0.985 0 0)
   popoverForeground: "#fafafa",
   // oklch(0.459 0.187 3.815)
   primary: "#a3004c",
   // oklch(0.971 0.014 343.198)
   primaryForeground: "#fdf2f8",
-  // oklch(0.274 0.006 286.033)
-  secondary: "#27272a",
+  // web value
+  secondary: "#18181b",
   // oklch(0.985 0 0)
   secondaryForeground: "#fafafa",
   // oklch(0.274 0.006 286.033)
   muted: "#27272a",
   // oklch(0.705 0.015 286.067)
   mutedForeground: "#9f9fa9",
-  // oklch(0.274 0.006 286.033)
-  accent: "#27272a",
-  // oklch(0.985 0 0)
+  // web value
+  accent: "#f6339a",
+  // web value
   accentForeground: "#fafafa",
-  // oklch(0.704 0.191 22.216)
-  destructive: "#ff6467",
-  // oklch(0.75 0.16 155)
-  success: "#42cb80",
+  // web value
+  destructive: "#ef4444",
+  // web value
+  success: "#22c55e",
   // oklch(1 0 0 / 10%)
   border: "rgba(255, 255, 255, 0.10)",
   // oklch(1 0 0 / 15%)
   input: "rgba(255, 255, 255, 0.15)",
-  // oklch(0.552 0.016 285.938)
-  ring: "#71717b",
+  // web value
+  ring: "#f6339a",
   // oklch(0.865 0.127 207.078)
   chart1: "#53eafd",
   // oklch(0.715 0.143 215.221)
   chart2: "#00b8db",
   // oklch(0.609 0.126 221.723)
   chart3: "#0092b8",
-  // oklch(0.52 0.105 223.128)
-  chart4: "#007595",
-  // oklch(0.45 0.085 224.283)
-  chart5: "#005f78",
-  // Matches the card surface, for the same reason.
-  sidebar: "#0e0e10",
+  // web value
+  chart4: "#005f78",
+  // web value
+  chart5: "#104e64",
+  // web value
+  sidebar: "#0e0e11",
   // oklch(0.985 0 0)
   sidebarForeground: "#fafafa",
   // oklch(0.656 0.241 354.308)
   sidebarPrimary: "#f6339a",
   // oklch(0.971 0.014 343.198)
   sidebarPrimaryForeground: "#fdf2f8",
-  // oklch(0.274 0.006 286.033)
-  sidebarAccent: "#27272a",
+  // web value
+  sidebarAccent: "#18181b",
   // oklch(0.985 0 0)
   sidebarAccentForeground: "#fafafa",
-  // oklch(1 0 0 / 10%)
+  // web value
   sidebarBorder: "rgba(255, 255, 255, 0.10)",
-  // oklch(0.552 0.016 285.938)
-  sidebarRing: "#71717b",
+  // web value
+  sidebarRing: "#f6339a",
+  // web value
+  warning: "#facc15",
+  // web value
+  selected: "#0078ff",
+  // web value
+  match: "#a855f7",
+  // web value
+  subtleForeground: "#71717a",
+  // web value
+  faintForeground: "#52525b",
+  // web value
+  borderStrong: "rgba(255, 255, 255, 0.20)",
 } as const;
 
 /** Type guard for any color string accepted by React Native's style parser. */

@@ -10,6 +10,21 @@ jest.mock("nativewind", () => ({
 
 jest.mock("react-native-css", () => ({}));
 
+// AsyncStorage is a native module; the package ships an in-memory stand-in.
+// A spec that needs to script it mocks the package itself, which takes
+// precedence over this one.
+jest.mock("@react-native-async-storage/async-storage", () =>
+  require("@react-native-async-storage/async-storage/jest/async-storage-mock"),
+);
+
+// The bundled font faces load through a native module; a test only needs the
+// loaded state.
+jest.mock("expo-font", () => ({
+  useFonts: () => [true, null],
+  loadAsync: async () => {},
+  isLoaded: () => true,
+}));
+
 // ``expo-notifications`` warns loudly when it is loaded outside a
 // development build, and its auto-registration reaches for a native module
 // the test environment does not have. Neither is useful in a unit test, so

@@ -5,7 +5,7 @@ describe("theme tokens", () => {
     expect(Object.keys(colors).sort()).toEqual(
       [
         "accent",
-        "accentForeground",
+        "accentForeground","borderStrong","faintForeground","match","selected","subtleForeground","warning",
         "background",
         "border",
         "card",

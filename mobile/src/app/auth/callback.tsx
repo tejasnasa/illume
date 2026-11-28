@@ -64,7 +64,7 @@ export default function AuthCallbackScreen() {
   return (
     <View className="flex-1 items-center justify-center bg-background p-6">
       <ActivityIndicator size="large" color={colors.foreground} />
-      <Text className="mt-4 text-lg font-semibold text-foreground">
+      <Text className="mt-4 text-lg font-pixel text-foreground">
         Completing sign-in…
       </Text>
       <Text className="mt-2 text-center text-[13px] text-muted-foreground">

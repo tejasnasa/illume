@@ -28,6 +28,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { Stack } from "expo-router";
+import { useFonts } from "expo-font";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -36,7 +37,9 @@ import "../../global.css";
 
 import { installAppStateFocusBridge } from "@/api/focusManager";
 import { registerQueryClient } from "@/lib/queryClientRegistry";
+import { FONT_FILES } from "@/lib/fonts";
 import { colors } from "@/theme/tokens";
+import { Starfield } from "@/ui/Starfield";
 import { AuthProvider } from "@/hooks/useAuth";
 import {
   useNotificationNavigation,
@@ -98,7 +101,7 @@ export function ErrorBoundary({
 
   return (
     <View className="flex-1 items-center justify-center bg-background p-6">
-      <Text className="mb-2 text-lg font-bold text-foreground">
+      <Text className="mb-2 text-lg font-pixel text-foreground">
         Something went wrong
       </Text>
       <Text className="mb-6 text-center text-[13px] text-muted-foreground">
@@ -111,7 +114,7 @@ export function ErrorBoundary({
         onPress={onRetry}
         className="min-h-[44px] justify-center rounded bg-primary px-5 py-2.5"
       >
-        <Text className="text-sm font-semibold text-primary-foreground">
+        <Text className="text-sm font-sans-semibold text-primary-foreground">
           Try again
         </Text>
       </Pressable>
@@ -135,8 +138,13 @@ function PushRegistration(): null {
 }
 
 export default function RootLayout() {
+  // Text renders in the system font until the bundled faces are ready; a
+  // load failure must not leave the app blank, so an error also proceeds.
+  const [fontsLoaded, fontError] = useFonts(FONT_FILES);
   // A tapped notification opens the repository it names.
   useNotificationNavigation();
+
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <SafeAreaProvider>
@@ -144,12 +152,15 @@ export default function RootLayout() {
         <AuthProvider>
           <PushRegistration />
           <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.background },
-            }}
-          />
+          <View className="flex-1 bg-background">
+            <Starfield />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: "transparent" },
+              }}
+            />
+          </View>
         </AuthProvider>
       </QueryClientProvider>
     </SafeAreaProvider>

@@ -3,11 +3,10 @@ Generate the app icon, adaptive icon, splash screen, and favicon.
 
 Run with: `python scripts/generate_assets.py`
 
-The mark is the web client's brand icon: Phosphor's ``StarFour`` at
-``weight="fill"``, which the web renders in ``--chart-1`` next to a
-blurred backdrop. The path below is copied verbatim from
-``@phosphor-icons/react`` (``StarFour`` -> ``fill``), so the mobile
-icon is the same shape the web shows rather than a redrawing of it.
+The mark is the web client's brand icon (``client/src/app/icon.svg``): a
+blue hub with three spokes, one ending in pink. It is drawn here with
+Pillow's primitives on a 4x canvas and scaled down, so no SVG rasteriser
+is needed.
 
 Palette comes from `src/theme/tokens.ts` (copied from the web
 `globals.css`): the app near-black background and the brand cyan.
@@ -188,57 +187,57 @@ def star_four_outline(size: int, steps: int = 48) -> list[tuple[float, float]]:
     return outline
 
 
-def star_four_image(size: int) -> Image.Image:
+def star_four_image(size: int, mono: bool = False) -> Image.Image:
     """The brand mark on a transparent canvas.
+
+    Named for the mark it used to draw; it now draws the hub-and-spokes
+    logo. ``mono`` paints every part white, for the status-bar icon.
 
     Args:
         size: Canvas size in pixels.
+        mono: Draw a single flat colour instead of the brand colours.
 
     Returns:
         A transparent RGBA image holding the mark.
     """
-    rendered = render_svg(star_four_svg(size, "#53EAFD"), size)
-    if rendered is not None:
-        return rendered
-
-    # No rasteriser available -- trace the outline instead.
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    ImageDraw.Draw(image).polygon(star_four_outline(size), fill=CYAN)
-    return image
+    scale = 4
+    big = size * scale
+    unit = big / 120
+    white = (0xFA, 0xFA, 0xFA, 255)
+    pink = white if mono else (0xF6, 0x33, 0x9A, 255)
+    blue = white if mono else (0x00, 0x78, 0xFF, 255)
+    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    hub = (60, 60)
+    leaves = [((26, 30), 11, white), ((95, 36), 11, pink), ((51, 98), 11, white)]
+    for (x, y), _, _ in leaves:
+        draw.line(
+            [(hub[0] * unit, hub[1] * unit), (x * unit, y * unit)],
+            fill=white,
+            width=int(7 * unit),
+        )
+    for (x, y), radius, colour in leaves:
+        draw.ellipse(
+            [(x - radius) * unit, (y - radius) * unit, (x + radius) * unit, (y + radius) * unit],
+            fill=colour,
+        )
+        draw.ellipse(
+            [(x - 3.5) * unit, (y - 3.5) * unit, (x + 3.5) * unit, (y + 3.5) * unit],
+            fill=colour,
+        )
+    draw.ellipse(
+        [(60 - 20) * unit, (60 - 20) * unit, (60 + 20) * unit, (60 + 20) * unit], fill=blue
+    )
+    return image.resize((size, size), Image.LANCZOS)
 
 
 def build_icon(size: int = 1024) -> Image.Image:
     """The full-bleed launcher icon.
 
     The launcher masks this to a shape, so the artwork fills the square
-    and the mark sits in the middle. A soft radial glow behind the mark
-    keeps it legible on a dark launcher without putting a hard edge
-    around the artwork -- the same trick the web navbar uses.
+    and the mark sits in the middle on the app background.
     """
     image = Image.new("RGBA", (size, size), BACKGROUND)
-
-    # A radial glow, built from stacked translucent discs and blurred.
-    glow_size = int(size * 0.62)
-    glow = Image.new("RGBA", (glow_size, glow_size), (0, 0, 0, 0))
-    glow_draw = ImageDraw.Draw(glow)
-    steps = 22
-    for step in range(steps, 0, -1):
-        t = step / steps
-        alpha = int(58 * (1 - t) ** 2.2)
-        disc = glow_size / 2 * t
-        glow_draw.ellipse(
-            [
-                glow_size / 2 - disc,
-                glow_size / 2 - disc,
-                glow_size / 2 + disc,
-                glow_size / 2 + disc,
-            ],
-            fill=(CYAN[0], CYAN[1], CYAN[2], alpha),
-        )
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=size * 0.02))
-    image.alpha_composite(
-        glow, (int(size / 2 - glow_size / 2), int(size / 2 - glow_size / 2))
-    )
 
     # The mark, at 62% of the canvas. A launcher icon has to read at
     # 48dp, and the mark is small within its own bounding box -- at the
@@ -284,7 +283,7 @@ def main() -> None:
     # has to be a flat, opaque mark -- no glow, no transparency.
     notification = Image.new("RGBA", (192, 192), (0, 0, 0, 0))
     mark_size = 168
-    mark = star_four_image(mark_size)
+    mark = star_four_image(mark_size, mono=True)
     notification.alpha_composite(
         mark, (int(192 / 2 - mark_size / 2), int(192 / 2 - mark_size / 2))
     )

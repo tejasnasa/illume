@@ -15,7 +15,7 @@ import { router } from "expo-router";
 export default function NotFoundScreen() {
   return (
     <View className="flex-1 items-center justify-center bg-background p-6">
-      <Text className="mb-2 text-lg font-bold text-foreground">
+      <Text className="mb-2 text-lg font-pixel text-foreground">
         This screen does not exist
       </Text>
       <Text className="mb-6 max-w-[280px] text-center text-[13px] text-muted-foreground">
@@ -29,7 +29,7 @@ export default function NotFoundScreen() {
         onPress={() => router.replace("/(app)/dashboard")}
         className="min-h-[44px] justify-center rounded bg-primary px-5 py-2.5"
       >
-        <Text className="text-sm font-semibold text-primary-foreground">
+        <Text className="text-sm font-sans-semibold text-primary-foreground">
           Go to the dashboard
         </Text>
       </Pressable>

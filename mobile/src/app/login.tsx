@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -21,6 +21,8 @@ import * as WebBrowser from "expo-web-browser";
 import { resolveBackendUrl } from "@/api/client";
 import { useAuth } from "@/hooks/useAuth";
 import { buildAuthorizeUrl, parseAuthCallback } from "@/lib/authCallback";
+import { Wordmark } from "@/ui/Logo";
+import { PixelGraph } from "@/ui/PixelGraph";
 
 const DEEP_LINK = "illume://auth/callback";
 
@@ -29,6 +31,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const { signIn } = useAuth();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   /**
    * Hand the user off to the system browser for the OAuth dance.
@@ -85,76 +88,82 @@ export default function LoginScreen() {
     // native view that ``className`` does not reach, so its ``flex-1`` was
     // ignored and the centred card below collapsed to no height.
     <View
-      className="flex-1 bg-background"
+      className="flex-1"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
+      <View className="absolute inset-x-0 top-0 opacity-60" pointerEvents="none">
+        <PixelGraph width={width} height={Math.round(width * 1.05)} seed={11} />
+      </View>
+
       {/*
         The introduction is reachable again from here: once it has been
         seen, the flag stops the cold start from showing it, so a reader who
         signs out and wants to read it once more has no other way back in.
       */}
-      <View className="flex-row justify-end px-4 pt-2">
+      <View className="flex-row items-center justify-between px-5 pt-2">
+        <Wordmark size={26} />
         <Pressable
           testID="login-help"
           accessibilityRole="button"
           accessibilityLabel="Show the introduction"
           onPress={() => router.push("/onboarding")}
           hitSlop={8}
-          className="min-h-[44px] min-w-[44px] items-center justify-center rounded-full border border-border active:bg-secondary"
+          className="min-h-[44px] min-w-[44px] items-center justify-center rounded-sm border border-input active:border-accent"
         >
-          <Text className="text-base font-semibold text-muted-foreground">
-            ?
-          </Text>
+          <Text className="font-pixel text-base text-muted-foreground">?</Text>
         </Pressable>
       </View>
 
-      <View className="flex-1 items-center justify-center px-6 py-4">
-        <View className="w-full max-w-[380px] items-center rounded-xl border border-border bg-card px-7 py-8">
-          <Text className="mb-2 text-center text-[44px] leading-[52px] text-chart-1">
-            ✦
-          </Text>
+      <View className="flex-1 justify-end px-6 pb-8">
+        <Text className="font-pixel text-[13px] tracking-[1.5px] text-muted-foreground">
+          &gt; illume login<Text className="text-accent">_</Text>
+        </Text>
+        <Text className="mt-3 font-pixel text-[34px] leading-[38px] text-foreground">
+          Welcome back,
+        </Text>
+        <Text className="font-pixel text-[34px] leading-[38px] text-chart-1">
+          your map is waiting
+        </Text>
+        <Text className="mb-6 mt-3 text-[15px] leading-[22px] text-zinc-400">
+          Sign in to analyze your codebase: your repositories, guides and
+          chats, kept current with main.
+        </Text>
 
-          <Text className="mt-2 text-center text-[22px] font-bold text-foreground">
-            Welcome to Illume
-          </Text>
-          <Text className="mt-1 text-center text-sm text-muted-foreground">
-            Sign in to analyze your codebase
-          </Text>
-
-          <View className="my-5 h-px w-full bg-border" />
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Continue with GitHub"
-            accessibilityState={{ disabled, busy }}
-            onPress={onContinueWithGitHub}
-            disabled={disabled}
-            hitSlop={8}
-            className={`min-h-[48px] w-full items-center justify-center rounded-lg bg-white px-4 py-3.5 ${
-              disabled ? "opacity-60" : ""
-            }`}
-          >
-            {busy ? (
-              <ActivityIndicator size="small" color="#000000" />
-            ) : (
-              <Text
-                className="text-[15px] font-semibold text-black"
-                style={buttonTextStyle}
-              >
-                Continue with GitHub
-              </Text>
-            )}
-          </Pressable>
-
-          {error ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Continue with GitHub"
+          accessibilityState={{ disabled, busy }}
+          onPress={onContinueWithGitHub}
+          disabled={disabled}
+          hitSlop={8}
+          className={`min-h-[52px] w-full flex-row items-center justify-center gap-3 rounded-sm bg-primary px-5 py-4 active:opacity-80 ${
+            disabled ? "opacity-60" : ""
+          }`}
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color="#fdf2f8" />
+          ) : (
             <Text
-              accessibilityRole="alert"
-              className="mt-3 text-center text-[13px] text-destructive"
+              className="font-pixel text-[15px] tracking-[0.6px] text-primary-foreground"
+              style={buttonTextStyle}
             >
-              {error}
+              Continue with GitHub
             </Text>
-          ) : null}
-        </View>
+          )}
+        </Pressable>
+
+        <Text className="mt-3 text-[13px] text-subtle-foreground">
+          New here? Continuing with GitHub creates your account.
+        </Text>
+
+        {error ? (
+          <Text
+            accessibilityRole="alert"
+            className="mt-3 text-[13px] text-destructive"
+          >
+            {error}
+          </Text>
+        ) : null}
       </View>
     </View>
   );

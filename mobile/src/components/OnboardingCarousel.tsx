@@ -30,6 +30,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "@/theme/tokens";
+import { Logo } from "@/ui/Logo";
+import { PixelGraph } from "@/ui/PixelGraph";
 
 /** One screen of the carousel. */
 export interface OnboardingPage {
@@ -168,13 +170,18 @@ export function OnboardingCarousel({
     // A plain ``View`` padded by the insets: ``className`` does not reach
     // the safe-area component's native view, so its ``flex-1`` was ignored.
     <View
-      className="flex-1 bg-background"
+      className="flex-1"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
     >
+      {/* The constellation turns behind the pages, faint enough to read over. */}
+      <View className="absolute inset-x-0 top-0 opacity-50" pointerEvents="none">
+        <PixelGraph width={width} height={Math.round(width * 1.1)} />
+      </View>
       <View className="flex-row items-center justify-between px-5 py-2">
-        <Text className="text-[11px] font-bold uppercase tracking-[2px] text-muted-foreground">
-          Illume
-        </Text>
+        <View className="flex-row items-center gap-2">
+          <Logo size={22} />
+          <Text className="font-pixel text-base text-foreground">illume</Text>
+        </View>
         {isFirst ? (
           <Pressable
             testID="onboarding-skip"
@@ -185,7 +192,7 @@ export function OnboardingCarousel({
             hitSlop={8}
             className="min-h-[44px] justify-center rounded px-2 active:bg-secondary"
           >
-            <Text className="text-sm font-semibold text-muted-foreground">
+            <Text className="font-pixel text-xs uppercase tracking-[1px] text-muted-foreground">
               Skip
             </Text>
           </Pressable>
@@ -215,14 +222,16 @@ export function OnboardingCarousel({
             style={{ width }}
             className="items-center justify-center px-8"
           >
-            <Text className="mb-6 text-center text-[52px]">{item.glyph}</Text>
+            <Text className="mb-5 font-pixel text-[13px] uppercase tracking-[2px] text-accent">
+              {`0${pageIndex + 1} / 0${ONBOARDING_PAGES.length}`}
+            </Text>
             <Text
               accessibilityRole="header"
-              className="text-center text-[26px] font-bold text-foreground"
+              className="text-center font-pixel text-[26px] leading-[32px] text-foreground"
             >
               {item.title}
             </Text>
-            <Text className="mt-3 text-center text-[15px] leading-6 text-muted-foreground">
+            <Text className="mt-3 text-center text-[15px] leading-6 text-zinc-400">
               {item.body}
             </Text>
             {item.bullets ? (
@@ -232,8 +241,8 @@ export function OnboardingCarousel({
                     key={bullet}
                     className="flex-row items-start justify-center gap-2"
                   >
-                    <Text className="text-[15px] leading-6 text-primary">
-                      •
+                    <Text className="font-pixel text-[15px] leading-6 text-accent">
+                      ▪
                     </Text>
                     <Text className="flex-1 text-[14px] leading-6 text-muted-foreground">
                       {bullet}
@@ -262,10 +271,10 @@ export function OnboardingCarousel({
                 className="min-h-[44px] min-w-[28px] items-center justify-center"
               >
                 <View
-                  className="h-2 w-2 rounded-full"
+                  className="h-2 w-2"
                   style={{
                     backgroundColor: isActive
-                      ? colors.primary
+                      ? colors.accent
                       : colors.mutedForeground,
                     opacity: isActive ? 1 : 0.4,
                   }}
@@ -287,9 +296,9 @@ export function OnboardingCarousel({
               accessibilityLabel="Get started"
               accessibilityState={{ disabled: !onComplete }}
               onPress={onComplete}
-              className="min-h-[44px] w-full items-center justify-center rounded bg-primary px-4 py-3 active:bg-secondary"
+              className="min-h-[48px] w-full items-center justify-center rounded-sm bg-primary px-4 py-3 active:opacity-80"
             >
-              <Text className="text-sm font-semibold text-primary-foreground">
+              <Text className="font-pixel text-sm uppercase tracking-[1px] text-primary-foreground">
                 Get started
               </Text>
             </Pressable>
