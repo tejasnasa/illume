@@ -20,9 +20,10 @@ The web client is canonical: features are designed there and the phone follows. 
 | Routing       | Next.js App Router, server components            | expo-router, client-side only                                      |
 | Session       | httponly cookie                                  | `Authorization: Bearer`, token in `expo-secure-store`              |
 | Data fetching | server components, server actions, browser fetch | TanStack Query over one `fetch` wrapper                            |
-| Chat          | streaming agent with presets                     | **Classic only**: `POST /chat`, no streaming, no presets           |
+| Chat          | streaming agent with presets                     | the same streaming agent: `POST /chat/stream`, every preset, conversations |
 | 3D graph      | `react-force-graph-3d` (WebGL 2)                 | raw `expo-gl` and three.js r162 (WebGL 1)                          |
 | First screen  | marketing landing page                           | a three-screen onboarding carousel                                 |
+| Look          | Geist Sans and Geist Pixel Square, pixel panels  | the same two fonts, loaded with `expo-font`, and the same palette   |
 | Layout        | any viewport                                     | portrait only, dark only                                           |
 
 Decisions behind this, recorded with the port:
@@ -31,7 +32,7 @@ Decisions behind this, recorded with the port:
 - **Android first.** Development happens on Windows, so the Android emulator and a physical device are the test surfaces. iOS builds come from EAS and are not exercised locally.
 - **A development build, not Expo Go.** Remote push was removed from Expo Go in SDK 53, and `expo-gl` needs native code Expo Go does not have.
 
-The mobile chat still uses the Classic endpoint. The agentic chat, presets, conversations and the live graph exist only on the web.
+The chat is the web's: it streams from `POST /chat/stream`, offers every preset including the two deep agent presets, and keeps conversations. What stays web-only is the full-viewport 3D live graph, which the phone replaces with a small flat graph inside each turn (see [Chat](#chat)).
 
 ## Project layout
 
@@ -47,13 +48,16 @@ mobile/
   jest.after-env.js    testing-library configuration, after it does
   __tests__/           Jest specs
   e2e/                 Maestro flows
+  assets/fonts/        Geist Sans (four weights) and Geist Pixel Square, as TrueType
   scripts/             check-native-linking.mjs, generate_assets.py
   src/
     app/               expo-router routes: the file tree is the route tree
-    components/        feature components: graph renderer, ingest flow, pickers
-    ui/                small presentational pieces
+    components/        feature components: graph renderer, pickers, and folders
+                       chat/, ingest/, overview/ and explorer/
+    ui/                small presentational pieces: Panel, Button, Logo, PixelGraph
     hooks/             data and state hooks
-    lib/               pure logic: tree building, layout maths, parsers
+    lib/               pure logic: tree building, layout maths, parsers, and
+                       lib/agent/ (the stream reducer, copied from the web)
     api/               one HTTP client and one module per endpoint group
     types/             copied from the web client; may drift
     theme/tokens.ts    the palette as strings, for places className cannot reach
@@ -77,8 +81,9 @@ Two rules: `lib/` never imports React, so it is the easiest code to test; and `a
 | `expo-web-browser`, `expo-auth-session`                | the OAuth browser session                                                                     |
 | `expo-notifications`                                   | push, loaded lazily                                                                           |
 | `expo-file-system`, `expo-sharing`                     | the `.illume` export and the share sheet                                                      |
-| `react-native-svg`                                     | the git timeline                                                                              |
-| `react-native-reanimated`                              | the ingest board, the log drawer, skeleton shimmer                                            |
+| `react-native-svg`                                     | pixel art: starfield, thumbnails, graph sketches, the git timeline                            |
+| `expo-font`                                            | loads Geist Sans and Geist Pixel Square before the first screen                               |
+| `react-native-reanimated`                              | the ingest board's indeterminate bars, skeleton shimmer                                       |
 | `zod`                                                  | form validation mirroring the web's schemas                                                   |
 
 ### NativeWind constraints
@@ -130,12 +135,15 @@ Expo substitutes the value by matching the literal expression `process.env.EXPO_
 | `/repo-picker`        | `app/(app)/repo-picker.tsx`      | modal route: pick a repository, then a version      |
 | `/settings`           | `app/(app)/settings.tsx`         | account settings                                    |
 | `/settings/ai`        | `app/(app)/settings/ai.tsx`      | the user's own AI key                               |
+| `/settings/agent`     | `app/(app)/settings/agent.tsx`   | the agent's context window and default preset       |
+| `/settings/mcp`       | `app/(app)/settings/mcp.tsx`     | MCP tokens and client setup                         |
 | `/settings/contact`   | `app/(app)/settings/contact.tsx` | the contact form                                    |
+| `/settings/delete-account` | `app/(app)/settings/delete-account.tsx` | account deletion                          |
 | `/repo/[id]`          | `app/(app)/repo/[id]/index.tsx`  | the overview, or the live ingest board              |
-| `/repo/[id]/glossary` | `.../glossary.tsx`               | glossary browse and search                          |
-| `/repo/[id]/explorer` | `.../explorer.tsx`               | the file tree with a details sheet                  |
+| `/repo/[id]/glossary` | `.../glossary.tsx`               | glossary browse and search; `?letter=` opens an initial |
+| `/repo/[id]/explorer` | `.../explorer.tsx`               | the file tree with a details sheet; `?file=` opens a file |
 | `/repo/[id]/graph`    | `.../graph.tsx`                  | the 3D graph                                        |
-| `/repo/[id]/chat`     | `.../chat.tsx`                   | Classic chat (hidden tab)                           |
+| `/repo/[id]/chat`     | `.../chat.tsx`                   | streaming agent chat (hidden tab); `?q=` prefills   |
 | `/repo/[id]/settings` | `.../settings.tsx`               | auto-update, export, re-ingest, delete (hidden tab) |
 | anything else         | `app/+not-found.tsx`             | "This screen does not exist"                        |
 
@@ -159,7 +167,7 @@ flowchart TD
   REPO --> H2["settings, hidden"]
 ```
 
-- **Root layout** (`app/_layout.tsx`) is the only place providers are wired: `SafeAreaProvider`, one `QueryClientProvider`, `AuthProvider`, a `PushRegistration` that renders nothing, the status bar and a headerless `Stack`. It also bridges app foreground to React Query's focus refetch and exports an `ErrorBoundary` with "Try again".
+- **Root layout** (`app/_layout.tsx`) is the only place providers are wired: `SafeAreaProvider`, one `QueryClientProvider`, `AuthProvider`, a `PushRegistration` that renders nothing, the status bar and a headerless `Stack` with a transparent scene background over a still pixel `Starfield`. It also loads the fonts with `useFonts` and shows the splash until they are ready. It also bridges app foreground to React Query's focus refetch and exports an `ErrorBoundary` with "Try again".
 - **Entry decision** (`app/index.tsx`): with a token, go to the dashboard without reading the onboarding flag; without one, onboarding on a first run, otherwise login. It shows a spinner rather than nothing, because some Android builds have already dismissed the splash.
 - **Auth gate** (`app/(app)/_layout.tsx`): a splash while loading, a `<Redirect>` to login without a token. Ownership is the backend's job; it returns 404 for another user's repository.
 - **Repository shell** (`app/(app)/repo/[id]/_layout.tsx`): a `Tabs` navigator with a custom top tab bar matching the web navbar. Chat and settings are registered with `href: null` and filtered from the bar, but navigable by URL. A repository that is not ready shows only Home. A deep link to a tab of an unready repository navigates (not replaces) back to the overview, because replacing a tab with a tab leaves two routes of the same name.
@@ -212,15 +220,18 @@ Every API function takes an options bag with `backendUrl` and `fetchImpl`, so te
 | --------------- | --------------------------------------------------------------------------------------- | --------------------- |
 | `repository.ts` | list, get, create (202)                                                                 | `repo_number` for get |
 | `graph.ts`      | `GET /graph?level=`                                                                     | UUID                  |
-| `explorer.ts`   | the same graph at file level, keeping only the nodes                                    | UUID                  |
-| `guide.ts`      | the onboarding guide                                                                    | UUID                  |
-| `glossary.ts`   | browse and search                                                                       | UUID                  |
+| `explorer.ts`   | the file graph's nodes, and one file's symbols and recent commits (`/file?path=&commits=3`) | UUID              |
+| `guide.ts`      | the onboarding guide, the stats and the recent activity                                 | UUID                  |
+| `glossary.ts`   | browse (optionally by initial, `#` for the rest) and search                             | UUID                  |
 | `ownership.ts`  | ownership (optionally one file) and knowledge silos                                     | UUID                  |
-| `chat.ts`       | `POST /chat`, history, delete one, clear                                                | UUID                  |
+| `agentStream.ts` | `POST /chat/stream`, read as server-sent events through `expo/fetch`                   | UUID                  |
+| `conversations.ts` | list, get, rename and delete conversations and turns                                 | UUID                  |
+| `chat.ts`       | the Classic `POST /chat`, history, delete one, clear; no longer used by the chat screen | UUID                  |
+| `account.ts`    | agent defaults, MCP tokens and account deletion                                         | user                  |
 | `settings.ts`   | AI credentials, auto-update, sync now, re-ingest, delete, the `.illume` export, contact | user or UUID          |
 | `push.ts`       | register, deregister and status of the push token                                       | user                  |
 | `ingest.ts`     | the ingest WebSocket URL, with `?token=`                                                | UUID                  |
-| `github.ts`     | the GitHub proxy: repositories, branches, commits                                       | user                  |
+| `github.ts`     | the GitHub proxy: repositories (with a server-side `q` name search), branches, commits  | user                  |
 
 **The identifier split causes most 404s.** List and detail routes use `repo_number`; everything else uses the UUID. A wrong id reads like "no glossary yet", so screens resolve the number to the record first and use `repo.id` after.
 
@@ -243,18 +254,19 @@ Two pollers: the dashboard refetches every 5 s while any repository is neither r
 
 ## Screens
 
-- **Dashboard.** Three skeleton cards while loading; an error panel with retry; an empty state; otherwise repository cards with pull-to-refresh, a floating add button, and Settings and Log out in the header. Settings is in the header because the free-tier banner, which used to link there, hides itself for users with their own key.
-- **Repository picker.** Step one lists the user's GitHub repositories (100 per page, filtered by name) or accepts a pasted URL; step two is a commit timeline (`GitGraph`, SVG) for choosing a branch or commit. It has an explicit Cancel, because a modal route has no visible dismissal on iOS. Creating a repository refreshes the profile, since the free-tier counter changed.
-- **Overview.** `IngestFlow` while ingesting; `RepoDetail` (identity, status, summary, stack, a button into chat) when ready. The guide is fetched only when ready.
-- **Glossary.** Server-side search debounced by 400 ms, page size 20, previous data kept while paging so the list does not blank. Three different empty messages: the repository failed to load, nothing matched, or there is no glossary.
-- **Explorer.** A tree built client-side from the file-level graph by `lib/fileTree.ts`: build a nested tree (a path that is both a file and a directory keeps the directory), flatten against the expanded set, sort directories first. Rendered by a `FlatList`, so re-renders follow visible rows. Tapping a file opens a sheet with its details and ownership, fetched for that one file.
+- **Onboarding and sign-in.** A pixel constellation (`ui/PixelGraph`, drawn with react-native-svg and stepped every 100 ms) sits behind the carousel and the login screen, and stands still when the system's reduce-motion setting is on.
+- **Dashboard.** A `> illume ls_` header, a count line, a search box and status filter chips (`lib/repoFilter.ts`); three skeleton cards while loading; an error panel with retry; an empty state; otherwise repository cards with a still pixel thumbnail of the repository's own graph (`ui/RepoThumb`, from `GET /graph/thumbnail`, with a seeded placeholder when there is none), pull-to-refresh, a floating add button, and Settings and Log out in the header. Settings is in the header because the free-tier banner, which used to link there, hides itself for users with their own key.
+- **Repository picker.** Step one lists the user's GitHub repositories (100 per page) or accepts a pasted URL. The search box is sent to the server as `q` after a 400 ms pause, so it reaches repositories beyond the pages already loaded; the term is part of the query key, so each term keeps its own pages. Step two is a commit timeline (`GitGraph`, SVG) for choosing a branch or commit. It has an explicit Cancel, because a modal route has no visible dismissal on iOS. Creating a repository refreshes the profile, since the free-tier counter changed.
+- **Overview.** `IngestFlow` while ingesting; when ready, a stack of cards in the web's order (`ui/RepoDetail`, `components/overview/OverviewCards`): status, branch and commit, the title, the risk spread, a button into chat, the architecture brief, a flat graph tile, at a glance with a language bar, start here (the first reading-order files), riskiest to change, recent activity, tech stack and who to ask. Each card is left out when its data is missing. The guide, stats, activity and file graph are fetched only when the repository is ready; the file graph uses the graph screen's query key, so it is downloaded once for the overview, the explorer, the chat and the graph. The graph tile and risk spread are computed from that payload (`lib/overview.ts`).
+- **Glossary.** Server-side search debounced by 400 ms, page size 20, previous data kept while paging so the list does not blank. An A to Z rail (`components/GlossaryLetters`) puts each initial on its own small card; initials with no terms are dimmed, `#` collects names that start with anything else, and picking one leaves search because the two filters are different routes. Three different empty messages: the repository failed to load, nothing matched, or there is no glossary.
+- **Explorer.** A tree built client-side from the file-level graph by `lib/fileTree.ts`: build a nested tree (a path that is both a file and a directory keeps the directory), flatten against the expanded set, sort directories first. Rendered by a `FlatList`, so re-renders follow visible rows. Tapping a file, or arriving with `?file=`, opens a sheet with the file's details: its reading-order note, ask and graph actions, a still neighbourhood picture (importers left, imports right, `lib/neighbourhood.ts`), its symbols and its three latest commits from `GET /file`, who owns it, and the files that import it and that it imports. Tapping a neighbour moves the selection to it.
 - **Graph.** See [the graph renderer](graph-renderer.md).
-- **Chat.** Optimistic turns with client ids replaced when the answer lands; history copied into local state once so a late refetch cannot reorder turns; 402 shows the server's message; failed turns stay, marked, and are left out of the next request's history. The composer is disabled when the free allowance is spent, and is not drawn until the repository record resolves, which once let a fast tap post to `/api/v1/repository//chat`.
-- **Settings.** Account-level only: AI credentials, contact, about, log out. Repository settings live behind the gear in the repository header: auto-update and sync, export, re-ingest and delete.
+- **Chat.** The web's streaming agent. `api/agentStream.ts` reads `POST /chat/stream` through `expo/fetch` (React Native's own `fetch` does not expose a streaming body), a server-sent events parser feeds a reducer copied from the web's `lib/agent/`, and the screen renders the run as it arrives. The preset picker offers Auto, Classic, Hybrid, Hybrid + rerank, Structural and the two deep agent presets (`deep_agent`, `deep_agent_workers`); on the free tier Auto and the agent presets are disabled with a reason, and the choice is remembered per repository in AsyncStorage. An advanced sheet tunes the preset's overrides. Each turn shows an activity block (planner steps, sub-questions numbered by worker, tool calls and retrievals), the answer with tappable citation chips, a stale notice when the snapshot has moved, and the run's cost. Conversations are listed and switched in a sheet. Below the activity, a collapsed graph panel (`components/chat/RunGraph`) draws a flat sketch of the file graph with the files the run touched lit in the colour of the lane that touched them, and, once finished, the files the answer cites in gold; a turn restored from the server has no record of touched files, so it shows the cited ones only. A `?q=` parameter prefills the composer, which is how the explorer and graph inspector ask about a file. The composer is disabled when the free allowance is spent, and is not drawn until the repository record resolves, which once let a fast tap post to `/api/v1/repository//chat`.
+- **Settings.** Account-level: AI credentials, agent defaults, MCP tokens, contact, about, account deletion and log out. Repository settings live behind the gear in the repository header: auto-update and sync, export, re-ingest and delete.
 
 ### The live ingest board
 
-`useIngestStream` owns the WebSocket and normalises frames, like the web hook. `IngestFlow` folds them into stage states with the same rules as the web (see [the WebSocket page](../interfaces/websockets.md#from-frames-to-node-states)): a headline that moves from queued through each stage to "Still working…" after five minutes of silence; a refresh 900 ms after completion or 2500 ms after failure, once each; one reconnect after a 15-second grace when the socket closes early. `IngestFlowCanvas` animates the board and drops its decorative layers when the system's reduce-motion setting is on. After the first successful ingest, and never at launch, the app asks for notification permission.
+`useIngestStream` owns the WebSocket and normalises frames, like the web hook. `IngestFlow` folds them into stage states with the same rules as the web (see [the WebSocket page](../interfaces/websockets.md#from-frames-to-node-states)): a headline that moves from queued through each stage to "Still working…" after five minutes of silence; a refresh 900 ms after completion or 2500 ms after failure, once each; one reconnect after a 15-second grace when the socket closes early. `PipelineBoard` draws the web's seven columns (Fetch, Read, Connect, Score, Write, Index, Done) as stacked stage cards, each with a state mark, a meta line (`1,200 / 4,000 files`, `2,871 dependencies`) and a bar that fills from the frame counters or sweeps while a stage runs without one; the sweep stops when the system's reduce-motion setting is on. `IngestLog` is the raw frame log, which follows the tail only while the reader is at the tail. The board's wording lives in `lib/pipelineBoard.ts` and the frame folding in `lib/ingestFlow.ts`; the cards are drawn from the state map alone, so nothing advances without a frame. After the first successful ingest, and never at launch, the app asks for notification permission.
 
 ### Export
 
@@ -269,9 +281,10 @@ Two pollers: the dashboard refetches every 5 s while any repository is neither r
 
 ## Visual system
 
-- The palette is sRGB hex or `rgba()`, defined in `global.css` and `tokens.ts` and kept equal by a test.
-- The card surface (`#0e0e10`) sits just above the background (`#09090b`); on a small screen the web's raised-card colour made every card a separate pane, so borders do the separating.
-- No custom fonts. Touch targets are at least 44 points. Portrait and dark only.
+- The palette is sRGB hex or `rgba()`, defined in `global.css` and `tokens.ts` and kept equal by a test, and follows the web's: card `#0e0e11`, accent `#f6339a`, plus the `warning`, `selected`, `match`, `subtle-foreground`, `faint-foreground` and `border-strong` tokens.
+- **Fonts.** Geist Sans (Regular, Medium, SemiBold, Bold) and Geist Pixel Square are bundled in `assets/fonts/` as TrueType, because React Native cannot load the web's WOFF2. They are loaded by `useFonts` in the root layout, and `font-sans*` and `font-pixel` in `global.css` name the same family strings. React Native picks a weight by family name, so each weight is its own entry in `lib/fonts.ts`.
+- **Panels** (`ui/Panel`) are a thin border, the flat card fill and a small radius, with an uppercase pixel `Eyebrow` for titles. The starfield and every thumbnail are drawn with react-native-svg; there is no Skia.
+- Touch targets are at least 44 points. Portrait and dark only.
 - Screens apply `paddingTop: insets.top` on a plain `View`. The chat pads by the keyboard height from `useKeyboardHeight` plus the bottom inset, because `KeyboardAvoidingView` misjudges the keyboard on Android with edge-to-edge display.
 
 ## Testing
@@ -283,9 +296,9 @@ npm run typecheck  # tsc --noEmit
 
 | Area       | Examples                                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------ |
-| pure logic | `graphLayout`, `graphSelection`, `fileTree`, `gitGraphLayout`, `markdownBlocks`            |
+| pure logic | `graphLayout`, `graphSelection`, `graphBrackets`, `fileTree`, `overview`, `neighbourhood`, `pipelineBoard`, `agentLib` |
 | hooks      | `useAuth`, `useChat`, `useIngestStream`, `useRepoForm`, `useRepositories`, `useAutoUpdate` |
-| screens    | dashboard, chat, glossary, explorer, graph, the repository shell, settings, onboarding     |
+| screens    | dashboard, chat (scripted stream), glossary, explorer, graph, ingest board, overview, settings, onboarding |
 | contracts  | `themeSync`, `routes` (every route module loads), push payload keys, `publicEnvInlining`   |
 
 - `jest.setup.js` mocks native modules and runs **before** the React Native environment exists; anything needing `react-native` goes in `jest.after-env.js`, which also raises the `waitFor` timeout to 5 s for full parallel runs.
@@ -331,10 +344,11 @@ npx eas build --profile preview --platform android
 ## Design trade-offs and limits
 
 - **Duplication over coupling.** Two independent apps, at the cost of copied types and a twice-maintained palette.
-- **Feature lag.** Mobile chat is Classic only: no agent, presets, conversations or streaming.
+- **Feature lag.** The live graph behind the chat is a flat sketch in each turn rather than a full-viewport 3D view, and the run replay is the cited files only.
+- **Chat streaming is unverified off a device.** It needs `expo/fetch` to deliver a streaming body, which Jest cannot show; there is no non-streaming fallback.
 - **iOS is unverified locally.**
 - **Push needs Firebase configuration** that is not in the repository.
-- **The explorer downloads the whole file graph**, links included, to use only the nodes.
+- **The overview, explorer and chat download the whole file graph**, once, for the tree, the neighbours, the risk spread and the run graph.
 - **The backend URL is baked in.** Changing it is a new build.
 - **No offline mode.** The only tolerance is keeping a session whose profile could not be read.
 - **Token in the WebSocket URL**, as on the web.
