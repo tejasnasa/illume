@@ -114,7 +114,11 @@ function makeBackend(createResponse: () => Response) {
       const method = (init?.method ?? "GET").toUpperCase();
 
       if (url.includes("/api/v1/github/repos?")) {
-        return new Response(JSON.stringify(REPOS), {
+        const q = new URL(url).searchParams.get("q");
+        const matches = q
+          ? REPOS.filter((repo) => repo.name.includes(q.toLowerCase()))
+          : REPOS;
+        return new Response(JSON.stringify(matches), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -270,7 +274,7 @@ describe("RepoPickerModal", () => {
     }
   });
 
-  it("filters the list by the search term", async () => {
+  it("sends the search term to the server and shows its matches", async () => {
     const { backend, restore } = useBackend(() =>
       jsonResponse(202, { repo_num: 1 }),
     );
@@ -287,10 +291,18 @@ describe("RepoPickerModal", () => {
         fireEvent.changeText(screen.getByTestId("repo-picker-search"), "other");
       });
 
-      await waitFor(() => {
-        expect(screen.queryByText("illume")).toBeNull();
-      });
-      expect(screen.getByText("other")).toBeTruthy();
+      await waitFor(
+        () => {
+          expect(screen.queryByText("illume")).toBeNull();
+          expect(screen.getByText("other")).toBeTruthy();
+        },
+        { timeout: 3000 },
+      );
+      expect(
+        backend.fetchImpl.mock.calls.some(([u]) =>
+          String(u).includes("q=other"),
+        ),
+      ).toBe(true);
     } finally {
       restore();
     }
@@ -315,7 +327,7 @@ describe("RepoPickerModal", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText("Configure Version for owner/illume"),
+          screen.getByText("owner/illume"),
         ).toBeTruthy();
       });
       // The branch chips are the mobile addition -- the branch to ingest is
@@ -484,7 +496,7 @@ describe("RepoPickerModal", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText("Configure Version for owner/external-repo"),
+          screen.getByText("owner/external-repo"),
         ).toBeTruthy();
       });
     } finally {

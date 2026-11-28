@@ -18,31 +18,31 @@
 /**
  * Rail colours, cycled by rail index.
  *
- * Copied from the web component so the timeline reads the same on both
- * platforms. These are literal hex values rather than theme tokens: the
- * palette is categorical (one hue per rail), not semantic, and a theme
- * slot per rail would not survive the light/dark split.
+ * The same palette as the web component, with the first rail -- the
+ * mainline -- in the accent pink. These are literal hex values rather than
+ * theme tokens: the palette is categorical (one hue per rail), not
+ * semantic.
  */
 export const RAIL_COLORS = [
-  "#a78bfa",
-  "#34d399",
-  "#22d3ee",
-  "#fbbf24",
-  "#f43f5e",
-  "#60a5fa",
+  "#f6339a",
+  "#53eafd",
+  "#facc15",
+  "#a855f7",
+  "#22c55e",
+  "#0078ff",
 ] as const;
 
 /** Horizontal distance between two adjacent rails, in points. */
-export const COLUMN_WIDTH = 18;
+export const COLUMN_WIDTH = 20;
 
 /** Height of one commit row, in points. */
-export const ROW_HEIGHT = 64;
+export const ROW_HEIGHT = 56;
 
 /** Radius of a commit node, in points. */
 export const NODE_RADIUS = 5;
 
 /** Horizontal padding inside the rail area, in points. */
-export const PADDING_X = 10;
+export const PADDING_X = 12;
 
 /**
  * Vertical offset of the first node from the top of the timeline.

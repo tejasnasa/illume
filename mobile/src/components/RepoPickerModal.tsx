@@ -21,13 +21,13 @@
  * (see ``src/app/(app)/repo-picker.tsx``).
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -38,8 +38,11 @@ import { GitGraph } from "@/components/GitGraph";
 import { useAuth } from "@/hooks/useAuth";
 import { useGitHubRepos } from "@/hooks/useGitHubRepos";
 import { useRepoForm } from "@/hooks/useRepoForm";
+import { PIXEL_FONT } from "@/lib/fonts";
 import { parseGitHubRepoUrl } from "@/lib/githubUrl";
+import { timeAgo } from "@/lib/timeAgo";
 import { colors } from "@/theme/tokens";
+import { Blink } from "@/ui/Blink";
 import type { GitHubRepo } from "@/types/github";
 
 /** Props for the repository picker modal. */
@@ -58,6 +61,47 @@ type Mode = "picker" | "graph";
 
 /** Which source of repositories is showing. */
 type Tab = "my-repos" | "external";
+
+/** The two sources of repositories, in tab order. */
+const TABS: { id: Tab; label: string }[] = [
+  { id: "my-repos", label: "My Repositories" },
+  { id: "external", label: "External URL" },
+];
+
+/** The steps of the flow, as the header names them. */
+const STEPS = ["Repository", "Version"] as const;
+
+/**
+ * The step indicator across the top of the picker.
+ *
+ * @param props - The zero-based index of the step on screen.
+ * @returns The ordered step list.
+ */
+function StepHeader({ current }: { current: number }) {
+  return (
+    <View accessibilityRole="header" className="flex-row items-center gap-2.5">
+      {STEPS.map((step, i) => {
+        const color =
+          i === current
+            ? "text-accent"
+            : i < current
+              ? "text-zinc-300"
+              : "text-faint-foreground";
+        return (
+          <View key={step} className="flex-row items-center gap-2.5">
+            {i > 0 ? <View className="h-px w-5 bg-border-strong" /> : null}
+            <Text
+              className={`text-[11px] uppercase tracking-[1.4px] ${color}`}
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              {`${i + 1} ${step}`}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 /**
  * Lets users choose a GitHub repo, then a branch/commit to ingest.
@@ -154,119 +198,130 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
     [clearError, onClose, refreshUser, selectedUrl, submit],
   );
 
-  const tabButton = useMemo(
-    () => (tab: Tab, label: string) => {
-      const isActive = activeTab === tab;
-      return (
-        <Pressable
-          testID={`repo-picker-tab-${tab}`}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: isActive }}
-          onPress={() => setActiveTab(tab)}
-          className={`min-h-[44px] flex-1 items-center justify-center border-b-2 py-3 ${
-            isActive
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground"
-          }`}
+  const header = (
+    <View className="flex-row items-center justify-between gap-4 border-b border-border px-4 py-3">
+      <StepHeader current={mode === "picker" ? 0 : 1} />
+      {/* A modal route has no visible dismissal of its own: the hardware
+          back button is the only way out on Android, and on iOS the reader
+          has to know the sheet can be swiped. This is the explicit exit. */}
+      <Pressable
+        testID="repo-picker-cancel"
+        accessibilityRole="button"
+        accessibilityLabel="Cancel adding a repository"
+        onPress={() => onClose?.(null)}
+        hitSlop={8}
+        className="h-[44px] w-[44px] items-center justify-center"
+      >
+        <Text
+          className="text-base text-subtle-foreground"
+          style={{ fontFamily: PIXEL_FONT }}
         >
-          <Text
-            className={`text-[11px] font-bold uppercase tracking-wider ${
-              isActive ? "text-foreground" : "text-muted-foreground"
-            }`}
-          >
-            {label}
-          </Text>
-        </Pressable>
-      );
-    },
-    [activeTab],
+          ✕
+        </Text>
+      </Pressable>
+    </View>
   );
 
   if (mode === "graph") {
     return (
       <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-        <View className="flex-row items-center gap-2 px-4 pb-2 pt-3">
-          <Pressable
-            testID="repo-picker-back"
-            accessibilityRole="button"
-            accessibilityLabel="Back to repository list"
-            onPress={() => setMode("picker")}
-            hitSlop={8}
-            className="rounded px-1.5 py-1 active:bg-secondary"
-          >
-            <Text className="text-xs text-muted-foreground">
-              ← Back to repository list
-            </Text>
-          </Pressable>
-        </View>
-
-        <View className="px-4 pb-3">
-          <Text className="text-xl font-bold text-foreground">
-            Configure Version for {selectedOwner}/{selectedName}
-          </Text>
-          <Text className="mt-1 text-xs text-muted-foreground">
-            Select a branch or commit from the git history to ingest a targeted
-            snapshot.
-          </Text>
-        </View>
-
-        {ingestError ? (
-          <View className="mx-4 mb-3 rounded border border-destructive/30 bg-destructive/10 p-3">
-            <Text className="text-xs text-destructive">{ingestError}</Text>
-            {quotaExceeded ? (
-              <Text className="mt-1 text-[11px] text-muted-foreground">
-                Add your own API key in Settings to keep ingesting.
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-
-        <View
-          className="flex-1 px-4"
-          style={{ paddingBottom: insets.bottom + 16 }}
+        {header}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerClassName="px-4 pt-5"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
         >
+          <View className="gap-1.5 pb-4">
+            <Text
+              className="text-2xl leading-[30px] text-foreground"
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              {"Choose a version of "}
+              <Text className="text-accent">
+                {selectedOwner}/{selectedName}
+              </Text>
+            </Text>
+            <Text className="text-sm leading-[20px] text-muted-foreground">
+              Read the tip of a branch, or pin any older commit as a snapshot.
+              The default branch is picked for you.
+            </Text>
+          </View>
+
+          {ingestError ? (
+            <View
+              accessibilityRole="alert"
+              className="mb-4 rounded-sm border border-red-500/25 bg-red-500/5 p-3"
+            >
+              <Text className="text-xs text-red-300">{ingestError}</Text>
+              {quotaExceeded ? (
+                <Text className="mt-1 text-[11px] text-muted-foreground">
+                  Add your own API key in Settings to keep ingesting.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
           <GitGraph
             owner={selectedOwner}
             repo={selectedName}
             onSelect={handleVersionSelect}
             isSubmitting={isSubmitting}
+            onBack={() => setMode("picker")}
           />
-        </View>
+        </ScrollView>
       </View>
     );
   }
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-      {/* A modal route has no visible dismissal of its own: the hardware
-          back button is the only way out on Android, and on iOS the reader
-          has to know the sheet can be swiped. This is the explicit exit. */}
-      <View className="flex-row items-center justify-between px-4 pb-1 pt-3">
-        <Text className="text-base font-semibold text-foreground">
-          Add a repository
-        </Text>
-        <Pressable
-          testID="repo-picker-cancel"
-          accessibilityRole="button"
-          accessibilityLabel="Cancel adding a repository"
-          onPress={() => onClose?.(null)}
-          hitSlop={8}
-          className="rounded px-2 py-1 active:bg-secondary"
+      {header}
+      <View className="gap-1.5 px-4 pt-5">
+        <Text
+          className="text-2xl text-foreground"
+          style={{ fontFamily: PIXEL_FONT }}
         >
-          <Text className="text-sm font-semibold text-muted-foreground">
-            Cancel
-          </Text>
-        </Pressable>
+          {"Add a "}
+          <Text className="text-accent">repository</Text>
+        </Text>
+        <Text className="text-sm text-muted-foreground">
+          Pick one of yours, or paste any public GitHub URL.
+        </Text>
       </View>
 
-      <View className="flex-row border-b border-border">
-        {tabButton("my-repos", "My Repositories")}
-        {tabButton("external", "External URL")}
+      <View
+        accessibilityRole="tablist"
+        className="mt-4 flex-row gap-6 border-b border-border px-4"
+      >
+        {TABS.map(({ id, label }) => {
+          const on = activeTab === id;
+          return (
+            <Pressable
+              key={id}
+              testID={`repo-picker-tab-${id}`}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: on }}
+              onPress={() => setActiveTab(id)}
+              className={`-mb-px min-h-[44px] justify-center border-b-2 ${
+                on ? "border-accent" : "border-transparent"
+              }`}
+            >
+              <Text
+                className={`text-xs uppercase tracking-[1.2px] ${
+                  on ? "text-foreground" : "text-subtle-foreground"
+                }`}
+                style={{ fontFamily: PIXEL_FONT }}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {activeTab === "my-repos" ? (
         <View className="flex-1">
-          <View className="px-4 pb-3 pt-3">
+          <View className="px-4 pb-3 pt-4">
             <TextInputRow
               testID="repo-picker-search"
               value={search}
@@ -290,86 +345,123 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
             onEndReached={() => {
               if (hasMore && !isLoading) void fetchMore();
             }}
-            renderItem={({ item }) => (
-              <Pressable
-                testID={`repo-picker-item-${item.full_name}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Select ${item.name}`}
-                onPress={() => handleSelectMyRepo(item)}
-                className="mb-2 min-h-[44px] flex-row items-center justify-between rounded border border-border bg-secondary/5 px-3 py-3 active:border-primary"
-              >
-                <View className="min-w-0 flex-1 pr-3">
+            renderItem={({ item }) => {
+              const [owner] = item.full_name.split("/");
+              return (
+                <Pressable
+                  testID={`repo-picker-item-${item.full_name}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${item.name}`}
+                  onPress={() => handleSelectMyRepo(item)}
+                  className="mb-1.5 min-h-[44px] gap-2 rounded-sm border border-border bg-background px-3.5 py-3 active:bg-secondary"
+                >
+                  <View className="flex-row items-center justify-between gap-3">
+                    <Text
+                      numberOfLines={1}
+                      className="min-w-0 flex-1 text-sm"
+                      style={{ fontFamily: PIXEL_FONT }}
+                    >
+                      <Text className="text-subtle-foreground">{owner}/</Text>
+                      <Text className="text-foreground">{item.name}</Text>
+                    </Text>
+                    <Text
+                      className="text-sm text-faint-foreground"
+                      style={{ fontFamily: PIXEL_FONT }}
+                    >
+                      →
+                    </Text>
+                  </View>
                   <Text
-                    className="text-sm font-semibold text-foreground"
-                    numberOfLines={1}
-                  >
-                    {item.name}
-                  </Text>
-                  <Text
-                    className="mt-0.5 text-xs text-muted-foreground"
+                    className="text-[13px] text-muted-foreground"
                     numberOfLines={1}
                   >
                     {item.description || "No description provided."}
                   </Text>
-                </View>
-                <View className="flex-row items-center gap-2">
-                  {item.language ? (
-                    <View className="rounded bg-secondary px-1.5 py-0.5">
-                      <Text className="font-mono text-[10px] text-muted-foreground">
-                        {item.language}
+                  <View className="flex-row flex-wrap items-center gap-2">
+                    {item.private ? (
+                      <View className="border border-warning/40 px-1.5 py-0.5">
+                        <Text
+                          className="text-[10px] uppercase tracking-[0.8px] text-warning"
+                          style={{ fontFamily: PIXEL_FONT }}
+                        >
+                          Private
+                        </Text>
+                      </View>
+                    ) : null}
+                    {item.language ? (
+                      <View className="border border-border px-1.5 py-0.5">
+                        <Text
+                          className="text-[10px] uppercase tracking-[0.8px] text-zinc-300"
+                          style={{ fontFamily: PIXEL_FONT }}
+                        >
+                          {item.language}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {item.updated_at ? (
+                      <Text
+                        className="text-[10px] uppercase tracking-[0.8px] text-faint-foreground"
+                        style={{ fontFamily: PIXEL_FONT }}
+                      >
+                        {`Pushed ${timeAgo(new Date(item.updated_at))}`}
                       </Text>
-                    </View>
-                  ) : null}
-                  {item.private ? (
-                    <View className="rounded-full bg-yellow-500/15 px-1.5 py-0.5">
-                      <Text className="text-[9px] font-bold uppercase tracking-wider text-yellow-500">
-                        Private
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-              </Pressable>
-            )}
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            }}
             ListEmptyComponent={
               isLoading ? (
-                <View className="items-center justify-center gap-2 py-10">
-                  <ActivityIndicator size="small" color={colors.primary} />
-                  <Text className="text-xs text-muted-foreground">
+                <Blink>
+                  <Text
+                    className="py-8 text-center text-xs uppercase tracking-[1.4px] text-muted-foreground"
+                    style={{ fontFamily: PIXEL_FONT }}
+                  >
                     Loading repositories...
                   </Text>
-                </View>
+                </Blink>
               ) : isError ? (
-                <View className="items-center justify-center gap-2 py-10">
-                  <Text className="text-center text-xs text-destructive">
-                    {error?.message ?? "Failed to load repositories"}
-                  </Text>
-                </View>
+                <Text
+                  accessibilityRole="alert"
+                  className="py-12 text-center text-sm text-red-300"
+                >
+                  {error?.message ?? "Failed to load repositories"}
+                </Text>
               ) : (
-                <View className="items-center justify-center py-12">
-                  <Text className="text-center text-xs italic text-muted-foreground">
-                    {search.trim()
-                      ? "No GitHub repositories match your search."
-                      : "No GitHub repositories found."}
-                  </Text>
-                </View>
+                <Text className="py-12 text-center text-sm text-muted-foreground">
+                  {search.trim()
+                    ? "No GitHub repositories match your search."
+                    : "No GitHub repositories found."}
+                </Text>
               )
             }
             ListFooterComponent={
               isLoading && repos.length > 0 ? (
-                <View className="items-center justify-center py-3">
-                  <ActivityIndicator size="small" color={colors.primary} />
-                </View>
+                <Blink>
+                  <Text
+                    className="py-4 text-center text-xs uppercase tracking-[1.4px] text-muted-foreground"
+                    style={{ fontFamily: PIXEL_FONT }}
+                  >
+                    Loading repositories...
+                  </Text>
+                </Blink>
               ) : null
             }
           />
         </View>
       ) : (
         <KeyboardAvoidingView
-          className="flex-1 justify-between px-4 py-4"
+          className="flex-1 justify-between gap-6 p-4"
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           style={{ paddingBottom: insets.bottom + 16 }}
         >
-          <View>
+          <View className="gap-2">
+            <Text
+              className="text-[11px] uppercase tracking-[1.4px] text-muted-foreground"
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              GitHub Repository URL
+            </Text>
             <TextInputRow
               testID="repo-picker-external-url"
               value={externalUrl}
@@ -383,20 +475,30 @@ export function RepoPickerModal({ onClose }: RepoPickerModalProps) {
               autoCorrect={false}
             />
             {externalError ? (
-              <Text className="mt-2 text-xs text-destructive">
-                {externalError}
+              <Text className="text-xs text-destructive">{externalError}</Text>
+            ) : (
+              <Text
+                className="text-[11px] uppercase tracking-[0.8px] text-subtle-foreground"
+                style={{ fontFamily: PIXEL_FONT }}
+              >
+                Public repositories only. For a private one, use the My
+                Repositories tab.
               </Text>
-            ) : null}
+            )}
           </View>
 
           <Pressable
             testID="repo-picker-external-continue"
             accessibilityRole="button"
+            accessibilityLabel="Continue"
             onPress={handleExternalSubmit}
-            className="min-h-[48px] w-full items-center justify-center rounded bg-primary"
+            className="min-h-[44px] items-center justify-center self-end rounded-sm bg-primary px-5 active:opacity-80"
           >
-            <Text className="text-sm font-semibold text-primary-foreground">
-              Continue
+            <Text
+              className="text-[13px] uppercase tracking-[0.8px] text-primary-foreground"
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              Continue →
             </Text>
           </Pressable>
         </KeyboardAvoidingView>
@@ -428,17 +530,17 @@ function TextInputRow({
   autoCorrect?: boolean;
 }) {
   return (
-    <View>
-      <TextInput
-        testID={testID}
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#71717b"
-        className="min-h-[44px] rounded border border-border bg-secondary/10 px-3 py-2.5 text-sm text-foreground"
-        {...rest}
-      />
-    </View>
+    <TextInput
+      testID={testID}
+      accessibilityLabel={placeholder}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={colors.faintForeground}
+      selectionColor={colors.accent}
+      className="h-[44px] rounded-sm border border-input bg-background px-3.5 text-sm text-foreground"
+      {...rest}
+    />
   );
 }
 

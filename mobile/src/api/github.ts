@@ -108,24 +108,26 @@ function hasServerDetail(body: unknown): boolean {
 /**
  * List the authenticated user's GitHub repositories, newest first.
  *
- * The name filter is applied by the *client*, not the server. The proxy
- * filters a GitHub page after fetching it, so a filtered page can come
- * back short while later pages still hold matches -- a server-side filter
- * cannot say "there is nothing more". Filtering the full list locally
- * keeps every match reachable.
+ * A non-empty ``search`` is sent as ``q``: the proxy scans the user's whole
+ * list for a case-insensitive name match and paginates the matches, so a
+ * short page is an exact end-of-list signal for a search too.
  *
  * @param page - 1-indexed page to fetch.
+ * @param search - Optional name substring; empty lists everything.
  * @param options - Test-friendly transport overrides.
  * @returns The repositories on that page.
  */
 export function getMyGitHubRepos(
   page: number = 1,
+  search: string = "",
   options: TestOptions = {},
 ): Promise<GitHubRepo[]> {
   const query = new URLSearchParams({
     page: page.toString(),
     per_page: GITHUB_REPOS_PER_PAGE.toString(),
   });
+  const term = search.trim();
+  if (term) query.set("q", term);
 
   return withGitHubMessage(
     apiGet<GitHubRepo[]>(`/api/v1/github/repos?${query.toString()}`, options),

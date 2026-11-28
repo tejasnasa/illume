@@ -45,9 +45,21 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("getMyGitHubRepos", () => {
+  it("sends a trimmed search term as q", async () => {
+    const fetchImpl = makeFetch(jsonResponse(200, []));
+    await getMyGitHubRepos(1, "  illume ", {
+      backendUrl: BACKEND,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const [url] = fetchImpl.mock.calls[0];
+    expect(url).toBe(
+      `${BACKEND}/api/v1/github/repos?page=1&per_page=${GITHUB_REPOS_PER_PAGE}&q=illume`,
+    );
+  });
+
   it("hits the proxy listing path with the page and page size", async () => {
     const fetchImpl = makeFetch(jsonResponse(200, []));
-    await getMyGitHubRepos(2, {
+    await getMyGitHubRepos(2, "", {
       backendUrl: BACKEND,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -60,7 +72,7 @@ describe("getMyGitHubRepos", () => {
 
   it("defaults to the first page", async () => {
     const fetchImpl = makeFetch(jsonResponse(200, []));
-    await getMyGitHubRepos(undefined, {
+    await getMyGitHubRepos(undefined, "", {
       backendUrl: BACKEND,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -72,7 +84,7 @@ describe("getMyGitHubRepos", () => {
   it("returns the parsed array on a 200 response", async () => {
     const repos = [{ full_name: "owner/name", name: "name" }];
     const fetchImpl = makeFetch(jsonResponse(200, repos));
-    const result = await getMyGitHubRepos(1, {
+    const result = await getMyGitHubRepos(1, "", {
       backendUrl: BACKEND,
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
@@ -82,7 +94,7 @@ describe("getMyGitHubRepos", () => {
   it("rewrites a 403 into the not-linked message", async () => {
     const fetchImpl = makeFetch(jsonResponse(403, { detail: "nope" }));
     await expect(
-      getMyGitHubRepos(1, {
+      getMyGitHubRepos(1, "", {
         backendUrl: BACKEND,
         fetchImpl: fetchImpl as unknown as typeof fetch,
       }),
@@ -98,7 +110,7 @@ describe("getMyGitHubRepos", () => {
       jsonResponse(404, { detail: "Repository not found on GitHub" }),
     );
     await expect(
-      getMyGitHubRepos(1, {
+      getMyGitHubRepos(1, "", {
         backendUrl: BACKEND,
         fetchImpl: fetchImpl as unknown as typeof fetch,
       }),
@@ -110,7 +122,7 @@ describe("getMyGitHubRepos", () => {
   it("falls back to a generic message when the server sent no detail", async () => {
     const fetchImpl = makeFetch(jsonResponse(502, {}));
     await expect(
-      getMyGitHubRepos(1, {
+      getMyGitHubRepos(1, "", {
         backendUrl: BACKEND,
         fetchImpl: fetchImpl as unknown as typeof fetch,
       }),
