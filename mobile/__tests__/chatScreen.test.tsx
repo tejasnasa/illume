@@ -1,297 +1,312 @@
 /**
- * Tests for the repository chat screen.
+ * Tests for the streaming chat screen.
  *
- * The screen is the reader's end of the conversation: a turn on the screen
- * with its question and its answer, the citations under it, and a failed
- * request that reads as a failure rather than as a crash. The transport
- * and the repository record are mocked, so what is under test is the
- * screen's own drawing.
+ * The transport is replaced by a scripted stream of events, so what is under
+ * test is the screen: the preset picker and its free-tier gating, the deep
+ * agent planner and worker lanes, the streamed answer with its citations,
+ * and conversations.
  */
 
 import React from "react";
-import { Linking } from "react-native";
-import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import RepoChatScreen from "@/app/(app)/repo/[id]/chat";
-import { getChatHistory, postChatQuestion } from "@/api/chat";
-import type Repository from "@/types/repository";
-import type { ChatSource } from "@/types/chat";
+import { streamAgentRun } from "@/api/agentStream";
+import type { StreamEvent } from "@/lib/agent/types";
 
 jest.mock("expo-router", () => ({
   useGlobalSearchParams: () => ({ id: "42" }),
   router: { push: jest.fn(), navigate: jest.fn(), replace: jest.fn() },
 }));
 
+jest.mock("@react-native-async-storage/async-storage", () => ({
+  __esModule: true,
+  default: {
+    getItem: jest.fn(async () => null),
+    setItem: jest.fn(async () => {}),
+  },
+}));
+
+const mockRepo = {
+  id: "repo-uuid-1",
+  name: "foo",
+  github_url: "https://github.com/example/foo",
+  status: "ready",
+  entry_points: null,
+  ingested_branch: "main",
+  ingested_commit_sha: "abcdef1234567890",
+};
+
+let mockUser: Record<string, unknown> = {};
+
 jest.mock("@/hooks/useRepositories", () => ({
-  useRepository: () => ({
-    data: mockRepo,
-    isLoading: false,
-    isError: false,
-  }),
+  useRepository: () => ({ data: mockRepo, isLoading: false, isError: false }),
 }));
 
 jest.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     loading: false,
-    token: "valid-jwt",
+    token: "jwt",
     user: mockUser,
     signIn: jest.fn(),
     signOut: jest.fn(),
-    refreshUser: jest.fn(),
+    refreshUser: jest.fn(async () => {}),
   }),
 }));
 
-jest.mock("@/api/chat", () => ({
-  getChatHistory: jest.fn(),
-  postChatQuestion: jest.fn(),
-  deleteChatMessage: jest.fn(),
-  clearChatHistory: jest.fn(),
+jest.mock("@/api/graph", () => ({
+  getGraph: jest.fn(async () => ({
+    nodes: [],
+    links: [],
+    metadata: { total_nodes: 0, total_edges: 0, clusters: 0 },
+  })),
 }));
 
-/**
- * The repository the screen is opened on.
- *
- * Declared with the ``mock`` prefix so the hoisted ``jest.mock`` factories
- * are allowed to close over it.
- */
-const mockRepo = {
-  id: "repo-uuid-1",
-  github_url: "https://github.com/example/foo",
-  name: "foo",
-  status: "ready",
-  architecture_summary: "A summary.",
-  repo_number: 42,
-  primary_language: "Python",
-  detected_stack: {
-    ci_cd: [],
-    databases: [],
-    languages: ["Python"],
-    frameworks: [],
-    infrastructure: [],
-  },
-  entry_points: null,
-  ingested_branch: "main",
-  ingested_commit_sha: "abcdef1234567890",
-  analysis_commit_sha: null,
-  created_at: new Date("2026-01-15T12:00:00Z"),
-  updated_at: new Date("2026-01-15T12:00:00Z"),
-  auto_update_enabled: true,
-  auto_update_interval_hours: 6,
-  next_sync_at: null,
-  last_synced_at: null,
-  sync_status: "idle",
-  last_sync_error: null,
-  consecutive_sync_failures: 0,
-  last_sync_summary: null,
-  sync_available: false,
-} as unknown as Repository;
+jest.mock("@/api/agentStream", () => ({
+  streamAgentRun: jest.fn(),
+}));
 
-/**
- * The reader: one with their own key, so the quota never gets in the way.
- */
-const mockUser = {
-  id: "user-1",
-  name: "Ada",
-  email: "ada@example.com",
-  avatar_url: null,
-  github_id: null,
-  ai_provider: null,
-  ai_model: null,
-  has_ai_key: true,
-  free_ingestions_used: 0,
-  free_chat_messages_used: 0,
-  free_ingestions_limit: 3,
-  free_chat_messages_limit: 10,
-};
+const mockList = jest.fn(async (): Promise<unknown[]> => []);
+jest.mock("@/api/conversations", () => ({
+  listConversations: () => mockList(),
+  renameConversation: jest.fn(async () => ({})),
+  deleteConversation: jest.fn(async () => ({})),
+  getConversationMessages: jest.fn(async () => []),
+  listAgentRuns: jest.fn(async () => []),
+  deleteChatTurn: jest.fn(async () => ({})),
+  getAnswerChanges: jest.fn(async () => ({
+    stale_paths: [],
+    commits: [],
+    compare_url: null,
+  })),
+}));
 
-const getChatHistoryMock = getChatHistory as jest.MockedFunction<
-  typeof getChatHistory
->;
-const postChatQuestionMock = postChatQuestion as jest.MockedFunction<
-  typeof postChatQuestion
->;
+const stream = streamAgentRun as jest.Mock;
 
-/**
- * The citation the stored turn carries.
- */
-const source: ChatSource = {
-  source_type: "symbol",
-  chunk_text: "def ingest_repository(repo_id): ...",
-  file_path: "app/tasks/ingest.py",
-  symbol_name: "ingest_repository",
-  start_line: 10,
-  end_line: 20,
-  commit_hash: null,
-  author_name: null,
-  pr_number: null,
-  pr_title: null,
-};
-
-/**
- * Build a stored history row.
- *
- * @param overrides - The fields the test cares about.
- * @returns The row.
- */
-function makeHistoryRow(overrides: Record<string, unknown> = {}) {
+function ev(
+  seq: number,
+  type: string,
+  data: Record<string, unknown> = {},
+  worker: string | null = null,
+): StreamEvent {
   return {
-    id: "turn-1",
-    repository_id: "repo-uuid-1",
-    user_id: "user-1",
-    question: "What does the pipeline do?",
-    answer: "It clones the repo, then parses it.",
-    sources: [source],
-    created_at: "2026-01-15T12:00:00Z",
-    ...overrides,
-  } as Awaited<ReturnType<typeof getChatHistory>>[number];
+    seq,
+    ts: "2026-01-01T00:00:00Z",
+    run_id: "run-1",
+    worker_id: worker,
+    type,
+    data,
+  };
 }
 
-/**
- * Render the chat screen.
- *
- * @returns The rendered screen.
- */
+const FREE_USER = {
+  id: "u",
+  has_ai_key: false,
+  free_chat_messages_used: 1,
+  free_chat_messages_limit: 10,
+};
+const OWN_KEY_USER = { ...FREE_USER, has_ai_key: true, ai_supports_tools: true };
+
 async function renderScreen() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-
-  const screen = await render(
-    <SafeAreaProvider
-      initialMetrics={{
-        frame: { x: 0, y: 0, width: 390, height: 844 },
-        insets: { top: 47, left: 0, right: 0, bottom: 34 },
-      }}
-    >
-      <QueryClientProvider client={queryClient}>
-        <RepoChatScreen />
-      </QueryClientProvider>
-    </SafeAreaProvider>,
-  );
-
-  // The list schedules a cell-measurement timer of its own. Letting it
-  // fire inside ``act`` keeps the update from being reported as one that
-  // escaped the test.
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await render(
+      <SafeAreaProvider
+        initialMetrics={{
+          frame: { x: 0, y: 0, width: 360, height: 800 },
+          insets: { top: 0, left: 0, right: 0, bottom: 0 },
+        }}
+      >
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <RepoChatScreen />
+        </QueryClientProvider>
+      </SafeAreaProvider>,
+    );
   });
+}
 
-  return screen;
+async function ask(text: string) {
+  await fireEvent.changeText(screen.getByTestId("chat-input"), text);
+  await act(async () => {
+    await fireEvent.press(screen.getByTestId("chat-send"));
+  });
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
-  getChatHistoryMock.mockResolvedValue([makeHistoryRow()]);
-  postChatQuestionMock.mockResolvedValue({
-    id: "turn-2",
-    answer: "It clones the repo, then parses it.",
-    sources: [],
+  stream.mockReset();
+  mockList.mockClear();
+  mockUser = OWN_KEY_USER;
+});
+
+describe("preset picker", () => {
+  it("offers both deep agent presets and Auto with an own key", async () => {
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId("preset-picker"));
+    for (const id of ["auto", "classic", "hybrid", "deep_agent", "deep_agent_workers"]) {
+      expect(screen.getByTestId(`preset-${id}`).props.accessibilityState.disabled).toBe(false);
+    }
+  });
+
+  it("disables Auto and the deep agent presets on the free tier, with a reason", async () => {
+    mockUser = FREE_USER;
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId("preset-picker"));
+    for (const id of ["auto", "deep_agent", "deep_agent_workers"]) {
+      expect(screen.getByTestId(`preset-${id}`).props.accessibilityState.disabled).toBe(true);
+      expect(screen.getByTestId(`preset-reason-${id}`)).toBeTruthy();
+    }
+    expect(screen.getByTestId("preset-classic").props.accessibilityState.disabled).toBe(false);
+  });
+
+  it("starts on the strongest preset the account can run", async () => {
+    await renderScreen();
+    expect(screen.getByText("Deep agent")).toBeTruthy();
   });
 });
 
-describe("RepoChatScreen", () => {
-  it("shows the question and the answer of a turn", async () => {
-    const screen = await renderScreen();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("chat-bubble")).toBeTruthy();
+describe("a deep agent run with workers", () => {
+  it("sends the chosen preset and renders the planner and numbered workers", async () => {
+    stream.mockImplementation(async (_repo, request, onEvent) => {
+      expect(request.preset).toBe("deep_agent");
+      onEvent(
+        ev(1, "run_started", {
+          preset: "deep_agent_workers",
+          model: "m",
+          config_hash: "h",
+          execution: "x",
+        }),
+      );
+      onEvent(
+        ev(2, "plan", {
+          subquestions: [
+            { id: "w1", question: "How is login handled?" },
+            { id: "w2", question: "Where are tokens stored?" },
+          ],
+        }),
+      );
+      onEvent(ev(3, "worker_started", { worker_id: "w1", question: "How is login handled?" }, "w1"));
+      onEvent(ev(4, "worker_started", { worker_id: "w2", question: "Where are tokens stored?" }, "w2"));
+      onEvent(
+        ev(5, "tool_call", { call_id: "c1", tool: "grep_code", arguments: '{"pattern":"login"}' }, "w1"),
+      );
+      onEvent(ev(6, "worker_done", { worker_id: "w1", status: "completed" }, "w1"));
+      onEvent(ev(7, "worker_done", { worker_id: "w2", status: "completed" }, "w2"));
+      onEvent(ev(8, "answer_delta", { text: "Login is in auth.py [F:app/auth.py:1-9]." }));
+      onEvent(
+        ev(9, "done", {
+          run_id: "run-1",
+          status: "completed",
+          answer: "Login is in auth.py [F:app/auth.py:1-9].",
+          citations: [
+            {
+              key: "F:app/auth.py:1-9",
+              source_type: "symbol",
+              chunk_text: "def login(): ...",
+              file_path: "app/auth.py",
+              symbol_name: "login",
+              start_line: 1,
+              end_line: 9,
+            },
+          ],
+          conversation_id: "conv-1",
+          chat_message_id: "msg-1",
+          usage: { input_tokens: 1200, output_tokens: 300, tool_calls: 1, elapsed_seconds: 12 },
+        }),
+      );
+      return null;
     });
 
-    expect(screen.getByText("What does the pipeline do?")).toBeTruthy();
-    expect(
-      screen.getByText("It clones the repo, then parses it."),
-    ).toBeTruthy();
+    await renderScreen();
+    await ask("How does auth work?");
+
+    await waitFor(() => expect(screen.getByTestId("answer")).toBeTruthy());
+    expect(screen.getByTestId("row-plan")).toBeTruthy();
+    expect(screen.getByText("Split into 2 parts, worked on in parallel")).toBeTruthy();
+    expect(screen.getByText("#1")).toBeTruthy();
+    expect(screen.getByText("#2")).toBeTruthy();
+    expect(screen.getByText("How is login handled?")).toBeTruthy();
+    expect(screen.getByText("Where are tokens stored?")).toBeTruthy();
+    expect(screen.getByText(/1.2k in/)).toBeTruthy();
+    // The finished turn refreshes the conversation list.
+    await waitFor(() => expect(mockList.mock.calls.length).toBeGreaterThan(1));
   });
 
-  it("cites the sources of the answer", async () => {
-    const screen = await renderScreen();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("citation-card-0")).toBeTruthy();
+  it("opens a cited source when its key is tapped", async () => {
+    stream.mockImplementation(async (_r, _q, onEvent) => {
+      onEvent(ev(1, "run_started", { preset: "deep_agent" }));
+      onEvent(
+        ev(2, "done", {
+          run_id: "run-1",
+          answer: "See [F:app/auth.py:1-9].",
+          citations: [
+            {
+              key: "F:app/auth.py:1-9",
+              source_type: "symbol",
+              chunk_text: "def login(): ...",
+              file_path: "app/auth.py",
+              symbol_name: "login",
+              start_line: 1,
+              end_line: 9,
+            },
+          ],
+        }),
+      );
+      return null;
     });
+    await renderScreen();
+    await ask("q");
+    await waitFor(() => expect(screen.getByTestId("cite-F:app/auth.py:1-9")).toBeTruthy());
+    await fireEvent.press(screen.getByTestId("cite-F:app/auth.py:1-9"));
+    expect(screen.getByTestId("opened-citation")).toBeTruthy();
+  });
+});
 
-    expect(screen.getByText("Sources Cited (1)")).toBeTruthy();
-    expect(screen.getByTestId("citation-card-0-title")).toHaveTextContent(
-      "ingest_repository",
-    );
+describe("failures", () => {
+  it("shows a refusal message and a link to add a key on a 402", async () => {
+    mockUser = FREE_USER;
+    stream.mockResolvedValue({ status: 402, message: "Free chat used up" });
+    await renderScreen();
+    await fireEvent.press(screen.getByTestId("preset-picker"));
+    await fireEvent.press(screen.getByTestId("preset-classic"));
+    await ask("q");
+    await waitFor(() => expect(screen.getByText("Free chat used up")).toBeTruthy());
+    expect(screen.getByText("Add your own API key")).toBeTruthy();
   });
 
-  it("reveals the chunk text when a citation is expanded", async () => {
-    const screen = await renderScreen();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("citation-card-0")).toBeTruthy();
+  it("marks a stream that ends with no terminal event as connection lost", async () => {
+    stream.mockImplementation(async (_r, _q, onEvent) => {
+      onEvent(ev(1, "run_started", { preset: "deep_agent" }));
+      return null;
     });
-
-    expect(screen.queryByTestId("citation-card-0-chunk")).toBeNull();
-
-    await fireEvent.press(screen.getByTestId("citation-card-0-toggle"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("citation-card-0-chunk")).toBeTruthy();
-    });
-    expect(screen.getByTestId("citation-card-0-chunk")).toHaveTextContent(
-      "def ingest_repository(repo_id): ...",
-    );
+    await renderScreen();
+    await ask("q");
+    await waitFor(() => expect(screen.getByText(/Connection lost/)).toBeTruthy());
   });
 
-  it("links a citation to the commit the repository was ingested at", async () => {
-    const openUrl = jest
-      .spyOn(Linking, "openURL")
-      .mockImplementation(async () => true);
+  it("marks a dropped connection as connection lost", async () => {
+    stream.mockRejectedValue(new Error("socket closed"));
+    await renderScreen();
+    await ask("q");
+    await waitFor(() => expect(screen.getByText(/Connection lost/)).toBeTruthy());
+  });
+});
 
-    const screen = await renderScreen();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("citation-card-0-github")).toBeTruthy();
+describe("composer", () => {
+  it("shows suggestions on an empty chat and asks one when tapped", async () => {
+    stream.mockResolvedValue(null);
+    await renderScreen();
+    const suggestions = screen.getAllByTestId("chat-suggestion");
+    expect(suggestions).toHaveLength(3);
+    await act(async () => {
+      await fireEvent.press(suggestions[0]);
     });
-
-    await fireEvent.press(screen.getByTestId("citation-card-0-github"));
-
-    expect(openUrl).toHaveBeenCalledWith(
-      "https://github.com/example/foo/blob/abcdef1234567890/app/tasks/ingest.py#L10-L20",
-    );
-
-    openUrl.mockRestore();
+    expect(stream).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a failed request as a failed turn", async () => {
-    postChatQuestionMock.mockRejectedValue(new Error("network down"));
-
-    const screen = await renderScreen();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("chat-bubble")).toBeTruthy();
-    });
-
-    await fireEvent.changeText(
-      screen.getByTestId("chat-input"),
-      "And the glossary?",
-    );
-    await fireEvent.press(screen.getByTestId("chat-send"));
-
-    await waitFor(() => {
-      expect(screen.getByTestId("chat-bubble-error")).toBeTruthy();
-    });
-
-    expect(screen.getByText("Failed to get response. Try again.")).toBeTruthy();
-  });
-
-  it("shows the empty state until something is asked", async () => {
-    getChatHistoryMock.mockResolvedValue([]);
-
-    const screen = await renderScreen();
-
-    await waitFor(() => {
-      expect(screen.getByTestId("chat-empty")).toBeTruthy();
-    });
-
-    expect(
-      screen.getByText(
-        "Ask questions about the architecture, logic, or ownership.",
-      ),
-    ).toBeTruthy();
+  it("blocks sending when the free allowance is spent", async () => {
+    mockUser = { ...FREE_USER, free_chat_messages_used: 10 };
+    await renderScreen();
+    expect(screen.getByTestId("chat-send").props.accessibilityState.disabled).toBe(true);
   });
 });

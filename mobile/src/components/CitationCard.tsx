@@ -246,7 +246,7 @@ export function CitationCard({
             className="mr-2 h-6 w-6 items-center justify-center rounded"
             style={{ backgroundColor: `${config.color}1a` }}
           >
-            <Text className="text-[11px] font-bold" style={{ color: config.color }}>
+            <Text className="text-[11px] font-sans-bold" style={{ color: config.color }}>
               {config.glyph}
             </Text>
           </View>
@@ -254,7 +254,7 @@ export function CitationCard({
           <View className="flex-1">
             <Text
               testID={`${testID}-title`}
-              className="text-xs font-bold text-foreground"
+              className="text-xs font-sans-bold text-foreground"
               numberOfLines={1}
             >
               {primary}
