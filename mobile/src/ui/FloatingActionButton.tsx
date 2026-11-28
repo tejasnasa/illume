@@ -9,13 +9,15 @@
  * both off the thumb's arc and competing with the "Your Indexed Libraries"
  * heading for space.
  *
- * The button keeps a 56pt touch target (the Material FAB size) and sits
+ * The button is a 56pt square in the primary colour with a pink border, like
+ * the repository dock's Ask button, and sits
  * above the bottom safe-area inset so it never lands under the gesture
  * bar or the home indicator.
  */
 
 import { Pressable, Text, View } from "react-native";
 
+import { PIXEL_FONT } from "@/lib/fonts";
 import { colors } from "@/theme/tokens";
 
 /** Props for the floating action button. */
@@ -34,11 +36,11 @@ export interface FloatingActionButtonProps {
   testID?: string;
 }
 
-/** Diameter of the button, in points. */
+/** Side of the button, in points. */
 const SIZE = 56;
 
 /**
- * Render a circular floating action button.
+ * Render a square floating action button.
  *
  * @param props - Button configuration.
  * @returns The rendered button.
@@ -62,32 +64,24 @@ export function FloatingActionButton({
         accessibilityLabel={accessibilityLabel}
         onPress={onPress}
         android_ripple={{ color: "rgba(255, 255, 255, 0.2)" }}
-        style={({ pressed }) => [
-          {
-            width: SIZE,
-            height: SIZE,
-            borderRadius: SIZE / 2,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: colors.primary,
-            // A soft elevation so the button reads as floating above the
-            // list rather than being painted into it.
-            elevation: 8,
-            shadowColor: "#000000",
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            shadowOffset: { width: 0, height: 4 },
-            opacity: pressed ? 0.85 : 1,
-          },
-        ]}
+        style={({ pressed }) => ({
+          width: SIZE,
+          height: SIZE,
+          borderRadius: 6,
+          borderWidth: 2,
+          borderColor: colors.accent,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.primary,
+          opacity: pressed ? 0.85 : 1,
+        })}
       >
         <Text
-          className="font-light"
           style={{
+            fontFamily: PIXEL_FONT,
             color: colors.primaryForeground,
-            fontSize: 30,
-            lineHeight: 34,
-            marginTop: -2,
+            fontSize: 28,
+            lineHeight: 32,
           }}
         >
           {glyph}

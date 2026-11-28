@@ -100,7 +100,7 @@ export function RepoStatusView({
           )}
           <Text
             testID="repo-status-headline"
-            className={`text-lg font-bold uppercase tracking-wide ${
+            className={`font-pixel text-lg uppercase tracking-[1px] ${
               failed ? "text-destructive" : "text-chart-1"
             }`}
           >
@@ -123,7 +123,7 @@ export function RepoStatusView({
 
       {failed ? null : (
         <View className="rounded border border-border p-4">
-          <Text className="mb-3 text-[11px] font-bold uppercase tracking-[2px] text-muted-foreground opacity-60">
+          <Text className="mb-3 text-[11px] font-pixel uppercase tracking-[2px] text-muted-foreground opacity-60">
             Pipeline
           </Text>
 

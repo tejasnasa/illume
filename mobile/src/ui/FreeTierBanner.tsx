@@ -17,6 +17,7 @@
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 
+import { PIXEL_FONT, SANS_FONT } from "@/lib/fonts";
 import {
   resolveFreeTierMessage,
   shouldShowFreeTierBanner,
@@ -49,18 +50,20 @@ export function FreeTierBanner({
 
   const palette =
     tone === "primary"
-      ? "border-primary/30 bg-primary/10"
-      : "border-primary/20 bg-secondary/30";
+      ? "border-accent/30 bg-primary/10"
+      : "border-border bg-card";
 
   return (
     <View
       testID={testID}
       accessibilityRole="text"
       accessibilityLabel={title}
-      className={`mb-3 items-center justify-center rounded border p-5 ${palette}`}
+      className={`mb-3 gap-3 rounded-sm border p-4 ${palette}`}
     >
-      <Text className="text-center text-[40px] opacity-40">✦</Text>
-      <Text className="mb-2 mt-1 text-center text-base font-semibold text-foreground">
+      <Text
+        className="text-sm leading-[21px] text-foreground"
+        style={{ fontFamily: SANS_FONT }}
+      >
         {title}
       </Text>
       <Pressable
@@ -68,9 +71,14 @@ export function FreeTierBanner({
         accessibilityRole="link"
         accessibilityLabel={ctaLabel}
         onPress={() => router.push("/(app)/settings")}
-        className="min-h-[44px] shrink-0 justify-center rounded border border-border px-4 py-3"
+        className="min-h-[44px] self-start justify-center rounded-sm border border-border-strong px-4 active:bg-secondary"
       >
-        <Text className="text-xs font-semibold text-primary">{ctaLabel}</Text>
+        <Text
+          className="text-xs uppercase tracking-[1px] text-accent"
+          style={{ fontFamily: PIXEL_FONT }}
+        >
+          {ctaLabel}
+        </Text>
       </Pressable>
     </View>
   );

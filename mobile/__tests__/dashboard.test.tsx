@@ -67,10 +67,12 @@ jest.mock("expo-router", () => {
  */
 function makeRepo(overrides: Partial<Repository> = {}): Repository {
   const now = new Date("2026-01-15T12:00:00Z");
+  const name = overrides.name ?? "foo";
   return {
     id: "repo-1",
-    github_url: "https://github.com/example/foo",
-    name: "foo",
+    // The card reads the name from the URL, like the web client's.
+    github_url: `https://github.com/example/${name}`,
+    name,
     status: "ready",
     architecture_summary:
       "A small example repository used by the dashboard tests.",

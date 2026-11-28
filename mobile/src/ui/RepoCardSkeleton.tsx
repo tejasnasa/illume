@@ -79,44 +79,41 @@ export function RepoCardSkeleton({
       testID={testID}
       accessibilityLabel="Loading repository"
       accessibilityRole="progressbar"
-      className="mb-3 overflow-hidden rounded border border-border p-4"
+      className="mb-3 overflow-hidden rounded-sm border border-border bg-card"
     >
-      <View className="mb-3">
-        <View className="h-[22px] w-3/5 overflow-hidden rounded bg-muted">
+      <View className="h-[112px] border-b border-border bg-[#060608]" />
+
+      <View className="gap-3 p-4">
+        <View className="h-[24px] w-3/5 overflow-hidden rounded-sm bg-muted">
           <Animated.View
             style={[sweepBarStyle.sweep, sweepBarStyle.sweepTitle, sweepStyle]}
           />
         </View>
-      </View>
 
-      <View className="mb-3 mt-2 h-[18px] w-[100px] overflow-hidden rounded-full bg-muted">
-        <Animated.View
-          style={[sweepBarStyle.sweep, sweepBarStyle.sweepStatus, sweepStyle]}
-        />
-      </View>
-
-      <View className="mb-2 h-[14px] w-full overflow-hidden rounded bg-muted">
-        <Animated.View
-          style={[sweepBarStyle.sweep, sweepBarStyle.sweepLine, sweepStyle]}
-        />
-      </View>
-
-      <View className="mb-2 h-[14px] w-[70%] overflow-hidden rounded bg-muted">
-        <Animated.View
-          style={[sweepBarStyle.sweep, sweepBarStyle.sweepLine, sweepStyle]}
-        />
-      </View>
-
-      <View className="mt-2 flex-row gap-1">
-        <View className="h-[18px] w-[60px] overflow-hidden rounded bg-muted">
-          <Animated.View
-            style={[sweepBarStyle.sweep, sweepBarStyle.sweepChip, sweepStyle]}
-          />
+        <View className="gap-2">
+          <View className="h-[14px] w-full overflow-hidden rounded-sm bg-muted">
+            <Animated.View
+              style={[sweepBarStyle.sweep, sweepBarStyle.sweepLine, sweepStyle]}
+            />
+          </View>
+          <View className="h-[14px] w-[70%] overflow-hidden rounded-sm bg-muted">
+            <Animated.View
+              style={[sweepBarStyle.sweep, sweepBarStyle.sweepLine, sweepStyle]}
+            />
+          </View>
         </View>
-        <View className="h-[18px] w-[60px] overflow-hidden rounded bg-muted">
-          <Animated.View
-            style={[sweepBarStyle.sweep, sweepBarStyle.sweepChip, sweepStyle]}
-          />
+
+        <View className="flex-row gap-1.5">
+          <View className="h-[24px] w-[64px] overflow-hidden rounded-[3px] bg-muted">
+            <Animated.View
+              style={[sweepBarStyle.sweep, sweepBarStyle.sweepChip, sweepStyle]}
+            />
+          </View>
+          <View className="h-[24px] w-[64px] overflow-hidden rounded-[3px] bg-muted">
+            <Animated.View
+              style={[sweepBarStyle.sweep, sweepBarStyle.sweepChip, sweepStyle]}
+            />
+          </View>
         </View>
       </View>
     </View>
@@ -138,7 +135,6 @@ const sweepBarStyle = {
     opacity: 0.45,
   },
   sweepTitle: { opacity: 0.55 },
-  sweepStatus: { opacity: 0.45 },
   sweepLine: { opacity: 0.45 },
   sweepChip: { opacity: 0.45 },
 };

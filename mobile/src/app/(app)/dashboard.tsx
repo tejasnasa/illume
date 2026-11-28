@@ -24,13 +24,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { FlatList, Pressable, RefreshControl, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
 import { useRepositories } from "@/hooks/useRepositories";
 import { useAuth } from "@/hooks/useAuth";
 import { isReadyStatus } from "@/lib/repoStatus";
+import { STATUS_FILTERS, countLine, filterRepos, type StatusFilter } from "@/lib/repoFilter";
 import { RepoCard } from "@/ui/RepoCard";
 import { RepoCardSkeleton } from "@/ui/RepoCardSkeleton";
 import { DashboardEmptyState } from "@/ui/DashboardEmptyState";
@@ -56,16 +57,22 @@ export default function DashboardScreen() {
   const { signOut, user } = useAuth();
   const insets = useSafeAreaInsets();
 
-  const repositories = useMemo(() => data ?? [], [data]);
+  const allRepositories = useMemo(() => data ?? [], [data]);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const repositories = useMemo(
+    () => filterRepos(allRepositories, query, statusFilter),
+    [allRepositories, query, statusFilter],
+  );
 
   // The interval only has to run when at least one repository is not in a
   // terminal state; once everything has settled it is switched off.
   useEffect(() => {
-    const anyInFlight = repositories.some(
+    const anyInFlight = allRepositories.some(
       (repo) => !isReadyStatus(repo.status) && repo.status !== "failed",
     );
     setPollWhileIngesting(anyInFlight);
-  }, [repositories]);
+  }, [allRepositories]);
 
   const onRepoPress = useCallback((repo: { repo_number: number }) => {
     router.push(`/(app)/repo/${repo.repo_number}`);
@@ -86,13 +93,13 @@ export default function DashboardScreen() {
 
   // ``isLoading`` is the first fetch; subsequent lists are background
   // refetches and should not blank the screen.
-  const showInitialSkeleton = isLoading && repositories.length === 0;
+  const showInitialSkeleton = isLoading && allRepositories.length === 0;
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1">
       <FlatList
         testID="dashboard-list"
-        className="flex-1 bg-background"
+        className="flex-1"
         contentContainerStyle={{
           paddingTop: 24 + insets.top,
           // The floating action button floats over the bottom of the
@@ -129,11 +136,17 @@ export default function DashboardScreen() {
           <View className="mb-4">
             <View className="flex-row items-start justify-between gap-3">
               <View className="min-w-0 flex-1">
-                <Text className="text-[32px] font-extrabold tracking-tight text-foreground">
-                  Dashboard
+                <Text className="font-pixel text-[13px] tracking-[1px] text-subtle-foreground">
+                  <Text className="text-accent">&gt;</Text> illume ls_
                 </Text>
-                <Text className="mt-2 text-base text-muted-foreground">
-                  Manage and explore your indexed codebases.
+                <Text className="mt-2 text-[30px] font-sans-medium leading-[36px] text-foreground">
+                  Your <Text className="font-pixel text-accent">repositories</Text>
+                </Text>
+                <Text
+                  testID="dashboard-count"
+                  className="mt-2 font-pixel text-xs uppercase tracking-[1px] text-muted-foreground"
+                >
+                  {countLine(allRepositories)}
                 </Text>
               </View>
               <View className="flex-row items-center">
@@ -150,9 +163,9 @@ export default function DashboardScreen() {
                   accessibilityLabel="Open settings"
                   testID="dashboard-settings"
                   hitSlop={8}
-                  className="mr-1 rounded px-2.5 py-1.5 active:bg-secondary"
+                  className="mr-1 rounded-sm px-2.5 py-1.5 active:bg-secondary"
                 >
-                  <Text className="text-sm font-semibold text-foreground">
+                  <Text className="font-pixel text-xs uppercase text-foreground">
                     Settings
                   </Text>
                 </Pressable>
@@ -162,9 +175,9 @@ export default function DashboardScreen() {
                   accessibilityLabel="Log out"
                   testID="dashboard-logout"
                   hitSlop={8}
-                  className="rounded px-2.5 py-1.5 active:bg-secondary"
+                  className="rounded-sm px-2.5 py-1.5 active:bg-secondary"
                 >
-                  <Text className="text-sm font-semibold text-foreground">
+                  <Text className="font-pixel text-xs uppercase text-foreground">
                     Log out
                   </Text>
                 </Pressable>
@@ -173,16 +186,53 @@ export default function DashboardScreen() {
 
             <FreeTierBanner user={user} />
 
-            <Text className="mt-6 text-[11px] font-bold uppercase tracking-[2px] text-muted-foreground opacity-60">
-              Your Indexed Libraries
-            </Text>
+            {allRepositories.length > 0 ? (
+              <View className="mt-5 gap-3">
+                <TextInput
+                  testID="dashboard-search"
+                  accessibilityLabel="Search repositories"
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="Search repositories…"
+                  placeholderTextColor={colors.faintForeground}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  className="h-11 rounded-sm border border-border bg-card px-3 text-sm text-foreground"
+                />
+                <View className="flex-row flex-wrap gap-1.5">
+                  {STATUS_FILTERS.map((filter) => {
+                    const on = statusFilter === filter.value;
+                    return (
+                      <Pressable
+                        key={filter.value}
+                        testID={`dashboard-filter-${filter.value}`}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: on }}
+                        onPress={() => setStatusFilter(filter.value)}
+                        className={`min-h-[36px] justify-center rounded-sm border px-3 ${
+                          on ? "border-accent bg-accent/10" : "border-border"
+                        }`}
+                      >
+                        <Text
+                          className={`font-pixel text-xs uppercase tracking-[1px] ${
+                            on ? "text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          {filter.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
           </View>
         }
         ListEmptyComponent={
           !showInitialSkeleton ? (
             isError ? (
               <View className="min-h-[120px] items-center justify-center gap-2 rounded border border-destructive bg-destructive/5 p-6">
-                <Text className="text-base font-bold text-destructive">
+                <Text className="text-base font-pixel text-destructive">
                   Couldn't load repositories
                 </Text>
                 <Text className="text-center text-[13px] text-muted-foreground">
@@ -195,13 +245,22 @@ export default function DashboardScreen() {
                   onPress={handleRefresh}
                   className="mt-2 min-h-[44px] justify-center rounded border border-border px-4 py-2 active:bg-secondary"
                 >
-                  <Text className="text-sm font-semibold text-foreground">
+                  <Text className="text-sm font-sans-semibold text-foreground">
                     Try again
                   </Text>
                 </Pressable>
               </View>
             ) : (
-              <DashboardEmptyState />
+              allRepositories.length > 0 ? (
+                <Text
+                  testID="dashboard-no-match"
+                  className="rounded-md border border-dashed border-input p-10 text-center font-pixel text-sm text-muted-foreground"
+                >
+                  No repositories match.
+                </Text>
+              ) : (
+                <DashboardEmptyState />
+              )
             )
           ) : null
         }

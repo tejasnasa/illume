@@ -326,3 +326,59 @@ export function statusTone(
   if (isFailedStatus(status)) return "destructive";
   return "pending";
 }
+
+/** How a repository's status is presented as a dot and a short label. */
+export interface StatusView {
+  /** The coarse state: indexed, still being ingested, or failed. */
+  kind: "ready" | "ingesting" | "failed";
+  /** The label, in sentence case. */
+  label: string;
+  /** The dot and label colour. */
+  color: string;
+}
+
+/**
+ * Map a repository status to the dot and label the web cards show.
+ *
+ * Every status that is neither ``ready`` nor ``failed`` is an ingest still
+ * in progress.
+ *
+ * @param status - The repository's ``status`` field.
+ * @returns The state, label and colour.
+ */
+export function statusView(status: string | null | undefined): StatusView {
+  if (isReadyStatus(status)) {
+    return { kind: "ready", label: "Ready", color: "#22c55e" };
+  }
+  if (isFailedStatus(status)) {
+    return { kind: "failed", label: "Failed", color: "#ef4444" };
+  }
+  return { kind: "ingesting", label: "Ingesting", color: "#f6339a" };
+}
+
+/**
+ * Describe the background-update state shown on cards.
+ *
+ * @param repo - The repository's auto-update fields.
+ * @returns The label, its dot colour, and whether the dot should pulse.
+ */
+export function syncView(repo: {
+  auto_update_enabled: boolean;
+  sync_status: string;
+  auto_update_interval_hours: number;
+}): { label: string; color: string; live: boolean } {
+  if (!repo.auto_update_enabled) {
+    return { label: "Auto-update off", color: "#3f3f46", live: false };
+  }
+  if (isSyncActive(repo.sync_status)) {
+    return { label: "Updating", color: "#53eafd", live: true };
+  }
+  if (repo.sync_status === "failed") {
+    return { label: "Update failed", color: "#ef4444", live: false };
+  }
+  return {
+    label: `Auto-update · ${repo.auto_update_interval_hours}h`,
+    color: "#00b8db",
+    live: false,
+  };
+}

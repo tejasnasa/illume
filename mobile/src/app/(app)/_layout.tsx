@@ -19,7 +19,7 @@ export default function AppLayout() {
     return (
       <View className="flex-1 items-center justify-center bg-background">
         <ActivityIndicator size="large" color={colors.foreground} />
-        <Text className="mt-4 text-2xl font-bold text-foreground">Illume</Text>
+        <Text className="mt-4 text-2xl font-pixel text-foreground">Illume</Text>
       </View>
     );
   }

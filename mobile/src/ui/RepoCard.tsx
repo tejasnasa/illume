@@ -1,28 +1,31 @@
 /**
- * Repository overview card with status, summary, and detected stack.
+ * Repository card for the dashboard, in every ingestion state.
  *
  * @module RepoCard
  *
- * Port of ``client/src/components/ui/RepoCard.tsx``. The web version
- * relied on CSS features that have no React Native equivalent
- * (``glass-card``'s backdrop-filter, ``line-clamp-4``), so the visual
- * structure carries over but the surface and truncation are simple
- * RN primitives. The summary string stays as the server returns it --
- * the backend already truncates ``architecture_summary`` so the card
- * renders the same text regardless of viewport size.
+ * Port of ``client/src/components/ui/RepoCard.tsx``. A picture of the
+ * repository's own graph on top with the status and primary language laid
+ * over it, then the owner and name in the pixel font, the branch and short
+ * commit it was read at, a body that depends on the state (progress while
+ * ingesting, a notice when failed, the architecture summary when ready),
+ * the detected stack, and a footer with the auto-update state and the time
+ * of the last change.
  *
- * Styling uses NativeWind ``className``. The status pill swaps colour
- * through Tailwind's ``bg-*-500/10`` opacity syntax; the activity
- * spinner and conditional summary placeholder keep their inline native
- * ``style`` because they need dynamic values that are awkward to
- * express as class strings.
+ * The whole card is one ``Pressable``; the parent decides what ``onPress``
+ * does (the dashboard navigates to the repository shell).
  */
 
 import { useMemo } from "react";
-import { Pressable, Text, View, ActivityIndicator } from "react-native";
-import type Repository from "@/types/repository";
+import { Pressable, Text, View } from "react-native";
+
+import { PIXEL_FONT } from "@/lib/fonts";
+import { splitRepoName } from "@/lib/repoName";
+import { statusView, syncView } from "@/lib/repoStatus";
 import { timeAgo } from "@/lib/timeAgo";
 import { colors } from "@/theme/tokens";
+import { Blink } from "@/ui/Blink";
+import { RepoThumb } from "@/ui/RepoThumb";
+import type Repository from "@/types/repository";
 
 export interface RepoCardProps {
   /** The repository record rendered by this card. */
@@ -31,162 +34,240 @@ export interface RepoCardProps {
   onPress?: (repo: Repository) => void;
 }
 
+/** The coarse statuses an ingest moves through, in order. */
+const INGEST_STEPS = ["pending", "cloning", "parsing", "embedding"] as const;
+
+/** What each step is doing, in words. */
+const STEP_LABEL: Record<string, string> = {
+  pending: "Queued",
+  cloning: "Fetching the repository",
+  parsing: "Parsing and mapping files",
+  embedding: "Writing the guide",
+};
+
+/** The most stack labels a card shows. */
+const MAX_STACK = 4;
+
+/** A square status dot that pulses while the thing it describes is live. */
+function Dot({ color, live }: { color: string; live: boolean }) {
+  return (
+    <Blink active={live}>
+      <View style={{ width: 6, height: 6, backgroundColor: color }} />
+    </Blink>
+  );
+}
+
 /**
- * Renders a tap-target summarising one repository's ingestion state.
+ * Render a tap-target summarising one repository.
  *
- * The whole surface is one ``Pressable``; the parent decides what
- * ``onPress`` does (the dashboard navigates to the repo shell). The
- * web card's open-in-browser GitHub icon is dropped here -- deep-linking
- * to a URL on RN hands control to the system browser which is rarely
- * what the user wants from a tile that already leads to a richer
- * in-app view.
+ * @param props - The repository and the press handler.
+ * @returns The card.
  */
 export function RepoCard({ repo, onPress }: RepoCardProps) {
-  const isReady = repo.status === "ready";
-  const isFailed = repo.status === "failed";
-  const isPending = !isReady && !isFailed;
+  const view = statusView(repo.status);
+  const sync = syncView(repo);
+  const { owner, name } = splitRepoName(repo.github_url, repo.name);
 
-  // Tailwind opacity-suffixed backgrounds are only supported against
-  // built-in palette names (e.g. ``green-500``), not the custom
-  // ``success`` token. The ready / failed / pending pills use the
-  // built-in ``green-500``, ``red-500``, and ``yellow-500`` swatches at
-  // 10% opacity so the colour reads the same on every card.
-  const pillClass = isReady
-    ? "bg-green-500/10"
-    : isFailed
-      ? "bg-red-500/10"
-      : "bg-yellow-500/10";
-  const pillLabelClass = isReady
-    ? "text-green-500"
-    : isFailed
-      ? "text-red-500"
-      : "text-yellow-500";
-
-  const chips = useMemo<string[]>(
-    () => [
-      ...((repo.detected_stack?.languages ?? []) as string[]),
-      ...((repo.detected_stack?.frameworks ?? []) as string[]),
-    ],
+  const stack = useMemo<string[]>(
+    () =>
+      [
+        ...new Set([
+          ...(repo.detected_stack?.languages ?? []),
+          ...(repo.detected_stack?.frameworks ?? []),
+        ]),
+      ].slice(0, MAX_STACK),
     [repo.detected_stack],
   );
 
-  const shortSha = repo.ingested_commit_sha
-    ? repo.ingested_commit_sha.substring(0, 7)
-    : null;
+  const shortSha = repo.ingested_commit_sha?.slice(0, 7) ?? null;
+  const stepIndex = Math.max(0, INGEST_STEPS.indexOf(repo.status as never));
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Open ${repo.name}`}
       onPress={onPress ? () => onPress(repo) : undefined}
-      className="mb-3 rounded border border-border p-4 active:border-primary"
+      className="mb-3 overflow-hidden rounded-sm border border-border bg-card active:border-border-strong"
     >
-      <View className="mb-3 flex-row items-start">
-        <View className="flex-1 min-w-0">
+      <View className="border-b border-border bg-[#060608]">
+        <RepoThumb
+          repoId={repo.id}
+          tone={view.kind === "ready" ? "ready" : "muted"}
+        />
+        <View
+          testID="repo-card-status"
+          className="absolute left-3 top-2.5 flex-row items-center gap-1.5 border bg-background/80 px-2 py-1"
+          style={{ borderColor: `${view.color}66` }}
+        >
+          <Dot color={view.color} live={view.kind === "ingesting"} />
           <Text
-            className="pr-3 text-lg font-bold text-foreground"
-            numberOfLines={1}
+            className="text-[11px] uppercase tracking-[1px]"
+            style={{ fontFamily: PIXEL_FONT, color: view.color }}
           >
-            {repo.name}
+            {view.label}
           </Text>
-
-          <View className="mt-1.5 flex-row flex-wrap items-center gap-2">
-            <View
-              className={`flex-row items-center rounded-full px-2 py-0.5 ${pillClass}`}
-            >
-              {isReady ? (
-                <Text
-                  className={`mr-1 text-[10px] font-bold ${pillLabelClass}`}
-                >
-                  ✓
-                </Text>
-              ) : null}
-              {isFailed ? (
-                <Text
-                  className={`mr-1 text-[10px] font-bold ${pillLabelClass}`}
-                >
-                  !
-                </Text>
-              ) : null}
-              {isPending ? (
-                <ActivityIndicator
-                  size="small"
-                  color={colors.foreground}
-                  style={styles.spinner}
-                />
-              ) : null}
-              <Text
-                className={`text-[10px] font-bold uppercase tracking-widest ${pillLabelClass}`}
-              >
-                {repo.status}
-              </Text>
-            </View>
-            <Text className="text-[10px] text-muted-foreground">
-              {timeAgo(repo.updated_at)}
-            </Text>
-          </View>
-
-          {repo.ingested_branch ? (
-            <View className="mt-2 max-w-[220px] flex-row items-center self-start rounded border border-border bg-secondary/20 px-1.5 py-0.5">
-              <Text className="mr-1 text-[11px]">🔀</Text>
-              <Text
-                className="flex-shrink text-[11px] font-mono text-muted-foreground"
-                numberOfLines={1}
-              >
-                {repo.ingested_branch}
-              </Text>
-              {shortSha ? (
-                <>
-                  <Text className="mx-1 text-[11px] text-muted-foreground opacity-40">
-                    @
-                  </Text>
-                  <Text className="text-[11px] font-mono text-primary">
-                    {shortSha}
-                  </Text>
-                </>
-              ) : null}
-            </View>
-          ) : null}
         </View>
+        {repo.primary_language ? (
+          <Text
+            className="absolute right-3 top-2.5 text-[11px] uppercase tracking-[1px] text-subtle-foreground"
+            style={{ fontFamily: PIXEL_FONT }}
+          >
+            {repo.primary_language}
+          </Text>
+        ) : null}
       </View>
 
-      {repo.architecture_summary ? (
-        <Text
-          className="mb-3 text-[13px] leading-[18px] text-muted-foreground"
-          numberOfLines={4}
-        >
-          {repo.architecture_summary}
-        </Text>
-      ) : (
-        <View className="mb-3 min-h-[60px] items-center justify-center rounded-lg border border-dashed border-border bg-white/[0.02]">
-          <Text className="text-xs italic text-muted-foreground">
-            Waiting for AI analysis...
+      <View className="gap-3 p-4">
+        <View className="flex-row items-start justify-between gap-2.5">
+          <View className="min-w-0 flex-1 gap-1.5">
+            <Text
+              numberOfLines={1}
+              className="text-xl leading-tight text-foreground"
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              {owner ? (
+                <Text className="text-subtle-foreground">{owner}/</Text>
+              ) : null}
+              <Text>{name}</Text>
+            </Text>
+            {repo.ingested_branch || shortSha ? (
+              <Text
+                numberOfLines={1}
+                className="text-xs text-muted-foreground"
+                style={{ fontFamily: PIXEL_FONT }}
+              >
+                {"⎇ "}
+                {repo.ingested_branch ?? "detached"}
+                {shortSha ? (
+                  <>
+                    <Text className="text-faint-foreground">{" @ "}</Text>
+                    <Text className="text-accent">{shortSha}</Text>
+                  </>
+                ) : null}
+              </Text>
+            ) : null}
+          </View>
+          <Text
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+            className="text-lg text-faint-foreground"
+            style={{ fontFamily: PIXEL_FONT }}
+          >
+            →
           </Text>
         </View>
-      )}
 
-      <View className="flex-row flex-wrap gap-1">
-        {chips.length > 0 ? (
-          chips.map((item, i) => (
-            <View
-              key={`${item}-${i}`}
-              className="rounded border border-border bg-muted px-1.5 py-0.5"
-            >
-              <Text className="font-mono text-xs text-foreground">{item}</Text>
+        {view.kind === "ingesting" ? (
+          <View
+            testID="repo-card-progress"
+            className="gap-2 rounded-sm border border-dashed border-border-strong p-3"
+          >
+            <View className="flex-row justify-between">
+              <Text
+                className="text-xs text-zinc-300"
+                style={{ fontFamily: PIXEL_FONT }}
+              >
+                {STEP_LABEL[repo.status] ?? "Working"}
+              </Text>
+              <Text
+                className="text-xs text-accent"
+                style={{ fontFamily: PIXEL_FONT }}
+              >
+                {stepIndex + 1}/{INGEST_STEPS.length}
+              </Text>
             </View>
-          ))
-        ) : (
-          <Text className="text-[10px] italic text-muted-foreground opacity-60">
-            Detecting...
+            <View className="flex-row gap-0.5" accessibilityElementsHidden>
+              {INGEST_STEPS.map((step, i) => (
+                <Blink key={step} active={i === stepIndex} style={{ flex: 1 }}>
+                  <View
+                    style={{
+                      height: 6,
+                      backgroundColor:
+                        i < stepIndex
+                          ? colors.chart2
+                          : i === stepIndex
+                            ? colors.accent
+                            : colors.muted,
+                    }}
+                  />
+                </Blink>
+              ))}
+            </View>
+            <Text
+              className="text-[11px] uppercase tracking-[1px] text-subtle-foreground"
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              {`Step ${stepIndex + 1} of ${INGEST_STEPS.length} · You can leave this page`}
+            </Text>
+          </View>
+        ) : null}
+
+        {view.kind === "failed" ? (
+          <View
+            testID="repo-card-failed"
+            className="rounded-sm border border-red-500/25 bg-red-500/5 p-3"
+          >
+            <Text className="text-[13px] leading-[19px] text-red-300">
+              This ingest did not finish. Open it to see where it stopped, or
+              start it again.
+            </Text>
+          </View>
+        ) : null}
+
+        {view.kind === "ready" ? (
+          repo.architecture_summary ? (
+            <Text
+              numberOfLines={3}
+              className="text-sm leading-[21px] text-zinc-400"
+            >
+              {repo.architecture_summary}
+            </Text>
+          ) : (
+            <Text
+              className="text-xs uppercase text-faint-foreground"
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              No summary yet
+            </Text>
+          )
+        ) : null}
+
+        {stack.length > 0 ? (
+          <View className="flex-row flex-wrap gap-1.5">
+            {stack.map((item) => (
+              <View
+                key={item}
+                className="rounded-[3px] border border-border px-2 py-1"
+              >
+                <Text
+                  className="text-[11px] text-zinc-300"
+                  style={{ fontFamily: PIXEL_FONT }}
+                >
+                  {item}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        <View className="flex-row justify-between gap-2.5 border-t border-border pt-3">
+          <View className="flex-row items-center gap-1.5">
+            <Dot color={sync.color} live={sync.live} />
+            <Text
+              className="text-[11px] uppercase tracking-[1px] text-subtle-foreground"
+              style={{ fontFamily: PIXEL_FONT }}
+            >
+              {sync.label}
+            </Text>
+          </View>
+          <Text
+            className="text-[11px] uppercase tracking-[1px] text-subtle-foreground"
+            style={{ fontFamily: PIXEL_FONT }}
+          >
+            {timeAgo(repo.updated_at)}
           </Text>
-        )}
+        </View>
       </View>
     </Pressable>
   );
 }
-
-// NativeWind has no spinner scale; the ``ActivityIndicator`` keeps an
-// inline transform so the pill stays a tight horizontal row.
-const styles = {
-  spinner: { marginRight: 4, transform: [{ scale: 0.6 }] },
-} as const;

@@ -13,7 +13,7 @@
 
 import { Text, View } from "react-native";
 
-const ICON = "🗄️";
+const ICON = "[ ]";
 
 export interface DashboardEmptyStateProps {
   /** Optional override for the testID; default is a stable value for tests. */
@@ -36,10 +36,10 @@ export function DashboardEmptyState({
       testID={testID}
       accessibilityRole="text"
       accessibilityLabel="No repositories found"
-      className="min-h-[144px] items-center justify-center gap-3 border-2 border-dashed border-border bg-secondary/5 px-6 py-8"
+      className="min-h-[144px] items-center justify-center gap-3 rounded-md border border-dashed border-input bg-card px-6 py-8"
     >
-      <Text className="text-[40px] opacity-40">{ICON}</Text>
-      <Text className="text-center text-sm text-muted-foreground">
+      <Text className="font-pixel text-[28px] text-faint-foreground">{ICON}</Text>
+      <Text className="text-center font-pixel text-sm text-muted-foreground">
         No repositories found. Add your first one to get started!
       </Text>
     </View>

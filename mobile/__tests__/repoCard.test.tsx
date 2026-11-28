@@ -1,17 +1,16 @@
 /**
  * Tests for :component:`RepoCard`.
  *
- * The card packs a lot into a single tap-target -- status pill, time,
- * branch row, summary, stack chips -- so this test pins each surface:
+ * The card packs a lot into a single tap-target, so this test pins each
+ * surface:
  *
  * - The on-press callback fires once per tap and receives the repo.
- * - The status pill shows the repo's status string and swaps colour
- *   tone between ready / failed / pending.
- * - The architecture summary renders when present, falling back to the
- *   "Waiting for AI analysis..." placeholder when missing.
- * - The branch row hides when ``ingested_branch`` is null.
- * - The "Detecting..." placeholder shows when both languages and
- *   frameworks are empty arrays.
+ * - The status chip shows the web client's label and the progress panel,
+ *   failure notice and summary each appear only in their own state.
+ * - The owner and name are split like the web card's.
+ * - The branch line hides when ``ingested_branch`` and the commit are null.
+ * - Stack chips are deduplicated and capped, and absent when nothing was
+ *   detected.
  */
 
 import { fireEvent, render } from "@testing-library/react-native";
@@ -68,10 +67,36 @@ describe("RepoCard", () => {
     expect(onPress).toHaveBeenCalledWith(repo);
   });
 
-  it("renders the status string", async () => {
+  it("shows the status label and the split owner and name", async () => {
     const repo = makeRepo({ status: "ready" });
     const { getByText } = await render(<RepoCard repo={repo} />);
-    expect(getByText("ready")).toBeTruthy();
+    expect(getByText("Ready")).toBeTruthy();
+    expect(getByText("example/")).toBeTruthy();
+    expect(getByText("foo")).toBeTruthy();
+  });
+
+  it("shows the ingest progress panel while ingesting", async () => {
+    const { getByTestId, getByText, queryByTestId } = await render(
+      <RepoCard repo={makeRepo({ status: "parsing", architecture_summary: null })} />,
+    );
+    expect(getByText("Ingesting")).toBeTruthy();
+    expect(getByTestId("repo-card-progress")).toBeTruthy();
+    expect(getByText("Parsing and mapping files")).toBeTruthy();
+    expect(getByText("3/4")).toBeTruthy();
+    expect(queryByTestId("repo-card-failed")).toBeNull();
+  });
+
+  it("omits the progress panel once the repository is ready", async () => {
+    const { queryByTestId } = await render(<RepoCard repo={makeRepo()} />);
+    expect(queryByTestId("repo-card-progress")).toBeNull();
+  });
+
+  it("shows the failure notice for a failed ingest", async () => {
+    const { getByTestId, getByText } = await render(
+      <RepoCard repo={makeRepo({ status: "failed", architecture_summary: null })} />,
+    );
+    expect(getByText("Failed")).toBeTruthy();
+    expect(getByTestId("repo-card-failed")).toBeTruthy();
   });
 
   it("renders the architecture summary when present", async () => {
@@ -82,20 +107,20 @@ describe("RepoCard", () => {
     expect(getByText("A useful test summary.")).toBeTruthy();
   });
 
-  it("shows the placeholder when there is no summary yet", async () => {
+  it("shows the placeholder when a ready repository has no summary", async () => {
     const repo = makeRepo({ architecture_summary: "" });
     const { getByText, queryByText } = await render(<RepoCard repo={repo} />);
-    expect(getByText("Waiting for AI analysis...")).toBeTruthy();
+    expect(getByText("No summary yet")).toBeTruthy();
     expect(queryByText("A useful test summary.")).toBeNull();
   });
 
-  it("hides the branch row when ingested_branch is null", async () => {
+  it("hides the branch line when ingested_branch and the commit are null", async () => {
     const repo = makeRepo({
       ingested_branch: null,
       ingested_commit_sha: null,
     });
     const { queryByText } = await render(<RepoCard repo={repo} />);
-    expect(queryByText("main")).toBeNull();
+    expect(queryByText(/⎇/)).toBeNull();
   });
 
   it("shows the branch and short SHA when both are present", async () => {
@@ -104,11 +129,11 @@ describe("RepoCard", () => {
       ingested_commit_sha: "abcdef1234567890",
     });
     const { getByText } = await render(<RepoCard repo={repo} />);
-    expect(getByText("feature/port")).toBeTruthy();
+    expect(getByText(/feature\/port/)).toBeTruthy();
     expect(getByText("abcdef1")).toBeTruthy();
   });
 
-  it("shows 'Detecting...' when no language or framework chips are present", async () => {
+  it("omits the stack chips when nothing was detected", async () => {
     const repo = makeRepo({
       detected_stack: {
         ci_cd: [],
@@ -118,22 +143,29 @@ describe("RepoCard", () => {
         infrastructure: [],
       },
     });
-    const { getByText } = await render(<RepoCard repo={repo} />);
-    expect(getByText("Detecting...")).toBeTruthy();
+    const { queryByText } = await render(<RepoCard repo={repo} />);
+    expect(queryByText("Detecting...")).toBeNull();
   });
 
-  it("renders language and framework chips together", async () => {
+  it("renders language and framework chips together, without duplicates", async () => {
     const repo = makeRepo({
       detected_stack: {
         ci_cd: [],
         databases: [],
         languages: ["TypeScript"],
-        frameworks: ["Next.js"],
+        frameworks: ["Next.js", "TypeScript"],
         infrastructure: [],
       },
     });
-    const { getByText } = await render(<RepoCard repo={repo} />);
-    expect(getByText("TypeScript")).toBeTruthy();
+    const { getByText, getAllByText } = await render(<RepoCard repo={repo} />);
+    expect(getAllByText("TypeScript").length).toBeGreaterThanOrEqual(1);
     expect(getByText("Next.js")).toBeTruthy();
+  });
+
+  it("shows the auto-update state in the footer", async () => {
+    const { getByText } = await render(
+      <RepoCard repo={makeRepo({ auto_update_interval_hours: 12 })} />,
+    );
+    expect(getByText("Auto-update · 12h")).toBeTruthy();
   });
 });

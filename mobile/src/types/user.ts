@@ -21,11 +21,21 @@ export default interface User {
   email: string;
   avatar_url: string | null;
   github_id: string | null;
+  /** When the account was created, as an ISO timestamp. */
+  created_at?: string | null;
   ai_provider: string | null;
   ai_model: string | null;
   has_ai_key: boolean;
+  /** `false` when the key's model was measured unable to call tools; null when unmeasured. */
+  ai_supports_tools?: boolean | null;
+  /** The user's own agent context window; null or absent means the default. */
+  ai_context_window?: number | null;
+  /** The server's default agent context window. */
+  ai_context_window_default?: number;
   free_ingestions_used: number;
   free_chat_messages_used: number;
   free_ingestions_limit: number;
   free_chat_messages_limit: number;
+  /** `false` when the server has switched the MCP endpoint off; the MCP card is hidden. */
+  mcp_enabled?: boolean;
 }
