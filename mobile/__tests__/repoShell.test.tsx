@@ -1,8 +1,8 @@
 /**
  * Tests for the repository shell.
  *
- * The shell is the container every repository screen lives in: the identity
- * header, the section tabs, and the decision about what a repository that
+ * The shell is the container every repository screen lives in: the top bar,
+ * the bottom dock, and the decision about what a repository that
  * is not ready yet is allowed to show.
  *
  * The tab navigator is stubbed rather than mounted. A real navigator needs
@@ -33,6 +33,12 @@ let mockParams: Record<string, string> = { id: "42" };
 
 /** The path the stubbed router reports. */
 let mockPathname = "/repo/42";
+
+/** The route the stubbed navigator reports as focused. */
+let mockFocusedRoute = "index";
+
+/** Routes the dock asked the navigator to switch to. */
+const mockNavigated: string[] = [];
 
 jest.mock("expo-router", () => {
   function noop() {
@@ -69,7 +75,7 @@ jest.mock("expo-router", () => {
  * exist, what they are called, and which of them are available for a
  * repository that has not been indexed -- not the navigator's own
  * behaviour. The stub builds just enough navigator state for the real
- * :component:`RepoTabBar` to render, so the bar itself is still exercised.
+ * :component:`RepoDock` to render, so the dock itself is still exercised.
  */
 jest.mock("expo-router/js-tabs", () => {
   const ReactLocal = require("react");
@@ -93,7 +99,10 @@ jest.mock("expo-router/js-tabs", () => {
     });
 
     const state = {
-      index: 0,
+      index: Math.max(
+        0,
+        routes.findIndex((r) => r.name === mockFocusedRoute),
+      ),
       routes,
       type: "tab",
       key: "tab",
@@ -101,7 +110,9 @@ jest.mock("expo-router/js-tabs", () => {
 
     const navigation = {
       emit: () => ({ defaultPrevented: false }),
-      navigate: () => {},
+      navigate: (name: string) => {
+        mockNavigated.push(name);
+      },
     };
 
     return ReactLocal.createElement(
@@ -183,6 +194,8 @@ let stubbedFetch: typeof fetch | null = null;
 beforeEach(() => {
   mockParams = { id: "42" };
   mockPathname = "/repo/42";
+  mockFocusedRoute = "index";
+  mockNavigated.length = 0;
   dismissToCalls.length = 0;
   navigateCalls.length = 0;
 
@@ -264,29 +277,96 @@ async function renderShell(repo: Repository) {
 }
 
 describe("RepoLayout", () => {
-  it("shows the repository's name and status in the header", async () => {
-    const screen = await renderShell(makeRepo({ name: "illume" }));
+  it("shows the repository's owner, name and status in the top bar", async () => {
+    const screen = await renderShell(makeRepo({
+        name: "illume",
+        github_url: "https://github.com/example/illume",
+      }));
 
     await waitFor(() => {
       expect(screen.getByTestId("repo-name")).toBeTruthy();
     });
 
+    expect(screen.getByText("example/")).toBeTruthy();
     expect(screen.getByText("illume")).toBeTruthy();
     expect(screen.getByTestId("repo-header-status")).toBeTruthy();
-    expect(screen.getByText("ready")).toBeTruthy();
+    expect(screen.getByText("READY · main @ abcdef1")).toBeTruthy();
   });
 
-  it("offers the four section tabs with the web client's labels", async () => {
+  it("lists the five dock slots for an indexed repository", async () => {
     const screen = await renderShell(makeRepo());
 
     await waitFor(() => {
-      expect(screen.getByTestId("repo-tab-index")).toBeTruthy();
+      expect(screen.getByTestId("repo-dock")).toBeTruthy();
     });
 
-    expect(screen.getByText("Home")).toBeTruthy();
-    expect(screen.getByText("Glossary")).toBeTruthy();
-    expect(screen.getByText("Explorer")).toBeTruthy();
-    expect(screen.getByText("Graph")).toBeTruthy();
+    for (const label of ["Overview", "Graph", "Ask", "Files", "Terms"]) {
+      expect(screen.getByLabelText(label)).toBeTruthy();
+    }
+    expect(screen.getAllByRole("tab")).toHaveLength(5);
+    // Settings has no slot of its own.
+    expect(screen.queryByTestId("repo-tab-settings")).toBeNull();
+  });
+
+  it("draws the slots in the dock's order with Ask in the centre", async () => {
+    const screen = await renderShell(makeRepo());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("repo-dock")).toBeTruthy();
+    });
+
+    const order = screen
+      .getAllByRole("tab")
+      .map((tab) => tab.props.testID as string);
+    expect(order).toEqual([
+      "repo-tab-index",
+      "repo-tab-graph",
+      "repo-tab-chat",
+      "repo-tab-explorer",
+      "repo-tab-glossary",
+    ]);
+  });
+
+  it("opens the chat from the Ask slot", async () => {
+    const screen = await renderShell(makeRepo());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("repo-tab-chat")).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId("repo-tab-chat"));
+
+    expect(mockNavigated).toEqual(["chat"]);
+  });
+
+  it("marks only the focused slot as selected", async () => {
+    mockFocusedRoute = "chat";
+    const screen = await renderShell(makeRepo());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("repo-tab-chat")).toBeTruthy();
+    });
+
+    const selected = screen
+      .getAllByRole("tab")
+      .filter((tab) => tab.props.accessibilityState?.selected);
+    expect(selected.map((tab) => tab.props.testID)).toEqual(["repo-tab-chat"]);
+    expect(screen.getByTestId("repo-tab-active-chat")).toBeTruthy();
+    expect(screen.queryByTestId("repo-tab-active-index")).toBeNull();
+  });
+
+  it("leaves every slot unselected while the settings screen is open", async () => {
+    mockFocusedRoute = "settings";
+    const screen = await renderShell(makeRepo());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("repo-dock")).toBeTruthy();
+    });
+
+    const selected = screen
+      .getAllByRole("tab")
+      .filter((tab) => tab.props.accessibilityState?.selected);
+    expect(selected).toHaveLength(0);
   });
 
   it("hides the sections a repository that is not indexed cannot support", async () => {
@@ -296,10 +376,11 @@ describe("RepoLayout", () => {
       expect(screen.getByTestId("repo-tab-index")).toBeTruthy();
     });
 
-    expect(screen.getByText("Home")).toBeTruthy();
-    expect(screen.queryByText("Glossary")).toBeNull();
-    expect(screen.queryByText("Explorer")).toBeNull();
-    expect(screen.queryByText("Graph")).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.queryByLabelText("Ask")).toBeNull();
+    expect(screen.queryByLabelText("Graph")).toBeNull();
+    expect(screen.queryByLabelText("Files")).toBeNull();
+    expect(screen.queryByLabelText("Terms")).toBeNull();
   });
 
   it("returns to the dashboard rather than leaving a broken stack", async () => {
@@ -314,6 +395,22 @@ describe("RepoLayout", () => {
     expect(dismissToCalls).toContain("/(app)/dashboard");
   });
 
+  it("opens the repository's settings from the top bar", async () => {
+    const pushed: string[] = [];
+    (router.push as unknown as (...args: string[]) => void) = (href: string) => {
+      pushed.push(href);
+    };
+    const screen = await renderShell(makeRepo());
+
+    await waitFor(() => {
+      expect(screen.getByTestId("repo-settings")).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByTestId("repo-settings"));
+
+    expect(pushed).toContain("/(app)/repo/42/settings");
+  });
+
   it("sends a deep link into an unavailable section back to the overview", async () => {
     mockPathname = "/repo/42/glossary";
 
@@ -323,15 +420,23 @@ describe("RepoLayout", () => {
       expect(screen.getByTestId("repo-name")).toBeTruthy();
     });
 
-    // The section tabs are gone, so the only thing on screen is the
-    // overview's own header, and the reader is sent to the overview.
-    expect(screen.queryByText("Glossary")).toBeNull();
+    expect(screen.queryByLabelText("Terms")).toBeNull();
     await waitFor(() => {
       expect(navigateCalls).toContain("/(app)/repo/42");
     });
   });
 
-  it("leaves a reader on a section tab of an indexed repository alone", async () => {
+  it("sends a deep link into the chat of an unindexed repository to the overview", async () => {
+    mockPathname = "/repo/42/chat";
+
+    await renderShell(makeRepo({ status: "parsing" }));
+
+    await waitFor(() => {
+      expect(navigateCalls).toContain("/(app)/repo/42");
+    });
+  });
+
+  it("leaves a reader on a section of an indexed repository alone", async () => {
     mockPathname = "/repo/42/glossary";
 
     const screen = await renderShell(makeRepo({ status: "ready" }));
@@ -341,6 +446,6 @@ describe("RepoLayout", () => {
     });
 
     expect(navigateCalls).toHaveLength(0);
-    expect(screen.getByText("Glossary")).toBeTruthy();
+    expect(screen.getByLabelText("Terms")).toBeTruthy();
   });
 });

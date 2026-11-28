@@ -4,24 +4,17 @@
  * @module RepoLayout
  *
  * Port of the web app's repository layout
- * (``client/src/app/repo/[id]/layout.tsx``) and its navbar
- * (``client/src/components/RepoNavbar.tsx``). The web navbar is a row of
- * section links across the top of the page; on a phone that row becomes a
- * tab bar pinned to the top, with the repository's identity above it.
+ * (``client/src/app/repo/[id]/layout.tsx``). A slim top bar carries the
+ * repository's identity and a way back and to its settings; a bottom dock
+ * (:component:`RepoDock`) switches between the sections and opens the chat.
  *
  * The layout is the right place for the pieces that have to outlive any
  * one screen:
  *
- * - The identity header, so the repository's name and status are visible
- *   from every tab.
+ * - The top bar, so the repository's name and status are visible from every
+ *   section.
  * - The :component:`RepoStatusPoller`, so a background sync repaints the
- *   page even while the reader is on another tab.
- *
- * The tab bar is a custom one (:component:`RepoTabBar`) rather than the
- * navigator's built-in bar: the built-in bar is a bottom bar that wants an
- * icon above every label, and the web navbar is the opposite -- a row of
- * text links. The labels are the web client's, unchanged: Home, Glossary,
- * Explorer, Graph.
+ *   page even while the reader is on another section.
  */
 
 import { useCallback, useEffect } from "react";
@@ -33,42 +26,41 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RepoStatusPoller } from "@/components/RepoStatusPoller";
 import { useRepository } from "@/hooks/useRepositories";
 import { isReadyStatus } from "@/lib/repoStatus";
-import { RepoStatusBadge } from "@/ui/RepoStatusBadge";
-import { RepoTabBar } from "@/ui/RepoTabBar";
+import { RepoDock } from "@/ui/RepoDock";
+import { RepoTopBar } from "@/ui/RepoTopBar";
 import { colors } from "@/theme/tokens";
 
 /**
- * The section tabs, in the order the web navbar lists them.
+ * The sections that need an indexed repository.
  *
- * A tab that is not available yet -- because the repository has not been
- * indexed -- is left out of the bar rather than shown disabled. On the web
- * the links stay visible and greyed out; on a phone three permanently dead
- * tabs crowd out the one that works, and the data behind them does not
- * exist yet anyway.
+ * A section that is not available yet -- because the repository has not
+ * been indexed -- is left out of the dock rather than shown disabled, and a
+ * deep link into one is sent back to the overview.
  */
 const SECTION_TABS = [
-  { name: "glossary", title: "Glossary" },
-  { name: "explorer", title: "Explorer" },
+  { name: "glossary", title: "Terms" },
+  { name: "explorer", title: "Files" },
   { name: "graph", title: "Graph" },
+  { name: "chat", title: "Ask" },
 ] as const;
 
 /**
- * The routes that are reachable but never listed in the tab bar.
+ * The routes that are reachable but never listed in the dock.
  *
  * ``href: null`` is what marks a screen as hidden: the navigator drops
- * the item from its own bar. This shell draws a custom bar instead
- * (:component:`RepoTabBar`), and a custom bar has to honour the same rule
- * itself -- otherwise the chat screen turns into a fifth tab.
+ * the item from its own bar. This shell draws a custom dock instead
+ * (:component:`RepoDock`), and a custom dock has to honour the same rule
+ * itself -- otherwise the settings screen turns into another slot.
  */
-const HIDDEN_ROUTES = new Set(["chat", "settings"]);
+const HIDDEN_ROUTES = new Set(["settings"]);
 
 /**
- * Drop the hidden routes from the state the custom tab bar draws.
+ * Drop the hidden routes from the state the custom dock draws.
  *
  * The focused index is carried over rather than recomputed: a hidden route
  * that is focused leaves the index pointing past the end of the shortened
- * list, which is exactly what keeps every tab unhighlighted while the
- * chat screen is open.
+ * list, which is exactly what keeps every slot unhighlighted while the
+ * settings screen is open.
  *
  * @param state - The navigator's state.
  * @returns The state without the hidden routes.
@@ -141,7 +133,7 @@ export default function RepoLayout() {
   if (isError) {
     return (
       <View className="flex-1 items-center justify-center bg-background p-6">
-        <Text className="mb-2 text-lg font-bold text-foreground">
+        <Text className="mb-2 text-lg font-pixel text-foreground">
           Repository not found
         </Text>
         <Text className="mb-6 text-center text-[13px] text-muted-foreground">
@@ -154,7 +146,7 @@ export default function RepoLayout() {
           onPress={goBack}
           className="min-h-[44px] justify-center rounded border border-border px-4 py-2"
         >
-          <Text className="text-sm font-semibold text-foreground">
+          <Text className="text-sm font-sans-semibold text-foreground">
             Back to dashboard
           </Text>
         </Pressable>
@@ -174,45 +166,12 @@ export default function RepoLayout() {
   }
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-      <View className="flex-row items-center border-b border-border px-3 py-2">
-        <Pressable
-          testID="repo-back"
-          accessibilityRole="button"
-          accessibilityLabel="Back to dashboard"
-          onPress={goBack}
-          hitSlop={8}
-          className="mr-2 rounded px-2 py-1 active:bg-secondary"
-        >
-          <Text className="text-lg text-foreground">←</Text>
-        </Pressable>
-
-        <Text
-          testID="repo-name"
-          className="flex-1 text-base font-medium text-foreground"
-          numberOfLines={1}
-        >
-          {repo.name}
-        </Text>
-
-        <RepoStatusBadge
-          status={repo.status}
-          syncStatus={repo.sync_status}
-          testID="repo-header-status"
-        />
-
-        {/* The repository's own settings, next to the status it reports. */}
-        <Pressable
-          testID="repo-settings"
-          accessibilityRole="button"
-          accessibilityLabel="Repository settings"
-          onPress={() => router.push(`/(app)/repo/${repoNumber}/settings`)}
-          hitSlop={8}
-          className="ml-2 rounded px-2 py-1 active:bg-secondary"
-        >
-          <Text className="text-lg text-foreground">⚙</Text>
-        </Pressable>
-      </View>
+    <View className="flex-1" style={{ paddingTop: insets.top }}>
+      <RepoTopBar
+        repo={repo}
+        onBack={goBack}
+        onSettings={() => router.push(`/(app)/repo/${repoNumber}/settings`)}
+      />
 
       <RepoStatusPoller
         repoNumber={repoNumber}
@@ -222,7 +181,7 @@ export default function RepoLayout() {
 
       <Tabs
         tabBar={(props) => (
-          <RepoTabBar
+          <RepoDock
             {...props}
             state={withoutHiddenRoutes(props.state)}
             sectionsAvailable={ready}
@@ -230,13 +189,13 @@ export default function RepoLayout() {
         )}
         screenOptions={{
           headerShown: false,
-          // The bar is custom, but the position still decides whether it
+          // The dock is custom, but the position still decides whether it
           // is laid out above the scenes or below them.
-          tabBarPosition: "top",
-          sceneStyle: { backgroundColor: colors.background },
+          tabBarPosition: "bottom",
+          sceneStyle: { backgroundColor: "transparent" },
         }}
       >
-        <Tabs.Screen name="index" options={{ title: "Home" }} />
+        <Tabs.Screen name="index" options={{ title: "Overview" }} />
 
         {SECTION_TABS.map((tab) => (
           <Tabs.Screen
@@ -246,12 +205,7 @@ export default function RepoLayout() {
           />
         ))}
 
-        {/*
-          The chat is a screen of its own rather than a tab: it has a URL
-          of its own, and ``href: null`` keeps it out of the tab bar
-          while leaving it navigable.
-        */}
-        <Tabs.Screen name="chat" options={{ href: null }} />
+        {/* Settings has a URL of its own but no slot in the dock. */}
         <Tabs.Screen name="settings" options={{ href: null }} />
       </Tabs>
     </View>
