@@ -42,7 +42,7 @@ export default function ContactScreen() {
         >
           <Text className="text-lg text-foreground">←</Text>
         </Pressable>
-        <Text className="flex-1 text-base font-medium text-foreground">
+        <Text className="flex-1 text-base font-sans-medium text-foreground">
           Contact
         </Text>
       </View>

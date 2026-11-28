@@ -70,8 +70,8 @@ export function ContactForm({
   const activeCategory = contactCategories.find((entry) => entry.value === category);
 
   return (
-    <View testID="contact-form" className="rounded border border-border bg-card p-4">
-      <Text className="mb-1 text-[13px] font-medium text-foreground">
+    <View testID="contact-form" className="rounded-md border border-border bg-card p-4">
+      <Text className="mb-1 text-[13px] font-sans-medium text-foreground">
         What is this about?
       </Text>
       <Pressable
@@ -92,7 +92,7 @@ export function ContactForm({
         <Text className="text-xs text-muted-foreground">▾</Text>
       </Pressable>
 
-      <Text className="mb-1 mt-4 text-[13px] font-medium text-foreground">
+      <Text className="mb-1 mt-4 text-[13px] font-sans-medium text-foreground">
         Name
       </Text>
       <TextInput
@@ -105,7 +105,7 @@ export function ContactForm({
         className="min-h-[44px] rounded border border-border bg-secondary/20 px-3 py-2 text-sm text-foreground"
       />
 
-      <Text className="mb-1 mt-4 text-[13px] font-medium text-foreground">
+      <Text className="mb-1 mt-4 text-[13px] font-sans-medium text-foreground">
         Email
       </Text>
       <TextInput
@@ -121,7 +121,7 @@ export function ContactForm({
         className="min-h-[44px] rounded border border-border bg-secondary/20 px-3 py-2 text-sm text-foreground"
       />
 
-      <Text className="mb-1 mt-4 text-[13px] font-medium text-foreground">
+      <Text className="mb-1 mt-4 text-[13px] font-sans-medium text-foreground">
         Message
       </Text>
       <TextInput
@@ -170,7 +170,7 @@ export function ContactForm({
         {isSubmitting ? (
           <ActivityIndicator size="small" color={colors.primaryForeground} />
         ) : (
-          <Text className="text-[13px] font-semibold text-primary-foreground">
+          <Text className="text-[13px] font-sans-semibold text-primary-foreground">
             Send message
           </Text>
         )}
@@ -191,9 +191,9 @@ export function ContactForm({
           <Pressable
             accessibilityRole="none"
             onPress={() => {}}
-            className="rounded-t-2xl border-t border-border bg-card p-4"
+            className="rounded-t-md border-t border-border bg-card p-4"
           >
-            <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Text className="mb-3 text-[11px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
               What is this about?
             </Text>
 
@@ -231,7 +231,7 @@ export function ContactForm({
               onPress={() => setPickerOpen(false)}
               className="mt-3 min-h-[44px] items-center justify-center rounded border border-border active:bg-secondary"
             >
-              <Text className="text-[13px] font-medium text-foreground">
+              <Text className="text-[13px] font-sans-medium text-foreground">
                 Cancel
               </Text>
             </Pressable>

@@ -161,11 +161,11 @@ export function DangerZone({
       testID="danger-zone"
       className="rounded border border-destructive/30 bg-card p-4"
     >
-      <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-destructive">
+      <Text className="mb-3 font-pixel text-xs uppercase tracking-[1.2px] text-destructive">
         Danger Zone
       </Text>
 
-      <Text className="text-[13px] font-medium text-foreground">
+      <Text className="text-[13px] font-sans-medium text-foreground">
         Re-ingest repository
       </Text>
       <Text className="mt-0.5 text-xs text-muted-foreground">
@@ -191,7 +191,7 @@ export function DangerZone({
         onPress={confirmReingest}
         className="min-h-[44px] items-center justify-center rounded border border-destructive px-4 active:bg-secondary"
       >
-        <Text className="text-[13px] font-semibold text-destructive">
+        <Text className="font-pixel text-[13px] text-destructive">
           Re-ingest repository
         </Text>
       </Pressable>
@@ -206,7 +206,7 @@ export function DangerZone({
             onPress={() => setVersionPickerOpen((open) => !open)}
             className="mt-2 min-h-[44px] items-center justify-center rounded border border-border px-4 active:bg-secondary"
           >
-            <Text className="text-[13px] font-medium text-foreground">
+            <Text className="text-[13px] font-sans-medium text-foreground">
               {versionPickerOpen
                 ? "Hide branch / commit picker"
                 : "Re-ingest a specific branch or commit"}
@@ -255,7 +255,7 @@ export function DangerZone({
 
       <View className="my-4 h-px w-full bg-border" />
 
-      <Text className="text-[13px] font-medium text-foreground">
+      <Text className="text-[13px] font-sans-medium text-foreground">
         Delete repository
       </Text>
       <Text className="mt-0.5 text-xs text-muted-foreground">
@@ -270,7 +270,7 @@ export function DangerZone({
         onPress={confirmDelete}
         className="mt-3 min-h-[44px] items-center justify-center rounded border border-destructive px-4 active:bg-secondary"
       >
-        <Text className="text-[13px] font-semibold text-destructive">
+        <Text className="font-pixel text-[13px] text-destructive">
           Delete repository
         </Text>
       </Pressable>

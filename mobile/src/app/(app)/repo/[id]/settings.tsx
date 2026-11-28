@@ -16,7 +16,6 @@
 import { useCallback } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { router, useGlobalSearchParams } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { AutoUpdateSection } from "@/components/AutoUpdateSection";
@@ -27,7 +26,6 @@ import { useRepository } from "@/hooks/useRepositories";
 import { colors } from "@/theme/tokens";
 
 export default function RepoSettingsScreen() {
-  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { id } = useGlobalSearchParams<{ id: string }>();
   const repoNumber = String(id ?? "");
@@ -56,7 +54,7 @@ export default function RepoSettingsScreen() {
   // draws no header of its own.
   if (isLoading || !repo) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View className="flex-1 items-center justify-center">
         {isError ? (
           <Text className="text-[13px] text-muted-foreground">
             This repository could not be loaded.
@@ -69,14 +67,14 @@ export default function RepoSettingsScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1">
       <ScrollView
         testID="repo-settings-scroll"
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           padding: 16,
-          paddingBottom: insets.bottom + 32,
+          paddingBottom: 32,
         }}
       >
         <AutoUpdateSection
@@ -88,11 +86,11 @@ export default function RepoSettingsScreen() {
           }}
         />
 
-        <Text className="mb-2 mt-6 text-[11px] font-bold uppercase tracking-[2px] text-muted-foreground opacity-60">
+        <Text className="mb-2 mt-6 font-pixel text-xs uppercase tracking-[1.4px] text-muted-foreground">
           Export
         </Text>
-        <View className="rounded border border-border bg-card p-4">
-          <Text className="text-[13px] font-medium text-foreground">
+        <View className="rounded-md border border-border bg-card p-4">
+          <Text className="text-[13px] font-sans-medium text-foreground">
             Export .illume file
           </Text>
           <Text className="mb-3 mt-0.5 text-xs text-muted-foreground">

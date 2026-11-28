@@ -19,7 +19,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Constants from "expo-constants";
 
@@ -75,7 +75,7 @@ function SettingsRow({
       className="min-h-[44px] flex-row items-center justify-between border-b border-border/60 px-4 py-3 active:bg-secondary"
     >
       <View className="min-w-0 flex-1 pr-3">
-        <Text className="text-sm font-medium text-foreground">{title}</Text>
+        <Text className="text-sm font-sans-medium text-foreground">{title}</Text>
         {subtitle ? (
           <Text className="mt-0.5 text-xs text-muted-foreground">
             {subtitle}
@@ -147,7 +147,7 @@ export default function SettingsScreen() {
         >
           <Text className="text-lg text-foreground">←</Text>
         </Pressable>
-        <Text className="flex-1 text-base font-medium text-foreground">
+        <Text className="flex-1 text-base font-sans-medium text-foreground">
           Settings
         </Text>
       </View>
@@ -156,10 +156,10 @@ export default function SettingsScreen() {
         testID="settings-list"
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        <Text className="px-4 pb-2 pt-5 text-[11px] font-bold uppercase tracking-[2px] text-muted-foreground opacity-60">
+        <Text className="px-4 pb-2 pt-5 font-pixel text-xs uppercase tracking-[1.4px] text-muted-foreground">
           AI
         </Text>
-        <View className="rounded border border-border bg-card">
+        <View className="rounded-md border border-border bg-card">
           <SettingsRow
             testID="settings-row-ai"
             title="AI credentials"
@@ -167,12 +167,26 @@ export default function SettingsScreen() {
             value={providerLabel ?? "Not set"}
             onPress={() => router.push("/(app)/settings/ai")}
           />
+          <SettingsRow
+            testID="settings-row-agent"
+            title="Agent"
+            subtitle="The context window agent runs work within"
+            onPress={() => router.push("/(app)/settings/agent" as Href)}
+          />
+          {user?.mcp_enabled === false ? null : (
+            <SettingsRow
+              testID="settings-row-mcp"
+              title="MCP access"
+              subtitle="Tokens and setup for AI coding tools"
+              onPress={() => router.push("/(app)/settings/mcp" as Href)}
+            />
+          )}
         </View>
 
-        <Text className="px-4 pb-2 pt-5 text-[11px] font-bold uppercase tracking-[2px] text-muted-foreground opacity-60">
+        <Text className="px-4 pb-2 pt-5 font-pixel text-xs uppercase tracking-[1.4px] text-muted-foreground">
           Support
         </Text>
-        <View className="rounded border border-border bg-card">
+        <View className="rounded-md border border-border bg-card">
           <SettingsRow
             testID="settings-row-contact"
             title="Contact"
@@ -187,10 +201,10 @@ export default function SettingsScreen() {
           />
         </View>
 
-        <Text className="px-4 pb-2 pt-5 text-[11px] font-bold uppercase tracking-[2px] text-muted-foreground opacity-60">
+        <Text className="px-4 pb-2 pt-5 font-pixel text-xs uppercase tracking-[1.4px] text-muted-foreground">
           Account
         </Text>
-        <View className="rounded border border-border bg-card">
+        <View className="rounded-md border border-border bg-card">
           <Pressable
             testID="settings-row-logout"
             accessibilityRole="button"
@@ -200,10 +214,16 @@ export default function SettingsScreen() {
             }}
             className="min-h-[44px] items-center justify-center border-b border-border/60 px-4 py-3 active:bg-secondary"
           >
-            <Text className="text-sm font-semibold text-destructive">
+            <Text className="text-sm font-sans-semibold text-destructive">
               Log out
             </Text>
           </Pressable>
+          <SettingsRow
+            testID="settings-row-delete-account"
+            title="Delete account"
+            subtitle="Remove your account and everything it owns"
+            onPress={() => router.push("/(app)/settings/delete-account" as Href)}
+          />
         </View>
       </ScrollView>
 
@@ -222,15 +242,15 @@ export default function SettingsScreen() {
           <Pressable
             accessibilityRole="none"
             onPress={() => {}}
-            className="w-full rounded-2xl border border-border bg-card p-5"
+            className="w-full rounded-md border border-border bg-card p-5"
           >
-            <Text className="text-lg font-bold text-foreground">Illume</Text>
+            <Text className="text-lg font-pixel text-foreground">Illume</Text>
             <Text className="mt-1 text-xs text-muted-foreground">
               Version {Constants.expoConfig?.version ?? "1.0.0"} · Built by
               Tejas Nasa
             </Text>
 
-            <Text className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Text className="mb-2 mt-5 text-[11px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
               Links
             </Text>
             {EXTERNAL_LINKS.map((link) => (
@@ -254,7 +274,7 @@ export default function SettingsScreen() {
               onPress={() => setAboutOpen(false)}
               className="mt-4 min-h-[44px] items-center justify-center rounded border border-border active:bg-secondary"
             >
-              <Text className="text-[13px] font-medium text-foreground">
+              <Text className="text-[13px] font-sans-medium text-foreground">
                 Close
               </Text>
             </Pressable>

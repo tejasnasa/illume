@@ -115,13 +115,13 @@ export function AiSettings({
       className="rounded border border-primary/20 bg-card p-4"
     >
       <View className="mb-3 flex-row items-center justify-between">
-        <Text className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+        <Text className="text-[11px] font-pixel uppercase tracking-[1.2px] text-primary">
           AI Provider
         </Text>
         {keyStored ? (
           <Text
             testID="ai-settings-connected"
-            className="text-xs font-medium text-chart-1"
+            className="text-xs font-sans-medium text-chart-1"
           >
             Connected
           </Text>
@@ -134,7 +134,7 @@ export function AiSettings({
         index consistent.
       </Text>
 
-      <Text className="mb-1 text-[13px] font-medium text-foreground">
+      <Text className="mb-1 text-[13px] font-sans-medium text-foreground">
         Provider
       </Text>
       <Pressable
@@ -159,7 +159,7 @@ export function AiSettings({
         </Text>
       ) : null}
 
-      <Text className="mb-1 mt-4 text-[13px] font-medium text-foreground">
+      <Text className="mb-1 mt-4 text-[13px] font-sans-medium text-foreground">
         API Key
       </Text>
       <TextInput
@@ -187,7 +187,7 @@ export function AiSettings({
         </Text>
       ) : null}
 
-      <Text className="mb-1 mt-4 text-[13px] font-medium text-foreground">
+      <Text className="mb-1 mt-4 text-[13px] font-sans-medium text-foreground">
         Model
       </Text>
       <TextInput
@@ -241,7 +241,7 @@ export function AiSettings({
             {isRemoving ? (
               <ActivityIndicator size="small" color={colors.destructive} />
             ) : (
-              <Text className="text-[13px] font-semibold text-destructive">
+              <Text className="text-[13px] font-sans-semibold text-destructive">
                 Remove key
               </Text>
             )}
@@ -262,7 +262,7 @@ export function AiSettings({
           {isSubmitting ? (
             <ActivityIndicator size="small" color={colors.primaryForeground} />
           ) : (
-            <Text className="text-[13px] font-semibold text-primary-foreground">
+            <Text className="text-[13px] font-sans-semibold text-primary-foreground">
               {keyStored ? "Replace key" : "Save key"}
             </Text>
           )}
@@ -332,9 +332,9 @@ function ProviderPicker({
         <Pressable
           accessibilityRole="none"
           onPress={() => {}}
-          className="rounded-t-2xl border-t border-border bg-card p-4"
+          className="rounded-t-md border-t border-border bg-card p-4"
         >
-          <Text className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <Text className="mb-3 text-[11px] font-pixel uppercase tracking-[1.2px] text-muted-foreground">
             AI Provider
           </Text>
 
@@ -351,7 +351,7 @@ function ProviderPicker({
                 className="min-h-[44px] flex-row items-center justify-between border-b border-border/60 active:bg-secondary"
               >
                 <View className="flex-1 pr-3">
-                  <Text className="text-sm font-medium text-foreground">
+                  <Text className="text-sm font-sans-medium text-foreground">
                     {preset.label}
                   </Text>
                   <Text className="mt-0.5 text-[11px] text-muted-foreground">
@@ -376,7 +376,7 @@ function ProviderPicker({
             onPress={onClose}
             className="mt-3 min-h-[44px] items-center justify-center rounded border border-border active:bg-secondary"
           >
-            <Text className="text-[13px] font-medium text-foreground">
+            <Text className="text-[13px] font-sans-medium text-foreground">
               Cancel
             </Text>
           </Pressable>
